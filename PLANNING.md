@@ -621,7 +621,7 @@ Screen rotation is triggered by a short button press. Screens cycle:
 3. **Players** — team name, own status badge, active player count.
 4. **Radio** — current channel name, last packet RSSI and SNR, hop count.
 
-A long press (≥ 3 s) while status is ACTIVE triggers the HIT state. A long press while status is HIT and within 2 seconds of reporting cancels the HIT before it propagates (accidental-hit protection). See §12.1 for full state machine.
+A long press (≥ 3 s) while status is ACTIVE triggers the HIT state. A short press while status is HIT and within 3 seconds of reporting cancels the HIT before it propagates (accidental-hit protection). See §12.1 for full state machine.
 
 ### 9.7 BLE Architecture
 
@@ -695,14 +695,16 @@ Transmitted on `DEVICE_STATUS` at connect and on any field change (debounced to 
 
 ```protobuf
 message DeviceStatus {
-  uint32    node_id          = 1;
-  string    node_name        = 2;
-  float     battery_level    = 3;   // 0.0–1.0
-  bool      charging         = 4;
-  GpsStatus gps              = 5;
-  RadioStatus radio          = 6;
-  uint32    mesh_node_count  = 7;
-  uint32    uptime_seconds   = 8;
+  uint32    node_id             = 1;
+  string    node_name           = 2;
+  float     battery_level       = 3;   // 0.0–1.0
+  bool      charging            = 4;
+  GpsStatus gps                 = 5;
+  RadioStatus radio             = 6;
+  uint32    mesh_node_count     = 7;
+  uint32    uptime_seconds      = 8;
+  string    firmware_version    = 9;
+  string    bluetooth_address   = 10;  // formatted as "AA:BB:CC:DD:EE:FF"
 }
 
 message GpsStatus {
@@ -1103,8 +1105,8 @@ proto/
 └── mash/
     ├── config.proto       MASH config group messages
     ├── ble.proto          BLE transport messages (ConfigPayload, ConfigAck, DeviceStatus, AdminRequest)
-    ├── game.proto         Game state, player state, zones, objectives, portnums 256–261
-    └── mesh.proto         MASH over-the-air packet payloads
+    ├── game.proto         Game state, player state, zones, objectives, audio; portnums 256–263
+    └── mesh.proto         Reserved for future MASH over-the-air packet extensions (schema TBD)
 ```
 
 ### 14.2 `mash/config.proto`
@@ -1121,6 +1123,7 @@ enum ConfigGroup {
   POWER    = 4;
   GAME     = 5;
   SECURITY = 6;
+  AUDIO    = 7;   // Phase 7 addition
 }
 
 message DeviceConfig {
@@ -1408,14 +1411,16 @@ message ConfigAck {
 
 // See §10.4
 message DeviceStatus {
-  uint32      node_id         = 1;
-  string      node_name       = 2;
-  float       battery_level   = 3;
-  bool        charging        = 4;
-  GpsStatus   gps             = 5;
-  RadioStatus radio           = 6;
-  uint32      mesh_node_count = 7;
-  uint32      uptime_seconds  = 8;
+  uint32      node_id             = 1;
+  string      node_name           = 2;
+  float       battery_level       = 3;
+  bool        charging            = 4;
+  GpsStatus   gps                 = 5;
+  RadioStatus radio               = 6;
+  uint32      mesh_node_count     = 7;
+  uint32      uptime_seconds      = 8;
+  string      firmware_version    = 9;
+  string      bluetooth_address   = 10;  // formatted as "AA:BB:CC:DD:EE:FF"
 }
 
 message GpsStatus {
