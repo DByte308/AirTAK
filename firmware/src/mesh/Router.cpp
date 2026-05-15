@@ -7,11 +7,15 @@
 #include "mesh/ChannelManager.h"
 #include "mesh/MeshNode.h"
 #include "mesh/PacketPool.h"
+#include "ble/BLEQueue.h"
 #include "config/Defaults.h"
 #include "config/ConfigManager.h"
 #include "hal/Radio.h"
 #include "config.h"
+#include "airtak/ble.pb.h"
+#include <pb_encode.h>
 #include <cstring>
+#include <cstdio>
 #include <Arduino.h>
 #include <FreeRTOS.h>
 
@@ -36,6 +40,7 @@ struct RelayEntry {
     uint32_t send_after_ms;   // absolute time to transmit
     bool     in_use;
     float    rx_snr;          // our rx SNR (for heard-by cancellation)
+    uint8_t  phy_profile_index;
 };
 
 static DupEntry    s_dup_cache[defaults::ROUTER_DUP_CACHE_SIZE];
@@ -330,6 +335,36 @@ static bool isAppDuplicate(uint32_t src_id, uint32_t request_id, uint32_t now_ms
     return false;
 }
 
+static void queueAdminError(const char* error) {
+    if (!::g_ble_tx_queue || !error) return;
+
+    airtak_AdminResponse response = airtak_AdminResponse_init_zero;
+    response.command = airtak_AdminCommand_RADIO_RESTART;
+    response.success = false;
+    strncpy(response.error, error, sizeof(response.error) - 1);
+
+    PooledPacket* pkt = PacketPool::alloc();
+    if (!pkt) return;
+    pkt->data[0] = ble::BLE_QUEUE_ADMIN;
+    pb_ostream_t stream = pb_ostream_from_buffer(pkt->data + 1, PACKET_POOL_BUF_SIZE - 1);
+    if (!pb_encode(&stream, airtak_AdminResponse_fields, &response)) {
+        PacketPool::free(pkt);
+        return;
+    }
+    pkt->length = static_cast<uint16_t>(1 + stream.bytes_written);
+    if (xQueueSendToBack(::g_ble_tx_queue, &pkt, 0) != pdTRUE) {
+        PacketPool::free(pkt);
+    }
+}
+
+static void queueDeliveryFailure(uint32_t portnum, uint32_t msg_id) {
+    char error[96];
+    snprintf(error, sizeof(error), "delivery_failed port=%lu request_id=%lu",
+             static_cast<unsigned long>(portnum),
+             static_cast<unsigned long>(msg_id));
+    queueAdminError(error);
+}
+
 // ── Router::init() ────────────────────────────────────────────────────────────
 void Router::init() {
     memset(s_dup_cache,   0, sizeof(s_dup_cache));
@@ -446,16 +481,16 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     }
 
     // Deliver to BLE MESH_RX if uplink is enabled for this slot.
-    // The payload is the raw protobuf Data message (including portnum).
-    // We prefix the decrypted payload with the 16-byte OTA header for the Android app.
-    if (slot->uplink_enabled && data_valid && !app_duplicate) {
-        // Build a ble_tx_queue entry: type byte 0x01 (MESH_RX) + OTA header + decrypted payload.
+    // The BLE payload is: portnum hint byte + 16-byte OTA header + decrypted Data protobuf.
+    if (slot->uplink_enabled && data_valid && !app_duplicate && ::g_ble_tx_queue) {
+        // Prefix an internal queue tag so BLEServer routes the packet to MESH_RX.
         PooledPacket* bpkt = PacketPool::alloc();
         if (bpkt) {
-            bpkt->data[0] = 0x01; // MESH_RX type tag
-            memcpy(bpkt->data + 1, raw, OTA_HEADER_BYTES); // OTA header
-            memcpy(bpkt->data + 1 + OTA_HEADER_BYTES, decrypted, payload_len); // decrypted payload
-            bpkt->length = 1 + OTA_HEADER_BYTES + payload_len;
+            bpkt->data[0] = ble::BLE_QUEUE_MESH_RX;
+            bpkt->data[1] = static_cast<uint8_t>(portnum_value & 0xFF);
+            memcpy(bpkt->data + 2, raw, OTA_HEADER_BYTES);
+            memcpy(bpkt->data + 2 + OTA_HEADER_BYTES, decrypted, payload_len);
+            bpkt->length = 2 + OTA_HEADER_BYTES + payload_len;
             if (xQueueSendToBack(::g_ble_tx_queue, &bpkt, 0) != pdTRUE) {
                 PacketPool::free(bpkt);
             }
@@ -531,6 +566,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                 buildOtaHeader(ack_pkt->data, ack_hdr);
                 memcpy(ack_pkt->data + OTA_HEADER_BYTES, ack_enc, ap);
                 ack_pkt->length = OTA_HEADER_BYTES + ap;
+                ack_pkt->phy_profile_index = slot->phy_profile_index;
                 if (xQueueSendToBack(tx_queue, &ack_pkt, 0) != pdTRUE) {
                     PacketPool::free(ack_pkt);
                 } else {
@@ -569,6 +605,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                     s_relay_queue[i].length       = relay_len;
                     s_relay_queue[i].send_after_ms = now_ms + delay_ms;
                     s_relay_queue[i].rx_snr        = snr;
+                    s_relay_queue[i].phy_profile_index = slot->phy_profile_index;
                     s_relay_queue[i].in_use        = true;
                     break;
                 }
@@ -591,6 +628,7 @@ void Router::tickRelayQueue(QueueHandle_t tx_queue) {
             if (pkt) {
                 memcpy(pkt->data, e.data, e.length);
                 pkt->length = e.length;
+                pkt->phy_profile_index = e.phy_profile_index;
                 if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
                     PacketPool::free(pkt);
                 } else {
@@ -632,6 +670,7 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
     buildOtaHeader(pkt->data, hdr);
     memcpy(pkt->data + OTA_HEADER_BYTES, enc, data_len);
     pkt->length = OTA_HEADER_BYTES + data_len;
+    pkt->phy_profile_index = slot->phy_profile_index;
 
     if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
         PacketPool::free(pkt);
@@ -779,7 +818,8 @@ void Router::tickRetryQueue(QueueHandle_t tx_queue) {
         if (!e.in_use) continue;
 
         if (e.attempts >= defaults::ACK_MAX_RETRIES) {
-            e.in_use = false; // delivery failed silently; BLE notification pending
+            queueDeliveryFailure(e.portnum, e.msg_id);
+            e.in_use = false;
             continue;
         }
 
@@ -814,6 +854,7 @@ void Router::tickRetryQueue(QueueHandle_t tx_queue) {
                 buildOtaHeader(pkt->data, hdr);
                 memcpy(pkt->data + OTA_HEADER_BYTES, enc, e.payload_len);
                 pkt->length = OTA_HEADER_BYTES + e.payload_len;
+                pkt->phy_profile_index = slot->phy_profile_index;
                 if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
                     PacketPool::free(pkt);
                 } else {

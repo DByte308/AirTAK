@@ -9,8 +9,10 @@
 #include "hal/Radio.h"
 #include "mesh/ChannelManager.h"
 #include "mesh/PacketPool.h"
+#include "ble/BLEQueue.h"
 #include "config.h"
 #include "airtak/config.pb.h"
+#include "airtak/ble.pb.h"
 #include <pb_encode.h>
 #include <pb_decode.h>
 #include <FreeRTOS.h>
@@ -20,6 +22,7 @@
 
 extern QueueHandle_t g_config_change_queue;
 extern QueueHandle_t g_radio_tx_queue;
+extern QueueHandle_t g_ble_tx_queue;
 
 namespace airtak {
 namespace config {
@@ -32,6 +35,30 @@ static bool                  s_dirty[CONFIG_GROUP_COUNT];
 constexpr size_t CONFIG_BUF_SIZE = 512;
 static uint8_t  s_buffers[CONFIG_GROUP_COUNT][CONFIG_BUF_SIZE];
 static size_t   s_sizes[CONFIG_GROUP_COUNT];
+static uint8_t  s_staged_buffers[CONFIG_GROUP_COUNT][CONFIG_BUF_SIZE];
+static size_t   s_staged_sizes[CONFIG_GROUP_COUNT];
+
+static void queueAdminError(const char* error) {
+    if (!::g_ble_tx_queue || !error) return;
+
+    airtak_AdminResponse response = airtak_AdminResponse_init_zero;
+    response.command = airtak_AdminCommand_RADIO_RESTART;
+    response.success = false;
+    strncpy(response.error, error, sizeof(response.error) - 1);
+
+    PooledPacket* pkt = PacketPool::alloc();
+    if (!pkt) return;
+    pkt->data[0] = ble::BLE_QUEUE_ADMIN;
+    pb_ostream_t stream = pb_ostream_from_buffer(pkt->data + 1, PACKET_POOL_BUF_SIZE - 1);
+    if (!pb_encode(&stream, airtak_AdminResponse_fields, &response)) {
+        PacketPool::free(pkt);
+        return;
+    }
+    pkt->length = static_cast<uint16_t>(1 + stream.bytes_written);
+    if (xQueueSendToBack(::g_ble_tx_queue, &pkt, 0) != pdTRUE) {
+        PacketPool::free(pkt);
+    }
+}
 
 // ── Protobuf structural validation ───────────────────────────────────────────
 
@@ -197,6 +224,7 @@ static size_t encodeFactoryDefaults(ConfigGroup g, uint8_t* buf, size_t buf_len)
 
 void ConfigManager::init() {
     memset(s_dirty, 0, sizeof(s_dirty));
+    memset(s_staged_sizes, 0, sizeof(s_staged_sizes));
     for (uint8_t i = 0; i < CONFIG_GROUP_COUNT; i++) {
         ConfigGroup g = static_cast<ConfigGroup>(i);
         size_t n = FlashStore::read(g, s_buffers[i], CONFIG_BUF_SIZE);
@@ -211,17 +239,16 @@ void ConfigManager::init() {
 
 int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t pb_len, bool commit) {
     uint8_t idx = static_cast<uint8_t>(group);
-    if (idx >= CONFIG_GROUP_COUNT) return -3;
-    if (pb_len > CONFIG_BUF_SIZE) return -1;
+    if (idx >= CONFIG_GROUP_COUNT) return -1;
+    if (pb_len > CONFIG_BUF_SIZE) return -2;
 
     // Structural proto validation: reject malformed streams before storing.
-    if (pb_len > 0 && !proto::isValid(pb_data, pb_len)) return -2;
+    if (pb_len > 0 && (!pb_data || !proto::isValid(pb_data, pb_len))) return -3;
 
     if (pb_len > 0) {
-        memcpy(s_buffers[idx], pb_data, pb_len);
-        s_sizes[idx] = pb_len;
+        memcpy(s_staged_buffers[idx], pb_data, pb_len);
+        s_staged_sizes[idx] = pb_len;
         s_dirty[idx] = true;
-        if (s_callback) s_callback(group);
     }
 
     if (!commit) {
@@ -229,14 +256,22 @@ int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t 
     }
 
     bool restart_required = false;
+    bool persist_failed = false;
     for (uint8_t i = 0; i < CONFIG_GROUP_COUNT; i++) {
         if (!s_dirty[i]) continue;
         ConfigGroup dirty_group = static_cast<ConfigGroup>(i);
-        FlashStore::write(dirty_group, s_buffers[i], s_sizes[i]);
+        if (!FlashStore::write(dirty_group, s_staged_buffers[i], s_staged_sizes[i])) {
+            persist_failed = true;
+            continue;
+        }
+        memcpy(s_buffers[i], s_staged_buffers[i], s_staged_sizes[i]);
+        s_sizes[i] = s_staged_sizes[i];
         if (config::groupRequiresRadioRestart(dirty_group)) {
             restart_required = true;
         }
         s_dirty[i] = false;
+        s_staged_sizes[i] = 0;
+        if (s_callback) s_callback(dirty_group);
     }
 
     if (restart_required) {
@@ -245,10 +280,13 @@ int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t 
         // (priority LOW/2) so the BLE event loop is not blocked during the
         // ≤300 ms radio pause/reinit/resume sequence (§9.4.2).
         void* sentinel = nullptr;
-        if (::g_config_change_queue) xQueueSend(::g_config_change_queue, &sentinel, 0);
+        if (!::g_config_change_queue || xQueueSend(::g_config_change_queue, &sentinel, 0) != pdTRUE) {
+            s_radio_restart_pending = false;
+            return -5;
+        }
     }
 
-    return 0;
+    return persist_failed ? -4 : 0;
 }
 
 size_t ConfigManager::readGroup(ConfigGroup group, uint8_t* buf, size_t buf_len) {
@@ -264,6 +302,8 @@ void ConfigManager::resetGroup(ConfigGroup group) {
     uint8_t idx = static_cast<uint8_t>(group);
     FlashStore::erase(group);
     s_sizes[idx] = encodeFactoryDefaults(group, s_buffers[idx], CONFIG_BUF_SIZE);
+    s_dirty[idx] = false;
+    s_staged_sizes[idx] = 0;
     if (s_callback) s_callback(group);
 }
 
@@ -282,6 +322,7 @@ void ConfigManager::radioRestartProcedure() {
     while (::g_radio_tx_queue && xQueueReceive(::g_radio_tx_queue, &queued, 0) == pdTRUE) {
         PacketPool::free(queued);
         queued = nullptr;
+        queueAdminError("tx_dropped_radio_restart");
     }
 
     Radio::reinit();

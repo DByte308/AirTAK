@@ -27,6 +27,9 @@ PooledPacket* PacketPool::alloc() {
         if (!s_pool[i].in_use) {
             s_pool[i].in_use = true;
             s_pool[i].length = 0;
+            s_pool[i].rssi = 0.0f;
+            s_pool[i].snr = 0.0f;
+            s_pool[i].phy_profile_index = 0;
             result = &s_pool[i];
             s_used++;
             break;

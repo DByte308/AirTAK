@@ -249,6 +249,7 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
                         pkt->length = (uint16_t)pkt_len;
                         pkt->rssi   = s_radio.getRSSI();
                         pkt->snr    = s_radio.getSNR();
+                        pkt->phy_profile_index = s_active_phy;
                         s_last_rssi = pkt->rssi;
                         s_last_snr  = pkt->snr;
                         s_packets_rx++;
@@ -275,7 +276,7 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
         PooledPacket* pkt = nullptr;
         if (xQueueReceive(tx_queue, &pkt, 0) == pdTRUE && pkt) {
             // transmit() handles the RadioLib call and frees the pooled packet.
-            transmit(pkt->data, (uint8_t)pkt->length, s_active_phy);
+            transmit(pkt->data, (uint8_t)pkt->length, pkt->phy_profile_index);
             PacketPool::free(pkt);
         }
     }

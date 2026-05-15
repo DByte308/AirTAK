@@ -5,8 +5,10 @@
 #include "ble/AirTAKService.h"
 #include "ble/DFUService.h"
 #include "ble/Framing.h"
+#include "ble/BLEQueue.h"
 #include "config/ConfigManager.h"
 #include "config/ConfigGroups.h"
+#include "mesh/ChannelManager.h"
 #include "mesh/Router.h"
 #include "mesh/PacketPool.h"
 #include "hal/Radio.h"
@@ -21,6 +23,7 @@
 #include <cstring>
 
 extern EventGroupHandle_t g_radio_event_group;
+extern QueueHandle_t g_ble_tx_queue;
 
 namespace airtak {
 namespace ble {
@@ -42,6 +45,52 @@ static uint64_t s_mesh_tx_recv_mask = 0;
 static uint8_t  s_admin_assembly[128];
 static uint64_t s_admin_recv_mask = 0;
 static uint64_t s_config_apply_started_ms = 0;
+static volatile bool s_pending_config_restart = false;
+static airtak_ConfigGroup s_pending_config_group = airtak_ConfigGroup_DEVICE;
+static uint64_t s_pending_config_started_ms = 0;
+
+static void sendFramed(BLECharacteristic& chr, const uint8_t* payload, uint16_t len, bool indicate);
+
+static const char* configErrorForResult(int result) {
+    switch (result) {
+        case -1: return "invalid_config_group";
+        case -2: return "invalid_config_payload";
+        case -3: return "invalid_config_payload";
+        case -4: return "config_persist_failed";
+        case -5: return "radio_restart_queue_failed";
+        default: return "invalid_config_payload";
+    }
+}
+
+static void enqueueConfigAck(airtak_ConfigGroup group, bool success, bool radio_restarted,
+                             uint32_t apply_duration_ms, const char* error) {
+    airtak_ConfigAck ack = airtak_ConfigAck_init_zero;
+    ack.group = group;
+    ack.success = success;
+    ack.radio_restarted = radio_restarted;
+    ack.apply_duration_ms = apply_duration_ms;
+    if (!success && error) {
+        strncpy(ack.error, error, sizeof(ack.error) - 1);
+    }
+
+    uint8_t ack_buf[128];
+    pb_ostream_t out_stream = pb_ostream_from_buffer(ack_buf, sizeof(ack_buf));
+    if (!pb_encode(&out_stream, airtak_ConfigAck_fields, &ack)) return;
+
+    if (!::g_ble_tx_queue) {
+        sendFramed(s_config_rw, ack_buf, static_cast<uint16_t>(out_stream.bytes_written), true);
+        return;
+    }
+
+    PooledPacket* pkt = PacketPool::alloc();
+    if (!pkt) return;
+    pkt->data[0] = BLE_QUEUE_CONFIG;
+    memcpy(pkt->data + 1, ack_buf, out_stream.bytes_written);
+    pkt->length = static_cast<uint16_t>(1 + out_stream.bytes_written);
+    if (xQueueSendToBack(::g_ble_tx_queue, &pkt, 0) != pdTRUE) {
+        PacketPool::free(pkt);
+    }
+}
 
 static void sendFramed(BLECharacteristic& chr, const uint8_t* payload, uint16_t len, bool indicate) {
     uint16_t chunks = Framing::chunkCount(len);
@@ -59,7 +108,6 @@ static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
     (void)conn_hdl;
     (void)chr;
 
-    bool radio_restarted = false;
     int result = 0;
 
     FrameHeader hdr;
@@ -104,24 +152,15 @@ static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
         request.data.bytes, request.data.size, request.commit);
 
     if (result == 0 && request.commit && config::ConfigManager::isRadioRestartPending()) {
-        config::ConfigManager::radioRestartProcedure();
-        radio_restarted = true;
+        s_pending_config_restart = true;
+        s_pending_config_group = request.group;
+        s_pending_config_started_ms = s_config_apply_started_ms;
+        return;
     }
 
-    airtak_ConfigAck ack = airtak_ConfigAck_init_zero;
-    ack.group = request.group;
-    ack.success = (result == 0);
-    ack.radio_restarted = radio_restarted;
-    ack.apply_duration_ms = millis() - s_config_apply_started_ms;
-    if (!ack.success) {
-        strncpy(ack.error, "invalid_config_payload", sizeof(ack.error) - 1);
-    }
-
-    uint8_t ack_buf[128];
-    pb_ostream_t out_stream = pb_ostream_from_buffer(ack_buf, sizeof(ack_buf));
-    if (pb_encode(&out_stream, airtak_ConfigAck_fields, &ack)) {
-        sendFramed(s_config_rw, ack_buf, static_cast<uint16_t>(out_stream.bytes_written), true);
-    }
+    enqueueConfigAck(request.group, result == 0, false,
+                     millis() - s_config_apply_started_ms,
+                     result == 0 ? nullptr : configErrorForResult(result));
 }
 
 static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
@@ -153,6 +192,8 @@ static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
     if (!pkt) return;
     memcpy(pkt->data, s_mesh_tx_assembly, hdr.total_length);
     pkt->length = hdr.total_length;
+    const auto* primary_slot = ChannelManager::primarySlot();
+    pkt->phy_profile_index = primary_slot ? primary_slot->phy_profile_index : 0;
 
     if (xQueueSendToBack(s_radio_tx_queue, &pkt, 0) != pdTRUE) {
         PacketPool::free(pkt);
@@ -260,6 +301,11 @@ void AirTAKService::init(QueueHandle_t mesh_rx_queue) {
 void AirTAKService::setRadioTxQueue(QueueHandle_t q) { s_radio_tx_queue = q; }
 
 void AirTAKService::notifyDeviceStatus(const uint8_t* data, uint16_t len) {
+    uint8_t frame[BLE_FRAME_MAX_LEN];
+    size_t frame_len = Framing::encodeChunk(data, len, 0, frame, sizeof(frame));
+    if (frame_len > 0) {
+        s_status.write(frame, static_cast<uint16_t>(frame_len));
+    }
     sendFramed(s_status, data, len, false);
 }
 
@@ -273,6 +319,14 @@ void AirTAKService::indicateConfigResponse(const uint8_t* data, uint16_t len) {
 
 void AirTAKService::indicateAdminResponse(const uint8_t* data, uint16_t len) {
     sendFramed(s_admin, data, len, true);
+}
+
+void AirTAKService::completePendingConfigRestart(bool success) {
+    if (!s_pending_config_restart) return;
+    s_pending_config_restart = false;
+    enqueueConfigAck(s_pending_config_group, success, success,
+                     millis() - s_pending_config_started_ms,
+                     success ? nullptr : "radio_restart_failed");
 }
 
 } // namespace ble

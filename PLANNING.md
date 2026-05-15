@@ -326,14 +326,15 @@ AirTAK uses Meshtastic's packet wire format without modification. The frame tran
 Offset  Length  Field
 0       4       Destination node ID (little-endian uint32; 0xFFFFFFFF = broadcast)
 4       4       Source node ID (little-endian uint32)
-8       1       Packet ID low byte
-9       1       Flags: [7:5] hop_limit, [4] want_ack, [3] via_mqtt, [2:0] hop_start
-10      1       Channel hash (see §8.5)
-11      1       Next-hop node ID (low byte; 0 = not yet relayed)
-12      N       Encrypted payload (protobuf Data message, AES-128-CTR)
+8       4       Packet ID / request ID (little-endian uint32)
+12      1       Flags: [7:5] hop_limit, [4] want_ack, [3] via_mqtt, [2:0] hop_start
+13      1       Channel hash (see §8.5)
+14      1       Next-hop node ID (low byte; 0 = not yet relayed)
+15      1       Relay node ID (low byte; 0 = not yet relayed)
+16      N       Encrypted payload (protobuf Data message, AES-128-CTR)
+```
 
 > **`hop_start`** (Flags bits [2:0]): the original `hop_limit` value set by the sender, preserved unchanged across all relay hops. Relay nodes decrement `hop_limit` but leave `hop_start` intact. The ACK receiver uses `hop_start` to set the return `hop_limit` on AIRTAK_ACK so the acknowledgment can traverse the full mesh diameter back to the sender (see §8.9). This matches the Meshtastic wire format at the pinned commit; `[2:0]` was incorrectly documented as `reserved` in earlier versions of this document. If a packet is received from a device that does not encode `hop_start` (zero value), the ACK receiver MUST default to `hop_limit = 7` on the reply.
-```
 
 This format is byte-for-byte identical to the Meshtastic wire format, enabling native mesh participation and relay by stock Meshtastic devices.
 

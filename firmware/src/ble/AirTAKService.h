@@ -48,6 +48,9 @@ public:
     // Phase 1.5: Indicate ADMIN with an AdminResponse payload.
     static void indicateAdminResponse(const uint8_t* data, uint16_t len);
 
+    // Called by the Config Apply task after a queued radio restart has completed.
+    static void completePendingConfigRestart(bool success);
+
     // Set the radio TX queue handle so MESH_TX writes can enqueue packets for the Radio task.
     static void setRadioTxQueue(QueueHandle_t q);
 };

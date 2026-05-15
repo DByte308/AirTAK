@@ -81,7 +81,9 @@ void setup() {
     // Initialize LittleFS config store and load all config groups from flash.
     // On first boot (no config files), defaults from Defaults.h are used.
     airtak::PacketPool::init();
-    airtak::config::FlashStore::init();
+    if (!airtak::config::FlashStore::init()) {
+        Serial.println("AirTAK: FlashStore init failed; using volatile defaults");
+    }
     airtak::config::ConfigManager::init();
     airtak::ChannelManager::init();
     airtak::GameState::init();
@@ -190,6 +192,7 @@ void task_config_apply(void* params) {
         if (xQueueReceive(g_config_change_queue, &sentinel, portMAX_DELAY) == pdTRUE) {
             if (airtak::config::ConfigManager::isRadioRestartPending()) {
                 airtak::config::ConfigManager::radioRestartProcedure();
+                airtak::ble::AirTAKService::completePendingConfigRestart(true);
             }
         }
     }

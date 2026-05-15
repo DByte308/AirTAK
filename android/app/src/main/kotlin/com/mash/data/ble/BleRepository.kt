@@ -59,6 +59,8 @@ class BleRepository @Inject constructor(
 
     private var gatt: BluetoothGatt? = null
     private var mtu: Int = 23 // default BLE ATT MTU; upgraded to 517 after connection
+    private val meshRxReassembler = BleFraming.Reassembler()
+    private val statusReassembler = BleFraming.Reassembler()
 
     // Reconnect backoff state.
     private var reconnectDelay = 1_000L // ms
@@ -80,6 +82,8 @@ class BleRepository @Inject constructor(
             } else {
                 this@BleRepository.gatt?.close()
                 this@BleRepository.gatt = null
+                meshRxReassembler.reset()
+                statusReassembler.reset()
                 _connectionState.value = ConnectionState.DISCONNECTED
                 scheduleReconnect()
             }
@@ -107,8 +111,12 @@ class BleRepository @Inject constructor(
             value: ByteArray
         ) {
             when (characteristic.uuid) {
-                CHAR_MESH_RX_UUID -> scope.launch { _meshRxFlow.emit(value.clone()) }
-                CHAR_STATUS_UUID  -> scope.launch { _deviceStatus.emit(value.clone()) }
+                CHAR_MESH_RX_UUID -> meshRxReassembler.consume(value)?.let { packet ->
+                    scope.launch { _meshRxFlow.emit(packet) }
+                }
+                CHAR_STATUS_UUID  -> statusReassembler.consume(value)?.let { packet ->
+                    scope.launch { _deviceStatus.emit(packet) }
+                }
             }
         }
 
@@ -221,7 +229,7 @@ class BleRepository @Inject constructor(
     suspend fun writeMeshTx(data: ByteArray): Boolean {
         val g = gatt ?: return false
         val char = g.getService(AIRTAK_SERVICE_UUID)?.getCharacteristic(CHAR_MESH_TX_UUID) ?: return false
-        val chunks = BleFraming.encode(data, mtu - 3 - 6)
+        val chunks = BleFraming.encode(data)
         for (chunk in chunks) {
             if (!writeCharacteristicNoResponse(g, char, chunk)) return false
         }
@@ -236,7 +244,7 @@ class BleRepository @Inject constructor(
     suspend fun writeConfig(pbData: ByteArray): Boolean {
         val g = gatt ?: return false
         val char = g.getService(AIRTAK_SERVICE_UUID)?.getCharacteristic(CHAR_CONFIG_RW_UUID) ?: return false
-        val chunks = BleFraming.encode(pbData, mtu - 3 - 6) // ATT overhead + frame header
+        val chunks = BleFraming.encode(pbData)
         for (chunk in chunks) {
             if (!writeCharacteristicWithResponse(g, char, chunk)) return false
         }
@@ -245,12 +253,16 @@ class BleRepository @Inject constructor(
 
     /**
      * Write nanopb-encoded AdminRequest bytes to ADMIN characteristic (§10.5).
-     * Single write, no framing required (AdminRequest ≤ 128 bytes).
+     * Uses the common 6-byte framing header and WRITE with response.
      */
     suspend fun writeAdmin(pbData: ByteArray): Boolean {
         val g = gatt ?: return false
         val char = g.getService(AIRTAK_SERVICE_UUID)?.getCharacteristic(CHAR_ADMIN_UUID) ?: return false
-        return writeCharacteristicWithResponse(g, char, pbData)
+        val chunks = BleFraming.encode(pbData)
+        for (chunk in chunks) {
+            if (!writeCharacteristicWithResponse(g, char, chunk)) return false
+        }
+        return true
     }
 
     // ── Internal write primitives ─────────────────────────────────────────────

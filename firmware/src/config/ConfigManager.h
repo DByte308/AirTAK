@@ -30,8 +30,8 @@ public:
     static void init();
 
     // Phase 2.8: Write a config group from a nanopb-encoded buffer.
-    // If commit=false: validates the proto, updates in-memory state, returns success/error.
-    // If commit=true: persists to flash and triggers any side effects (radio restart etc.).
+    // If commit=false: validates and stages the proto without changing committed state.
+    // If commit=true: persists staged groups, updates committed state, and triggers side effects.
     // Returns 0 on success, negative error code on failure.
     static int applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t pb_len, bool commit);
 

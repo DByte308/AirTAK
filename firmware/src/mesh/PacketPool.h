@@ -24,6 +24,7 @@ struct PooledPacket {
     uint16_t length;
     float    rssi;   // received signal strength (dBm), set by Radio task
     float    snr;    // signal-to-noise ratio (dB),    set by Radio task
+    uint8_t  phy_profile_index; // selected LoRa PHY profile for TX frames
     bool     in_use;
 };
 

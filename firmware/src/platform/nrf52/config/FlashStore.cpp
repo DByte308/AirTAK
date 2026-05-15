@@ -135,8 +135,7 @@ bool FlashStore::write(ConfigGroup group, const uint8_t* data, size_t len) {
     if (written != len) { s_config_fs.remove(tmp_path); return false; }
 
     s_config_fs.remove(path);
-    s_config_fs.rename(tmp_path, path);
-    return true;
+    return s_config_fs.rename(tmp_path, path);
 }
 
 bool FlashStore::erase(ConfigGroup group) {

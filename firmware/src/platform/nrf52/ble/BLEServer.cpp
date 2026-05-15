@@ -6,6 +6,7 @@
 #include "ble/AirTAKService.h"
 #include "ble/DFUService.h"
 #include "ble/Framing.h"
+#include "ble/BLEQueue.h"
 #include "hal/Display.h"
 #include "hal/Battery.h"
 #include "hal/GPS.h"
@@ -129,10 +130,14 @@ void BLEServer::process(QueueHandle_t ble_tx_queue, QueueHandle_t /*config_queue
             uint8_t type = pkt->data[0];
             const uint8_t* payload = pkt->data + 1;
             uint16_t payload_len   = pkt->length - 1;
-            if (type == 0x01) {
+            if (type == BLE_QUEUE_MESH_RX) {
                 AirTAKService::notifyMeshRx(payload, payload_len);
-            } else if (type == 0x02) {
+            } else if (type == BLE_QUEUE_DEVICE_STATUS) {
                 AirTAKService::notifyDeviceStatus(payload, payload_len);
+            } else if (type == BLE_QUEUE_ADMIN) {
+                AirTAKService::indicateAdminResponse(payload, payload_len);
+            } else if (type == BLE_QUEUE_CONFIG) {
+                AirTAKService::indicateConfigResponse(payload, payload_len);
             }
         }
         PacketPool::free(pkt);
