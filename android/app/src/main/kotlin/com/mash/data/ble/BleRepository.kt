@@ -214,14 +214,18 @@ class BleRepository @Inject constructor(
     // ── Write operations ──────────────────────────────────────────────────────
 
     /**
-     * Write raw OTA mesh packet bytes to the MESH_TX characteristic (§10.3).
-     * Fire-and-forget (WRITE_WITHOUT_RESPONSE); no chunking required.
+     * Write a decoded meshtastic.Data protobuf to the MESH_TX characteristic (§10.3).
+     * Uses the common 6-byte framing header and WRITE_WITHOUT_RESPONSE.
      * Returns true if the write was submitted successfully.
      */
     suspend fun writeMeshTx(data: ByteArray): Boolean {
         val g = gatt ?: return false
         val char = g.getService(MASH_SERVICE_UUID)?.getCharacteristic(CHAR_MESH_TX_UUID) ?: return false
-        return writeCharacteristicNoResponse(g, char, data)
+        val chunks = BleFraming.encode(data, mtu - 3 - 6)
+        for (chunk in chunks) {
+            if (!writeCharacteristicNoResponse(g, char, chunk)) return false
+        }
+        return true
     }
 
     /**

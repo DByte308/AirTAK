@@ -24,6 +24,9 @@
 
 using namespace mash;
 
+void setUp() {}
+void tearDown() {}
+
 void test_default_hop_limit_position() {
     TEST_ASSERT_EQUAL(defaults::HOP_LIMIT_POSITION, Router::defaultHopLimit(Portnum::POSITION_APP));
 }

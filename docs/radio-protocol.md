@@ -4,6 +4,10 @@
 
 > **v1.4 NOTE:** Flags byte bits [2:0] carry `hop_start` — they are **NOT reserved**.
 > See §8.2 amendment A. All relay nodes must preserve `hop_start` unchanged.
+>
+> **v1.5 NOTE:** Default hop limits are unified to 7 for every packet type except
+> `MASH_AUDIO`, which remains local-only with hop limit 1. `MASH_ACK` uses the
+> original packet's `hop_start`.
 
 ---
 
@@ -16,7 +20,7 @@ Offset  Size  Field            Description
 ──────  ────  ───────────────  ──────────────────────────────────────────────────────────
   0      4    dest_node_id     Destination node ID (0xFFFFFFFF = broadcast), LE uint32
   4      4    src_node_id      Originating node ID (FICR.DEVICEID[0] lower 32 bits), LE uint32
-  8      1    packet_id_low    Low 8 bits of packet ID (full packet ID in Data.id field)
+  8      1    packet_id_low    Low 8 bits of the transport packet ID
   9      1    flags            [7:5] hop_limit (3 bits)
                                [4]   want_ack  (1 bit)
                                [3]   via_mqtt  (1 bit, always 0 for MASH)
@@ -55,10 +59,10 @@ The payload is the nanopb-encoded `meshtastic.Data` message, encrypted in-place 
 |------------|----------------------------------------------------|
 | Algorithm  | AES-128-CTR                                        |
 | Key        | `SHA256(psk_bytes_padded_to_32)[0:16]`             |
-| Nonce      | `packet_id (32-bit LE) ‖ from_node_id (32-bit LE) ‖ 0x00…` (128 bits) |
+| Nonce      | `packet_id_low` zero-extended to 32-bit LE ‖ `from_node_id` 32-bit LE ‖ `0x00…` (128 bits) |
 | PSK pad    | Raw PSK zero-padded to 32 bytes before SHA256      |
 
-The AES key is derived once per PSK change via `Crypto::deriveKey()`. The nonce is unique per packet because `packet_id` is a monotonically increasing counter.
+The AES key is derived once per PSK change via `Crypto::deriveKey()`. MASH uses the OTA-visible packet ID byte for nonce construction because receivers can only reconstruct the low 8 bits from the compact wire header.
 
 ### `meshtastic.Data` fields used by MASH
 
@@ -81,19 +85,19 @@ reply_id          uint32    request_id of the message being replied to
 | Portnum | Value | Hop Limit | Reliability   | Description                        |
 |---------|-------|-----------|---------------|------------------------------------|
 | `UNKNOWN_APP`            |   0 | 3 | BEST_EFFORT   | Unused                             |
-| `TEXT_MESSAGE_APP`       |   1 | 3 | BEST_EFFORT   | UTF-8 text message                 |
-| `POSITION_APP`           |   3 | 3 | BEST_EFFORT   | GPS position                       |
-| `NODEINFO_APP`           |   4 | 3 | BEST_EFFORT   | Node identity (HardwareModel, callsign) |
-| `TELEMETRY_APP`          |  67 | 2 | BEST_EFFORT   | Battery/sensor telemetry           |
+| `TEXT_MESSAGE_APP`       |   1 | 7 | BEST_EFFORT / ACK when requested | UTF-8 text message      |
+| `POSITION_APP`           |   3 | 7 | BEST_EFFORT   | GPS position; `PositionConfig.position_hop_limit` can override when set |
+| `NODEINFO_APP`           |   4 | 7 | BEST_EFFORT   | Node identity (HardwareModel, callsign) |
+| `TELEMETRY_APP`          |  67 | 7 | BEST_EFFORT   | Battery/sensor telemetry           |
 | `TRACEROUTE_APP`         |  71 | 7 | BEST_EFFORT   | Path discovery                     |
-| `NEIGHBORINFO_APP`       |  73 | 3 | BEST_EFFORT   | Neighbor table exchange            |
-| `MASH_PLAYER`            | 256 | 3 | ACKNOWLEDGED* | `PlayerStatePacket`                |
+| `NEIGHBORINFO_APP`       |  73 | 7 | BEST_EFFORT   | Neighbor table exchange            |
+| `MASH_PLAYER`            | 256 | 7 | ACKNOWLEDGED* | `PlayerStatePacket`                |
 | `MASH_GAME`              | 257 | 7 | ACKNOWLEDGED  | `GameStatePacket`                  |
 | `MASH_ZONE`              | 258 | 7 | ACKNOWLEDGED  | `ZonePacket`                       |
-| `MASH_OBJECTIVE`         | 259 | 5 | ACKNOWLEDGED  | `ObjectivePacket`                  |
+| `MASH_OBJECTIVE`         | 259 | 7 | ACKNOWLEDGED  | `ObjectivePacket`                  |
 | `MASH_ADMIN`             | 260 | 7 | ACKNOWLEDGED  | `AdminPacket`                      |
 | `MASH_ACK`               | 261 | = hop_start | — | `MashAck` (application-layer ACK)  |
-| `MASH_POSITION_REQUEST`  | 262 | 5 | BEST_EFFORT   | `PositionRequestPacket`            |
+| `MASH_POSITION_REQUEST`  | 262 | 7 | BEST_EFFORT   | `PositionRequestPacket`            |
 | `MASH_AUDIO`             | 263 | 1 | BEST_EFFORT   | `AudioPacket` (Phase 7, local-only) |
 
 *`MASH_PLAYER` uses ACKNOWLEDGED only when `PlayerStatePacket.is_state_transition = true`.

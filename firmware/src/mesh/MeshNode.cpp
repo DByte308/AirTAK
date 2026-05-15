@@ -18,6 +18,8 @@
 // nRF52840 FICR register address for unique device ID
 #define NRF_FICR_BASE        0x10000000UL
 #define NRF_FICR_DEVICEID0   (*(volatile uint32_t*)(NRF_FICR_BASE + 0x060))
+#define NRF_FICR_DEVICEADDR0 (*(volatile uint32_t*)(NRF_FICR_BASE + 0x0A4))
+#define NRF_FICR_DEVICEADDR1 (*(volatile uint32_t*)(NRF_FICR_BASE + 0x0A8))
 
 namespace mash {
 
@@ -46,6 +48,12 @@ static uint16_t encodeString(uint8_t* buf, uint16_t pos, uint32_t field, const c
     memcpy(buf + pos, str, len);
     return pos + len;
 }
+static uint16_t encodeBytes(uint8_t* buf, uint16_t pos, uint32_t field, const uint8_t* data, uint16_t len) {
+    pos = encodeTag(buf, pos, field, 2);
+    pos = encodeVarint(buf, pos, len);
+    memcpy(buf + pos, data, len);
+    return pos + len;
+}
 static uint16_t encodeFixed32(uint8_t* buf, uint16_t pos, uint32_t field, uint32_t v) {
     pos = encodeTag(buf, pos, field, 5); // wire type 5 = fixed 32-bit
     memcpy(buf + pos, &v, 4);
@@ -65,18 +73,22 @@ static uint16_t serializeUser(uint8_t* buf, uint16_t buf_len) {
     const char* long_name  = config::ConfigManager::deviceLongName();
     if (!long_name || long_name[0] == '\0') long_name = defaults::DEVICE_LONG_NAME;
 
-    // short_name: first 4 chars of the hex suffix (Meshtastic convention)
-    char short_name[5];
-    snprintf(short_name, sizeof(short_name), "%04lx", (unsigned long)(s_node_id & 0xFFFF));
+    const char* short_name = config::ConfigManager::deviceShortName();
+    if (!short_name || short_name[0] == '\0') short_name = defaults::DEVICE_SHORT_NAME;
+
+    uint8_t macaddr[6];
+    uint32_t addr0 = NRF_FICR_DEVICEADDR0;
+    uint32_t addr1 = NRF_FICR_DEVICEADDR1;
+    memcpy(macaddr + 0, &addr0, 4);
+    memcpy(macaddr + 4, &addr1, 2);
 
     uint16_t pos = 0;
     pos = encodeString(buf, pos, 1, id_str);     // field 1: id
     pos = encodeString(buf, pos, 2, long_name);  // field 2: long_name
     pos = encodeString(buf, pos, 3, short_name); // field 3: short_name
-    // field 6: hw_model = 41 (LILYGOT_ECHO) — Meshtastic HardwareModel enum
-    pos = encodeTag   (buf, pos, 6, 0); pos = encodeVarint(buf, pos, 41);
-    // field 8: role = 0 (CLIENT, default)
-    pos = encodeTag   (buf, pos, 8, 0); pos = encodeVarint(buf, pos, 0);
+    pos = encodeBytes (buf, pos, 4, macaddr, sizeof(macaddr));
+    // field 6: hw_model = 43 (LILYGO_TECHO) — Meshtastic HardwareModel enum
+    pos = encodeTag   (buf, pos, 6, 0); pos = encodeVarint(buf, pos, 43);
 
     (void)buf_len;
     return pos;
@@ -102,8 +114,9 @@ static uint16_t serializePosition(uint8_t* buf, uint16_t buf_len) {
     // field 4: time (unix seconds; derived from GPS timestamp_ms / 1000)
     uint32_t unix_sec = (uint32_t)(fix.timestamp_ms / 1000);
     pos = encodeFixed32(buf, pos, 4, unix_sec);
-    // field 14: precision_bits = 13 (approximately 10 m precision, standard)
-    pos = encodeTag    (buf, pos, 14, 0); pos = encodeVarint(buf, pos, 13);
+    uint32_t precision_bits = config::ConfigManager::positionPrecisionBits();
+    if (precision_bits > 32) precision_bits = 32;
+    pos = encodeTag    (buf, pos, 14, 0); pos = encodeVarint(buf, pos, precision_bits);
 
     (void)buf_len;
     return pos;
@@ -151,16 +164,23 @@ void MeshNode::maybeTransmitPosition(QueueHandle_t tx_queue, EventGroupHandle_t 
     bool reduced_rate = (ps == PlayerStatus::HIT ||
                          ps == PlayerStatus::RESPAWNING ||
                          ps == PlayerStatus::ELIMINATED);
+    uint32_t heartbeat_secs = config::ConfigManager::positionBroadcastIntervalSecs();
+    if (heartbeat_secs == 0) heartbeat_secs = defaults::POSITION_BROADCAST_INTERVAL_SECS;
+    uint32_t min_tx_secs = config::ConfigManager::positionMinTxIntervalSecs();
+    if (min_tx_secs == 0) min_tx_secs = defaults::POSITION_MIN_TX_INTERVAL_SECS;
+    uint32_t movement_threshold_m = config::ConfigManager::positionMovementThresholdM();
+    if (movement_threshold_m == 0) movement_threshold_m = defaults::POSITION_MOVEMENT_THRESHOLD_M;
+
     uint32_t heartbeat_ms = reduced_rate
         ? (defaults::POSITION_HIT_HEARTBEAT_SECS * 1000UL)
-        : (defaults::POSITION_BROADCAST_INTERVAL_SECS * 1000UL);
+        : (heartbeat_secs * 1000UL);
 
     bool should_tx = false;
     // Movement trigger: ≥ 10 m displacement AND ≥ 15 s since last TX.
     // Suppress movement-triggered TX for players who are not actively moving (HIT/ELIMINATED).
     if (!reduced_rate &&
-        displacement >= defaults::POSITION_MOVEMENT_THRESHOLD_M &&
-        (now - s_last_position_ms) >= (defaults::POSITION_MIN_TX_INTERVAL_SECS * 1000UL)) {
+        displacement >= movement_threshold_m &&
+        (now - s_last_position_ms) >= (min_tx_secs * 1000UL)) {
         should_tx = true;
     }
     // Heartbeat trigger.
@@ -183,12 +203,13 @@ void MeshNode::maybeTransmitPosition(QueueHandle_t tx_queue, EventGroupHandle_t 
 // ── MeshNode::handlePositionRequest() ────────────────────────────────────────
 void MeshNode::handlePositionRequest(uint32_t requester_id, QueueHandle_t tx_queue) {
     // Respond within 2 seconds (§8.12), bypassing beaconing timer.
+    (void)requester_id;
     if (GPS::hasFix()) {
         uint8_t buf[64];
         uint16_t len = serializePosition(buf, sizeof(buf));
         if (len > 0) {
-            // Unicast response to requester (§8.12).
-            Router::sendPacket(Portnum::POSITION_APP, requester_id, buf, len, false, tx_queue);
+            // Broadcast response so every stale map pin can refresh from one request (§8.7).
+            Router::sendPacket(Portnum::POSITION_APP, 0xFFFFFFFF, buf, len, false, tx_queue);
         }
         GPS::markPositionTransmitted();
         s_last_position_ms = millis();

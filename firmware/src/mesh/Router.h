@@ -40,10 +40,11 @@ struct OtaHeader {
 // Entry in the application-layer ACK retry queue (§8.9).
 struct AckRetryEntry {
     uint32_t msg_id;           // logical message ID (Data.request_id)
+    uint32_t dest_node_id;     // original destination for retries
     uint32_t timeout_ms;       // absolute deadline
     uint8_t  attempts;         // retries so far (0 = first send)
     uint8_t  hop_start;        // original hop_start for timeout formula
-    uint8_t  portnum;          // for re-serialization
+    uint32_t portnum;          // for diagnostics/retry policy
     uint8_t  payload[237];     // original payload bytes
     uint16_t payload_len;
     bool     in_use;
@@ -65,6 +66,11 @@ public:
     static void sendPacket(Portnum portnum, uint32_t dest,
                            const uint8_t* payload, uint16_t payload_len,
                            bool want_ack, QueueHandle_t tx_queue);
+
+    // Phase 2.3: Prepare and queue an outgoing packet from a decoded
+    // meshtastic.Data protobuf delivered over BLE MESH_TX.
+    static bool sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
+                               QueueHandle_t tx_queue);
 
     // Phase 2.11: Tick the ACK retry queue — called from Router task every 100 ms.
     // Retransmits entries whose timeout has elapsed; removes after MAX_RETRIES.

@@ -101,8 +101,8 @@ static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
 }
 
 // ── MESH_TX write callback ────────────────────────────────────────────────────
-// Android sends raw OTA-format mesh packet bytes for transmission.
-// The data is the serialized MeshPacket (with OTA wire header + encrypted payload).
+// Android normally sends a decoded meshtastic.Data protobuf. For compatibility
+// with early tooling, already-encoded OTA frames are still accepted and queued.
 static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
                      uint8_t* data, uint16_t len) {
     (void)conn_hdl; (void)chr;
@@ -112,7 +112,7 @@ static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
     const uint8_t* chunk_payload;
     size_t chunk_len;
     if (!Framing::decodeChunk(data, len, &hdr, &chunk_payload, &chunk_len)) return;
-    if (hdr.total_length < 12 || hdr.total_length > sizeof(s_mesh_tx_assembly)) return;
+    if (hdr.total_length == 0 || hdr.total_length > sizeof(s_mesh_tx_assembly)) return;
     if (hdr.chunk_index == 0) {
         memset(s_mesh_tx_assembly, 0, sizeof(s_mesh_tx_assembly));
         s_mesh_tx_recv_mask = 0;
@@ -120,6 +120,12 @@ static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
     bool done = Framing::reassemble(hdr, chunk_payload, chunk_len,
                                     s_mesh_tx_assembly, &s_mesh_tx_recv_mask);
     if (!done) return;
+
+    if (Router::sendDataPacket(s_mesh_tx_assembly, hdr.total_length, s_radio_tx_queue)) {
+        return;
+    }
+
+    if (hdr.total_length < 12) return;
 
     PooledPacket* pkt = PacketPool::alloc();
     if (!pkt) return;

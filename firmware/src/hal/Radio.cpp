@@ -61,14 +61,17 @@ static void IRAM_ATTR on_packet_sent() {
 // Apply PHY profile parameters to the SX1262. Returns true on success.
 static bool applyPhyProfile(uint8_t profile_idx) {
     if (profile_idx >= 5) profile_idx = 0;
-    const auto& p = defaults::PHY_PROFILES[profile_idx];
+    uint8_t sf = defaults::PHY_PROFILES[profile_idx].spreading_factor;
+    uint32_t bw_hz = defaults::PHY_PROFILES[profile_idx].bandwidth_hz;
+    uint8_t cr = defaults::PHY_PROFILES[profile_idx].coding_rate;
+    config::ConfigManager::loraPhyProfile(profile_idx, sf, bw_hz, cr);
 
     // Determine frequency from LoraConfig region.
     // Phase 2.8: read from ConfigManager; default to EU868.
-    float freq_mhz = LORA_FREQ_EU868;
+    float freq_mhz = config::ConfigManager::loraFrequencyMhz();
 
-    float bw_khz = p.bandwidth_hz / 1000.0f;
-    int16_t cr   = p.coding_rate;   // RadioLib uses 5=4/5, 6=4/6, 7=4/7, 8=4/8
+    float bw_khz = bw_hz / 1000.0f;
+    int16_t radio_cr = cr;   // RadioLib uses 5=4/5, 6=4/6, 7=4/7, 8=4/8
 
     int16_t err = s_radio.setFrequency(freq_mhz);
     if (err != RADIOLIB_ERR_NONE) return false;
@@ -76,10 +79,10 @@ static bool applyPhyProfile(uint8_t profile_idx) {
     err = s_radio.setBandwidth(bw_khz);
     if (err != RADIOLIB_ERR_NONE) return false;
 
-    err = s_radio.setSpreadingFactor(p.spreading_factor);
+    err = s_radio.setSpreadingFactor(sf);
     if (err != RADIOLIB_ERR_NONE) return false;
 
-    err = s_radio.setCodingRate(cr);
+    err = s_radio.setCodingRate(radio_cr);
     if (err != RADIOLIB_ERR_NONE) return false;
 
     s_active_phy = profile_idx;
@@ -95,15 +98,21 @@ void Radio::init() {
     // SX1262 uses a dedicated SPI bus on the T-Echo Plus (same bus as radio).
     // The Module constructor already references the correct pins.
 
-    // Attempt to initialize with Profile 0 defaults.
+    uint8_t initial_phy = config::ConfigManager::primarySlotPhyProfileIndex();
+    if (initial_phy >= 5) initial_phy = 0;
+    uint8_t sf = defaults::PHY_PROFILES[initial_phy].spreading_factor;
+    uint32_t bw_hz = defaults::PHY_PROFILES[initial_phy].bandwidth_hz;
+    uint8_t cr = defaults::PHY_PROFILES[initial_phy].coding_rate;
+    config::ConfigManager::loraPhyProfile(initial_phy, sf, bw_hz, cr);
+
     // RadioLib begin(freq, bw, sf, cr, syncWord, txPower, preamble).
     int16_t result = s_radio.begin(
-        LORA_FREQ_EU868,
-        defaults::PHY_PROFILES[0].bandwidth_hz / 1000.0f,
-        defaults::PHY_PROFILES[0].spreading_factor,
-        defaults::PHY_PROFILES[0].coding_rate,
+        config::ConfigManager::loraFrequencyMhz(),
+        bw_hz / 1000.0f,
+        sf,
+        cr,
         LORA_SYNC_WORD,
-        defaults::LORA_TX_POWER_DBM,
+        config::ConfigManager::loraTxPowerDbm(),
         LORA_PREAMBLE_LENGTH,
         MASH_SX1262_TCXO_VOLTAGE
     );
@@ -124,7 +133,7 @@ void Radio::init() {
     s_radio.setPacketReceivedAction(on_packet_received);
     s_radio.setPacketSentAction(on_packet_sent);
 
-    s_active_phy = 0;
+    s_active_phy = initial_phy;
 
     // Enter continuous receive mode.
     s_radio.startReceive();
@@ -157,12 +166,16 @@ void Radio::reinit() {
     uint8_t new_phy = config::ConfigManager::primarySlotPhyProfileIndex();
     if (new_phy >= 5) new_phy = 0;
     s_active_phy = new_phy;
+    uint8_t sf = defaults::PHY_PROFILES[s_active_phy].spreading_factor;
+    uint32_t bw_hz = defaults::PHY_PROFILES[s_active_phy].bandwidth_hz;
+    uint8_t cr = defaults::PHY_PROFILES[s_active_phy].coding_rate;
+    config::ConfigManager::loraPhyProfile(s_active_phy, sf, bw_hz, cr);
 
     int16_t result = s_radio.begin(
         freq_mhz,
-        defaults::PHY_PROFILES[s_active_phy].bandwidth_hz / 1000.0f,
-        defaults::PHY_PROFILES[s_active_phy].spreading_factor,
-        defaults::PHY_PROFILES[s_active_phy].coding_rate,
+        bw_hz / 1000.0f,
+        sf,
+        cr,
         LORA_SYNC_WORD,
         tx_power,
         LORA_PREAMBLE_LENGTH,

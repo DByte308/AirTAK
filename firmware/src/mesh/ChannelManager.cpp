@@ -13,6 +13,25 @@ namespace mash {
 
 static ChannelSlot s_slots[MAX_CHANNEL_SLOTS];
 
+static void seedDefaultSlots() {
+    for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
+        const auto& def = defaults::CHANNEL_SLOTS[i];
+        auto& slot = s_slots[i];
+        slot.index              = def.index;
+        strncpy(slot.name, def.name, 16);
+        slot.name[16]           = '\0';
+        slot.psk_len            = 0;
+        memset(slot.psk, 0, sizeof(slot.psk));
+        slot.role               = static_cast<ChannelRole>(def.role);
+        slot.uplink_enabled     = def.uplink_enabled;
+        slot.downlink_enabled   = def.downlink_enabled;
+        slot.position_precision = def.position_precision;
+        slot.phy_profile_index  = def.phy_profile_index;
+        slot.channel_hash       = 0;
+        memset(slot.aes_key, 0, sizeof(slot.aes_key));
+    }
+}
+
 // ── parseChannelSlot() ───────────────────────────────────────────────────────
 // Parse a single ChannelConfig sub-message (field layout matches encodeChannelConfig).
 // Fields: 1=index(varint), 2=name(string), 3=psk(bytes), 4=role(varint),
@@ -75,26 +94,10 @@ static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot&
     return idx;
 }
 
-void ChannelManager::init() {
-    // Step 1: Seed all slots from factory defaults.
-    for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
-        const auto& def = defaults::CHANNEL_SLOTS[i];
-        auto& slot = s_slots[i];
-        slot.index              = def.index;
-        strncpy(slot.name, def.name, 16);
-        slot.name[16]           = '\0';
-        slot.psk_len            = 0;
-        memset(slot.psk, 0, sizeof(slot.psk));
-        slot.role               = static_cast<ChannelRole>(def.role);
-        slot.uplink_enabled     = def.uplink_enabled;
-        slot.downlink_enabled   = def.downlink_enabled;
-        slot.position_precision = def.position_precision;
-        slot.phy_profile_index  = def.phy_profile_index;
-        slot.channel_hash       = 0;
-        memset(slot.aes_key, 0, sizeof(slot.aes_key));
-    }
+static void loadConfiguredSlots() {
+    seedDefaultSlots();
 
-    // Step 2: Overlay with persisted CHANNELS config from ConfigManager (§2.7).
+    // Overlay with current CHANNELS config from ConfigManager (§2.7).
     // ConfigManager is initialized before ChannelManager in main.cpp so the buffer
     // is valid (either loaded from flash or populated with factory defaults).
     uint8_t  buf[512];
@@ -129,11 +132,15 @@ void ChannelManager::init() {
             }
         }
     }
+}
 
+void ChannelManager::init() {
     rekey();
 }
 
 void ChannelManager::rekey() {
+    loadConfiguredSlots();
+
     // Recompute channel hashes and AES keys for all active slots (§8.6).
     for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
         auto& slot = s_slots[i];

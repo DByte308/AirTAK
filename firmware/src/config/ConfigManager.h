@@ -52,9 +52,20 @@ public:
     // Returns true if a radio restart is pending (groups committed but restart not yet run).
     static bool isRadioRestartPending();
 
-    // Returns the device's configured long name (from DEVICE config group, field 2).
+    // Returns the device's configured long name (from DEVICE config group, field 1).
     // Falls back to the compile-time default if not configured.
     static const char* deviceLongName();
+
+    // Returns the device's configured short name (from DEVICE config group, field 2).
+    // Falls back to the compile-time default if not configured.
+    static const char* deviceShortName();
+
+    // ── Position parameter accessors (read from POSITION config buffer) ─────
+    static uint32_t positionBroadcastIntervalSecs();
+    static uint32_t positionMinTxIntervalSecs();
+    static uint32_t positionMovementThresholdM();
+    static uint32_t positionPrecisionBits();
+    static uint8_t  positionHopLimitOverride();
 
     // ── LoRa parameter accessors (read from LORA config buffer) ──────────────
     // These are used by Radio::reinit() to apply the committed LORA config
@@ -72,6 +83,13 @@ public:
     // from the CHANNELS config buffer (field 8 of the PRIMARY slot sub-message).
     // Falls back to 0 (Long/Mesh) if no PRIMARY slot is found or field is absent.
     static uint8_t primarySlotPhyProfileIndex();
+
+    // Reads a PHY profile by index from LORA config. Returns false on malformed
+    // config or an out-of-range index, in which case callers should use Defaults.h.
+    static bool loraPhyProfile(uint8_t profile_index,
+                               uint8_t& spreading_factor,
+                               uint32_t& bandwidth_hz,
+                               uint8_t& coding_rate);
 };
 
 } // namespace config

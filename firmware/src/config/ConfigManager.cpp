@@ -8,21 +8,25 @@
 #include "config/Defaults.h"
 #include "hal/Radio.h"
 #include "mesh/ChannelManager.h"
+#include "mesh/PacketPool.h"
 #include "config.h"
 #include "mash/config.pb.h"
 #include <pb_encode.h>
+#include <pb_decode.h>
 #include <FreeRTOS.h>
 #include <queue.h>
 #include <cstring>
 #include <Arduino.h>
 
 extern QueueHandle_t g_config_change_queue;
+extern QueueHandle_t g_radio_tx_queue;
 
 namespace mash {
 namespace config {
 
 static ConfigChangedCallback s_callback = nullptr;
 static bool                  s_radio_restart_pending = false;
+static bool                  s_dirty[CONFIG_GROUP_COUNT];
 
 // In-memory raw protobuf buffers for each config group (max 512 bytes per group)
 constexpr size_t CONFIG_BUF_SIZE = 512;
@@ -192,6 +196,7 @@ static size_t encodeFactoryDefaults(ConfigGroup g, uint8_t* buf, size_t buf_len)
 // ── ConfigManager public API ─────────────────────────────────────────────────
 
 void ConfigManager::init() {
+    memset(s_dirty, 0, sizeof(s_dirty));
     for (uint8_t i = 0; i < CONFIG_GROUP_COUNT; i++) {
         ConfigGroup g = static_cast<ConfigGroup>(i);
         size_t n = FlashStore::read(g, s_buffers[i], CONFIG_BUF_SIZE);
@@ -205,27 +210,44 @@ void ConfigManager::init() {
 }
 
 int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t pb_len, bool commit) {
+    uint8_t idx = static_cast<uint8_t>(group);
+    if (idx >= CONFIG_GROUP_COUNT) return -3;
     if (pb_len > CONFIG_BUF_SIZE) return -1;
 
     // Structural proto validation: reject malformed streams before storing.
     if (pb_len > 0 && !proto::isValid(pb_data, pb_len)) return -2;
 
-    uint8_t idx = static_cast<uint8_t>(group);
-    memcpy(s_buffers[idx], pb_data, pb_len);
-    s_sizes[idx] = pb_len;
-
-    if (commit) {
-        FlashStore::write(group, pb_data, pb_len);
-        if (config::groupRequiresRadioRestart(group)) {
-            s_radio_restart_pending = true;
-            // Signal task_config_apply to run radioRestartProcedure() on its own stack
-            // (priority LOW/2) so the BLE event loop is not blocked during the
-            // ≤300 ms radio pause/reinit/resume sequence (§9.4.2).
-            void* sentinel = nullptr;
-            if (::g_config_change_queue) xQueueSend(::g_config_change_queue, &sentinel, 0);
-        }
+    if (pb_len > 0) {
+        memcpy(s_buffers[idx], pb_data, pb_len);
+        s_sizes[idx] = pb_len;
+        s_dirty[idx] = true;
         if (s_callback) s_callback(group);
     }
+
+    if (!commit) {
+        return 0;
+    }
+
+    bool restart_required = false;
+    for (uint8_t i = 0; i < CONFIG_GROUP_COUNT; i++) {
+        if (!s_dirty[i]) continue;
+        ConfigGroup dirty_group = static_cast<ConfigGroup>(i);
+        FlashStore::write(dirty_group, s_buffers[i], s_sizes[i]);
+        if (config::groupRequiresRadioRestart(dirty_group)) {
+            restart_required = true;
+        }
+        s_dirty[i] = false;
+    }
+
+    if (restart_required) {
+        s_radio_restart_pending = true;
+        // Signal task_config_apply to run radioRestartProcedure() on its own stack
+        // (priority LOW/2) so the BLE event loop is not blocked during the
+        // ≤300 ms radio pause/reinit/resume sequence (§9.4.2).
+        void* sentinel = nullptr;
+        if (::g_config_change_queue) xQueueSend(::g_config_change_queue, &sentinel, 0);
+    }
+
     return 0;
 }
 
@@ -248,7 +270,19 @@ void ConfigManager::registerCallback(ConfigChangedCallback cb) { s_callback = cb
 
 void ConfigManager::radioRestartProcedure() {
     // §9.4.2 Radio restart sequence. Target ≤ 300 ms.
+    uint32_t started_ms = millis();
     Radio::pause();
+
+    while (!Radio::isPaused() && (millis() - started_ms) < 100) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    PooledPacket* queued = nullptr;
+    while (::g_radio_tx_queue && xQueueReceive(::g_radio_tx_queue, &queued, 0) == pdTRUE) {
+        PacketPool::free(queued);
+        queued = nullptr;
+    }
+
     Radio::reinit();
     ChannelManager::rekey();
     Radio::resume();
@@ -259,6 +293,7 @@ bool ConfigManager::isRadioRestartPending() { return s_radio_restart_pending; }
 
 // Device long name: scan DEVICE group buffer for tag 0x12 (field 2, string).
 static char s_device_long_name[65];
+static char s_device_short_name[8];
 
 const char* ConfigManager::deviceLongName() {
     uint8_t idx = static_cast<uint8_t>(ConfigGroup::DEVICE);
@@ -277,6 +312,25 @@ const char* ConfigManager::deviceLongName() {
         }
     }
     return defaults::DEVICE_LONG_NAME;
+}
+
+const char* ConfigManager::deviceShortName() {
+    uint8_t idx = static_cast<uint8_t>(ConfigGroup::DEVICE);
+    if (s_sizes[idx] == 0) return defaults::DEVICE_SHORT_NAME;
+
+    const uint8_t* buf = s_buffers[idx];
+    size_t n = s_sizes[idx];
+    for (size_t i = 0; i + 1 < n; i++) {
+        if (buf[i] == 0x12) { // field 2, wire 2 = DeviceConfig.short_name
+            uint8_t len = buf[i + 1];
+            if (i + 2 + len <= n && len < sizeof(s_device_short_name)) {
+                memcpy(s_device_short_name, buf + i + 2, len);
+                s_device_short_name[len] = '\0';
+                return s_device_short_name;
+            }
+        }
+    }
+    return defaults::DEVICE_SHORT_NAME;
 }
 
 // ── LoRa parameter accessors ─────────────────────────────────────────────────
@@ -318,6 +372,47 @@ static bool readProtoVarint(const uint8_t* buf, size_t n, size_t& pos, uint32_t&
         shift += 7;
     }
     return false;
+}
+
+static uint32_t readPositionVarintField(uint32_t wanted_field, uint32_t fallback) {
+    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::POSITION);
+    const uint8_t* buf = s_buffers[gidx];
+    size_t n = s_sizes[gidx];
+    size_t pos = 0;
+    while (pos < n) {
+        uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
+        uint8_t wire = tag & 7;
+        uint32_t field = tag >> 3;
+        if (wire == 0) {
+            uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
+            if (field == wanted_field) return v;
+        } else {
+            if (!skipProtoField(buf, n, pos, wire)) break;
+        }
+    }
+    return fallback;
+}
+
+uint32_t ConfigManager::positionBroadcastIntervalSecs() {
+    return readPositionVarintField(1, defaults::POSITION_BROADCAST_INTERVAL_SECS);
+}
+
+uint32_t ConfigManager::positionMinTxIntervalSecs() {
+    return readPositionVarintField(5, defaults::POSITION_MIN_TX_INTERVAL_SECS);
+}
+
+uint32_t ConfigManager::positionMovementThresholdM() {
+    return readPositionVarintField(4, defaults::POSITION_MOVEMENT_THRESHOLD_M);
+}
+
+uint32_t ConfigManager::positionPrecisionBits() {
+    return readPositionVarintField(2, defaults::POSITION_GPS_PRECISION_BITS);
+}
+
+uint8_t ConfigManager::positionHopLimitOverride() {
+    uint32_t value = readPositionVarintField(6, 0);
+    if (value > 7) value = 7;
+    return static_cast<uint8_t>(value);
 }
 
 float ConfigManager::loraFrequencyMhz() {
@@ -388,6 +483,30 @@ uint8_t ConfigManager::primarySlotPhyProfileIndex() {
         } else { if (!skipProtoField(buf, n, pos, wire)) break; }
     }
     return 0; // default: Long/Mesh (Profile 0)
+}
+
+bool ConfigManager::loraPhyProfile(uint8_t profile_index,
+                                   uint8_t& spreading_factor,
+                                   uint32_t& bandwidth_hz,
+                                   uint8_t& coding_rate) {
+    if (profile_index >= 5) return false;
+
+    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::LORA);
+    if (s_sizes[gidx] == 0) return false;
+
+    mash_LoraConfig msg = mash_LoraConfig_init_zero;
+    pb_istream_t stream = pb_istream_from_buffer(s_buffers[gidx], s_sizes[gidx]);
+    if (!pb_decode(&stream, mash_LoraConfig_fields, &msg)) return false;
+    if (profile_index >= msg.profiles_count) return false;
+
+    const auto& profile = msg.profiles[profile_index];
+    if (profile.spreading_factor < 7 || profile.spreading_factor > 12) return false;
+    if (profile.bandwidth_hz == 0 || profile.coding_rate < 5 || profile.coding_rate > 8) return false;
+
+    spreading_factor = static_cast<uint8_t>(profile.spreading_factor);
+    bandwidth_hz = profile.bandwidth_hz;
+    coding_rate = static_cast<uint8_t>(profile.coding_rate);
+    return true;
 }
 
 } // namespace config

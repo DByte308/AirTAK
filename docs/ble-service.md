@@ -63,6 +63,14 @@ For payloads ≤ 508 bytes: `chunk_count = 1`, `chunk_index = 0`.
 4. Firmware reassembles all chunks, parses `ConfigPayload` proto.
 5. Firmware applies config and sends `ConfigAck` back via CONFIG_RW Indicate (single chunk).
 
+### Flow (MESH_TX write)
+
+1. Android serializes a decoded `meshtastic.Data` protobuf.
+2. Android writes it to MESH_TX with the same 6-byte framing header.
+3. Firmware reassembles the Data payload, selects channel 0, applies hop limit and ACK policy, then encrypts and emits the OTA packet.
+
+For compatibility with early tooling, firmware still accepts an already-encoded OTA frame on MESH_TX when the payload does not parse as `meshtastic.Data` and is at least 12 bytes long.
+
 ---
 
 ## 5. Config Protocol Flow (§10.3)

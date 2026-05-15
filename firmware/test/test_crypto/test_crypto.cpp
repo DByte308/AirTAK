@@ -35,6 +35,9 @@ static const uint8_t TEST_PSK[32] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
+void setUp() {}
+void tearDown() {}
+
 void test_key_derivation_length() {
     uint8_t key[16];
     Crypto::deriveKey(TEST_PSK, sizeof(TEST_PSK), key);

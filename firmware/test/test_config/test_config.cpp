@@ -172,6 +172,23 @@ static void test_security_roundtrip() {
     TEST_ASSERT_EQUAL(defaults::SECURITY_MAX_BONDED_DEVICES, in.max_bonded_devices);
 }
 
+static void test_audio_roundtrip() {
+    mash_AudioConfig out = mash_AudioConfig_init_zero;
+    out.audio_channel_slot = defaults::AUDIO_CHANNEL_SLOT;
+    out.codec2_mode_bps = defaults::AUDIO_CODEC2_BPS;
+    out.ptt_enabled = defaults::AUDIO_PTT_ENABLED;
+    out.frame_count = defaults::AUDIO_FRAME_COUNT;
+
+    size_t len = encodeMessage(mash_AudioConfig_fields, out);
+    mash_AudioConfig in = mash_AudioConfig_init_zero;
+    decodeMessage(mash_AudioConfig_fields, s_encoded, len, in);
+
+    TEST_ASSERT_EQUAL(defaults::AUDIO_CHANNEL_SLOT, in.audio_channel_slot);
+    TEST_ASSERT_EQUAL(defaults::AUDIO_CODEC2_BPS, in.codec2_mode_bps);
+    TEST_ASSERT_FALSE(in.ptt_enabled);
+    TEST_ASSERT_EQUAL(defaults::AUDIO_FRAME_COUNT, in.frame_count);
+}
+
 static void test_flash_store_roundtrip_all_phase1_groups() {
     const uint8_t payload[] = {0x0A, 0x04, 'M', 'A', 'S', 'H'};
     const ConfigGroup groups[] = {
@@ -182,6 +199,7 @@ static void test_flash_store_roundtrip_all_phase1_groups() {
         ConfigGroup::POWER,
         ConfigGroup::GAME,
         ConfigGroup::SECURITY,
+        ConfigGroup::AUDIO,
     };
 
     for (ConfigGroup group : groups) {
@@ -199,6 +217,7 @@ static void test_group_paths_and_restart_metadata() {
     TEST_ASSERT_EQUAL_STRING("/config/device.pb", configGroupPath(ConfigGroup::DEVICE));
     TEST_ASSERT_EQUAL_STRING("/config/lora.pb", configGroupPath(ConfigGroup::LORA));
     TEST_ASSERT_EQUAL_STRING("/config/security.pb", configGroupPath(ConfigGroup::SECURITY));
+    TEST_ASSERT_EQUAL_STRING("/config/audio.pb", configGroupPath(ConfigGroup::AUDIO));
     TEST_ASSERT_TRUE(groupRequiresRadioRestart(ConfigGroup::LORA));
     TEST_ASSERT_TRUE(groupRequiresRadioRestart(ConfigGroup::CHANNELS));
     TEST_ASSERT_FALSE(groupRequiresRadioRestart(ConfigGroup::DEVICE));
@@ -213,6 +232,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_power_roundtrip);
     RUN_TEST(test_game_roundtrip);
     RUN_TEST(test_security_roundtrip);
+    RUN_TEST(test_audio_roundtrip);
     RUN_TEST(test_flash_store_roundtrip_all_phase1_groups);
     RUN_TEST(test_group_paths_and_restart_metadata);
     return UNITY_END();
