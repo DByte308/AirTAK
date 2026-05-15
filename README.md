@@ -4,7 +4,7 @@ LoRa mesh radio firmware for the **LilyGo T-Echo Plus** and a native **Android**
 
 MASH is Meshtastic wire-format compatible on the shared channel and introduces a dedicated game-mode protocol on top.
 
-> **Status: pre-development.** No code exists yet. See [`PLANNING.md`](PLANNING.md) for the full design.
+> **Status:** Phase 1 firmware scaffolding is buildable and covered by native tests. Hardware signoff still requires validation on actual T-Echo Plus devices.
 
 ---
 
@@ -28,7 +28,19 @@ MASH is Meshtastic wire-format compatible on the shared channel and introduces a
 | Display | 1.54″ e-ink 200 × 200 |
 | Battery | 400 mAh LiPo |
 
-## Repository layout (planned)
+## Firmware quick start
+
+The firmware toolchain is pinned in git and installed into a local, ignored venv under `firmware/.venv`.
+
+```powershell
+.\tools\setup_firmware_env.ps1
+.\tools\pio_firmware.ps1 test -e native
+.\tools\pio_firmware.ps1 run -e t_echo_plus
+```
+
+`setup_firmware_env.ps1` installs PlatformIO plus Zig-based native compiler wrappers so Windows machines can run the Phase 1 native tests without a separate system C/C++ compiler. The target firmware build still uses PlatformIO's nRF52 ARM toolchain.
+
+## Repository layout
 
 ```
 proto/
@@ -40,7 +52,9 @@ android/            Kotlin + Jetpack Compose app (min API 31, target 35)
 
 tools/
 ├── flash.ps1       Flash firmware to connected device
+├── pio_firmware.ps1        Run the pinned firmware PlatformIO environment
 ├── proto_gen.ps1   Regenerate nanopb + Kotlin sources from .proto files
+├── setup_firmware_env.ps1  Create the local firmware Python environment
 └── tile_fetch.py   Download MBTiles for a bounding box
 
 docs/

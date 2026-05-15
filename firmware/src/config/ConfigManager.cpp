@@ -320,14 +320,20 @@ static bool skipProtoField(const uint8_t* buf, size_t n, size_t& pos, uint8_t wi
             while (pos < n) { if (!(buf[pos++] & 0x80)) return true; }
             return false;
         case 1: // 64-bit
-            if (pos + 8 > n) return false; pos += 8; return true;
+            if (pos + 8 > n) return false;
+            pos += 8;
+            return true;
         case 2: { // length-delimited
             uint32_t sz = 0; uint8_t sh = 0;
             while (pos < n) { uint8_t b = buf[pos++]; sz |= (uint32_t)(b & 0x7F) << sh; if (!(b & 0x80)) break; sh += 7; }
-            if (pos + sz > n) return false; pos += sz; return true;
+            if (pos + sz > n) return false;
+            pos += sz;
+            return true;
         }
         case 5: // 32-bit
-            if (pos + 4 > n) return false; pos += 4; return true;
+            if (pos + 4 > n) return false;
+            pos += 4;
+            return true;
         default: return false;
     }
 }

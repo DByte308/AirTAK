@@ -111,14 +111,15 @@ static void renderMainScreen() {
 
     // Mesh row
     char mbuf[24];
-    snprintf(mbuf, sizeof(mbuf), "MESH: %u node%s",
-             MeshNode::knownNodeCount(), MeshNode::knownNodeCount() == 1 ? "" : "s");
+    uint32_t knownNodeCount = MeshNode::knownNodeCount();
+    snprintf(mbuf, sizeof(mbuf), "MESH: %lu node%s",
+             static_cast<unsigned long>(knownNodeCount), knownNodeCount == 1 ? "" : "s");
     s_display.setCursor(4, y); s_display.print(mbuf);
     y += 18;
 
     // Node ID (short, last 4 hex digits)
     char idbuf[16];
-    snprintf(idbuf, sizeof(idbuf), "ID: %08X", MeshNode::nodeId());
+    snprintf(idbuf, sizeof(idbuf), "ID: %08lX", static_cast<unsigned long>(MeshNode::nodeId()));
     s_display.setCursor(4, y); s_display.print(idbuf);
 
     drawFooter();
@@ -164,7 +165,9 @@ static void renderRadioScreen() {
     s_display.setCursor(4, y); s_display.print(rbuf); y += 18;
     snprintf(rbuf, sizeof(rbuf), "SNR:  %.1f dB", Radio::lastSnr());
     s_display.setCursor(4, y); s_display.print(rbuf); y += 18;
-    snprintf(rbuf, sizeof(rbuf), "RX:%u TX:%u", Radio::packetsRx(), Radio::packetsTx());
+    snprintf(rbuf, sizeof(rbuf), "RX:%lu TX:%lu",
+             static_cast<unsigned long>(Radio::packetsRx()),
+             static_cast<unsigned long>(Radio::packetsTx()));
     s_display.setCursor(4, y); s_display.print(rbuf);
 
     drawFooter();
