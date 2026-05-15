@@ -16,6 +16,10 @@ public:
     // Phase 1.5: Register the BLE DFU service (BLEDfu from Adafruit Bluefruit library).
     // Must be called before Bluefruit.Advertising.start().
     static void init();
+
+    // Phase 1.5: Request entry into DFU bootloader mode via the Buttonless DFU control point.
+    // Called from MashService when an ADMIN_DFU_ENTER command is received over BLE.
+    static void enterDfu();
 };
 
 } // namespace ble

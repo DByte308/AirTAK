@@ -42,6 +42,11 @@ public:
 
     // Returns the number of known mesh nodes (excludes self).
     static uint32_t knownNodeCount();
+
+    // Phase 2.2: Called by the Router when a NODEINFO_APP packet is received from a
+    // remote node. Tracks unique source IDs so knownNodeCount() stays accurate.
+    // Updates the display dirty flag when a new node is first seen.
+    static void onNodeInfoReceived(uint32_t src_node_id);
 };
 
 } // namespace mash

@@ -171,6 +171,12 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         }
     }
 
+    // ── NODEINFO_APP dispatch (§2.2) ──────────────────────────────────────────
+    // Track remote node IDs so knownNodeCount() stays accurate for the display.
+    if (portnum_value == static_cast<uint32_t>(Portnum::NODEINFO_APP)) {
+        MeshNode::onNodeInfoReceived(hdr.src_node_id);
+    }
+
     // ── MASH_POSITION_REQUEST dispatch (§2.12) ──────────────────────────────
     // When we receive a PositionRequestPacket addressed to us (or broadcast),
     // respond with a unicast POSITION_APP within 2 s, bypassing the beaconing timer.

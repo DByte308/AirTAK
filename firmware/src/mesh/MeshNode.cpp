@@ -6,6 +6,8 @@
 #include "mesh/Router.h"
 #include "mesh/Portnums.h"
 #include "hal/GPS.h"
+#include "hal/Display.h"
+#include "game/PlayerState.h"
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "firmware/include/config.h"
@@ -144,11 +146,20 @@ void MeshNode::maybeTransmitPosition(QueueHandle_t tx_queue, EventGroupHandle_t 
     uint32_t now = millis();
     float displacement = GPS::displacementFromLastTxMeters();
 
-    uint32_t heartbeat_ms = defaults::POSITION_BROADCAST_INTERVAL_SECS * 1000UL;
+    // Players in HIT, RESPAWNING, or ELIMINATED states use a 5-minute heartbeat (§8.7).
+    PlayerStatus ps = PlayerState::status();
+    bool reduced_rate = (ps == PlayerStatus::HIT ||
+                         ps == PlayerStatus::RESPAWNING ||
+                         ps == PlayerStatus::ELIMINATED);
+    uint32_t heartbeat_ms = reduced_rate
+        ? (defaults::POSITION_HIT_HEARTBEAT_SECS * 1000UL)
+        : (defaults::POSITION_BROADCAST_INTERVAL_SECS * 1000UL);
 
     bool should_tx = false;
     // Movement trigger: ≥ 10 m displacement AND ≥ 15 s since last TX.
-    if (displacement >= defaults::POSITION_MOVEMENT_THRESHOLD_M &&
+    // Suppress movement-triggered TX for players who are not actively moving (HIT/ELIMINATED).
+    if (!reduced_rate &&
+        displacement >= defaults::POSITION_MOVEMENT_THRESHOLD_M &&
         (now - s_last_position_ms) >= (defaults::POSITION_MIN_TX_INTERVAL_SECS * 1000UL)) {
         should_tx = true;
     }
@@ -186,5 +197,25 @@ void MeshNode::handlePositionRequest(uint32_t requester_id, QueueHandle_t tx_que
 
 uint32_t MeshNode::nodeId()          { return s_node_id;          }
 uint32_t MeshNode::knownNodeCount()  { return s_known_node_count; }
+
+// ── MeshNode::onNodeInfoReceived() ───────────────────────────────────────────
+// Track up to 50 unique remote node IDs. When a new node is seen for the first
+// time, increment s_known_node_count and mark the display dirty so the main
+// screen reflects the updated mesh size.
+constexpr uint8_t  MAX_KNOWN_NODES = 50;
+static uint32_t    s_known_ids[MAX_KNOWN_NODES];
+static uint8_t     s_known_id_count = 0;
+
+void MeshNode::onNodeInfoReceived(uint32_t src_node_id) {
+    if (src_node_id == s_node_id || src_node_id == 0) return;
+    for (uint8_t i = 0; i < s_known_id_count; i++) {
+        if (s_known_ids[i] == src_node_id) return; // already known
+    }
+    if (s_known_id_count < MAX_KNOWN_NODES) {
+        s_known_ids[s_known_id_count++] = src_node_id;
+    }
+    s_known_node_count = s_known_id_count;
+    Display::markDirty(DISPLAY_DIRTY_RADIO);
+}
 
 } // namespace mash

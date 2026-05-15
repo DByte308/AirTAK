@@ -38,6 +38,10 @@ inline const char* configGroupPath(ConfigGroup g) {
     }
 }
 
+// Alias used in FlashStore.cpp and tests.
+// configGroupFilename() is identical to configGroupPath().
+inline const char* configGroupFilename(ConfigGroup g) { return configGroupPath(g); }
+
 // Groups that require a radio restart when changed (§9.4.2).
 // After a commit of any of these groups, task_config_apply must perform:
 // pause → drain → reinit radio → rekey channels → resume (≤ 300 ms).

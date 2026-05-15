@@ -70,6 +70,7 @@ void setup() {
 
     // Initialize LittleFS config store and load all config groups from flash.
     // On first boot (no config files), defaults from Defaults.h are used.
+    mash::PacketPool::init();
     mash::config::FlashStore::init();
     mash::config::ConfigManager::init();
 
@@ -161,11 +162,21 @@ void task_ble_server(void* params) {
 }
 
 void task_config_apply(void* params) {
-    // Phase 2.8: hot-reload config — driven by config_change_queue posted by MashService.
+    // Phase 2.8: hot-reload config — driven by g_config_change_queue.
+    // ConfigManager::applyGroup() sets s_radio_restart_pending when a LORA or
+    // CHANNELS commit arrives on the BLE task stack. The BLE task posts a
+    // sentinel (nullptr) to g_config_change_queue instead of calling
+    // radioRestartProcedure() directly, keeping the BLE event loop unblocked.
+    // This task drains the queue and performs the ≤300 ms radio restart safely
+    // from its own stack context (priority LOW/2, stack 2 KB).
     for (;;) {
-        // Config apply is handled inline in MashService::onConfigWrite().
-        // This task is reserved for future batch/async config validation logic.
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        void* sentinel = nullptr;
+        // Block indefinitely until a restart request arrives.
+        if (xQueueReceive(g_config_change_queue, &sentinel, portMAX_DELAY) == pdTRUE) {
+            if (mash::config::ConfigManager::isRadioRestartPending()) {
+                mash::config::ConfigManager::radioRestartProcedure();
+            }
+        }
     }
 }
 

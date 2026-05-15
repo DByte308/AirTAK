@@ -111,6 +111,7 @@ constexpr const char* GAME_CALLSIGN         = "Player";
 constexpr uint32_t    GAME_TEAM_ID          = 0;    // 0 = SPECTATOR until user sets a team
 constexpr uint32_t    GAME_PLAYER_COLOR_RGB = 0x2196F3; // Material Blue
 constexpr bool        GAME_IS_ADMIN         = false;
+constexpr uint32_t    RESPAWN_TIMER_SECS    = 30;   // seconds to respawn after HIT cancel window expires (§12.6)
 
 // ── SecurityConfig ────────────────────────────────────────────────────────────
 constexpr uint32_t SECURITY_MAX_BONDED_DEVICES = 1;

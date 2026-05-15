@@ -22,13 +22,13 @@ enum class Portnum : uint32_t {
     // ── MASH private range (256–511) ─────────────────────────────────────────
     // Relayed by Meshtastic nodes but not decryptable without the game channel PSK.
 
-    MASH_PLAYER           = 256,  // PlayerStatePacket; hop_limit=3; ACKNOWLEDGED on transition
+    MASH_PLAYER           = 256,  // PlayerStatePacket; hop_limit=7; ACKNOWLEDGED on transition
     MASH_GAME             = 257,  // GameStatePacket; hop_limit=7; ACKNOWLEDGED
     MASH_ZONE             = 258,  // ZonePacket; hop_limit=7; ACKNOWLEDGED
-    MASH_OBJECTIVE        = 259,  // ObjectivePacket; hop_limit=5; ACKNOWLEDGED
+    MASH_OBJECTIVE        = 259,  // ObjectivePacket; hop_limit=7; ACKNOWLEDGED
     MASH_ADMIN            = 260,  // AdminPacket; hop_limit=7; ACKNOWLEDGED
     MASH_ACK              = 261,  // MashAck; hop_limit=hop_start of original; required for §8.9
-    MASH_POSITION_REQUEST = 262,  // PositionRequestPacket; hop_limit=5; BEST_EFFORT
+    MASH_POSITION_REQUEST = 262,  // PositionRequestPacket; hop_limit=7; BEST_EFFORT
     MASH_AUDIO            = 263,  // AudioPacket; hop_limit=1; BEST_EFFORT; MUST NOT relay
 };
 

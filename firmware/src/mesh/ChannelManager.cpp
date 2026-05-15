@@ -5,6 +5,7 @@
 #include "mesh/ChannelManager.h"
 #include "mesh/Crypto.h"
 #include "config/ConfigManager.h"
+#include "config/ConfigGroups.h"
 #include "config/Defaults.h"
 #include <cstring>
 
@@ -12,25 +13,123 @@ namespace mash {
 
 static ChannelSlot s_slots[MAX_CHANNEL_SLOTS];
 
+// ── parseChannelSlot() ───────────────────────────────────────────────────────
+// Parse a single ChannelConfig sub-message (field layout matches encodeChannelConfig).
+// Fields: 1=index(varint), 2=name(string), 3=psk(bytes), 4=role(varint),
+//         5=uplink_enabled(varint), 6=downlink_enabled(varint),
+//         7=position_precision(varint), 8=phy_profile_index(varint).
+// Returns the slot index encoded in field 1, or 0xFF if not present or out of range.
+static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot& slot) {
+    // First pass: locate the index field.
+    uint8_t idx = 0xFF;
+    size_t  sp  = 0;
+    while (sp < sub_len) {
+        uint32_t tag = 0; uint8_t shift = 0;
+        while (sp < sub_len) { uint8_t b = sub[sp++]; tag |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+        uint8_t wire  = tag & 0x07;
+        uint8_t field = (uint8_t)(tag >> 3);
+        if (wire == 0 && field == 1) {
+            uint32_t v = 0; shift = 0;
+            while (sp < sub_len) { uint8_t b = sub[sp++]; v |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            idx = (uint8_t)v;
+        } else if (wire == 0) { while (sp < sub_len && (sub[sp++] & 0x80)) {} }
+        else if (wire == 2) { uint32_t fl = 0; shift = 0; while (sp < sub_len) { uint8_t b = sub[sp++]; fl |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; } sp += fl; }
+        else if (wire == 5) { sp += 4; }
+        else if (wire == 1) { sp += 8; }
+    }
+    if (idx >= MAX_CHANNEL_SLOTS) return 0xFF;
+
+    // Second pass: populate slot fields.
+    sp = 0;
+    while (sp < sub_len) {
+        uint32_t tag = 0; uint8_t shift = 0;
+        while (sp < sub_len) { uint8_t b = sub[sp++]; tag |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+        uint8_t wire  = tag & 0x07;
+        uint8_t field = (uint8_t)(tag >> 3);
+        if (wire == 0) {
+            uint32_t v = 0; shift = 0;
+            while (sp < sub_len) { uint8_t b = sub[sp++]; v |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            switch (field) {
+                case 4: slot.role               = static_cast<ChannelRole>(v); break;
+                case 5: slot.uplink_enabled     = (v != 0); break;
+                case 6: slot.downlink_enabled   = (v != 0); break;
+                case 7: slot.position_precision = (uint8_t)v; break;
+                case 8: slot.phy_profile_index  = (uint8_t)v; break;
+                default: break;
+            }
+        } else if (wire == 2) {
+            uint32_t flen = 0; shift = 0;
+            while (sp < sub_len) { uint8_t b = sub[sp++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            if (field == 2 && flen > 0) { // name
+                uint8_t cplen = (uint8_t)(flen < 16 ? flen : 16);
+                memcpy(slot.name, sub + sp, cplen);
+                slot.name[cplen] = '\0';
+            } else if (field == 3 && flen > 0 && flen <= 32) { // psk
+                memcpy(slot.psk, sub + sp, flen);
+                slot.psk_len = (uint8_t)flen;
+            }
+            sp += flen;
+        } else if (wire == 5) { sp += 4; }
+        else if (wire == 1) { sp += 8; }
+    }
+    return idx;
+}
+
 void ChannelManager::init() {
-    // Load default channel configurations from Defaults.h.
-    // Phase 2.7: Load from ConfigManager when available.
+    // Step 1: Seed all slots from factory defaults.
     for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
         const auto& def = defaults::CHANNEL_SLOTS[i];
         auto& slot = s_slots[i];
-        slot.index             = def.index;
+        slot.index              = def.index;
         strncpy(slot.name, def.name, 16);
-        slot.name[16]          = '\0';
-        slot.psk_len           = 0; // PSK set by user at first-time setup
+        slot.name[16]           = '\0';
+        slot.psk_len            = 0;
         memset(slot.psk, 0, sizeof(slot.psk));
-        slot.role              = static_cast<ChannelRole>(def.role);
-        slot.uplink_enabled    = def.uplink_enabled;
-        slot.downlink_enabled  = def.downlink_enabled;
+        slot.role               = static_cast<ChannelRole>(def.role);
+        slot.uplink_enabled     = def.uplink_enabled;
+        slot.downlink_enabled   = def.downlink_enabled;
         slot.position_precision = def.position_precision;
-        slot.phy_profile_index = def.phy_profile_index;
-        slot.channel_hash      = 0;
+        slot.phy_profile_index  = def.phy_profile_index;
+        slot.channel_hash       = 0;
         memset(slot.aes_key, 0, sizeof(slot.aes_key));
     }
+
+    // Step 2: Overlay with persisted CHANNELS config from ConfigManager (§2.7).
+    // ConfigManager is initialized before ChannelManager in main.cpp so the buffer
+    // is valid (either loaded from flash or populated with factory defaults).
+    uint8_t  buf[512];
+    size_t   buf_len = config::ConfigManager::readGroup(
+                           config::ConfigGroup::CHANNELS, buf, sizeof(buf));
+    if (buf_len > 0) {
+        // Parse repeated ChannelConfig sub-messages (field 1, wire 2) at the top level.
+        size_t pos = 0;
+        while (pos < buf_len) {
+            uint32_t tag = 0; uint8_t shift = 0;
+            while (pos < buf_len) { uint8_t b = buf[pos++]; tag |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            uint8_t wire  = tag & 0x07;
+            uint8_t field = (uint8_t)(tag >> 3);
+            if (wire == 2 && field == 1) {
+                // Length-delimited ChannelConfig sub-message.
+                uint32_t submsg_len = 0; shift = 0;
+                while (pos < buf_len) { uint8_t b = buf[pos++]; submsg_len |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+                if (pos + submsg_len > buf_len) break;
+                ChannelSlot tmp{};
+                uint8_t idx = parseChannelSlot(buf + pos, submsg_len, tmp);
+                if (idx < MAX_CHANNEL_SLOTS) {
+                    parseChannelSlot(buf + pos, submsg_len, s_slots[idx]);
+                    s_slots[idx].index = idx; // ensure index field is authoritative
+                }
+                pos += submsg_len;
+            } else {
+                // Skip unknown top-level fields.
+                if (wire == 0) { while (pos < buf_len && (buf[pos++] & 0x80)) {} }
+                else if (wire == 2) { uint32_t fl = 0; shift = 0; while (pos < buf_len) { uint8_t b = buf[pos++]; fl |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; } pos += fl; }
+                else if (wire == 5) { pos += 4; }
+                else if (wire == 1) { pos += 8; }
+            }
+        }
+    }
+
     rekey();
 }
 

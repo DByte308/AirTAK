@@ -243,7 +243,12 @@ int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t 
         FlashStore::write(group, pb_data, pb_len);
         if (config::groupRequiresRadioRestart(group)) {
             s_radio_restart_pending = true;
-            radioRestartProcedure();
+            // Signal task_config_apply to run radioRestartProcedure() on its own stack
+            // (priority LOW/2) so the BLE event loop is not blocked during the
+            // ≤300 ms radio pause/reinit/resume sequence (§9.4.2).
+            extern QueueHandle_t g_config_change_queue;
+            void* sentinel = nullptr;
+            xQueueSend(g_config_change_queue, &sentinel, 0);
         }
         if (s_callback) s_callback(group);
     }
