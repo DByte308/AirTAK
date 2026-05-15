@@ -165,6 +165,11 @@ void task_gps_parser(void* params) {
     airtak::GPS::init();
     for (;;) {
         airtak::GPS::process(g_system_event_group);
+        // Yield for 100 ms between polling iterations to prevent starvation of
+        // lower-priority tasks (config apply, display, battery monitor) and
+        // competition with same-priority BLE task (§9.3).
+        // GPS NMEA sentences arrive at 1 Hz (1000 ms), so 100 ms polling is sufficient.
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 

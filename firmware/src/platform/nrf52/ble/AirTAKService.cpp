@@ -235,9 +235,7 @@ static void onAdminWrite(uint16_t conn_hdl, BLECharacteristic* chr,
             success = true;
             break;
         case airtak_AdminCommand_RADIO_RESTART:
-            Radio::pause();
-            Radio::reinit();
-            Radio::resume();
+            config::ConfigManager::radioRestartProcedure();
             success = true;
             break;
         case airtak_AdminCommand_GPS_RESET:

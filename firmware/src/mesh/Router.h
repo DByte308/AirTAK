@@ -119,6 +119,8 @@ public:
     static bool testFirstRetry(uint32_t& msg_id, uint8_t& attempts,
                                uint32_t& timeout_ms, uint8_t& hop_start,
                                uint16_t& payload_len);
+    static bool testIsPacketAddressedToMe(const OtaHeader& hdr,
+                                         uint32_t data_dest);
 #endif
 };
 

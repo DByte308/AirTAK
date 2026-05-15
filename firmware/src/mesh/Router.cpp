@@ -365,6 +365,13 @@ static void queueDeliveryFailure(uint32_t portnum, uint32_t msg_id) {
     queueAdminError(error);
 }
 
+static bool isPacketAddressedToMe(const OtaHeader& hdr, const DataMetadata& data_meta) {
+    uint32_t my_id = MeshNode::nodeId();
+    bool ota_ok = (hdr.dest_node_id == my_id || hdr.dest_node_id == 0xFFFFFFFF);
+    bool data_ok = (data_meta.dest == my_id || data_meta.dest == 0xFFFFFFFF);
+    return ota_ok && data_ok;
+}
+
 // ── Router::init() ────────────────────────────────────────────────────────────
 void Router::init() {
     memset(s_dup_cache,   0, sizeof(s_dup_cache));
@@ -480,9 +487,13 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         app_duplicate = isAppDuplicate(hdr.src_node_id, data_meta.request_id, now_ms);
     }
 
-    // Deliver to BLE MESH_RX if uplink is enabled for this slot.
+    // Deliver to BLE MESH_RX if uplink is enabled for this slot AND this packet
+    // is addressed to us (OTA dest is broadcast or matches us; Data.dest is broadcast or matches us).
+    // Without this check, intermediate relay nodes would deliver unicast packets to their BLE
+    // client even when the packet is destined for another node (§8.7, §8.9).
     // The BLE payload is: portnum hint byte + 16-byte OTA header + decrypted Data protobuf.
-    if (slot->uplink_enabled && data_valid && !app_duplicate && ::g_ble_tx_queue) {
+    if (slot->uplink_enabled && data_valid && isPacketAddressedToMe(hdr, data_meta)
+        && !app_duplicate && ::g_ble_tx_queue) {
         // Prefix an internal queue tag so BLEServer routes the packet to MESH_RX.
         PooledPacket* bpkt = PacketPool::alloc();
         if (bpkt) {
@@ -518,8 +529,9 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     // ── AIRTAK_ACK receive: cancel pending retry queue entry (§8.9) ───────────
     // Correlation is via Data.request_id (field 6, tag 0x30) which the ACK sender
     // sets to the ack_request_id so the original sender can match it.
+    // Only process if the ACK is addressed to us (OTA dest is us or broadcast).
     if (portnum_value == static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
-        if (data_meta.request_id != 0) {
+        if (data_meta.request_id != 0 && isPacketAddressedToMe(hdr, data_meta)) {
             handleAck(data_meta.request_id);
         }
         // Still relay AIRTAK_ACK so it can reach back to the original sender.
@@ -527,7 +539,10 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
 
     // ── Generate AIRTAK_ACK when sender requested acknowledgment (§8.9) ───────
     // Never ACK a AIRTAK_ACK itself (prevents infinite ACK loops).
-    if (hdr.wantAck() && data_valid && portnum_value != static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
+    // Only ACK if this packet is addressed to us — intermediate relays must not
+    // ACK unicast packets destined for another node (§8.9).
+    if (hdr.wantAck() && data_valid && isPacketAddressedToMe(hdr, data_meta)
+        && portnum_value != static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
         uint32_t req_id = data_meta.request_id;
         if (req_id != 0) {
             // Build Data proto bytes for AIRTAK_ACK (portnum 261 = 0x85 0x02 as varint).
@@ -817,13 +832,13 @@ void Router::tickRetryQueue(QueueHandle_t tx_queue) {
         auto& e = s_retry_queue[i];
         if (!e.in_use) continue;
 
-        if (e.attempts >= defaults::ACK_MAX_RETRIES) {
-            queueDeliveryFailure(e.portnum, e.msg_id);
-            e.in_use = false;
-            continue;
-        }
-
         if (now_ms >= e.timeout_ms) {
+            if (e.attempts >= defaults::ACK_MAX_RETRIES) {
+                queueDeliveryFailure(e.portnum, e.msg_id);
+                e.in_use = false;
+                continue;
+            }
+
             // Retransmit with a NEW packet_id but same msg_id (Data.request_id) (§8.9).
             uint32_t new_packet_id = nextPacketId();
             const ChannelSlot* slot = ChannelManager::slotByIndex(e.slot_index);
@@ -949,6 +964,13 @@ size_t Router::testAppDedupCount() {
         if (entry.in_use && entry.expires_ms >= now_ms) count++;
     }
     return count;
+}
+
+bool Router::testIsPacketAddressedToMe(const OtaHeader& hdr,
+                                       uint32_t data_dest) {
+    DataMetadata meta;
+    meta.dest = (data_dest == 0) ? 0xFFFFFFFF : data_dest;
+    return isPacketAddressedToMe(hdr, meta);
 }
 
 bool Router::testFirstRelay(uint8_t* out, uint8_t& out_len,

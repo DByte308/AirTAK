@@ -88,13 +88,13 @@ static uint8_t build_ota(uint8_t* out, uint32_t src_node_id, uint32_t packet_id,
                          const uint8_t* payload = nullptr,
                          uint16_t payload_len = 0,
                          bool want_ack = false,
-                         uint32_t request_id = 0) {
+                         uint32_t request_id = 0,
+                         uint32_t dest_node_id = 0xFFFFFFFF) {
     uint8_t data[160];
     uint16_t data_len = build_data(data, portnum, payload, payload_len,
-                                   want_ack, 0xFFFFFFFF, request_id);
+                                   want_ack, dest_node_id, request_id);
 
-    uint32_t dest = 0xFFFFFFFF;
-    memcpy(out + 0, &dest, 4);
+    memcpy(out + 0, &dest_node_id, 4);
     memcpy(out + 4, &src_node_id, 4);
     memcpy(out + 8, &packet_id, 4);
     out[12] = static_cast<uint8_t>(((hop_limit & 0x07) << 5)
@@ -120,6 +120,39 @@ static uint16_t build_player_payload(uint8_t* out, bool is_state_transition) {
     uint16_t pos = 0;
     pos = append_tag(out, pos, 7, 0);
     pos = append_var_u32(out, pos, is_state_transition ? 1 : 0);
+    return pos;
+}
+
+static uint16_t build_ack_data(uint8_t* out, uint32_t ack_request_id,
+                               uint32_t from_node_id, uint32_t dest_node_id) {
+    uint16_t pos = 0;
+    // portnum = 261 (0x85 0x02 as varint)
+    out[pos++] = 0x08; out[pos++] = 0x85; out[pos++] = 0x02;
+    // Data.payload (field 2, wire 2): inner AirTAKAck sub-message
+    uint16_t payload_start = pos;
+    pos += 2; // placeholder for tag + length
+    uint16_t inner_start = pos;
+    // ack_request_id (field 1, varint)
+    pos = append_tag(out, pos, 1, 0);
+    pos = append_var_u32(out, pos, ack_request_id);
+    // from_node_id (field 2, varint)
+    pos = append_tag(out, pos, 2, 0);
+    pos = append_var_u32(out, pos, from_node_id);
+    // original_hop_start (field 3, varint)
+    pos = append_tag(out, pos, 3, 0);
+    pos = append_var_u32(out, pos, 7);
+    uint16_t inner_len = pos - inner_start;
+    // Patch the tag + length
+    out[payload_start] = 0x12; // field 2, wire 2
+    out[payload_start + 1] = inner_len;
+    // Data.request_id (field 6, varint)
+    pos = append_tag(out, pos, 6, 0);
+    pos = append_var_u32(out, pos, ack_request_id);
+    // Data.want_response (field 3, varint) — ACK does not want response
+    if (dest_node_id != 0xFFFFFFFF) {
+        pos = append_tag(out, pos, 4, 0);
+        pos = append_var_u32(out, pos, dest_node_id);
+    }
     return pos;
 }
 
@@ -441,6 +474,181 @@ void test_ack_retry_tick_retransmits_with_attempt_count() {
     TEST_ASSERT_GREATER_THAN_UINT32(millis(), timeout_ms);
 }
 
+// ── Destination ownership tests (Issue 1: analysis.md) ────────────────────
+
+void test_is_packet_addressed_to_me_broadcast_to_broadcast() {
+    OtaHeader hdr;
+    hdr.dest_node_id = 0xFFFFFFFF;
+    TEST_ASSERT_TRUE(Router::testIsPacketAddressedToMe(hdr, 0xFFFFFFFF));
+}
+
+void test_is_packet_addressed_to_me_ota_broadcast_data_matches_us() {
+    OtaHeader hdr;
+    hdr.dest_node_id = 0xFFFFFFFF;
+    // MeshNode::nodeId() returns 0x12345678 in native tests
+    TEST_ASSERT_TRUE(Router::testIsPacketAddressedToMe(hdr, 0x12345678));
+}
+
+void test_is_packet_addressed_to_me_ota_broadcast_data_other() {
+    OtaHeader hdr;
+    hdr.dest_node_id = 0xFFFFFFFF;
+    TEST_ASSERT_FALSE(Router::testIsPacketAddressedToMe(hdr, 0xDEADBEEF));
+}
+
+void test_is_packet_addressed_to_me_unicast_to_other() {
+    OtaHeader hdr;
+    hdr.dest_node_id = 0xDEADBEEF;
+    TEST_ASSERT_FALSE(Router::testIsPacketAddressedToMe(hdr, 0xDEADBEEF));
+}
+
+void test_is_packet_addressed_to_me_unicast_to_us() {
+    OtaHeader hdr;
+    hdr.dest_node_id = 0x12345678;
+    TEST_ASSERT_TRUE(Router::testIsPacketAddressedToMe(hdr, 0));
+}
+
+void test_ack_to_other_node_does_not_clear_retry() {
+    Router::init();
+
+    // Create a retry entry via sendDataPacket (ACKNOWLEDGED packet).
+    uint8_t data[96];
+    uint16_t data_len = build_data(data, Portnum::AIRTAK_GAME);
+    TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
+    TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
+
+    uint32_t msg_id = 0;
+    uint8_t attempts = 0;
+    uint32_t timeout_ms = 0;
+    uint8_t hop_start = 0;
+    uint16_t payload_len = 0;
+    TEST_ASSERT_TRUE(Router::testFirstRetry(msg_id, attempts, timeout_ms, hop_start, payload_len));
+
+    // Send an AIRTAK_ACK packet addressed to a different node (0xDEADBEEF).
+    uint8_t ack_data[64];
+    uint16_t ack_data_len = build_ack_data(ack_data, msg_id, 0xAABBCCDD, 0xDEADBEEF);
+    uint8_t raw[192];
+    // OTA dest = 0xDEADBEEF (not us, not broadcast), Data.dest also 0xDEADBEEF
+    uint8_t raw_len = 0;
+    {
+        uint32_t ota_dest = 0xDEADBEEF;
+        uint32_t ota_src = 0xAABBCCDD;
+        uint32_t ota_pkt_id = 0xA1;
+        uint8_t ota_hop = 7;
+        memcpy(raw + 0, &ota_dest, 4);
+        memcpy(raw + 4, &ota_src, 4);
+        memcpy(raw + 8, &ota_pkt_id, 4);
+        raw[12] = static_cast<uint8_t>(((ota_hop & 0x07) << 5) | (ota_hop & 0x07));
+        raw[13] = 0;
+        raw[14] = 0;
+        raw[15] = 0;
+        memcpy(raw + OTA_HEADER_BYTES, ack_data, ack_data_len);
+        raw_len = OTA_HEADER_BYTES + ack_data_len;
+    }
+    Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
+
+    // The retry entry MUST still be present — the ACK was not for us.
+    TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
+}
+
+void test_ack_to_us_broadcast_clears_retry() {
+    Router::init();
+
+    uint8_t data[96];
+    uint16_t data_len = build_data(data, Portnum::AIRTAK_GAME);
+    TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
+    TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
+
+    uint32_t msg_id = 0;
+    uint8_t attempts = 0;
+    uint32_t timeout_ms = 0;
+    uint8_t hop_start = 0;
+    uint16_t payload_len = 0;
+    TEST_ASSERT_TRUE(Router::testFirstRetry(msg_id, attempts, timeout_ms, hop_start, payload_len));
+
+    // Build a complete Data protobuf for AIRTAK_ACK directly (not double-wrapped).
+    // The ACK must have Data.request_id = msg_id so the Router can clear the retry.
+    uint8_t ack_data[64];
+    uint16_t ack_data_len = build_ack_data(ack_data, msg_id, 0xAABBCCDD, 0xFFFFFFFF);
+    // Build OTA header manually with the ack_data as the raw payload.
+    uint8_t raw[192];
+    uint32_t ota_dest = 0xFFFFFFFF;
+    uint32_t ota_src  = 0xAABBCCDD;
+    uint32_t ota_pkt  = 0xA2;
+    uint8_t  ota_hop  = 7;
+    memcpy(raw + 0, &ota_dest, 4);
+    memcpy(raw + 4, &ota_src, 4);
+    memcpy(raw + 8, &ota_pkt, 4);
+    raw[12] = static_cast<uint8_t>(((ota_hop & 0x07) << 5) | (ota_hop & 0x07));
+    raw[13] = 0;
+    raw[14] = 0;
+    raw[15] = 0;
+    memcpy(raw + OTA_HEADER_BYTES, ack_data, ack_data_len);
+    uint8_t raw_len = OTA_HEADER_BYTES + ack_data_len;
+
+    Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
+
+    // The retry entry MUST be cleared — the ACK was for us.
+    TEST_ASSERT_EQUAL_UINT32(0, Router::testRetryEntryCount());
+}
+
+void test_intermediate_relay_still_relays_unicast_for_other_node() {
+    Router::init();
+
+    // Send a unicast packet addressed to another node (OTA dest=0xDEADBEEF).
+    // Even though the destination check blocks BLE delivery and ACK generation,
+    // the relay path MUST still queue the packet for relay (§8.7).
+    uint8_t raw[192];
+    uint8_t raw_len = build_ota(raw, 0xAABBCCDD, 0x53, 3,
+                                Portnum::TEXT_MESSAGE_APP,
+                                nullptr, 0, false, 0,
+                                0xDEADBEEF);
+    Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
+
+    // Intermediate relay MUST still relay the packet.
+    TEST_ASSERT_EQUAL_UINT32(1, Router::testPendingRelayCount());
+}
+
+void test_retry_entry_remains_after_max_retries_until_timeout_expires() {
+    Router::init();
+
+    // Create a retry entry via sendDataPacket (AIRTAK_GAME, hop_start=7).
+    uint8_t data[96];
+    uint16_t data_len = build_data(data, Portnum::AIRTAK_GAME);
+    TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
+    TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
+
+    // Trigger all 3 retries by advancing time and calling tickRetryQueue.
+    // Each retry timeout = 5600 ms (2 × 7 × 400), clamped by min=500.
+    // Native random(min, max) always returns min (0), so backoff = 0.
+    for (uint8_t retry = 0; retry < defaults::ACK_MAX_RETRIES; retry++) {
+        delay(6000); // advance past the timeout window
+        Router::tickRetryQueue(reinterpret_cast<QueueHandle_t>(0x1));
+    }
+
+    // After 3 retries, the entry should STILL be in the queue — attempts=3
+    // but the final retry's timeout has NOT expired yet. This validates the
+    // fix for Issue 2: the old code would remove the entry immediately on
+    // attempts >= ACK_MAX_RETRIES, without waiting for the final ACK timeout.
+    TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
+
+    uint32_t msg_id = 0;
+    uint8_t attempts = 0;
+    uint32_t timeout_ms = 0;
+    uint8_t hop_start = 0;
+    uint16_t payload_len = 0;
+    TEST_ASSERT_TRUE(Router::testFirstRetry(msg_id, attempts, timeout_ms, hop_start, payload_len));
+    TEST_ASSERT_EQUAL_UINT8(3, attempts);
+    // Verify the timeout is in the future.
+    TEST_ASSERT_GREATER_THAN_UINT32(millis(), timeout_ms);
+
+    // Now advance time past the final retry's timeout.
+    delay(6000);
+    Router::tickRetryQueue(reinterpret_cast<QueueHandle_t>(0x1));
+
+    // The entry should now be removed: attempts >= ACK_MAX_RETRIES AND timeout expired.
+    TEST_ASSERT_EQUAL_UINT32(0, Router::testRetryEntryCount());
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_default_hop_limit_position);
@@ -467,5 +675,14 @@ int main(int argc, char** argv) {
     RUN_TEST(test_airtak_player_transition_field_controls_acknowledged_delivery);
     RUN_TEST(test_acknowledged_receiver_deduplicates_by_request_id);
     RUN_TEST(test_ack_retry_tick_retransmits_with_attempt_count);
+    RUN_TEST(test_is_packet_addressed_to_me_broadcast_to_broadcast);
+    RUN_TEST(test_is_packet_addressed_to_me_ota_broadcast_data_matches_us);
+    RUN_TEST(test_is_packet_addressed_to_me_ota_broadcast_data_other);
+    RUN_TEST(test_is_packet_addressed_to_me_unicast_to_other);
+    RUN_TEST(test_is_packet_addressed_to_me_unicast_to_us);
+    RUN_TEST(test_ack_to_other_node_does_not_clear_retry);
+    RUN_TEST(test_ack_to_us_broadcast_clears_retry);
+    RUN_TEST(test_intermediate_relay_still_relays_unicast_for_other_node);
+    RUN_TEST(test_retry_entry_remains_after_max_retries_until_timeout_expires);
     return UNITY_END();
 }

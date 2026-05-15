@@ -314,8 +314,20 @@ void ConfigManager::radioRestartProcedure() {
     uint32_t started_ms = millis();
     Radio::pause();
 
-    while (!Radio::isPaused() && (millis() - started_ms) < 100) {
-        vTaskDelay(pdMS_TO_TICKS(1));
+    // Wait for the radio task to acknowledge pause. Profile 0 packets can
+    // exceed 300 ms airtime, and with relay backoff the radio task may be
+    // mid-transmit for up to ~680 ms. A 2 s window covers the worst case and
+    // still completes well under any user-perceptible BLE timeout (§9.4.2).
+    constexpr uint32_t PAUSE_TIMEOUT_MS = 2000;
+    while (!Radio::isPaused() && (millis() - started_ms) < PAUSE_TIMEOUT_MS) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    if (!Radio::isPaused()) {
+        Radio::resume();
+        queueAdminError("radio_pause_timeout");
+        s_radio_restart_pending = false;
+        return;
     }
 
     PooledPacket* queued = nullptr;
