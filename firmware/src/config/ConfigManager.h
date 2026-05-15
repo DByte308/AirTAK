@@ -56,6 +56,23 @@ public:
     // Returns the device's configured long name (from DEVICE config group, field 2).
     // Falls back to the compile-time default if not configured.
     static const char* deviceLongName();
+
+    // ── LoRa parameter accessors (read from LORA config buffer) ──────────────
+    // These are used by Radio::reinit() to apply the committed LORA config
+    // without relying on hardcoded defaults (§9.4.2, Roadmap 2.8).
+
+    // Returns the LoRa frequency in MHz derived from the configured region
+    // (field 1: 0=EU_868 → 869.525 MHz, 1=US_915 → 906.875 MHz).
+    static float loraFrequencyMhz();
+
+    // Returns the configured TX power in dBm (field 2 of LORA config).
+    // Falls back to LORA_TX_POWER_DBM compile-time default if not set.
+    static uint8_t loraTxPowerDbm();
+
+    // Returns the phy_profile_index of the PRIMARY channel slot (role=1)
+    // from the CHANNELS config buffer (field 8 of the PRIMARY slot sub-message).
+    // Falls back to 0 (Long/Mesh) if no PRIMARY slot is found or field is absent.
+    static uint8_t primarySlotPhyProfileIndex();
 };
 
 } // namespace config

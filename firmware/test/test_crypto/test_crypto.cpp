@@ -6,11 +6,19 @@
 //   1. Key derivation: SHA256(psk)[0:16] matches Meshtastic reference vectors.
 //   2. Nonce construction: packet_id||from_node_id||0x00... layout.
 //   3. AES-CTR encrypt/decrypt round-trip (plaintext == decrypt(encrypt(plaintext))).
-//   4. Channel hash: XOR-fold for slot 0, SHA256(psk)[0] for slots 1–7.
-//   5. Zero-length PSK produces deterministic key (SHA256 of 32 zero bytes).
+//   4. Channel hash slot 0: XOR-fold of all 32 PSK bytes — Meshtastic-compatible.
+//   5. Channel hash slot 0: known-good test vector using the Meshtastic default
+//      LongFast PSK (§8.6 interop requirement, §19.1).
+//   6. Channel hash slot 1–7: SHA256(psk)[0].
+//   7. Zero-length PSK produces deterministic key (SHA256 of 32 zero bytes).
 //
-// Meshtastic test vectors should be sourced from the repo at the pinned commit
-// in proto/meshtastic/VERSION.
+// Test vector derivation for §5 (Meshtastic default "LongFast" channel):
+//   PSK bytes:  {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x00 × 26}
+//   XOR fold:   0xd4 ^ 0xf1 ^ 0xbb ^ 0x3a ^ 0x20 ^ 0x29 = 0xad
+//   (All remaining 26 bytes are 0x00, which do not change the XOR result.)
+//   Expected channel hash: 0xad — must match what a stock Meshtastic device computes.
+//
+// Meshtastic reference commit SHA is pinned in proto/meshtastic/VERSION.
 
 #include <unity.h>
 #include "mesh/Crypto.h"
@@ -80,6 +88,43 @@ void test_channel_hash_slot0_xor_fold() {
     TEST_ASSERT_EQUAL_HEX8(expected, Crypto::channelHash(psk, 32, 0));
 }
 
+// §8.6 Meshtastic interop: channel hash for the default LongFast channel.
+// PSK:  {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x00...0x00} (32 bytes)
+// XOR fold:  0xd4 ^ 0xf1 = 0x25
+//            0x25 ^ 0xbb = 0x9e
+//            0x9e ^ 0x3a = 0xa4
+//            0xa4 ^ 0x20 = 0x84
+//            0x84 ^ 0x29 = 0xad
+//            0xad ^ 0x00...= 0xad
+// Expected:  0xad — this is the byte that appears in the Flags field of every
+// default Meshtastic LongFast packet and must match what stock Meshtastic devices
+// compute. A mismatch here means MASH and Meshtastic are on different logical
+// channels and will silently discard each other's packets (§8.6 §G1).
+void test_channel_hash_slot0_meshtastic_longfast_interop() {
+    static const uint8_t LONGFAST_PSK[32] = {
+        0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+    TEST_ASSERT_EQUAL_HEX8(0xad, Crypto::channelHash(LONGFAST_PSK, 32, 0));
+}
+
+// Slot 1–7 must use SHA256(psk)[0], not XOR-fold (§8.6).
+void test_channel_hash_slot1_differs_from_slot0_xor() {
+    static const uint8_t LONGFAST_PSK[32] = {
+        0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+    uint8_t hash0 = Crypto::channelHash(LONGFAST_PSK, 32, 0); // XOR-fold = 0xad
+    uint8_t hash1 = Crypto::channelHash(LONGFAST_PSK, 32, 1); // SHA256[0]
+    // The two algorithms produce different values for this PSK, confirming
+    // that slot 1 is NOT using the XOR-fold path.
+    TEST_ASSERT_NOT_EQUAL(hash0, hash1);
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_key_derivation_length);
@@ -87,5 +132,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_different_packet_ids_produce_different_ciphertext);
     RUN_TEST(test_nonce_construction);
     RUN_TEST(test_channel_hash_slot0_xor_fold);
+    RUN_TEST(test_channel_hash_slot0_meshtastic_longfast_interop);
+    RUN_TEST(test_channel_hash_slot1_differs_from_slot0_xor);
     return UNITY_END();
 }

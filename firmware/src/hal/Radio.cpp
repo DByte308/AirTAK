@@ -8,7 +8,7 @@
 #include "hal/Radio.h"
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
-#include "mesh/PacketPool.h"
+#include "mesh/ChannelManager.h"
 #include "firmware/include/config.h"
 
 // RadioLib include — provided via lib/RadioLib/ (platformio.ini dependency)
@@ -129,7 +129,11 @@ void Radio::init() {
 // ── Radio::reinit() ───────────────────────────────────────────────────────────
 void Radio::reinit() {
     // Phase 2.8: Called by ConfigManager::radioRestartProcedure() (§9.4.2).
-    // Reset and re-apply updated LoraConfig parameters. Target: ≤ 300 ms.
+    // Re-apply LoRa parameters from the committed ConfigManager buffers.
+    // Reads frequency and TX power from the LORA config group; reads the active
+    // PHY profile index from the PRIMARY channel slot via ChannelManager so that
+    // a CHANNELS config commit that changes phy_profile_index takes effect here.
+    // Target: ≤ 300 ms. Does not restart MCU. Does not disconnect BLE.
 
     // Reset SX1262 hardware via RESET pin.
     digitalWrite(PIN_SX1262_RESET, LOW);
@@ -137,15 +141,26 @@ void Radio::reinit() {
     digitalWrite(PIN_SX1262_RESET, HIGH);
     delay(10);
 
-    // Re-initialize with current ConfigManager settings.
-    // Phase 2.8: read active profile from ConfigManager when available.
+    // Read live parameters from ConfigManager (committed config buffers).
+    float   freq_mhz = config::ConfigManager::loraFrequencyMhz();
+    uint8_t tx_power = config::ConfigManager::loraTxPowerDbm();
+
+    // PHY profile: prefer the PRIMARY channel slot's committed value.
+    // Note: ChannelManager::rekey() is called after reinit() in radioRestartProcedure();
+    // for CHANNELS-driven PHY changes the slot data is current because ConfigManager
+    // already wrote s_buffers[CHANNELS] before triggering the restart, and
+    // primarySlotPhyProfileIndex() parses directly from that buffer.
+    uint8_t new_phy = config::ConfigManager::primarySlotPhyProfileIndex();
+    if (new_phy >= 5) new_phy = 0;
+    s_active_phy = new_phy;
+
     int16_t result = s_radio.begin(
-        LORA_FREQ_EU868,
+        freq_mhz,
         defaults::PHY_PROFILES[s_active_phy].bandwidth_hz / 1000.0f,
         defaults::PHY_PROFILES[s_active_phy].spreading_factor,
         defaults::PHY_PROFILES[s_active_phy].coding_rate,
         LORA_SYNC_WORD,
-        defaults::LORA_TX_POWER_DBM,
+        tx_power,
         LORA_PREAMBLE_LENGTH
     );
 

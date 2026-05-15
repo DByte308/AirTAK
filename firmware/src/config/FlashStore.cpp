@@ -13,8 +13,12 @@ namespace config {
 static bool s_initialized = false;
 
 bool FlashStore::init() {
-    // TODO Phase 1.6: Configure SPI NOR flash chip select (PIN_FLASH_CS) before mounting.
-    // LittleFS is mapped over the GD25Q32C (4 MB) via the Adafruit BSP Flasher driver.
+    // Deassert SPI NOR flash CS before any SPI transactions so the GD25Q32C does
+    // not interfere with the radio SPI bus during startup (§7.1).
+    // PIN_NOR_CS must be verified against the T-Echo Plus schematic.
+    pinMode(PIN_NOR_CS, OUTPUT);
+    digitalWrite(PIN_NOR_CS, HIGH);
+
     if (!LittleFS.begin()) {
         // Format on first boot
         LittleFS.format();
@@ -86,9 +90,8 @@ bool FlashStore::exists(ConfigGroup group) {
 
 size_t FlashStore::freeBytes() {
     if (!s_initialized) return 0;
-    FSInfo info;
-    LittleFS.info(info);
-    return info.totalBytes - info.usedBytes;
+    // Adafruit nRF52 BSP LittleFS exposes totalBytes() / usedBytes() directly.
+    return LittleFS.totalBytes() - LittleFS.usedBytes();
 }
 
 } // namespace config

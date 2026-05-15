@@ -54,8 +54,11 @@
 #define PIN_NFC1           9   // P0.09
 #define PIN_NFC2          10   // P0.10
 
-// SPI NOR flash GD25Q32C — CS pin TBD at schematic review
-// #define PIN_NOR_CS  ???    // TODO: verify at schematic review (§7.1)
+// SPI NOR flash GD25Q32C — CS pin.
+// MANDATORY: verify against T-Echo Plus schematic before first hardware flash.
+// P1.00 (pin 32) is unallocated in the current mapping and is used as a
+// placeholder until the schematic review confirms the actual CS line.
+#define PIN_NOR_CS    32   // P1.00 — VERIFY AT SCHEMATIC REVIEW (§7.1)
 
 // ── LoRa global parameters (§8.1) ─────────────────────────────────────────────
 // These are hardware-level constants that apply to all channel slots.

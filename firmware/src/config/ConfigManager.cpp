@@ -300,6 +300,110 @@ const char* ConfigManager::deviceLongName() {
     return defaults::DEVICE_LONG_NAME;
 }
 
+// ── LoRa parameter accessors ─────────────────────────────────────────────────
+// Sequential proto parsers so Radio::reinit() reads the committed config rather
+// than compile-time defaults. Required for hot-reload (§9.4.2, Roadmap 2.8).
+
+// Helper: advance pos over one proto field (any wire type). Returns false on error.
+static bool skipProtoField(const uint8_t* buf, size_t n, size_t& pos, uint8_t wire) {
+    switch (wire) {
+        case 0: // varint
+            while (pos < n) { if (!(buf[pos++] & 0x80)) return true; }
+            return false;
+        case 1: // 64-bit
+            if (pos + 8 > n) return false; pos += 8; return true;
+        case 2: { // length-delimited
+            uint32_t sz = 0; uint8_t sh = 0;
+            while (pos < n) { uint8_t b = buf[pos++]; sz |= (uint32_t)(b & 0x7F) << sh; if (!(b & 0x80)) break; sh += 7; }
+            if (pos + sz > n) return false; pos += sz; return true;
+        }
+        case 5: // 32-bit
+            if (pos + 4 > n) return false; pos += 4; return true;
+        default: return false;
+    }
+}
+
+// Helper: read a varint from buf at pos. Returns false on overrun.
+static bool readProtoVarint(const uint8_t* buf, size_t n, size_t& pos, uint32_t& out) {
+    out = 0; uint8_t shift = 0;
+    while (pos < n && shift < 32) {
+        uint8_t b = buf[pos++];
+        out |= (uint32_t)(b & 0x7F) << shift;
+        if (!(b & 0x80)) return true;
+        shift += 7;
+    }
+    return false;
+}
+
+float ConfigManager::loraFrequencyMhz() {
+    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::LORA);
+    const uint8_t* buf = s_buffers[gidx];
+    size_t n = s_sizes[gidx];
+    size_t pos = 0;
+    while (pos < n) {
+        uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
+        uint8_t wire  = tag & 7;
+        uint32_t field = tag >> 3;
+        if (wire == 0) {
+            uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
+            if (field == 1) return (v == 1) ? (float)LORA_FREQ_US915 : (float)LORA_FREQ_EU868;
+        } else { if (!skipProtoField(buf, n, pos, wire)) break; }
+    }
+    return (float)LORA_FREQ_EU868;
+}
+
+uint8_t ConfigManager::loraTxPowerDbm() {
+    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::LORA);
+    const uint8_t* buf = s_buffers[gidx];
+    size_t n = s_sizes[gidx];
+    size_t pos = 0;
+    while (pos < n) {
+        uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
+        uint8_t wire  = tag & 7;
+        uint32_t field = tag >> 3;
+        if (wire == 0) {
+            uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
+            if (field == 2 && v > 0) return (uint8_t)v;
+        } else { if (!skipProtoField(buf, n, pos, wire)) break; }
+    }
+    return defaults::LORA_TX_POWER_DBM;
+}
+
+uint8_t ConfigManager::primarySlotPhyProfileIndex() {
+    // CHANNELS buffer: repeated slot sub-messages on field 1 (tag 0x0A, wire 2).
+    // Each slot sub-message has: field 4 = role (varint), field 8 = phy_profile_index (varint).
+    // Find the first slot with role=1 (PRIMARY) and return its phy_profile_index.
+    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::CHANNELS);
+    const uint8_t* buf = s_buffers[gidx];
+    size_t n = s_sizes[gidx];
+    size_t pos = 0;
+    while (pos < n) {
+        uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
+        uint8_t wire  = tag & 7;
+        uint32_t field = tag >> 3;
+        if (wire == 2 && field == 1) {
+            // Slot sub-message length
+            uint32_t slen; if (!readProtoVarint(buf, n, pos, slen)) break;
+            size_t end = pos + slen;
+            if (end > n) break;
+            uint8_t slot_role = 0, slot_phy = 0;
+            size_t sp = pos;
+            while (sp < end) {
+                uint32_t stag; if (!readProtoVarint(buf, end, sp, stag)) break;
+                uint8_t sw = stag & 7;
+                uint32_t sf = stag >> 3;
+                if (sw == 0) {
+                    uint32_t v; if (!readProtoVarint(buf, end, sp, v)) break;
+                    if (sf == 4) slot_role = (uint8_t)v;
+                    if (sf == 8) slot_phy  = (uint8_t)v;
+                } else { if (!skipProtoField(buf, end, sp, sw)) break; }
+            }
+            if (slot_role == 1 /* PRIMARY */) return slot_phy;
+            pos = end;
+        } else { if (!skipProtoField(buf, n, pos, wire)) break; }
+    }
+    return 0; // default: Long/Mesh (Profile 0)
+}
+
 } // namespace config
 } // namespace mash
-

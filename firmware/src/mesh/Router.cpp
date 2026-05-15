@@ -504,19 +504,23 @@ void Router::handleAck(uint32_t ack_request_id) {
 
 // ── Router::handleOverheardRelay() ───────────────────────────────────────────
 void Router::handleOverheardRelay(uint32_t src_id, uint32_t dup_key, float overheard_snr) {
-    // If we overheard a relay and the overheard SNR ≥ our own rx SNR,
-    // cancel our queued relay of the same packet (§8.7).
+    // Cancel a queued relay if we overheard another node relay the same packet
+    // and its SNR was >= ours (they have a better path, §8.7).
+    // Match on BOTH src_id AND the reconstructed dup_key so that two simultaneously
+    // pending relays from the same source node are not incorrectly conflated.
     for (size_t i = 0; i < 16; i++) {
         auto& e = s_relay_queue[i];
         if (!e.in_use) continue;
-        // Match by checking the src_id in the relay buffer OTA header (bytes 4–7).
         uint32_t relay_src;
         memcpy(&relay_src, e.data + 4, 4);
-        if (relay_src == src_id && overheard_snr >= e.rx_snr) {
+        if (relay_src != src_id) continue;
+        // Reconstruct dup_key from the relay buffer header using the same formula
+        // as processIncoming(): src_node_id XOR (packet_id_low << 24).
+        uint32_t relay_dup_key = relay_src ^ ((uint32_t)e.data[8] << 24);
+        if (relay_dup_key == dup_key && overheard_snr >= e.rx_snr) {
             e.in_use = false;
         }
     }
-    (void)dup_key;
 }
 
 // ── Router::defaultHopLimit() ────────────────────────────────────────────────
