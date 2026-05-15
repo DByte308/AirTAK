@@ -20,7 +20,7 @@ namespace airtak {
 
 constexpr uint8_t MAX_ZONES      = 16;
 constexpr uint8_t MAX_OBJECTIVES = 8;
-constexpr uint8_t MAX_TEAMS      = 4;
+constexpr uint8_t MAX_TEAMS      = 8;    // §12.2: up to 8 teams per game
 
 // Values MUST match proto/airtak/game.proto GamePhase enum exactly.
 // The nanopb-generated enum (airtak_GamePhase) is the wire authority.

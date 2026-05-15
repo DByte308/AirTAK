@@ -139,6 +139,28 @@ void test_channel_hash_slot1_differs_from_slot0_xor() {
     TEST_ASSERT_NOT_EQUAL(hash0, hash1);
 }
 
+// Zero-length PSK must produce a deterministic, non-crashing result.
+// SHA256 of 32 zero bytes is well-defined and stable.
+void test_key_derivation_zero_length_psk() {
+    uint8_t key[16];
+    Crypto::deriveKey(nullptr, 0, key);
+    // Must not crash; key must be non-zero (SHA256 of empty input produces a
+    // well-known digest whose first 16 bytes are not all-zero).
+    uint8_t zeros[16] = {};
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(key, zeros, sizeof(key)));
+}
+
+// 32-byte PSK at exact max boundary must derive correctly.
+void test_key_derivation_32_byte_psk_boundary() {
+    uint8_t psk[32];
+    memset(psk, 0xFF, 32);
+    uint8_t key_a[16], key_b[16];
+    Crypto::deriveKey(psk, 32, key_a);
+    // 33 bytes (truncated to 32) must produce the same key as 32 bytes.
+    Crypto::deriveKey(psk, 33, key_b);
+    TEST_ASSERT_EQUAL_MEMORY(key_a, key_b, 16);
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_key_derivation_length);
@@ -149,5 +171,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_channel_hash_slot0_xor_fold);
     RUN_TEST(test_channel_hash_slot0_meshtastic_longfast_interop);
     RUN_TEST(test_channel_hash_slot1_differs_from_slot0_xor);
+    RUN_TEST(test_key_derivation_zero_length_psk);
+    RUN_TEST(test_key_derivation_32_byte_psk_boundary);
     return UNITY_END();
 }

@@ -729,13 +729,20 @@ static void addRetryEntry(Portnum portnum, uint32_t dest, uint32_t msg_id,
                           uint16_t data_len) {
     if (!Router::isAcknowledgedPortnum(portnum) || data_len > sizeof(s_retry_queue[0].payload)) return;
 
+    uint32_t now_ms = millis();
+
     size_t slot_idx = defaults::ACK_RETRY_QUEUE_SIZE;
-    uint32_t oldest_ms = UINT32_MAX;
+    uint32_t oldest_created = UINT32_MAX;
     size_t oldest_idx  = 0;
     for (size_t i = 0; i < defaults::ACK_RETRY_QUEUE_SIZE; i++) {
         if (!s_retry_queue[i].in_use) { slot_idx = i; break; }
-        if (s_retry_queue[i].timeout_ms < oldest_ms) {
-            oldest_ms = s_retry_queue[i].timeout_ms;
+        // Evict by original creation time, NOT timeout_ms.  timeout_ms is the
+        // backoff deadline during the in_backoff phase (0–200 ms ahead), which
+        // would cause backoff-phase entries to be evicted preferentially over
+        // entries still awaiting their first ACK (timeout up to 5600 ms).
+        // Using created_ms gives true FIFO eviction regardless of phase.
+        if (s_retry_queue[i].created_ms < oldest_created) {
+            oldest_created = s_retry_queue[i].created_ms;
             oldest_idx = i;
         }
     }
@@ -746,14 +753,16 @@ static void addRetryEntry(Portnum portnum, uint32_t dest, uint32_t msg_id,
     s_retry_queue[slot_idx] = {
         msg_id,
         dest,
-        millis() + timeout,
+        now_ms + timeout,
+        now_ms,   // created_ms — FIFO eviction anchor
         0,
         hop_start,
         slot_index,
         static_cast<uint32_t>(portnum),
         {},
         data_len,
-        true
+        true,
+        false     // in_backoff
     };
     memcpy(s_retry_queue[slot_idx].payload, data_pb, data_len);
 }
@@ -827,6 +836,13 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
     uint32_t msg_id = meta.has_request_id ? meta.request_id : packet_id;
 
     if (want_ack) {
+        // Guard: appending tag+varint for want_response (field 3) and
+        // request_id (field 6) each needs up to 2+5 = 7 bytes.  Reserve 16
+        // bytes so the buffer cannot overflow when the incoming Data proto is
+        // close to MESH_MAX_PAYLOAD_BYTES.
+        if (outgoing_len + 16 > sizeof(outgoing)) {
+            return false; // payload too close to limit — cannot add ACK fields
+        }
         if (!meta.want_response) {
             if (!appendTag(outgoing, outgoing_len, sizeof(outgoing), 3, 0) ||
                 !appendVarU32(outgoing, outgoing_len, sizeof(outgoing), 1)) {

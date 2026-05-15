@@ -10,6 +10,7 @@
 #include "config/Defaults.h"
 #include "mesh/ChannelManager.h"
 #include "mesh/PacketPool.h"
+#include "ble/BLEQueue.h"
 #include "config.h"
 
 // RadioLib include — provided via lib/RadioLib/ (platformio.ini dependency)
@@ -57,18 +58,20 @@ static void IRAM_ATTR on_packet_sent() {
     }
 }
 
-// ── applyPhyProfile() ─────────────────────────────────────────────────────────
-// Apply PHY profile parameters to the SX1262. Returns true on success.
-// Validates that the selected profile has usable values; falls back to profile 0
-// if the configured profile is uninitialized (e.g. User Defined not yet set up).
-static bool applyPhyProfile(uint8_t profile_idx) {
+// ── resolvePhyProfile() ───────────────────────────────────────────────────────
+// Resolve the SF/BW/CR for a PHY profile index.  Returns true on success and
+// writes the validated values to out parameters.  Falls back to profile 0
+// (Long/Mesh) if the requested profile is unusable.  Also sets s_active_phy.
+// Does NOT write SX1262 registers — caller must do that after begin().
+static bool resolvePhyProfile(uint8_t& profile_idx,
+                              uint8_t& sf, uint32_t& bw_hz, uint8_t& cr) {
     if (profile_idx >= 5) profile_idx = 0;
 
     // Start from compile-time defaults.  loraPhyProfile() overlays the committed
     // LORA config on top when available; keep the defaults if it fails.
-    uint8_t  sf    = defaults::PHY_PROFILES[profile_idx].spreading_factor;
-    uint32_t bw_hz = defaults::PHY_PROFILES[profile_idx].bandwidth_hz;
-    uint8_t  cr    = defaults::PHY_PROFILES[profile_idx].coding_rate;
+    sf    = defaults::PHY_PROFILES[profile_idx].spreading_factor;
+    bw_hz = defaults::PHY_PROFILES[profile_idx].bandwidth_hz;
+    cr    = defaults::PHY_PROFILES[profile_idx].coding_rate;
     if (!config::ConfigManager::loraPhyProfile(profile_idx, sf, bw_hz, cr)) {
         // Config is missing or malformed for this profile.  If the defaults are
         // also unusable (profile 4 User Defined = all zeros), fall back to
@@ -81,29 +84,8 @@ static bool applyPhyProfile(uint8_t profile_idx) {
         }
     }
 
-    // Determine frequency from LoraConfig region.
-    float freq_mhz = config::ConfigManager::loraFrequencyMhz();
-
-    // Safety: if frequency came back 0 (corrupt config), use EU868 default.
-    if (freq_mhz < 100.0f) freq_mhz = (float)LORA_FREQ_EU868;
-
-    float   bw_khz    = bw_hz / 1000.0f;
-    int16_t radio_cr  = cr;   // RadioLib uses 5=4/5, 6=4/6, 7=4/7, 8=4/8
-
-    int16_t err = s_radio.setFrequency(freq_mhz);
-    if (err != RADIOLIB_ERR_NONE) return false;
-
-    err = s_radio.setBandwidth(bw_khz);
-    if (err != RADIOLIB_ERR_NONE) return false;
-
-    err = s_radio.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE) return false;
-
-    err = s_radio.setCodingRate(radio_cr);
-    if (err != RADIOLIB_ERR_NONE) return false;
-
     s_active_phy = profile_idx;
-    return true;
+    return (sf >= 7 && sf <= 12 && bw_hz > 0 && cr >= 5 && cr <= 8);
 }
 
 // ── Radio::init() ─────────────────────────────────────────────────────────────
@@ -111,26 +93,26 @@ void Radio::init() {
     // Phase 1.2: Configure SX1262 with global PHY parameters from §8.1.
     // Default to profile 0 (Long/Mesh); overridden from config if available.
 
-    uint8_t initial_phy = config::ConfigManager::primarySlotPhyProfileIndex();
+    uint8_t  initial_phy = config::ConfigManager::primarySlotPhyProfileIndex();
     if (initial_phy >= 5) initial_phy = 0;
-    uint8_t  sf    = defaults::PHY_PROFILES[initial_phy].spreading_factor;
-    uint32_t bw_hz = defaults::PHY_PROFILES[initial_phy].bandwidth_hz;
-    uint8_t  cr    = defaults::PHY_PROFILES[initial_phy].coding_rate;
-    if (!config::ConfigManager::loraPhyProfile(initial_phy, sf, bw_hz, cr)) {
-        if (sf < 7 || sf > 12 || bw_hz == 0 || cr < 5 || cr > 8) {
-            initial_phy = 0;
-            sf    = defaults::PHY_PROFILES[0].spreading_factor;
-            bw_hz = defaults::PHY_PROFILES[0].bandwidth_hz;
-            cr    = defaults::PHY_PROFILES[0].coding_rate;
-        }
+
+    uint8_t  sf    = 0;
+    uint32_t bw_hz = 0;
+    uint8_t  cr    = 0;
+    if (!resolvePhyProfile(initial_phy, sf, bw_hz, cr)) {
+        // Even the fallback failed — radio is non-functional.
+        // The display will show an error state.
+        return;
     }
 
     float freq_mhz = config::ConfigManager::loraFrequencyMhz();
     if (freq_mhz < 100.0f) freq_mhz = (float)LORA_FREQ_EU868;
 
     // RadioLib begin(freq, bw, sf, cr, syncWord, txPower, preamble).
+    // Use validated freq_mhz with fallback — NOT a fresh ConfigManager call
+    // that could return 0 for a corrupt/missing LORA config.
     int16_t result = s_radio.begin(
-        config::ConfigManager::loraFrequencyMhz(),
+        freq_mhz,
         bw_hz / 1000.0f,
         sf,
         cr,
@@ -156,8 +138,6 @@ void Radio::init() {
     s_radio.setPacketReceivedAction(on_packet_received);
     s_radio.setPacketSentAction(on_packet_sent);
 
-    s_active_phy = initial_phy;
-
     // Enter continuous receive mode.
     s_radio.startReceive();
 }
@@ -177,28 +157,22 @@ void Radio::reinit() {
     digitalWrite(AIRTAK_PIN_SX1262_RESET, HIGH);
     delay(10);
 
+    // Resolve PHY profile: prefer the PRIMARY channel slot's committed value.
+    // Falls back to profile 0 Long/Mesh via resolvePhyProfile if unusable.
+    uint8_t  new_phy = config::ConfigManager::primarySlotPhyProfileIndex();
+    if (new_phy >= 5) new_phy = 0;
+    uint8_t  sf    = 0;
+    uint32_t bw_hz = 0;
+    uint8_t  cr    = 0;
+    if (!resolvePhyProfile(new_phy, sf, bw_hz, cr)) {
+        ble::queueAdminError("radio_reinit_phy_failed");
+        return;
+    }
+
     // Read live parameters from ConfigManager (committed config buffers).
     float   freq_mhz = config::ConfigManager::loraFrequencyMhz();
     if (freq_mhz < 100.0f) freq_mhz = (float)LORA_FREQ_EU868;
     uint8_t tx_power = config::ConfigManager::loraTxPowerDbm();
-
-    // PHY profile: prefer the PRIMARY channel slot's committed value.
-    // If the stored profile is unusable (e.g. User Defined not configured),
-    // fall back to profile 0 Long/Mesh so the radio stays operational.
-    uint8_t new_phy = config::ConfigManager::primarySlotPhyProfileIndex();
-    if (new_phy >= 5) new_phy = 0;
-    uint8_t  sf    = defaults::PHY_PROFILES[new_phy].spreading_factor;
-    uint32_t bw_hz = defaults::PHY_PROFILES[new_phy].bandwidth_hz;
-    uint8_t  cr    = defaults::PHY_PROFILES[new_phy].coding_rate;
-    if (!config::ConfigManager::loraPhyProfile(new_phy, sf, bw_hz, cr)) {
-        if (sf < 7 || sf > 12 || bw_hz == 0 || cr < 5 || cr > 8) {
-            new_phy = 0;
-            sf    = defaults::PHY_PROFILES[0].spreading_factor;
-            bw_hz = defaults::PHY_PROFILES[0].bandwidth_hz;
-            cr    = defaults::PHY_PROFILES[0].coding_rate;
-        }
-    }
-    s_active_phy = new_phy;
 
     int16_t result = s_radio.begin(
         freq_mhz,
@@ -211,7 +185,13 @@ void Radio::reinit() {
         AIRTAK_SX1262_TCXO_VOLTAGE
     );
 
-    if (result != RADIOLIB_ERR_NONE) return;
+    if (result != RADIOLIB_ERR_NONE) {
+        // Radio hardware is unresponsive after reset — notify BLE client.
+        // The firmware will continue operating without radio; the display
+        // and BLE remain functional for diagnostics.
+        ble::queueAdminError("radio_reinit_begin_failed");
+        return;
+    }
 
     s_radio.setCRC(true);
     s_radio.explicitHeader();
@@ -316,7 +296,19 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
     // Phase 7 multi-PHY: if the requested profile differs from the active one,
     // reconfigure the SX1262. This is only expected during Phase 7 audio bursts.
     if (phy_profile_idx != s_active_phy) {
-        if (!applyPhyProfile(phy_profile_idx)) return false;
+        uint8_t  idx   = phy_profile_idx;
+        uint8_t  sf    = 0;
+        uint32_t bw_hz = 0;
+        uint8_t  cr    = 0;
+        if (!resolvePhyProfile(idx, sf, bw_hz, cr)) return false;
+
+        // Apply the resolved SF/BW/CR to the live SX1262 (frequency unchanged).
+        int16_t err = s_radio.setBandwidth(bw_hz / 1000.0f);
+        if (err != RADIOLIB_ERR_NONE) return false;
+        err = s_radio.setSpreadingFactor(sf);
+        if (err != RADIOLIB_ERR_NONE) return false;
+        err = s_radio.setCodingRate(cr);
+        if (err != RADIOLIB_ERR_NONE) return false;
     }
 
     // Synchronous transmit.  const_cast is safe here — RadioLib's SX1262::transmit

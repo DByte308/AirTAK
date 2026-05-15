@@ -126,6 +126,52 @@ void test_maximum_chunk_uses_declared_frame_capacity() {
     TEST_ASSERT_EQUAL(BLE_FRAME_MAX_LEN, n);
 }
 
+// Zero-length payload: chunkCount must return 1 (one empty chunk), and
+// encodeChunk must produce a valid header with total_length=0.
+void test_zero_length_payload() {
+    uint8_t frame[BLE_FRAME_MAX_LEN];
+    TEST_ASSERT_EQUAL(1, Framing::chunkCount(0));
+    size_t n = Framing::encodeChunk(s_payload, 0, 0, frame, sizeof(frame));
+    TEST_ASSERT_EQUAL(FRAME_HEADER_SIZE, n);
+
+    FrameHeader hdr;
+    const uint8_t* payload;
+    size_t plen;
+    TEST_ASSERT_TRUE(Framing::decodeChunk(frame, n, &hdr, &payload, &plen));
+    TEST_ASSERT_EQUAL(0, hdr.total_length);
+    TEST_ASSERT_EQUAL(0, hdr.chunk_index);
+    TEST_ASSERT_EQUAL(1, hdr.chunk_count);
+    TEST_ASSERT_EQUAL(0, plen);
+}
+
+// Duplicate chunk delivery must be idempotent: reassembly must return false
+// (not yet complete) and must not corrupt the assembly buffer.
+void test_duplicate_chunk_idempotent() {
+    size_t total = FRAME_CHUNK_SIZE * 2;
+    uint64_t mask = 0;
+
+    uint8_t c0[BLE_MTU];
+    size_t n0 = Framing::encodeChunk(s_payload, total, 0, c0, sizeof(c0));
+    FrameHeader h0; const uint8_t* p0; size_t l0;
+    Framing::decodeChunk(c0, n0, &h0, &p0, &l0);
+
+    // Deliver chunk 0 twice.
+    TEST_ASSERT_FALSE(Framing::reassemble(h0, p0, l0, s_assembled, &mask));
+    uint64_t mask_after_first = mask;
+    TEST_ASSERT_FALSE(Framing::reassemble(h0, p0, l0, s_assembled, &mask));
+    // Mask must not change on duplicate delivery.
+    TEST_ASSERT_EQUAL(mask_after_first, mask);
+
+    // Now deliver chunk 1 — reassembly must complete correctly.
+    uint8_t c1[BLE_MTU];
+    size_t n1 = Framing::encodeChunk(s_payload, total, 1, c1, sizeof(c1));
+    FrameHeader h1; const uint8_t* p1; size_t l1;
+    Framing::decodeChunk(c1, n1, &h1, &p1, &l1);
+    TEST_ASSERT_TRUE(Framing::reassemble(h1, p1, l1, s_assembled, &mask));
+
+    TEST_ASSERT_EQUAL_MEMORY(s_payload, s_assembled, total);
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_single_chunk_small_payload);
@@ -135,5 +181,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_decode_rejects_invalid_chunk_index);
     RUN_TEST(test_framed_full_lora_packet_fits_single_att_value);
     RUN_TEST(test_maximum_chunk_uses_declared_frame_capacity);
+    RUN_TEST(test_zero_length_payload);
+    RUN_TEST(test_duplicate_chunk_idempotent);
     return UNITY_END();
 }

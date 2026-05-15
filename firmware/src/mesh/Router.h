@@ -54,6 +54,8 @@ struct AckRetryEntry {
     uint32_t msg_id;           // logical message ID (Data.request_id)
     uint32_t dest_node_id;     // original destination for retries
     uint32_t timeout_ms;       // absolute deadline: ACK deadline or backoff deadline
+    uint32_t created_ms;       // original queue insertion time; used for FIFO eviction
+                               // (not timeout_ms, which is smaller during backoff phase)
     uint8_t  attempts;         // retries attempted so far (0 = initial send only)
     uint8_t  hop_start;        // original hop_start for timeout formula
     uint8_t  slot_index;       // channel slot used for the original transmission
