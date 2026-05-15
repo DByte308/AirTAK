@@ -42,17 +42,26 @@ struct OtaHeader {
 };
 
 // Entry in the application-layer ACK retry queue (§8.9).
+//
+// State machine:
+//   in_backoff == false  →  timeout_ms is the ACK deadline; on expiry,
+//                           compute backoff, set in_backoff=true, set new
+//                           timeout_ms = now + backoff.
+//   in_backoff == true   →  timeout_ms is the backoff deadline; on expiry,
+//                           retransmit with new packet_id, set in_backoff=false,
+//                           increment attempts, set timeout_ms = now + ack_timeout.
 struct AckRetryEntry {
     uint32_t msg_id;           // logical message ID (Data.request_id)
     uint32_t dest_node_id;     // original destination for retries
-    uint32_t timeout_ms;       // absolute deadline
-    uint8_t  attempts;         // retries so far (0 = first send)
+    uint32_t timeout_ms;       // absolute deadline: ACK deadline or backoff deadline
+    uint8_t  attempts;         // retries attempted so far (0 = initial send only)
     uint8_t  hop_start;        // original hop_start for timeout formula
     uint8_t  slot_index;       // channel slot used for the original transmission
     uint32_t portnum;          // for diagnostics/retry policy
-    uint8_t  payload[237];     // original payload bytes
+    uint8_t  payload[237];     // original payload bytes (unencrypted Data protobuf)
     uint16_t payload_len;
     bool     in_use;
+    bool     in_backoff;       // true when waiting for backoff before next retry
 };
 
 class Router {

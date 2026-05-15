@@ -201,17 +201,23 @@ static bool readPositionRequestTarget(const uint8_t* data_pb, uint16_t data_len,
     return readVarintField(inner, inner_len, 1, target_node_id);
 }
 
+// Returns true if the inner PlayerStatePacket has is_state_transition = true.
+// On any parse failure (malformed proto, missing field), defaults to true so
+// that a state transition is never silently sent BEST_EFFORT (§8.9 fail-safe).
 static bool airtakPlayerIsStateTransition(const uint8_t* data_pb, uint16_t data_len) {
     const uint8_t* inner = nullptr;
     uint16_t inner_len = 0;
-    if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return false;
+    if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return true;
     uint32_t value = 0;
-    return readVarintField(inner, inner_len, 7, value) && value != 0;
+    if (!readVarintField(inner, inner_len, 7, value)) return true;
+    return value != 0;
 }
 
+// Same fail-safe for the raw PlayerStatePacket payload path (sendPacket).
 static bool playerPayloadIsStateTransition(const uint8_t* payload, uint16_t payload_len) {
     uint32_t value = 0;
-    return readVarintField(payload, payload_len, 7, value) && value != 0;
+    if (!readVarintField(payload, payload_len, 7, value)) return true;
+    return value != 0;
 }
 
 static bool parseDataMetadata(const uint8_t* data, uint16_t data_len, DataMetadata& out) {
@@ -315,7 +321,9 @@ static const ChannelSlot* selectTxSlot(Portnum portnum, bool require_downlink) {
 static bool isAppDuplicate(uint32_t src_id, uint32_t request_id, uint32_t now_ms) {
     if (request_id == 0) return false;
     for (auto& entry : s_app_dedup) {
-        if (entry.in_use && entry.expires_ms < now_ms) {
+        // Signed-difference expiry check is safe across millis() wrap
+        // (TTL = 60 s, well under the ~24.8 day safe window).
+        if (entry.in_use && (int32_t)(now_ms - entry.expires_ms) >= 0) {
             entry.in_use = false;
             continue;
         }
@@ -434,10 +442,12 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     }
 
     // Check duplicate-suppression cache (§8.7).
+    // Signed-difference comparison is safe across millis() wrap for 60 s TTL.
     for (size_t i = 0; i < defaults::ROUTER_DUP_CACHE_SIZE; i++) {
         auto& e = s_dup_cache[i];
-        if (!e.in_use || e.expires_ms < now_ms) {
-            if (e.in_use) e.in_use = false; // expired
+        if (!e.in_use) continue;
+        if ((int32_t)(now_ms - e.expires_ms) >= 0) {
+            e.in_use = false; // expired
             continue;
         }
         if (e.src_id == hdr.src_node_id && e.packet_id == dup_key) {
@@ -628,21 +638,23 @@ void Router::tickRelayQueue(QueueHandle_t tx_queue) {
     for (size_t i = 0; i < 16; i++) {
         auto& e = s_relay_queue[i];
         if (!e.in_use) continue;
-        if (now_ms >= e.send_after_ms) {
-            // Queue for radio TX.
-            PooledPacket* pkt = PacketPool::alloc();
-            if (pkt) {
-                memcpy(pkt->data, e.data, e.length);
-                pkt->length = e.length;
-                pkt->phy_profile_index = e.phy_profile_index;
-                if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
-                    PacketPool::free(pkt);
-                } else {
-                    xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
-                }
+        // Signed-difference comparison is safe across millis() wrap for
+        // deadlines up to ~24.8 days (all relay delays are < 10 s).
+        if ((int32_t)(now_ms - e.send_after_ms) < 0) continue;
+
+        // Queue for radio TX.
+        PooledPacket* pkt = PacketPool::alloc();
+        if (pkt) {
+            memcpy(pkt->data, e.data, e.length);
+            pkt->length = e.length;
+            pkt->phy_profile_index = e.phy_profile_index;
+            if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
+                PacketPool::free(pkt);
+            } else {
+                xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
             }
-            e.in_use = false;
         }
+        e.in_use = false;
     }
 }
 
@@ -816,6 +828,53 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
     return true;
 }
 
+// ── Helper: retransmit one entry with a new packet_id (§8.9) ────────────────
+// Returns true if the retransmission was queued successfully.
+static bool retransmitEntry(AckRetryEntry& e, QueueHandle_t tx_queue, uint32_t now_ms) {
+    uint32_t new_packet_id = nextPacketId();
+    const ChannelSlot* slot = ChannelManager::slotByIndex(e.slot_index);
+    if (!slot || slot->role == ChannelRole::DISABLED) slot = ChannelManager::primarySlot();
+    if (!slot) return false;
+
+    OtaHeader hdr;
+    hdr.dest_node_id  = e.dest_node_id;
+    hdr.src_node_id   = MeshNode::nodeId();
+    hdr.packet_id     = new_packet_id;
+    hdr.flags         = ((e.hop_start & 0x07) << 5)
+                      | (1 << 4)           // want_ack=true
+                      | (e.hop_start & 0x07);
+    hdr.channel_hash  = slot->channel_hash;
+    hdr.next_hop_low  = 0;
+    hdr.relay_node_low = 0;
+
+    uint8_t enc[MESH_MAX_PAYLOAD_BYTES];
+    memcpy(enc, e.payload, e.payload_len);
+    if (slot->psk_len > 0) {
+        uint8_t nonce[16];
+        Crypto::buildNonce(hdr.packet_id, MeshNode::nodeId(), nonce);
+        Crypto::crypt(slot->aes_key, nonce, enc, e.payload_len);
+    }
+
+    PooledPacket* pkt = PacketPool::alloc();
+    if (pkt) {
+        buildOtaHeader(pkt->data, hdr);
+        memcpy(pkt->data + OTA_HEADER_BYTES, enc, e.payload_len);
+        pkt->length = OTA_HEADER_BYTES + e.payload_len;
+        pkt->phy_profile_index = slot->phy_profile_index;
+        if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
+            PacketPool::free(pkt);
+        } else {
+            xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
+        }
+    }
+
+    e.attempts++;
+    uint32_t ack_timeout = max(defaults::ACK_TIMEOUT_MIN_MS,
+                               2u * (uint32_t)e.hop_start * defaults::ACK_TIMEOUT_PER_HOP_MS);
+    e.timeout_ms = now_ms + ack_timeout;
+    return true;
+}
+
 // ── Router::tickRetryQueue() ─────────────────────────────────────────────────
 void Router::tickRetryQueue(QueueHandle_t tx_queue) {
     uint32_t now_ms = millis();
@@ -823,57 +882,41 @@ void Router::tickRetryQueue(QueueHandle_t tx_queue) {
         auto& e = s_retry_queue[i];
         if (!e.in_use) continue;
 
-        if (now_ms >= e.timeout_ms) {
-            if (e.attempts >= defaults::ACK_MAX_RETRIES) {
-                queueDeliveryFailure(e.portnum, e.msg_id);
-                e.in_use = false;
-                continue;
+        // Use signed-difference comparison so the deadline check is correct
+        // across the ~49.7-day millis() wrap (all deadlines are < 25 days).
+        if ((int32_t)(now_ms - e.timeout_ms) < 0) continue;
+
+        // ── Backoff phase: delay expired → retransmit now ─────────────────
+        if (e.in_backoff) {
+            e.in_backoff = false;
+            if (!retransmitEntry(e, tx_queue, now_ms)) {
+                e.in_use = false; // no usable TX slot — abandon retry
             }
-
-            // Retransmit with a NEW packet_id but same msg_id (Data.request_id) (§8.9).
-            uint32_t new_packet_id = nextPacketId();
-            const ChannelSlot* slot = ChannelManager::slotByIndex(e.slot_index);
-            if (!slot || slot->role == ChannelRole::DISABLED) slot = ChannelManager::primarySlot();
-            if (!slot) { e.in_use = false; continue; }
-
-            OtaHeader hdr;
-            hdr.dest_node_id  = e.dest_node_id;
-            hdr.src_node_id   = MeshNode::nodeId();
-            hdr.packet_id     = new_packet_id;
-            hdr.flags         = ((e.hop_start & 0x07) << 5)
-                              | (1 << 4)           // want_ack=true
-                              | (e.hop_start & 0x07);
-            hdr.channel_hash  = slot->channel_hash;
-            hdr.next_hop_low  = 0;
-            hdr.relay_node_low = 0;
-
-            uint8_t enc[MESH_MAX_PAYLOAD_BYTES];
-            memcpy(enc, e.payload, e.payload_len);
-            if (slot->psk_len > 0) {
-                uint8_t nonce[16];
-                Crypto::buildNonce(hdr.packet_id, MeshNode::nodeId(), nonce);
-                Crypto::crypt(slot->aes_key, nonce, enc, e.payload_len);
-            }
-
-            PooledPacket* pkt = PacketPool::alloc();
-            if (pkt) {
-                buildOtaHeader(pkt->data, hdr);
-                memcpy(pkt->data + OTA_HEADER_BYTES, enc, e.payload_len);
-                pkt->length = OTA_HEADER_BYTES + e.payload_len;
-                pkt->phy_profile_index = slot->phy_profile_index;
-                if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
-                    PacketPool::free(pkt);
-                } else {
-                    xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
-                }
-            }
-
-            e.attempts++;
-            uint32_t backoff = (uint32_t)random(0, defaults::ACK_RETRY_BASE_MS * (1 << e.attempts));
-            uint32_t timeout = max(defaults::ACK_TIMEOUT_MIN_MS,
-                                   2u * (uint32_t)e.hop_start * defaults::ACK_TIMEOUT_PER_HOP_MS);
-            e.timeout_ms = now_ms + backoff + timeout;
+            continue;
         }
+
+        // ── ACK timeout phase: no ACK received → backoff or give up ──────
+        if (e.attempts >= defaults::ACK_MAX_RETRIES) {
+            queueDeliveryFailure(e.portnum, e.msg_id);
+            e.in_use = false;
+            continue;
+        }
+
+        // Jittered exponential backoff BEFORE the next retry (§8.9).
+        // Formula: random(0, 200 × 2^attempt).  attempt=0 → 0–200 ms.
+        uint32_t backoff = (uint32_t)random(0,
+            defaults::ACK_RETRY_BASE_MS * (1u << e.attempts));
+
+        if (backoff == 0) {
+            // Zero backoff — retransmit immediately without a backoff phase.
+            if (!retransmitEntry(e, tx_queue, now_ms)) {
+                e.in_use = false; // no usable TX slot — abandon retry
+            }
+            continue;
+        }
+
+        e.in_backoff = true;
+        e.timeout_ms = now_ms + backoff;
     }
 }
 

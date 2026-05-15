@@ -186,20 +186,9 @@ static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
         return;
     }
 
-    if (hdr.total_length < OTA_HEADER_BYTES) return;
-
-    PooledPacket* pkt = PacketPool::alloc();
-    if (!pkt) return;
-    memcpy(pkt->data, s_mesh_tx_assembly, hdr.total_length);
-    pkt->length = hdr.total_length;
-    const auto* primary_slot = ChannelManager::primarySlot();
-    pkt->phy_profile_index = primary_slot ? primary_slot->phy_profile_index : 0;
-
-    if (xQueueSendToBack(s_radio_tx_queue, &pkt, 0) != pdTRUE) {
-        PacketPool::free(pkt);
-    } else {
-        xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
-    }
+    // Router rejected the packet (unparseable Data protobuf, no usable TX slot,
+    // or payload too large).  Silently drop — never bypass the Router to send
+    // raw bytes unencrypted and without hop-limit enforcement.
 }
 
 static void onAdminWrite(uint16_t conn_hdl, BLECharacteristic* chr,

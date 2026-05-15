@@ -264,10 +264,20 @@ int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t 
         // Signal task_config_apply to run radioRestartProcedure() on its own stack
         // (priority LOW/2) so the BLE event loop is not blocked during the
         // ≤300 ms radio pause/reinit/resume sequence (§9.4.2).
+        // Use a 2-second send timeout so a transiently full queue does not leave
+        // persisted config desynchronized from the active radio state.
         void* sentinel = nullptr;
-        if (!::g_config_change_queue || xQueueSend(::g_config_change_queue, &sentinel, 0) != pdTRUE) {
-            s_radio_restart_pending = false;
-            return -5;
+        if (!::g_config_change_queue ||
+            xQueueSend(::g_config_change_queue, &sentinel, pdMS_TO_TICKS(2000)) != pdTRUE) {
+            // Queue still full after 2 s — the config task is stalled.
+            // Run the restart inline on the BLE task stack as a last resort.
+            // This blocks the BLE event loop but prevents indefinite config/radio
+            // mismatch.  Target ≤ 300 ms per §9.4.2.
+            radioRestartProcedure();
+            if (s_radio_restart_pending) {
+                s_radio_restart_pending = false;
+                return -5;
+            }
         }
     }
 
