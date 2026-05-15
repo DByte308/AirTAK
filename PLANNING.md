@@ -1,5 +1,5 @@
 # MASH — Mesh Airsoft Situational Hub
-## Master Planning Document v1.4
+## Master Planning Document v1.5
 ### Status: IMMUTABLE AFTER ACCEPTANCE — 2026-05-13
 ### Amendments: v1.1 — 2026-05-13 — Multi-PHY per-channel-slot architecture; transparent PHY parameter model replacing opaque modem presets; all channel slots interchangeable between Meshtastic and MASH use; GPS position multi-hop relay fix; MASH_POSITION_REQUEST; per-packet-type hop limits; heard-by relay suppression; application-layer reliability (MeshCore-derived); PTT audio Phase 7; RECORD_AUDIO conditional permission
 ### Amendments: v1.2 — 2026-05-13 — 100-node airtime budget analysis; smart beaconing replacing fixed 30 s interval (movement-triggered + 90 s heartbeat); POSITION_APP and MASH_PLAYER hop_limit reduced 5→3; EU 868 MHz duty-cycle compliance guidance; audio packet size redesigned 73-frame→8-frame; FEC piggyback (fec_prev_audio_data); jitter buffer and PLC; AudioConfig.frame_count; infrastructure relay node guidance (§13.4); 3 new risks; Duty Cycle, FEC, PLC, Smart Beaconing, TDM glossary entries

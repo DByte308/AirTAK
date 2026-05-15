@@ -13,7 +13,7 @@ MASH is Meshtastic wire-format compatible on the shared channel and introduces a
 - Display every player's GPS position on an offline map in real time
 - Track player state (active / hit / respawning / eliminated) with push-to-device acknowledgment
 - Broadcast game zones, objectives, and phase changes to the whole mesh
-- Support up to 100 nodes on a 10 km × 10 km field under EU duty-cycle limits
+- Designed for deployment of up to 100 players on a 10 km × 10 km field; smart beaconing helps each device stay within regulatory duty-cycle limits
 - Interoperate with stock Meshtastic devices on the shared channel
 - PTT voice over LoRa via Codec2 (Phase 7)
 

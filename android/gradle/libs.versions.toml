@@ -1,0 +1,83 @@
+# MASH Android — gradle/libs.versions.toml
+# Version catalog for all dependencies.
+# Planning: §11 | Roadmap: Phase 3
+#
+# Minimum SDK: 31 (Android 12 — required for BLUETOOTH_SCAN/BLUETOOTH_CONNECT split permissions)
+# Target SDK: 35
+# Kotlin: ≥ 2.0 (§11.1)
+
+[versions]
+kotlin                = "2.0.21"
+agp                   = "8.5.2"
+ksp                   = "2.0.21-1.0.28"
+hilt                  = "2.51.1"
+compose-bom           = "2025.01.00"
+navigation            = "2.8.4"
+room                  = "2.7.0"
+maplibre              = "11.0.0"
+protobuf              = "4.26.1"
+protobuf-plugin       = "0.9.4"
+ktor                  = "2.3.9"
+coroutines            = "1.8.1"
+lifecycle             = "2.8.7"
+activity-compose      = "1.9.3"
+junit5                = "5.10.3"
+mockk                 = "1.13.12"
+espresso              = "3.6.1"
+test-ext              = "1.2.1"
+
+[libraries]
+# Kotlin
+kotlin-stdlib                     = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+coroutines-android                = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# Compose BOM
+compose-bom                       = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
+compose-ui                        = { module = "androidx.compose.ui:ui" }
+compose-ui-tooling-preview        = { module = "androidx.compose.ui:ui-tooling-preview" }
+compose-ui-tooling                = { module = "androidx.compose.ui:ui-tooling" }
+compose-material3                 = { module = "androidx.compose.material3:material3" }
+compose-runtime-livedata          = { module = "androidx.compose.runtime:runtime-livedata" }
+
+# Navigation
+navigation-compose                = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
+hilt-navigation-compose           = { module = "androidx.hilt:hilt-navigation-compose", version = "1.2.0" }
+
+# Lifecycle
+lifecycle-viewmodel-compose       = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+lifecycle-runtime-ktx             = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }
+activity-compose                  = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
+
+# Hilt
+hilt-android                      = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
+hilt-compiler                     = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
+
+# Room
+room-runtime                      = { module = "androidx.room:room-runtime", version.ref = "room" }
+room-ktx                          = { module = "androidx.room:room-ktx", version.ref = "room" }
+room-compiler                     = { module = "androidx.room:room-compiler", version.ref = "room" }
+
+# MapLibre
+maplibre-android                  = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
+
+# Protobuf
+protobuf-kotlin-lite              = { module = "com.google.protobuf:protobuf-kotlin-lite", version.ref = "protobuf" }
+
+# Ktor (HTTP for tile download)
+ktor-client-android               = { module = "io.ktor:ktor-client-android", version.ref = "ktor" }
+ktor-client-content-negotiation  = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json  = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+
+# Testing
+junit5-api                        = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit5" }
+junit5-engine                     = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit5" }
+mockk                             = { module = "io.mockk:mockk", version.ref = "mockk" }
+espresso-core                     = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
+test-ext-junit                    = { module = "androidx.test.ext:junit", version.ref = "test-ext" }
+
+[plugins]
+android-application               = { id = "com.android.application", version.ref = "agp" }
+kotlin-android                    = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+hilt                              = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+ksp                               = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+protobuf                          = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }

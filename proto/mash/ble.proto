@@ -1,0 +1,90 @@
+// MASH — Mesh Airsoft Situational Hub
+// proto/mash/ble.proto — BLE transport message schema (CONFIG_RW, DEVICE_STATUS, ADMIN)
+// Planning: §10.3, §10.4, §10.5, §14.4 | Roadmap: T.3
+//
+// Generated outputs: firmware/src/proto/ (nanopb), android/.../com/mash/proto/ (Kotlin)
+// Regenerate with: tools/proto_gen.ps1
+
+syntax = "proto3";
+package mash;
+
+import "mash/config.proto";
+
+// ── Config protocol (§10.3) ───────────────────────────────────────────────────
+
+// Written to CONFIG_RW characteristic by the Android app.
+// Set commit=false to stage changes without applying; commit=true to apply all staged.
+// Staged changes allow grouping multiple config groups into a single radio restart (§9.4.3).
+message ConfigPayload {
+  ConfigGroup group  = 1;   // which config group is being written
+  bytes       data   = 2;   // serialized config group proto (nanopb binary)
+  bool        commit = 3;   // false = stage only; true = apply all staged and notify
+}
+
+// Notified on CONFIG_RW by the device after a commit.
+// radio_restarted=true means the SX1262 was re-initialized (≤ 300 ms, BLE preserved).
+message ConfigAck {
+  ConfigGroup group             = 1;
+  bool        success           = 2;
+  string      error             = 3;   // non-empty only when !success
+  bool        radio_restarted   = 4;   // true if CHANNELS or LORA group was applied
+  uint32      apply_duration_ms = 5;   // measured apply time; validate ≤ 300 ms (§9.4.2)
+}
+
+// ── Device Status (§10.4) ─────────────────────────────────────────────────────
+
+// Notified on DEVICE_STATUS at connect and on any field change (debounced 1 Hz).
+// DEVICE_STATUS is readable without authentication (open characteristic).
+message DeviceStatus {
+  uint32      node_id          = 1;    // lower 32 bits of FICR.DEVICEID[0] (§8.8)
+  string      node_name        = 2;    // DeviceConfig.long_name
+  float       battery_level    = 3;    // 0.0–1.0
+  bool        charging         = 4;    // CHG_STAT pin state (P0.05)
+  GpsStatus   gps              = 5;
+  RadioStatus radio            = 6;
+  uint32      mesh_node_count  = 7;    // number of known mesh nodes
+  uint32      uptime_seconds   = 8;
+  string      firmware_version = 9;
+  string      bluetooth_address = 10;  // "AA:BB:CC:DD:EE:FF"
+}
+
+message GpsStatus {
+  bool   fix        = 1;
+  uint32 satellites = 2;
+  double latitude   = 3;
+  double longitude  = 4;
+  float  altitude_m = 5;
+  float  accuracy_m = 6;   // derived from HDOP; values > 5.0 flagged low quality (§9.5)
+}
+
+message RadioStatus {
+  string channel_name = 1;   // name of PRIMARY channel slot
+  float  last_rssi    = 2;   // dBm
+  float  last_snr     = 3;   // dB
+  uint32 packets_rx   = 4;   // total since boot
+  uint32 packets_tx   = 5;   // total since boot
+}
+
+// ── Admin commands (§10.5) ────────────────────────────────────────────────────
+
+// Sent to and notified on the ADMIN characteristic (authenticated, security mode 1 level 3).
+// FACTORY_RESET and PAIR_CLEAR require a valid confirm_token (§10.5, §15.2).
+enum AdminCommand {
+  REBOOT        = 0;
+  FACTORY_RESET = 1;   // requires confirm_token = HMAC-SHA256(node_id_bytes, "FACTORY_RESET")
+  DFU_ENTER     = 2;   // enter Nordic DFU mode for OTA update (§6.1)
+  RADIO_RESTART = 3;   // trigger controlled radio restart without config change
+  GPS_RESET     = 4;   // cold-reset the L76K GPS module
+  PAIR_CLEAR    = 5;   // remove all BLE bonds; requires confirm_token
+}
+
+message AdminRequest {
+  AdminCommand command       = 1;
+  string       confirm_token = 2;   // required for FACTORY_RESET and PAIR_CLEAR
+}
+
+message AdminResponse {
+  AdminCommand command = 1;
+  bool         success = 2;
+  string       error   = 3;
+}

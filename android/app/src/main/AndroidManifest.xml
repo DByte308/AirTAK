@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MASH Android — AndroidManifest.xml -->
+<!-- Planning: §11.2 | Roadmap: Phase 3 -->
+<!--
+    PERMISSIONS: Only the permissions listed in §11.2 are declared here.
+    RECORD_AUDIO is declared with android:required="false" and only meaningful
+    when the Phase 7 audio feature is enabled at build time.
+    No ACCESS_COARSE_LOCATION — the app requires fine location for GPS overlay.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Bluetooth permissions (Android 12+ split model, §11.2) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Location (required for MapLibre GPS overlay, §11.2) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- Foreground service for persistent BLE connection (§11.3) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- Notifications (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Phase 7 audio (not required — gracefully disabled if not granted) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"
+        android:required="false" />
+
+    <!-- BLE hardware requirement -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+
+    <application
+        android:name=".MashApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Mash">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- BLE foreground service (FOREGROUND_SERVICE_CONNECTED_DEVICE type, §11.3) -->
+        <service
+            android:name=".data.ble.BleConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+    </application>
+
+</manifest>

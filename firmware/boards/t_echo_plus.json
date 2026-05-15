@@ -1,0 +1,62 @@
+{
+  "_comment": "MASH — Mesh Airsoft Situational Hub | firmware/boards/t_echo_plus.json | Planning: §7.1 | Roadmap: 1.1",
+  "_warning": "MANDATORY: Verify ALL pin assignments against the actual T-Echo Plus hardware schematic before first firmware compilation. The Meshtastic T-Echo board definition is the authoritative reference for discrepancies. Update this file with verified values and remove this warning comment.",
+
+  "build": {
+    "arduino": {
+      "ldscript": "nrf52840_s140_v6.ld"
+    },
+    "core": "nRF5",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DNRF52840_XXAA -DARDUINO_NRF52840_LILYGO_TECHO_PLUS",
+    "f_cpu": "64000000L",
+    "hwids": [["0x1915", "0x521F"]],
+    "mcu": "nrf52840",
+    "variant": "t_echo_plus"
+  },
+  "connectivity": ["bluetooth"],
+  "debug": {
+    "jlink_device": "nRF52840_xxAA",
+    "openocd_target": "nrf52840",
+    "svd_path": "nRF52840_xxAA.svd"
+  },
+  "frameworks": ["arduino"],
+  "name": "LilyGo T-Echo Plus",
+  "upload": {
+    "maximum_ram_size": 262144,
+    "maximum_size": 1048576,
+    "protocol": "nrfjprog",
+    "protocols": ["nrfjprog", "jlink"]
+  },
+  "url": "https://www.lilygo.cc/",
+  "vendor": "LilyGo",
+
+  "_pin_mapping": {
+    "_note": "Pin mapping per §7.1. Each entry must be verified against hardware schematic before use.",
+    "SX1262_SCK":    "P0.19",
+    "SX1262_MISO":   "P0.23",
+    "SX1262_MOSI":   "P0.22",
+    "SX1262_NSS":    "P0.24",
+    "SX1262_RESET":  "P0.25",
+    "SX1262_DIO1":   "P0.20",
+    "SX1262_BUSY":   "P0.17",
+    "SX1262_TXEN":   "P1.13",
+    "SX1262_RXEN":   "P1.14",
+    "EINK_SCK":      "P0.14",
+    "EINK_MOSI":     "P0.13",
+    "EINK_CS":       "P0.30",
+    "EINK_DC":       "P0.28",
+    "EINK_RST":      "P0.02",
+    "EINK_BUSY":     "P0.03",
+    "GPS_RX_MCU":    "P1.09",
+    "GPS_TX_MCU":    "P1.08",
+    "GPS_PPS":       "P1.04",
+    "GPS_ENABLE":    "P1.02",
+    "VBAT_SENSE":    "P0.04",
+    "CHG_STAT":      "P0.05",
+    "USER_BUTTON":   "P1.10",
+    "NFC1":          "P0.09",
+    "NFC2":          "P0.10",
+    "SPI_NOR_CS":    "TBD — verify at schematic review"
+  }
+}

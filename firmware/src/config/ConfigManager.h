@@ -1,0 +1,58 @@
+// MASH — Mesh Airsoft Situational Hub
+// firmware/src/config/ConfigManager.h — Hot-reload config engine
+// Planning: §9.4, §9.4.2 | Roadmap: 2.8
+//
+// Manages the in-memory config state for all 8 config groups.
+// Supports staged commit (commit=false for validation, commit=true to persist).
+// Config changes that affect radio (LORA, CHANNELS) trigger the radio restart procedure:
+//   pause → drain TX queue → reinit radio → rekey channels → resume (≤ 300 ms, §9.4.2).
+
+#pragma once
+
+#include <cstdint>
+#include <cstddef>
+#include "config/ConfigGroups.h"
+
+// Nanopb-generated headers (generated from proto/mash/config.proto)
+// These will be available after running tools/proto_gen.ps1
+// #include "proto/config.pb.h"
+
+namespace mash {
+namespace config {
+
+// Callback invoked after a config group is successfully committed.
+// Receives the group that changed. Implementations should update their local copy.
+using ConfigChangedCallback = void (*)(ConfigGroup group);
+
+class ConfigManager {
+public:
+    // Phase 2.8: Load all config groups from FlashStore.
+    // Groups missing from flash are initialized with factory defaults from Defaults.h.
+    static void init();
+
+    // Phase 2.8: Write a config group from a nanopb-encoded buffer.
+    // If commit=false: validates the proto, updates in-memory state, returns success/error.
+    // If commit=true: persists to flash and triggers any side effects (radio restart etc.).
+    // Returns 0 on success, negative error code on failure.
+    static int applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t pb_len, bool commit);
+
+    // Phase 2.8: Read current in-memory state of a config group as a nanopb-encoded buffer.
+    // Returns number of bytes written to buf, or 0 on failure.
+    static size_t readGroup(ConfigGroup group, uint8_t* buf, size_t buf_len);
+
+    // Phase 2.8: Factory reset a single config group (re-apply Defaults.h values).
+    static void resetGroup(ConfigGroup group);
+
+    // Phase 2.8: Register a callback for config change notifications.
+    static void registerCallback(ConfigChangedCallback cb);
+
+    // Phase 2.8: Perform the radio restart procedure for groups that require it (§9.4.2).
+    // pause→drain→reinit→rekey→resume, target ≤ 300 ms.
+    static void radioRestartProcedure();
+
+    // Returns true if a radio restart is pending (groups committed but restart not yet run).
+    static bool isRadioRestartPending();
+};
+
+} // namespace config
+} // namespace mash

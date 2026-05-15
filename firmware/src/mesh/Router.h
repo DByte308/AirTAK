@@ -1,0 +1,85 @@
+// MASH — Mesh Airsoft Situational Hub
+// firmware/src/mesh/Router.h — Flood router with duplicate suppression
+// Planning: §8.7, §8.9 | Roadmap: 2.5, 2.6, 2.9, 2.10, 2.11
+//
+// Implements Meshtastic-compatible ManagedFlood algorithm:
+//   - Re-broadcast up to hop_limit times; decrement per hop
+//   - Rolling duplicate-suppression cache on (source_id, packet_id)
+//   - SNR-based relay delay (§8.7)
+//   - Heard-by relay suppression (§8.7)
+//   - Per-packet-type default hop limits from Defaults.h (§8.7)
+//   - Application-layer ACKNOWLEDGED delivery (§8.9)
+//   - hop_start preserved in Flags [2:0] across all relay hops (§8.2)
+
+#pragma once
+
+#include <cstdint>
+#include <FreeRTOS.h>
+#include <queue.h>
+#include "mesh/Portnums.h"
+#include "mesh/PacketPool.h"
+
+namespace mash {
+
+// Parsed representation of the OTA wire header (§8.2).
+struct OtaHeader {
+    uint32_t dest_node_id;   // bytes 0–3
+    uint32_t src_node_id;    // bytes 4–7
+    uint8_t  packet_id_low;  // byte 8
+    uint8_t  flags;          // byte 9: [7:5]=hop_limit [4]=want_ack [3]=via_mqtt [2:0]=hop_start
+    uint8_t  channel_hash;   // byte 10
+    uint8_t  next_hop_low;   // byte 11
+
+    // Helpers
+    uint8_t hopLimit()  const { return (flags >> 5) & 0x07; }
+    uint8_t hopStart()  const { return flags & 0x07; }
+    bool    wantAck()   const { return (flags >> 4) & 0x01; }
+    void setHopLimit(uint8_t v) { flags = (flags & ~0xE0) | ((v & 0x07) << 5); }
+};
+
+// Entry in the application-layer ACK retry queue (§8.9).
+struct AckRetryEntry {
+    uint32_t msg_id;           // logical message ID (Data.request_id)
+    uint32_t timeout_ms;       // absolute deadline
+    uint8_t  attempts;         // retries so far (0 = first send)
+    uint8_t  hop_start;        // original hop_start for timeout formula
+    uint8_t  portnum;          // for re-serialization
+    uint8_t  payload[237];     // original payload bytes
+    uint16_t payload_len;
+    bool     in_use;
+};
+
+class Router {
+public:
+    // Phase 2.5: Initialize duplicate-suppression cache and retry queue.
+    static void init();
+
+    // Phase 2.5: Process a received OTA packet from the radio RX queue.
+    // Decrypts, dispatches to the correct channel, queues relay if appropriate.
+    static void processIncoming(const uint8_t* raw, uint8_t raw_len,
+                                float rssi, float snr,
+                                QueueHandle_t tx_queue);
+
+    // Phase 2.5: Prepare and queue an outgoing packet from the BLE layer.
+    // Applies per-packet-type hop limits from Defaults.h.
+    static void sendPacket(Portnum portnum, uint32_t dest,
+                           const uint8_t* payload, uint16_t payload_len,
+                           bool want_ack, QueueHandle_t tx_queue);
+
+    // Phase 2.11: Tick the ACK retry queue — called from Router task every 100 ms.
+    // Retransmits entries whose timeout has elapsed; removes after MAX_RETRIES.
+    static void tickRetryQueue(QueueHandle_t tx_queue);
+
+    // Phase 2.11: Called when a MASH_ACK is received. Removes matching entry from
+    // retry queue using ack_request_id (NOT packet ID — see §8.9).
+    static void handleAck(uint32_t ack_request_id);
+
+    // Phase 2.10: Called when the Router overhears a relay of a queued packet.
+    // If overheard SNR ≥ own received SNR, cancel the queued relay.
+    static void handleOverheardRelay(uint32_t src_id, uint32_t packet_id, float overheard_snr);
+
+    // Returns the default hop_limit for a given portnum (§8.7 table, Defaults.h).
+    static uint8_t defaultHopLimit(Portnum portnum);
+};
+
+} // namespace mash
