@@ -43,6 +43,9 @@ bool Framing::decodeChunk(const uint8_t* in_buf, size_t in_len,
     memcpy(&hdr_out->total_length, in_buf + 0, 2);
     memcpy(&hdr_out->chunk_index,  in_buf + 2, 2);
     memcpy(&hdr_out->chunk_count,  in_buf + 4, 2);
+    if (hdr_out->chunk_count == 0) return false;
+    if (hdr_out->chunk_index >= hdr_out->chunk_count) return false;
+    if (hdr_out->chunk_count > 64) return false;
     *payload_out     = in_buf + FRAME_HEADER_SIZE;
     *payload_len_out = in_len - FRAME_HEADER_SIZE;
     return true;
@@ -51,16 +54,19 @@ bool Framing::decodeChunk(const uint8_t* in_buf, size_t in_len,
 bool Framing::reassemble(const FrameHeader& hdr,
                          const uint8_t* chunk_data, size_t chunk_len,
                          uint8_t* assembly_buf,
-                         uint16_t* chunks_received_mask) {
-    if (hdr.chunk_index >= 64) return false; // max 64 chunks (bitmask limit)
+                         uint64_t* chunks_received_mask) {
+    if (hdr.chunk_count == 0 || hdr.chunk_count > 64) return false;
+    if (hdr.chunk_index >= hdr.chunk_count) return false;
     size_t offset = (size_t)hdr.chunk_index * FRAME_CHUNK_SIZE;
     if (offset + chunk_len > hdr.total_length) return false;
 
     memcpy(assembly_buf + offset, chunk_data, chunk_len);
-    *chunks_received_mask |= (uint16_t)(1u << hdr.chunk_index);
+    *chunks_received_mask |= (uint64_t(1) << hdr.chunk_index);
 
     // Assembly complete when all bits are set
-    uint16_t all_bits = (uint16_t)((1u << hdr.chunk_count) - 1u);
+    uint64_t all_bits = (hdr.chunk_count == 64)
+        ? UINT64_MAX
+        : ((uint64_t(1) << hdr.chunk_count) - uint64_t(1));
     return (*chunks_received_mask & all_bits) == all_bits;
 }
 

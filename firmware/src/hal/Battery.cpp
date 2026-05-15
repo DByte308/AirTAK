@@ -13,22 +13,24 @@ static float    s_level        = 0.0f;
 static bool     s_is_charging  = false;
 static uint32_t s_voltage_mv   = 0;
 
+constexpr uint32_t ADC_REFERENCE_MV = 3000;
+constexpr uint32_t ADC_MAX_COUNTS   = 4095;
+constexpr uint32_t VBAT_DIVIDER_NUM = 2;
+constexpr uint32_t VBAT_DIVIDER_DEN = 1;
+
 void Battery::init() {
     // Configure ADC input for VBAT_SENSE (P0.04 / AIN2)
-    // Configure CHG_STAT as input with pull-up (P0.05, active low = charging)
-    pinMode(PIN_VBAT_SENSE, INPUT);
-    pinMode(PIN_CHG_STAT,   INPUT_PULLUP);
+    analogReadResolution(12);
+    pinMode(MASH_PIN_VBAT_SENSE, INPUT);
+#if MASH_PIN_CHG_STAT >= 0
+    pinMode(MASH_PIN_CHG_STAT,   INPUT_PULLUP);
+#endif
 }
 
 void Battery::sample(EventGroupHandle_t system_event_group) {
-    // TODO Phase 1.7: Read ADC voltage on PIN_VBAT_SENSE.
-    // The T-Echo Plus uses a voltage divider; apply the correct scaling factor.
-    // Map raw millivolts to 0.0–1.0 using a LiPo discharge curve approximation:
-    //   4200 mV = 1.0 (full)  |  3700 mV = 0.5  |  3200 mV = 0.0 (empty)
-
-    uint32_t raw_adc = analogRead(PIN_VBAT_SENSE);
-    // Placeholder: assume 3.3V ADC reference, 12-bit, 2× voltage divider
-    s_voltage_mv = (raw_adc * 3300 * 2) / 4096;
+    uint32_t raw_adc = analogRead(MASH_PIN_VBAT_SENSE);
+    s_voltage_mv = (raw_adc * ADC_REFERENCE_MV * VBAT_DIVIDER_NUM)
+                 / (ADC_MAX_COUNTS * VBAT_DIVIDER_DEN);
 
     // Clamp and normalise
     if (s_voltage_mv >= 4200) s_level = 1.0f;
@@ -36,7 +38,11 @@ void Battery::sample(EventGroupHandle_t system_event_group) {
     else s_level = (float)(s_voltage_mv - 3200) / (4200 - 3200);
 
     // CHG_STAT: active low = charging (typical TP4054 behavior)
-    s_is_charging = (digitalRead(PIN_CHG_STAT) == LOW);
+#if MASH_PIN_CHG_STAT >= 0
+    s_is_charging = (digitalRead(MASH_PIN_CHG_STAT) == LOW);
+#else
+    s_is_charging = false;
+#endif
 
     // Notify display and BLE status
     Display::markDirty(DISPLAY_DIRTY_BATTERY);

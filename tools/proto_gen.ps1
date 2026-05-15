@@ -24,7 +24,7 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot   = Split-Path -Parent $PSScriptRoot
 $ProtoMash     = Join-Path $ProjectRoot "proto\mash"
-$FirmwareProto = Join-Path $ProjectRoot "firmware\src\proto"
+$FirmwareProto = Join-Path $ProjectRoot "firmware\src\proto\mash"
 $AndroidProto  = Join-Path $ProjectRoot "android\app\src\main\proto\com\mash\proto"
 
 # Verify protoc is available
@@ -44,10 +44,20 @@ if ($ProtoFiles.Count -eq 0) {
 if (-not $AndroidOnly) {
     Write-Host "`n[proto_gen.ps1] Generating nanopb C bindings → $FirmwareProto" -ForegroundColor Cyan
 
-    # Find nanopb generator (prefer local lib, fall back to PATH)
-    $nanopbGen = Join-Path $ProjectRoot "firmware\lib\nanopb\generator\nanopb_generator.py"
-    if (-not (Test-Path $nanopbGen)) {
-        $nanopbGen = "nanopb_generator.py"  # fall back to PATH
+    # Find nanopb generator (prefer local lib, then PlatformIO cache, then PATH).
+    $nanopbCandidates = @(
+        (Join-Path $ProjectRoot "firmware\lib\nanopb\generator\nanopb_generator.py"),
+        (Join-Path $ProjectRoot "firmware\.pio\libdeps\t_echo_plus\Nanopb\generator\nanopb_generator.py"),
+        (Join-Path $ProjectRoot "firmware\.pio\libdeps\native\Nanopb\generator\nanopb_generator.py")
+    )
+    $nanopbGen = $nanopbCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $nanopbGen) {
+        $nanopbCmd = Get-Command nanopb_generator.py -ErrorAction SilentlyContinue
+        if ($nanopbCmd) { $nanopbGen = $nanopbCmd.Source }
+    }
+    if (-not $nanopbGen) {
+        Write-Error "nanopb_generator.py not found. Build firmware once or install nanopb with pip."
+        exit 1
     }
 
     New-Item -ItemType Directory -Force -Path $FirmwareProto | Out-Null

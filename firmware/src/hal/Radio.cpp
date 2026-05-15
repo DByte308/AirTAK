@@ -24,8 +24,8 @@
 namespace mash {
 
 // ── Static state ──────────────────────────────────────────────────────────────
-static SX1262 s_radio = new Module(PIN_SX1262_NSS, PIN_SX1262_DIO1,
-                                   PIN_SX1262_RESET, PIN_SX1262_BUSY);
+static SX1262 s_radio = new Module(MASH_PIN_SX1262_NSS, MASH_PIN_SX1262_DIO1,
+                                   MASH_PIN_SX1262_RESET, MASH_PIN_SX1262_BUSY);
 static volatile float    s_last_rssi    = 0.0f;
 static volatile float    s_last_snr     = 0.0f;
 static volatile uint32_t s_packets_rx   = 0;
@@ -104,7 +104,8 @@ void Radio::init() {
         defaults::PHY_PROFILES[0].coding_rate,
         LORA_SYNC_WORD,
         defaults::LORA_TX_POWER_DBM,
-        LORA_PREAMBLE_LENGTH
+        LORA_PREAMBLE_LENGTH,
+        MASH_SX1262_TCXO_VOLTAGE
     );
 
     if (result != RADIOLIB_ERR_NONE) {
@@ -117,9 +118,7 @@ void Radio::init() {
     s_radio.setCRC(true);         // CRC enabled
     s_radio.explicitHeader();
 
-    // T-Echo Plus RF switch control (TXEN = P1.13, RXEN = P1.14).
-    // setRfSwitchPins(rxen, txen) — HIGH = active.
-    s_radio.setRfSwitchPins(PIN_SX1262_RXEN, PIN_SX1262_TXEN);
+    s_radio.setDio2AsRfSwitch(true);
 
     // Register interrupt callbacks (RadioLib 6.x API).
     s_radio.setPacketReceivedAction(on_packet_received);
@@ -141,9 +140,9 @@ void Radio::reinit() {
     // Target: ≤ 300 ms. Does not restart MCU. Does not disconnect BLE.
 
     // Reset SX1262 hardware via RESET pin.
-    digitalWrite(PIN_SX1262_RESET, LOW);
+    digitalWrite(MASH_PIN_SX1262_RESET, LOW);
     delay(2);
-    digitalWrite(PIN_SX1262_RESET, HIGH);
+    digitalWrite(MASH_PIN_SX1262_RESET, HIGH);
     delay(10);
 
     // Read live parameters from ConfigManager (committed config buffers).
@@ -166,14 +165,15 @@ void Radio::reinit() {
         defaults::PHY_PROFILES[s_active_phy].coding_rate,
         LORA_SYNC_WORD,
         tx_power,
-        LORA_PREAMBLE_LENGTH
+        LORA_PREAMBLE_LENGTH,
+        MASH_SX1262_TCXO_VOLTAGE
     );
 
     if (result != RADIOLIB_ERR_NONE) return;
 
     s_radio.setCRC(true);
     s_radio.explicitHeader();
-    s_radio.setRfSwitchPins(PIN_SX1262_RXEN, PIN_SX1262_TXEN);
+    s_radio.setDio2AsRfSwitch(true);
     s_radio.setPacketReceivedAction(on_packet_received);
     s_radio.setPacketSentAction(on_packet_sent);
     s_radio.startReceive();

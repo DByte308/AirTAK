@@ -9,6 +9,8 @@
 #include "hal/Radio.h"
 #include "mesh/ChannelManager.h"
 #include "config.h"
+#include "mash/config.pb.h"
+#include <pb_encode.h>
 #include <FreeRTOS.h>
 #include <queue.h>
 #include <cstring>
@@ -27,50 +29,9 @@ constexpr size_t CONFIG_BUF_SIZE = 512;
 static uint8_t  s_buffers[CONFIG_GROUP_COUNT][CONFIG_BUF_SIZE];
 static size_t   s_sizes[CONFIG_GROUP_COUNT];
 
-// ── Minimal hand-rolled proto encoder ────────────────────────────────────────
-// Used only to write factory defaults into s_buffers[] before nanopb is
-// available (i.e., before proto_gen.ps1 has been run for the first time).
-// Wire type 0 = varint, wire type 2 = length-delimited.
+// ── Protobuf structural validation ───────────────────────────────────────────
 
 namespace proto {
-
-static size_t writeVarint(uint8_t* buf, size_t pos, uint32_t v) {
-    while (v >= 0x80) { buf[pos++] = (uint8_t)((v & 0x7F) | 0x80); v >>= 7; }
-    buf[pos++] = (uint8_t)v;
-    return pos;
-}
-static size_t writeUint32(uint8_t* buf, size_t pos, uint8_t field, uint32_t v) {
-    if (v == 0) return pos; // proto3: skip default-value fields
-    pos = writeVarint(buf, pos, (uint32_t)((field << 3) | 0)); // wire 0
-    return writeVarint(buf, pos, v);
-}
-static size_t writeBool(uint8_t* buf, size_t pos, uint8_t field, bool v) {
-    if (!v) return pos;
-    pos = writeVarint(buf, pos, (uint32_t)((field << 3) | 0));
-    buf[pos++] = 0x01;
-    return pos;
-}
-static size_t writeString(uint8_t* buf, size_t pos, uint8_t field, const char* s) {
-    size_t len = strlen(s);
-    if (len == 0) return pos;
-    pos = writeVarint(buf, pos, (uint32_t)((field << 3) | 2)); // wire 2
-    pos = writeVarint(buf, pos, (uint32_t)len);
-    memcpy(buf + pos, s, len);
-    return pos + len;
-}
-static size_t writeBytes(uint8_t* buf, size_t pos, uint8_t field,
-                         const uint8_t* data, size_t len) {
-    if (len == 0) return pos;
-    pos = writeVarint(buf, pos, (uint32_t)((field << 3) | 2));
-    pos = writeVarint(buf, pos, (uint32_t)len);
-    memcpy(buf + pos, data, len);
-    return pos + len;
-}
-// Write an embedded message field (same wire type as bytes).
-static size_t writeMsg(uint8_t* buf, size_t pos, uint8_t field,
-                       const uint8_t* submsg, size_t submsg_len) {
-    return writeBytes(buf, pos, field, submsg, submsg_len);
-}
 
 // Basic structural validation: scan buf as a proto stream; return false if
 // any varint overruns or length-delimited field exceeds buf boundaries.
@@ -117,92 +78,101 @@ static bool isValid(const uint8_t* buf, size_t len) {
 
 // ── Factory default encoders ─────────────────────────────────────────────────
 
-static size_t encodeDeviceConfig(uint8_t* buf, size_t) {
-    size_t p = 0;
-    p = proto::writeString(buf, p, 1, defaults::DEVICE_LONG_NAME);
-    p = proto::writeString(buf, p, 2, defaults::DEVICE_SHORT_NAME);
-    return p;
+static size_t encodeMessage(const pb_msgdesc_t* fields, const void* msg,
+                            uint8_t* buf, size_t buf_len) {
+    pb_ostream_t stream = pb_ostream_from_buffer(buf, buf_len);
+    if (!pb_encode(&stream, fields, msg)) return 0;
+    return stream.bytes_written;
 }
 
-static size_t encodeLoraConfig(uint8_t* buf, size_t) {
-    size_t p = 0;
-    p = proto::writeUint32(buf, p, 1, defaults::LORA_REGION);
-    p = proto::writeUint32(buf, p, 2, defaults::LORA_TX_POWER_DBM);
-    // Encode 5 PhyProfile sub-messages (field 3, repeated).
-    uint8_t tmp[64];
-    for (uint8_t i = 0; i < 5; i++) {
+static void copyString(char* dest, size_t dest_len, const char* src) {
+    if (dest_len == 0) return;
+    strncpy(dest, src, dest_len - 1);
+    dest[dest_len - 1] = '\0';
+}
+
+static size_t encodeDeviceConfig(uint8_t* buf, size_t buf_len) {
+    mash_DeviceConfig msg = mash_DeviceConfig_init_zero;
+    copyString(msg.long_name, sizeof(msg.long_name), defaults::DEVICE_LONG_NAME);
+    copyString(msg.short_name, sizeof(msg.short_name), defaults::DEVICE_SHORT_NAME);
+    return encodeMessage(mash_DeviceConfig_fields, &msg, buf, buf_len);
+}
+
+static size_t encodeLoraConfig(uint8_t* buf, size_t buf_len) {
+    mash_LoraConfig msg = mash_LoraConfig_init_zero;
+    msg.region = static_cast<mash_LoraRegion>(defaults::LORA_REGION);
+    msg.tx_power_dbm = defaults::LORA_TX_POWER_DBM;
+    msg.profiles_count = 5;
+    for (uint8_t i = 0; i < msg.profiles_count; i++) {
         const auto& ph = defaults::PHY_PROFILES[i];
-        size_t tp = 0;
-        tp = proto::writeString(tmp, tp, 1, ph.name);
-        tp = proto::writeUint32(tmp, tp, 2, ph.spreading_factor);
-        tp = proto::writeUint32(tmp, tp, 3, ph.bandwidth_hz);
-        tp = proto::writeUint32(tmp, tp, 4, ph.coding_rate);
-        p  = proto::writeMsg(buf, p, 3, tmp, tp);
+        copyString(msg.profiles[i].name, sizeof(msg.profiles[i].name), ph.name);
+        msg.profiles[i].spreading_factor = ph.spreading_factor;
+        msg.profiles[i].bandwidth_hz = ph.bandwidth_hz;
+        msg.profiles[i].coding_rate = ph.coding_rate;
     }
-    return p;
+    return encodeMessage(mash_LoraConfig_fields, &msg, buf, buf_len);
 }
 
-static size_t encodeChannelConfig(uint8_t* buf, size_t) {
-    size_t p = 0;
-    uint8_t tmp[64];
-    for (uint8_t i = 0; i < defaults::CHANNEL_COUNT; i++) {
+static size_t encodeChannelConfig(uint8_t* buf, size_t buf_len) {
+    mash_ChannelConfig msg = mash_ChannelConfig_init_zero;
+    msg.slots_count = defaults::CHANNEL_COUNT;
+    for (uint8_t i = 0; i < msg.slots_count; i++) {
         const auto& ch = defaults::CHANNEL_SLOTS[i];
-        size_t tp = 0;
-        tp = proto::writeUint32(tmp, tp, 1, ch.index);
-        tp = proto::writeString(tmp, tp, 2, ch.name);
-        // psk: empty for factory defaults (user must set)
-        tp = proto::writeUint32(tmp, tp, 4, ch.role);
-        tp = proto::writeBool(tmp, tp, 5, ch.uplink_enabled);
-        tp = proto::writeBool(tmp, tp, 6, ch.downlink_enabled);
-        tp = proto::writeUint32(tmp, tp, 7, ch.position_precision);
-        tp = proto::writeUint32(tmp, tp, 8, ch.phy_profile_index);
-        p  = proto::writeMsg(buf, p, 1, tmp, tp);
+        auto& slot = msg.slots[i];
+        slot.index = ch.index;
+        copyString(slot.name, sizeof(slot.name), ch.name);
+        slot.psk.size = 0;
+        slot.role = static_cast<mash_ChannelRole>(ch.role);
+        slot.uplink_enabled = ch.uplink_enabled;
+        slot.downlink_enabled = ch.downlink_enabled;
+        slot.position_precision = ch.position_precision;
+        slot.phy_profile_index = ch.phy_profile_index;
     }
-    return p;
+    return encodeMessage(mash_ChannelConfig_fields, &msg, buf, buf_len);
 }
 
-static size_t encodePositionConfig(uint8_t* buf, size_t) {
-    size_t p = 0;
-    p = proto::writeUint32(buf, p, 1, defaults::POSITION_BROADCAST_INTERVAL_SECS);
-    p = proto::writeUint32(buf, p, 2, defaults::POSITION_GPS_PRECISION_BITS);
-    p = proto::writeBool  (buf, p, 3, defaults::POSITION_SMART_BROADCAST);
-    p = proto::writeUint32(buf, p, 4, defaults::POSITION_MOVEMENT_THRESHOLD_M);
-    p = proto::writeUint32(buf, p, 5, defaults::POSITION_MIN_TX_INTERVAL_SECS);
-    // position_hop_limit=6: 0 = use firmware default (7); skip (proto3 default)
-    return p;
+static size_t encodePositionConfig(uint8_t* buf, size_t buf_len) {
+    mash_PositionConfig msg = mash_PositionConfig_init_zero;
+    msg.broadcast_interval_secs = defaults::POSITION_BROADCAST_INTERVAL_SECS;
+    msg.gps_precision_bits = defaults::POSITION_GPS_PRECISION_BITS;
+    msg.smart_broadcast = defaults::POSITION_SMART_BROADCAST;
+    msg.movement_threshold_m = defaults::POSITION_MOVEMENT_THRESHOLD_M;
+    msg.min_tx_interval_secs = defaults::POSITION_MIN_TX_INTERVAL_SECS;
+    msg.position_hop_limit = 0;
+    return encodeMessage(mash_PositionConfig_fields, &msg, buf, buf_len);
 }
 
-static size_t encodePowerConfig(uint8_t* buf, size_t) {
-    size_t p = 0;
-    p = proto::writeBool  (buf, p, 1, defaults::POWER_GPS_DUTY_CYCLE);
-    p = proto::writeUint32(buf, p, 2, defaults::POWER_GPS_ON_SECS);
-    p = proto::writeUint32(buf, p, 3, defaults::POWER_GPS_OFF_SECS);
-    p = proto::writeUint32(buf, p, 4, defaults::POWER_DISPLAY_OFF_SECS);
-    return p;
+static size_t encodePowerConfig(uint8_t* buf, size_t buf_len) {
+    mash_PowerConfig msg = mash_PowerConfig_init_zero;
+    msg.gps_duty_cycle = defaults::POWER_GPS_DUTY_CYCLE;
+    msg.gps_on_secs = defaults::POWER_GPS_ON_SECS;
+    msg.gps_off_secs = defaults::POWER_GPS_OFF_SECS;
+    msg.display_off_secs = defaults::POWER_DISPLAY_OFF_SECS;
+    return encodeMessage(mash_PowerConfig_fields, &msg, buf, buf_len);
 }
 
-static size_t encodeGameConfig(uint8_t* buf, size_t) {
-    size_t p = 0;
-    p = proto::writeString(buf, p, 1, defaults::GAME_CALLSIGN);
-    p = proto::writeUint32(buf, p, 2, defaults::GAME_TEAM_ID);
-    p = proto::writeUint32(buf, p, 3, defaults::GAME_PLAYER_COLOR_RGB);
-    p = proto::writeBool  (buf, p, 4, defaults::GAME_IS_ADMIN);
-    return p;
+static size_t encodeGameConfig(uint8_t* buf, size_t buf_len) {
+    mash_GameConfig msg = mash_GameConfig_init_zero;
+    copyString(msg.callsign, sizeof(msg.callsign), defaults::GAME_CALLSIGN);
+    msg.team_id = defaults::GAME_TEAM_ID;
+    msg.player_color_rgb = defaults::GAME_PLAYER_COLOR_RGB;
+    msg.is_admin = defaults::GAME_IS_ADMIN;
+    return encodeMessage(mash_GameConfig_fields, &msg, buf, buf_len);
 }
 
-static size_t encodeSecurityConfig(uint8_t* buf, size_t) {
-    size_t p = 0;
-    p = proto::writeUint32(buf, p, 1, defaults::SECURITY_MAX_BONDED_DEVICES);
-    return p;
+static size_t encodeSecurityConfig(uint8_t* buf, size_t buf_len) {
+    mash_SecurityConfig msg = mash_SecurityConfig_init_zero;
+    msg.max_bonded_devices = defaults::SECURITY_MAX_BONDED_DEVICES;
+    return encodeMessage(mash_SecurityConfig_fields, &msg, buf, buf_len);
 }
 
-static size_t encodeAudioConfig(uint8_t* buf, size_t) {
-    size_t p = 0;
-    p = proto::writeUint32(buf, p, 1, defaults::AUDIO_CHANNEL_SLOT);
-    p = proto::writeUint32(buf, p, 2, defaults::AUDIO_CODEC2_BPS);
-    p = proto::writeBool  (buf, p, 3, false /* ptt_enabled = false */);
-    p = proto::writeUint32(buf, p, 4, defaults::AUDIO_FRAME_COUNT);
-    return p;
+static size_t encodeAudioConfig(uint8_t* buf, size_t buf_len) {
+    mash_AudioConfig msg = mash_AudioConfig_init_zero;
+    msg.audio_channel_slot = defaults::AUDIO_CHANNEL_SLOT;
+    msg.codec2_mode_bps = defaults::AUDIO_CODEC2_BPS;
+    msg.ptt_enabled = defaults::AUDIO_PTT_ENABLED;
+    msg.frame_count = defaults::AUDIO_FRAME_COUNT;
+    return encodeMessage(mash_AudioConfig_fields, &msg, buf, buf_len);
 }
 
 static size_t encodeFactoryDefaults(ConfigGroup g, uint8_t* buf, size_t buf_len) {

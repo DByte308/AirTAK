@@ -56,7 +56,7 @@ public:
     static bool reassemble(const FrameHeader& hdr,
                            const uint8_t* chunk_data, size_t chunk_len,
                            uint8_t* assembly_buf,
-                           uint16_t* chunks_received_mask); // bitmask, max 64 chunks
+                           uint64_t* chunks_received_mask); // bitmask, max 64 chunks
 };
 
 } // namespace ble

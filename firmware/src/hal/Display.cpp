@@ -31,11 +31,11 @@ using namespace ui;
 // GxEPD2_BW<DisplayClass, PageHeight> — page height ≤ display height.
 // SSD1681 with 200×200 resolution, 200-line single-page buffer (full update).
 static GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT>
-    s_display(GxEPD2_154_D67(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RST, PIN_EINK_BUSY));
+    s_display(GxEPD2_154_D67(MASH_PIN_EINK_CS, MASH_PIN_EINK_DC, MASH_PIN_EINK_RST, MASH_PIN_EINK_BUSY));
 
 // Custom SPI instance for the dedicated e-ink SPI bus (separate from radio SPI).
-// SSD1681 is write-only — MISO is not connected. PIN_EINK_BUSY is used as a placeholder.
-static SPIClass s_eink_spi(NRF_SPIM2, PIN_EINK_BUSY /*miso unused*/, PIN_EINK_SCK, PIN_EINK_MOSI);
+// SSD1681 is write-only — MISO is not connected. BUSY is used as a placeholder.
+static SPIClass s_eink_spi(NRF_SPIM2, MASH_PIN_EINK_BUSY /*miso unused*/, MASH_PIN_EINK_SCK, MASH_PIN_EINK_MOSI);
 
 static ScreenId  s_current_screen  = ScreenId::MAIN;
 static uint16_t  s_dirty_mask      = DISPLAY_DIRTY_ALL;
@@ -175,6 +175,9 @@ static void renderRadioScreen() {
 
 // ── Display::init() ──────────────────────────────────────────────────────────
 void Display::init() {
+    pinMode(MASH_PIN_EINK_EN, OUTPUT);
+    digitalWrite(MASH_PIN_EINK_EN, HIGH);
+
     // Initialize the dedicated SPI bus for the e-ink display.
     s_eink_spi.begin();
 

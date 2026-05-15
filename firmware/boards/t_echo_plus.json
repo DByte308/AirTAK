@@ -1,6 +1,6 @@
 {
   "_comment": "MASH — Mesh Airsoft Situational Hub | firmware/boards/t_echo_plus.json | Planning: §7.1 | Roadmap: 1.1",
-  "_warning": "MANDATORY: Verify ALL pin assignments against the actual T-Echo Plus hardware schematic before first firmware compilation. The Meshtastic T-Echo board definition is the authoritative reference for discrepancies. Update this file with verified values and remove this warning comment.",
+  "_pin_reference": "Pin mapping aligned with meshtastic/firmware variants/nrf52840/t-echo-plus/variant.h on 2026-05-15.",
 
   "build": {
     "arduino": {
@@ -45,7 +45,7 @@
   "vendor": "LilyGo",
 
   "_pin_mapping": {
-    "_note": "Pin mapping per §7.1. Each entry must be verified against hardware schematic before use.",
+    "_note": "Pin mapping per upstream Meshtastic T-Echo Plus variant. Physical acceptance still requires hardware smoke tests.",
     "SX1262_SCK":    "P0.19",
     "SX1262_MISO":   "P0.23",
     "SX1262_MOSI":   "P0.22",
@@ -53,23 +53,31 @@
     "SX1262_RESET":  "P0.25",
     "SX1262_DIO1":   "P0.20",
     "SX1262_BUSY":   "P0.17",
-    "SX1262_TXEN":   "P1.13",
-    "SX1262_RXEN":   "P1.14",
-    "EINK_SCK":      "P0.14",
-    "EINK_MOSI":     "P0.13",
+    "SX1262_DIO2":   "internal RF switch",
+    "SX1262_DIO3":   "1.8V TCXO control",
+    "EINK_SCK":      "P0.31",
+    "EINK_MOSI":     "P0.29",
     "EINK_CS":       "P0.30",
     "EINK_DC":       "P0.28",
     "EINK_RST":      "P0.02",
     "EINK_BUSY":     "P0.03",
+    "EINK_EN":       "P1.11",
     "GPS_RX_MCU":    "P1.09",
     "GPS_TX_MCU":    "P1.08",
     "GPS_PPS":       "P1.04",
-    "GPS_ENABLE":    "P1.02",
+    "GPS_STANDBY":   "P1.02",
+    "GPS_RESET":     "P1.05",
     "VBAT_SENSE":    "P0.04",
-    "CHG_STAT":      "P0.05",
+    "CHG_STAT":      "not exposed in upstream pin map",
     "USER_BUTTON":   "P1.10",
     "NFC1":          "P0.09",
     "NFC2":          "P0.10",
-    "SPI_NOR_CS":    "TBD — verify at schematic review"
+    "QSPI_SCK":      "P1.14",
+    "QSPI_CS":       "P1.15",
+    "QSPI_IO0":      "P1.12",
+    "QSPI_IO1":      "P1.13",
+    "QSPI_IO2":      "P0.07",
+    "QSPI_IO3":      "P0.05",
+    "QSPI_FLASH":    "MX25R1635F"
   }
 }

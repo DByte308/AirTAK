@@ -19,11 +19,11 @@ static uint32_t s_last_release_ms = 0;
 static uint8_t  s_press_count    = 0;
 
 void Button::init() {
-    pinMode(PIN_USER_BUTTON, INPUT_PULLUP); // active low
+    pinMode(MASH_PIN_USER_BUTTON, INPUT_PULLUP); // active low
 }
 
 ButtonGesture Button::poll() {
-    bool pressed = (digitalRead(PIN_USER_BUTTON) == LOW);
+    bool pressed = (digitalRead(MASH_PIN_USER_BUTTON) == LOW);
     uint32_t now = millis();
 
     if (pressed && !s_last_state) {

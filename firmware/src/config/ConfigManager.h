@@ -13,9 +13,8 @@
 #include <cstddef>
 #include "config/ConfigGroups.h"
 
-// Nanopb-generated headers (generated from proto/mash/config.proto)
-// These will be available after running tools/proto_gen.ps1
-// #include "proto/config.pb.h"
+// Factory defaults are serialized with the committed nanopb bindings generated
+// from proto/mash/config.proto by tools/proto_gen.ps1.
 
 namespace mash {
 namespace config {

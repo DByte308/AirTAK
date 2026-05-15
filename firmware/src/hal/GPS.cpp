@@ -29,11 +29,13 @@ static void send_pmtk(const char* cmd) {
 // ── GPS::init() ───────────────────────────────────────────────────────────────
 void GPS::init() {
     // Enable L76K via GPIO
-    pinMode(PIN_GPS_ENABLE, OUTPUT);
-    digitalWrite(PIN_GPS_ENABLE, HIGH);
+    pinMode(MASH_PIN_GPS_ENABLE, OUTPUT);
+    digitalWrite(MASH_PIN_GPS_ENABLE, HIGH);
+    pinMode(MASH_PIN_GPS_RESET, OUTPUT);
+    digitalWrite(MASH_PIN_GPS_RESET, HIGH);
 
     // PPS pin — configure as input but do not use in logic (reserved, §9.5)
-    pinMode(PIN_GPS_PPS, INPUT);
+    pinMode(MASH_PIN_GPS_PPS, INPUT);
 
     // Start UART at initial baud rate (§9.5)
     GPS_SERIAL.begin(GPS_BAUD_INITIAL, SERIAL_8N1);
@@ -97,7 +99,7 @@ bool GPS::hasFix() { return s_current_fix.valid; }
 // ── GPS::setPower() ──────────────────────────────────────────────────────────
 void GPS::setPower(bool on) {
     // Phase 6.2: GPS duty cycling via ENABLE pin (§9.5)
-    digitalWrite(PIN_GPS_ENABLE, on ? HIGH : LOW);
+    digitalWrite(MASH_PIN_GPS_ENABLE, on ? HIGH : LOW);
 }
 
 // ── Displacement and smart beaconing support ─────────────────────────────────

@@ -1,0 +1,8 @@
+mash.DeviceConfig.long_name max_size:40
+mash.DeviceConfig.short_name max_size:5
+mash.PhyProfile.name max_size:17
+mash.LoraConfig.profiles max_count:5
+mash.ChannelSlot.name max_size:17
+mash.ChannelSlot.psk max_size:32
+mash.ChannelConfig.slots max_count:8
+mash.GameConfig.callsign max_size:17

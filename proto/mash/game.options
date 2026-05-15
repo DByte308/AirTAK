@@ -1,0 +1,8 @@
+mash.PlayerStatePacket.callsign max_size:17
+mash.GameStatePacket.teams max_count:8
+mash.GameStatePacket.scores max_count:8
+mash.TeamDefinition.name max_size:17
+mash.ZonePacket.name max_size:17
+mash.ZonePacket.polygon max_count:32
+mash.AudioPacket.audio_data max_size:200
+mash.AudioPacket.fec_prev_audio_data max_size:200

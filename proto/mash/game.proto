@@ -14,11 +14,11 @@ package mash;
 // ── Player (portnum 256) ──────────────────────────────────────────────────────
 
 enum PlayerStatus {
-  ACTIVE     = 0;
-  HIT        = 1;
-  RESPAWNING = 2;
-  ELIMINATED = 3;
-  SPECTATING = 4;   // team_id=0; excluded from hit/respawn mechanics and scoring
+  PLAYER_STATUS_ACTIVE     = 0;
+  PLAYER_STATUS_HIT        = 1;
+  PLAYER_STATUS_RESPAWNING = 2;
+  PLAYER_STATUS_ELIMINATED = 3;
+  PLAYER_STATUS_SPECTATING = 4;   // team_id=0; excluded from hit/respawn mechanics and scoring
 }
 
 // Roadmap: 2.11, 4.2, 5.3 | Sent on state transition (ACKNOWLEDGED) or heartbeat (BEST_EFFORT).
@@ -39,16 +39,16 @@ message PlayerStatePacket {
 // ── Game state (portnum 257) ──────────────────────────────────────────────────
 
 enum GamePhase {
-  LOBBY  = 0;
-  ACTIVE = 1;
-  PAUSED = 2;
-  ENDED  = 3;
+  GAME_PHASE_LOBBY  = 0;
+  GAME_PHASE_ACTIVE = 1;
+  GAME_PHASE_PAUSED = 2;
+  GAME_PHASE_ENDED  = 3;
 }
 
 enum GameMode {
-  ELIMINATION = 0;   // Last team with ≥ 1 ACTIVE player wins
-  TIME_LIMIT  = 1;   // Team with most ACTIVE players at timer expiry wins
-  DOMINATION  = 2;   // Team controlling most objectives (weighted by score_value) wins
+  GAME_MODE_ELIMINATION = 0;   // Last team with at least one active player wins
+  GAME_MODE_TIME_LIMIT  = 1;   // Team with most active players at timer expiry wins
+  GAME_MODE_DOMINATION  = 2;   // Team controlling most objectives (weighted by score_value) wins
 }
 
 // Per-team configuration broadcast at game start. Defines respawn rules.
@@ -82,10 +82,10 @@ message GameStatePacket {
 // ── Zones (portnum 258) ───────────────────────────────────────────────────────
 
 enum ZoneType {
-  BOUNDARY  = 0;   // Hard field boundary — red dashed border
-  SAFE_ZONE = 1;   // Team respawn area — team color 30% opacity
-  OBJECTIVE = 2;   // Capturable point — yellow 40% opacity
-  EXCLUSION = 3;   // Out-of-bounds — dark grey 50% opacity
+  ZONE_TYPE_BOUNDARY  = 0;   // Hard field boundary — red dashed border
+  ZONE_TYPE_SAFE_ZONE = 1;   // Team respawn area — team color 30% opacity
+  ZONE_TYPE_OBJECTIVE = 2;   // Capturable point — yellow 40% opacity
+  ZONE_TYPE_EXCLUSION = 3;   // Out-of-bounds — dark grey 50% opacity
 }
 
 // WGS-84 coordinate pair for zone polygon vertices.
@@ -121,11 +121,11 @@ message ObjectivePacket {
 // ── Admin (portnum 260) ───────────────────────────────────────────────────────
 
 enum AdminAction {
-  FORCE_PLAYER_STATE = 0;   // target_node_id + value=PlayerStatus
-  FORCE_PLAYER_TEAM  = 1;   // target_node_id + value=team_id
-  FORCE_RESPAWN_ALL  = 2;   // no target; resets all players to ACTIVE
-  RESET_SCORES       = 3;   // clears all team scores
-  BROADCAST_ZONES    = 4;   // admin re-broadcasts all zone packets
+  ADMIN_ACTION_FORCE_PLAYER_STATE = 0;   // target_node_id + value=PlayerStatus
+  ADMIN_ACTION_FORCE_PLAYER_TEAM  = 1;   // target_node_id + value=team_id
+  ADMIN_ACTION_FORCE_RESPAWN_ALL  = 2;   // no target; resets all players to active
+  ADMIN_ACTION_RESET_SCORES       = 3;   // clears all team scores
+  ADMIN_ACTION_BROADCAST_ZONES    = 4;   // admin re-broadcasts all zone packets
 }
 
 // Roadmap: 5.7 | Admin control commands. hop_limit=7 (must reach everyone). See §8.7.

@@ -12,8 +12,11 @@
 #include "hal/Radio.h"
 #include "mesh/MeshNode.h"
 #include "mesh/ChannelManager.h"
+#include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "config.h"
+#include "mash/ble.pb.h"
+#include <pb_encode.h>
 #include <bluefruit.h>
 #include <Arduino.h>
 #include <cstdio>
@@ -29,80 +32,40 @@ static bool     s_has_passkey     = false;
 static uint32_t s_last_status_ms  = 0;
 
 // ── DeviceStatus protobuf builder ────────────────────────────────────────────
-// Manually serializes a DeviceStatus message using the nanopb field layout defined
-// in ble.proto. This avoids a dependency on generated .pb.h until proto_gen runs.
-// Fields: node_id(1), node_name(2), battery_level(3), charging(4),
-//         gps sub-message(5), radio sub-message(6), mesh_node_count(7), uptime_seconds(8),
-//         firmware_version(9), bluetooth_address(10).
-//
-// For Phase 1 we encode a minimal set sufficient for the Android app to display status.
-// Full proto encoding is added when proto_gen output is available (Phase 2.8 / T.4).
 
 static uint16_t buildDeviceStatus(uint8_t* buf, uint16_t buf_len) {
-    // Minimal hand-rolled encoding: just tag+varint and tag+bytes for essential fields.
-    // This is intentionally simple — replaced by nanopb when protos are generated.
-    uint16_t pos = 0;
+    mash_DeviceStatus status = mash_DeviceStatus_init_zero;
+    status.node_id = MeshNode::nodeId();
+    strncpy(status.node_name, config::ConfigManager::deviceLongName(), sizeof(status.node_name) - 1);
+    status.battery_level = Battery::level();
+    status.charging = Battery::isCharging();
 
-    auto writeVarint = [&](uint32_t v) {
-        while (v >= 0x80) {
-            if (pos >= buf_len) return;
-            buf[pos++] = (uint8_t)(v | 0x80);
-            v >>= 7;
-        }
-        if (pos < buf_len) buf[pos++] = (uint8_t)v;
-    };
-    auto writeTag = [&](uint32_t field, uint8_t wire) {
-        writeVarint((field << 3) | wire);
-    };
-    auto writeBytes = [&](uint32_t field, const uint8_t* data, uint16_t len) {
-        writeTag(field, 2); // wire type 2 = length-delimited
-        writeVarint(len);
-        if (pos + len <= buf_len) {
-            memcpy(buf + pos, data, len);
-            pos += len;
-        }
-    };
-    auto writeString = [&](uint32_t field, const char* str) {
-        writeBytes(field, (const uint8_t*)str, (uint16_t)strlen(str));
-    };
-    auto writeFixed32 = [&](uint32_t field, uint32_t v) {
-        writeTag(field, 5); // wire type 5 = fixed 32-bit
-        if (pos + 4 <= buf_len) {
-            memcpy(buf + pos, &v, 4);
-            pos += 4;
-        }
-    };
+    status.has_gps = true;
+    const GpsFix& fix = GPS::currentFix();
+    status.gps.fix = fix.valid;
+    status.gps.satellites = fix.satellites;
+    status.gps.latitude = fix.latitude;
+    status.gps.longitude = fix.longitude;
+    status.gps.altitude_m = fix.altitude_m;
+    status.gps.accuracy_m = fix.accuracy_m;
 
-    // Field 1: node_id (varint)
-    writeTag(1, 0);
-    writeVarint(MeshNode::nodeId());
+    status.has_radio = true;
+    const ChannelSlot* primary = ChannelManager::primarySlot();
+    if (primary) {
+        strncpy(status.radio.channel_name, primary->name, sizeof(status.radio.channel_name) - 1);
+    }
+    status.radio.last_rssi = Radio::lastRssi();
+    status.radio.last_snr = Radio::lastSnr();
+    status.radio.packets_rx = Radio::packetsRx();
+    status.radio.packets_tx = Radio::packetsTx();
 
-    // Field 2: node_name (string)
-    writeString(2, defaults::DEVICE_LONG_NAME);
+    status.mesh_node_count = MeshNode::knownNodeCount();
+    status.uptime_seconds = millis() / 1000;
+    strncpy(status.firmware_version, MASH_FIRMWARE_VERSION_STR, sizeof(status.firmware_version) - 1);
 
-    // Field 3: battery_level (fixed32 float)
-    float bat = Battery::level();
-    uint32_t bat_bits;
-    memcpy(&bat_bits, &bat, 4);
-    writeFixed32(3, bat_bits);
-
-    // Field 4: charging (bool varint)
-    writeTag(4, 0);
-    writeVarint(Battery::isCharging() ? 1 : 0);
-
-    // Field 7: mesh_node_count (varint)
-    writeTag(7, 0);
-    writeVarint(MeshNode::knownNodeCount());
-
-    // Field 8: uptime_seconds (varint)
-    writeTag(8, 0);
-    writeVarint(millis() / 1000);
-
-    // Field 9: firmware_version (string)
-    writeString(9, MASH_FIRMWARE_VERSION_STR);
-
-    (void)writeBytes; // used in GPS/radio sub-messages below when available
-    return pos;
+    pb_ostream_t stream = pb_ostream_from_buffer(buf, buf_len);
+    if (!pb_encode(&stream, mash_DeviceStatus_fields, &status)) return 0;
+    return static_cast<uint16_t>(stream.bytes_written);
 }
 
 // ── BLE callbacks ────────────────────────────────────────────────────────────

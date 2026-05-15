@@ -37,6 +37,7 @@
 #include "mesh/PacketPool.h"
 #include "game/GameState.h"
 #include "game/PlayerState.h"
+#include "config.h"
 
 // ── Inter-task communication handles ─────────────────────────────────────────
 // All inter-task communication uses these queues and event groups.
@@ -69,12 +70,17 @@ void task_audio_codec(void* params);
 void setup() {
     Serial.begin(115200);
 
+    pinMode(MASH_PIN_POWER_EN, OUTPUT);
+    digitalWrite(MASH_PIN_POWER_EN, HIGH);
+
     // Initialize LittleFS config store and load all config groups from flash.
     // On first boot (no config files), defaults from Defaults.h are used.
     mash::PacketPool::init();
     mash::config::FlashStore::init();
     mash::config::ConfigManager::init();
     mash::ChannelManager::init();
+    mash::GameState::init();
+    mash::PlayerState::init();
     mash::Button::init();
 
     // Create inter-task communication primitives.
@@ -98,15 +104,15 @@ void setup() {
     configASSERT(g_system_event_group);
 
     // Create all FreeRTOS tasks. Tasks are stubs in Phase 1; filled in subsequent phases.
-    xTaskCreate(task_radio_rxtx,      "radio",    4096, nullptr, 4, nullptr);
-    xTaskCreate(task_gps_parser,      "gps",      2048, nullptr, 3, nullptr);
-    xTaskCreate(task_ble_server,      "ble",      4096, nullptr, 3, nullptr);
-    xTaskCreate(task_config_apply,    "config",   2048, nullptr, 2, nullptr);
-    xTaskCreate(task_display_refresh, "display",  2048, nullptr, 1, nullptr);
-    xTaskCreate(task_battery_monitor, "battery",  1024, nullptr, 0, nullptr);
+    configASSERT(xTaskCreate(task_radio_rxtx,      "radio",    4096, nullptr, 4, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_gps_parser,      "gps",      2048, nullptr, 3, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_ble_server,      "ble",      4096, nullptr, 3, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_config_apply,    "config",   2048, nullptr, 2, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_display_refresh, "display",  2048, nullptr, 1, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_battery_monitor, "battery",  1024, nullptr, 0, nullptr) == pdPASS);
 
 #ifdef MASH_PHASE7_AUDIO
-    xTaskCreate(task_audio_codec, "audio", 3072, nullptr, 2, nullptr);
+    configASSERT(xTaskCreate(task_audio_codec, "audio", 3072, nullptr, 2, nullptr) == pdPASS);
 #endif
 
     // FreeRTOS scheduler starts at end of setup(); loop() becomes the idle task.
@@ -187,9 +193,25 @@ void task_config_apply(void* params) {
 void task_display_refresh(void* params) {
     // Phase 1.4: E-Ink display bring-up | Phase 9.6: refresh management
     mash::Display::init();
+    uint32_t last_refresh_check_ms = 0;
     for (;;) {
-        mash::Display::refresh(g_system_event_group);
-        vTaskDelay(pdMS_TO_TICKS(5000)); // check every 5 s; actual refresh gated by dirty state
+        mash::ButtonGesture gesture = mash::Button::poll();
+        if (gesture == mash::ButtonGesture::SHORT_PRESS) {
+            if (mash::PlayerState::isCancellable()) {
+                mash::PlayerState::cancelHit(g_radio_tx_queue);
+            } else {
+                mash::Display::nextScreen();
+            }
+        } else if (gesture == mash::ButtonGesture::LONG_PRESS) {
+            mash::PlayerState::reportHit(g_radio_tx_queue);
+        }
+
+        uint32_t now = millis();
+        if ((now - last_refresh_check_ms) >= 5000) {
+            mash::Display::refresh(g_system_event_group);
+            last_refresh_check_ms = now;
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
