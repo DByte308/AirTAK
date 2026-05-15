@@ -5,6 +5,7 @@
 #include "ble/BLEServer.h"
 #include "ble/MashService.h"
 #include "ble/DFUService.h"
+#include "ble/Framing.h"
 #include "hal/Display.h"
 #include "hal/Battery.h"
 #include "hal/GPS.h"
@@ -12,7 +13,7 @@
 #include "mesh/MeshNode.h"
 #include "mesh/ChannelManager.h"
 #include "config/Defaults.h"
-#include "firmware/include/config.h"
+#include "config.h"
 #include <bluefruit.h>
 #include <Arduino.h>
 #include <cstdio>
@@ -125,31 +126,31 @@ static void onDisconnect(uint16_t conn_hdl, uint8_t reason) {
     Bluefruit.Advertising.start(0);
 }
 
-static void onPasskeyDisplay(uint16_t conn_hdl, uint32_t passkey) {
+static bool onPasskeyDisplay(uint16_t conn_hdl, uint8_t const passkey[6], bool match_request) {
     (void)conn_hdl;
-    s_pending_passkey = passkey;
+    uint32_t parsed = 0;
+    for (uint8_t i = 0; i < 6; ++i) parsed = (parsed * 10U) + (passkey[i] - '0');
+    s_pending_passkey = parsed;
     s_has_passkey     = true;
-    Display::showPasscode(passkey);
+    Display::showPasscode(parsed);
+    return match_request ? true : true;
 }
 
 // ── BLEServer::init() ────────────────────────────────────────────────────────
 void BLEServer::init(QueueHandle_t mesh_rx_queue) {
+    Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     Bluefruit.begin();
-    Bluefruit.setName(BLE_DEVICE_NAME);
+    Bluefruit.setName(defaults::DEVICE_LONG_NAME);
     Bluefruit.setTxPower(4); // +4 dBm BLE advertising TX power
-
-    // Request MTU 517 (§10.1)
-    Bluefruit.setMtu(BLE_MTU);
 
     // LE Secure Connections + Numeric Comparison (§10.6).
     // DISPLAY_ONLY: device shows a passkey on the E-Ink; the user confirms on the phone.
-    Bluefruit.Security.setIOCaps(BLE_GAP_IO_CAPS_DISPLAY_ONLY);
+    Bluefruit.Security.setIOCaps(true, false, false);
     Bluefruit.Security.setMITM(true);
-    Bluefruit.Security.setLESC(true);
-    Bluefruit.Security.setPasskeyCallback(onPasskeyDisplay);
+    Bluefruit.Security.setPairPasskeyCallback(onPasskeyDisplay);
 
-    Bluefruit.setConnectCallback(onConnect);
-    Bluefruit.setDisconnectCallback(onDisconnect);
+    Bluefruit.Periph.setConnectCallback(onConnect);
+    Bluefruit.Periph.setDisconnectCallback(onDisconnect);
 
     // Register MASH service and Nordic DFU service (§10.1).
     MashService::init(mesh_rx_queue);
@@ -158,7 +159,7 @@ void BLEServer::init(QueueHandle_t mesh_rx_queue) {
     // Configure advertising payload.
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
     Bluefruit.Advertising.addTxPower();
-    Bluefruit.Advertising.addService(BLEService(MASH_SERVICE_UUID));
+    Bluefruit.Advertising.addUuid(BLEUuid(MASH_SERVICE_UUID));
     Bluefruit.ScanResponse.addName();
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(160, 160); // 100 ms @ 0.625 ms/unit

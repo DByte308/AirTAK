@@ -8,10 +8,14 @@
 #include "mesh/MeshNode.h"
 #include "mesh/PacketPool.h"
 #include "config/Defaults.h"
-#include "firmware/include/config.h"
+#include "hal/Radio.h"
+#include "config.h"
 #include <cstring>
 #include <Arduino.h>
 #include <FreeRTOS.h>
+
+extern QueueHandle_t g_ble_tx_queue;
+extern EventGroupHandle_t g_radio_event_group;
 
 namespace mash {
 
@@ -145,14 +149,13 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     // We prefix the decrypted payload with the 12-byte OTA header for the Android app.
     if (slot->uplink_enabled) {
         // Build a ble_tx_queue entry: type byte 0x01 (MESH_RX) + OTA header + decrypted payload.
-        extern QueueHandle_t g_ble_tx_queue;
         PooledPacket* bpkt = PacketPool::alloc();
         if (bpkt) {
             bpkt->data[0] = 0x01; // MESH_RX type tag
             memcpy(bpkt->data + 1, raw, 12);               // OTA header
             memcpy(bpkt->data + 13, decrypted, payload_len); // decrypted payload
             bpkt->length = 1 + 12 + payload_len;
-            if (xQueueSendToBack(g_ble_tx_queue, &bpkt, 0) != pdTRUE) {
+            if (xQueueSendToBack(::g_ble_tx_queue, &bpkt, 0) != pdTRUE) {
                 PacketPool::free(bpkt);
             }
         }
@@ -285,11 +288,10 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                 buildOtaHeader(ack_pkt->data, ack_hdr);
                 memcpy(ack_pkt->data + 12, ack_enc, ap);
                 ack_pkt->length = 12 + ap;
-                extern EventGroupHandle_t g_radio_event_group;
                 if (xQueueSendToBack(tx_queue, &ack_pkt, 0) != pdTRUE) {
                     PacketPool::free(ack_pkt);
                 } else {
-                    xEventGroupSetBits(g_radio_event_group, RADIO_EVENT_TX_READY);
+                    xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
                 }
             }
         }
@@ -345,11 +347,10 @@ void Router::tickRelayQueue(QueueHandle_t tx_queue) {
             if (pkt) {
                 memcpy(pkt->data, e.data, e.length);
                 pkt->length = e.length;
-                extern EventGroupHandle_t g_radio_event_group;
                 if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
                     PacketPool::free(pkt);
                 } else {
-                    xEventGroupSetBits(g_radio_event_group, RADIO_EVENT_TX_READY);
+                    xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
                 }
             }
             e.in_use = false;
@@ -401,12 +402,11 @@ void Router::sendPacket(Portnum portnum, uint32_t dest,
     memcpy(pkt->data + 12, enc, payload_len);
     pkt->length = 12 + payload_len;
 
-    extern EventGroupHandle_t g_radio_event_group;
     if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
         PacketPool::free(pkt);
         return;
     }
-    xEventGroupSetBits(g_radio_event_group, RADIO_EVENT_TX_READY);
+    xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
 
     // Queue for ACKNOWLEDGED retry if requested (§8.9).
     if (want_ack && isAcknowledgedPortnum(portnum)) {
@@ -481,11 +481,10 @@ void Router::tickRetryQueue(QueueHandle_t tx_queue) {
                 buildOtaHeader(pkt->data, hdr);
                 memcpy(pkt->data + 12, enc, e.payload_len);
                 pkt->length = 12 + e.payload_len;
-                extern EventGroupHandle_t g_radio_event_group;
                 if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
                     PacketPool::free(pkt);
                 } else {
-                    xEventGroupSetBits(g_radio_event_group, RADIO_EVENT_TX_READY);
+                    xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
                 }
             }
 

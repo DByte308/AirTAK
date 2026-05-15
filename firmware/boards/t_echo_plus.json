@@ -12,7 +12,20 @@
     "f_cpu": "64000000L",
     "hwids": [["0x1915", "0x521F"]],
     "mcu": "nrf52840",
-    "variant": "t_echo_plus"
+    "variant": "t_echo_plus",
+    "variants_dir": "variants",
+    "bsp": {
+      "name": "adafruit"
+    },
+    "softdevice": {
+      "sd_flags": "-DS140",
+      "sd_name": "s140",
+      "sd_version": "6.1.1",
+      "sd_fwid": "0x00B6"
+    },
+    "bootloader": {
+      "settings_addr": "0xFF000"
+    }
   },
   "connectivity": ["bluetooth"],
   "debug": {
@@ -24,7 +37,7 @@
   "name": "LilyGo T-Echo Plus",
   "upload": {
     "maximum_ram_size": 262144,
-    "maximum_size": 1048576,
+    "maximum_size": 815104,
     "protocol": "nrfjprog",
     "protocols": ["nrfjprog", "jlink"]
   },

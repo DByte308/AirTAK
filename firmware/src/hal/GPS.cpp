@@ -4,7 +4,7 @@
 
 #include "hal/GPS.h"
 #include "config/Defaults.h"
-#include "firmware/include/config.h"
+#include "config.h"
 #include <Arduino.h>
 #include <TinyGPS++.h>  // TinyGPS++ ≥ 1.0.3 (platformio.ini dependency)
 
@@ -36,7 +36,7 @@ void GPS::init() {
     pinMode(PIN_GPS_PPS, INPUT);
 
     // Start UART at initial baud rate (§9.5)
-    GPS_SERIAL.begin(GPS_BAUD_INITIAL, SERIAL_8N1, PIN_GPS_RX_MCU, PIN_GPS_TX_MCU);
+    GPS_SERIAL.begin(GPS_BAUD_INITIAL, SERIAL_8N1);
 }
 
 // ── GPS::process() ───────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ void GPS::process(EventGroupHandle_t system_event_group) {
 
                 // Step 2: Re-init MCU UART at fast baud rate.
                 GPS_SERIAL.end();
-                GPS_SERIAL.begin(GPS_BAUD_FAST, SERIAL_8N1, PIN_GPS_RX_MCU, PIN_GPS_TX_MCU);
+                GPS_SERIAL.begin(GPS_BAUD_FAST, SERIAL_8N1);
                 delay(10);
 
                 // Step 3: Configure L76K to emit GNGGA + GNRMC only (§9.5).

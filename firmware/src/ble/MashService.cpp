@@ -10,9 +10,11 @@
 #include "mesh/PacketPool.h"
 #include "hal/Radio.h"
 #include "hal/GPS.h"
-#include "firmware/include/config.h"
+#include "config.h"
 #include <cstring>
 #include <Arduino.h>
+
+extern EventGroupHandle_t g_radio_event_group;
 
 namespace mash {
 namespace ble {
@@ -111,7 +113,7 @@ static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
 
     if (pb_data == nullptr || group_val > 7) return;
 
-    config::ConfigGroup group = static_cast<config::ConfigGroup>(group_val);
+    ConfigGroup group = static_cast<ConfigGroup>(group_val);
     int result = config::ConfigManager::applyGroup(group, pb_data, pb_len, commit);
 
     // Build and send ConfigAck (field 1=group, 2=success, 3=error, 4=radio_restarted).
@@ -146,11 +148,10 @@ static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
     pkt->length = len;
 
     // Signal Radio task that a TX packet is ready.
-    extern EventGroupHandle_t g_radio_event_group;
     if (xQueueSendToBack(s_radio_tx_queue, &pkt, 0) != pdTRUE) {
         PacketPool::free(pkt);
     } else {
-        xEventGroupSetBits(g_radio_event_group, RADIO_EVENT_TX_READY);
+        xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
     }
 }
 

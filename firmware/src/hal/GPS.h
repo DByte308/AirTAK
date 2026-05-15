@@ -10,6 +10,7 @@
 #pragma once
 
 #include <cstdint>
+#include <FreeRTOS.h>
 #include <event_groups.h>
 
 namespace mash {

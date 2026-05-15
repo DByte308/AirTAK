@@ -8,8 +8,13 @@
 #include "config/Defaults.h"
 #include "hal/Radio.h"
 #include "mesh/ChannelManager.h"
+#include "config.h"
+#include <FreeRTOS.h>
+#include <queue.h>
 #include <cstring>
 #include <Arduino.h>
+
+extern QueueHandle_t g_config_change_queue;
 
 namespace mash {
 namespace config {
@@ -246,9 +251,8 @@ int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t 
             // Signal task_config_apply to run radioRestartProcedure() on its own stack
             // (priority LOW/2) so the BLE event loop is not blocked during the
             // ≤300 ms radio pause/reinit/resume sequence (§9.4.2).
-            extern QueueHandle_t g_config_change_queue;
             void* sentinel = nullptr;
-            xQueueSend(g_config_change_queue, &sentinel, 0);
+            if (::g_config_change_queue) xQueueSend(::g_config_change_queue, &sentinel, 0);
         }
         if (s_callback) s_callback(group);
     }

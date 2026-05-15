@@ -23,6 +23,8 @@ enum class ConfigGroup : uint8_t {
     _COUNT   = 8,
 };
 
+constexpr uint8_t CONFIG_GROUP_COUNT = static_cast<uint8_t>(ConfigGroup::_COUNT);
+
 // LittleFS path for each config group (§9.4.4).
 inline const char* configGroupPath(ConfigGroup g) {
     switch (g) {
@@ -48,5 +50,13 @@ inline const char* configGroupFilename(ConfigGroup g) { return configGroupPath(g
 inline bool groupRequiresRadioRestart(ConfigGroup g) {
     return g == ConfigGroup::LORA || g == ConfigGroup::CHANNELS;
 }
+
+namespace config {
+using ::mash::CONFIG_GROUP_COUNT;
+using ::mash::ConfigGroup;
+using ::mash::configGroupFilename;
+using ::mash::configGroupPath;
+using ::mash::groupRequiresRadioRestart;
+} // namespace config
 
 } // namespace mash

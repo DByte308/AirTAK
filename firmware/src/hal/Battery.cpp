@@ -4,7 +4,7 @@
 
 #include "hal/Battery.h"
 #include "hal/Display.h"
-#include "firmware/include/config.h"
+#include "config.h"
 #include <Arduino.h>
 
 namespace mash {

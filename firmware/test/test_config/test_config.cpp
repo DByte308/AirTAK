@@ -30,9 +30,20 @@
 
 static char s_tmp_path[256] = {};
 
+static const char* mock_temp_dir() {
+    const char* tmp = getenv("TEMP");
+    if (!tmp || tmp[0] == '\0') tmp = getenv("TMP");
+    if (!tmp || tmp[0] == '\0') tmp = ".";
+    return tmp;
+}
+
+static void mock_path(const char* key) {
+    snprintf(s_tmp_path, sizeof(s_tmp_path), "%s\\mash_test_%s.pb", mock_temp_dir(), key);
+}
+
 // Write bytes to the mock store.
 static bool mock_write(const char* key, const uint8_t* data, size_t len) {
-    snprintf(s_tmp_path, sizeof(s_tmp_path), "/tmp/mash_test_%s.pb", key);
+    mock_path(key);
     FILE* f = fopen(s_tmp_path, "wb");
     if (!f) return false;
     bool ok = (fwrite(data, 1, len, f) == len);
@@ -42,7 +53,7 @@ static bool mock_write(const char* key, const uint8_t* data, size_t len) {
 
 // Read bytes from the mock store. Returns bytes read, 0 if not found.
 static size_t mock_read(const char* key, uint8_t* buf, size_t buf_len) {
-    snprintf(s_tmp_path, sizeof(s_tmp_path), "/tmp/mash_test_%s.pb", key);
+    mock_path(key);
     FILE* f = fopen(s_tmp_path, "rb");
     if (!f) return 0;
     size_t n = fread(buf, 1, buf_len, f);
@@ -51,12 +62,15 @@ static size_t mock_read(const char* key, uint8_t* buf, size_t buf_len) {
 }
 
 static void mock_erase(const char* key) {
-    snprintf(s_tmp_path, sizeof(s_tmp_path), "/tmp/mash_test_%s.pb", key);
+    mock_path(key);
     remove(s_tmp_path);
 }
 #endif // MASH_NATIVE_TEST
 
 using namespace mash::config;
+
+void setUp() {}
+void tearDown() {}
 
 void test_group_requires_radio_restart_lora() {
     TEST_ASSERT_TRUE(groupRequiresRadioRestart(ConfigGroup::LORA));

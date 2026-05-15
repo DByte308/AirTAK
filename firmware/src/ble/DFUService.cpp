@@ -20,7 +20,7 @@ void DFUService::enterDfu() {
     // Trigger a system reset into DFU bootloader mode via the Adafruit Bluefruit
     // BLEDfu control point. This is equivalent to what the Nordic nRF Connect app
     // does when the user taps "Enter DFU" on the Buttonless DFU service.
-    s_dfu.enterDfu();
+    enterOTADfu();
 }
 
 } // namespace ble

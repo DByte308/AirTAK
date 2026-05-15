@@ -3,14 +3,22 @@
 // Planning: §9.4.4 | Roadmap: 1.6
 
 #include "config/FlashStore.h"
-#include "firmware/include/config.h"
-#include <LittleFS.h>  // Arduino LittleFS wrapper for nRF52
+#include "config.h"
+#include <Arduino.h>
+#include <InternalFileSystem.h>
+#include <cstdio>
 #include <cstring>
 
 namespace mash {
 namespace config {
 
 static bool s_initialized = false;
+
+static int countUsedBlock(void* context, lfs_block_t) {
+    size_t* used_blocks = static_cast<size_t*>(context);
+    ++(*used_blocks);
+    return 0;
+}
 
 bool FlashStore::init() {
     // Deassert SPI NOR flash CS before any SPI transactions so the GD25Q32C does
@@ -19,14 +27,13 @@ bool FlashStore::init() {
     pinMode(PIN_NOR_CS, OUTPUT);
     digitalWrite(PIN_NOR_CS, HIGH);
 
-    if (!LittleFS.begin()) {
-        // Format on first boot
-        LittleFS.format();
-        if (!LittleFS.begin()) return false;
+    if (!InternalFS.begin()) {
+        InternalFS.format();
+        if (!InternalFS.begin()) return false;
     }
     // Ensure /config directory exists
-    if (!LittleFS.exists("/config")) {
-        LittleFS.mkdir("/config");
+    if (!InternalFS.exists("/config")) {
+        InternalFS.mkdir("/config");
     }
     s_initialized = true;
     return true;
@@ -37,7 +44,7 @@ size_t FlashStore::read(ConfigGroup group, uint8_t* buf, size_t buf_len) {
     const char* path = configGroupFilename(group);
     if (!path) return 0;
 
-    File f = LittleFS.open(path, "r");
+    Adafruit_LittleFS_Namespace::File f = InternalFS.open(path, Adafruit_LittleFS_Namespace::FILE_O_READ);
     if (!f) return 0;
     size_t n = f.read(buf, buf_len);
     f.close();
@@ -53,15 +60,15 @@ bool FlashStore::write(ConfigGroup group, const uint8_t* data, size_t len) {
     char tmp_path[48];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
 
-    File f = LittleFS.open(tmp_path, "w");
+    Adafruit_LittleFS_Namespace::File f = InternalFS.open(tmp_path, Adafruit_LittleFS_Namespace::FILE_O_WRITE);
     if (!f) return false;
     size_t written = f.write(data, len);
     f.flush();
     f.close();
-    if (written != len) { LittleFS.remove(tmp_path); return false; }
+    if (written != len) { InternalFS.remove(tmp_path); return false; }
 
-    LittleFS.remove(path);
-    LittleFS.rename(tmp_path, path);
+    InternalFS.remove(path);
+    InternalFS.rename(tmp_path, path);
     return true;
 }
 
@@ -69,7 +76,7 @@ bool FlashStore::erase(ConfigGroup group) {
     if (!s_initialized) return false;
     const char* path = configGroupFilename(group);
     if (!path) return false;
-    return LittleFS.remove(path);
+    return InternalFS.remove(path);
 }
 
 bool FlashStore::eraseAll() {
@@ -85,13 +92,17 @@ bool FlashStore::exists(ConfigGroup group) {
     if (!s_initialized) return false;
     const char* path = configGroupFilename(group);
     if (!path) return false;
-    return LittleFS.exists(path);
+    return InternalFS.exists(path);
 }
 
 size_t FlashStore::freeBytes() {
     if (!s_initialized) return 0;
-    // Adafruit nRF52 BSP LittleFS exposes totalBytes() / usedBytes() directly.
-    return LittleFS.totalBytes() - LittleFS.usedBytes();
+    lfs_t* fs = InternalFS._getFS();
+    size_t used_blocks = 0;
+    if (lfs_traverse(fs, countUsedBlock, &used_blocks) < 0) return 0;
+    const size_t used = used_blocks * fs->cfg->block_size;
+    const size_t total = fs->cfg->block_count * fs->cfg->block_size;
+    return (used < total) ? (total - used) : 0;
 }
 
 } // namespace config

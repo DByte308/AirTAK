@@ -11,13 +11,13 @@
 #include "mesh/MeshNode.h"
 #include "mesh/ChannelManager.h"
 #include "config/Defaults.h"
-#include "firmware/include/config.h"
+#include "config.h"
 #include <Arduino.h>
 #include <SPI.h>
 
 // GxEPD2 — SSD1681 200×200 1-bit controller (ZinggJM/GxEPD2 ≥ 1.5.4)
 #include <GxEPD2_BW.h>
-#include <GxEPD2_154_D67.h>          // SSD1681 200×200 display variant
+#include <epd/GxEPD2_154_D67.h>      // SSD1681 200x200 display variant
 
 // Adafruit GFX for text/graphics primitives (dependency of GxEPD2)
 #include <Fonts/FreeSans9pt7b.h>
@@ -31,7 +31,7 @@ using namespace ui;
 // GxEPD2_BW<DisplayClass, PageHeight> — page height ≤ display height.
 // SSD1681 with 200×200 resolution, 200-line single-page buffer (full update).
 static GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT>
-    s_display(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RST, PIN_EINK_BUSY);
+    s_display(GxEPD2_154_D67(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RST, PIN_EINK_BUSY));
 
 // Custom SPI instance for the dedicated e-ink SPI bus (separate from radio SPI).
 // SSD1681 is write-only — MISO is not connected. PIN_EINK_BUSY is used as a placeholder.

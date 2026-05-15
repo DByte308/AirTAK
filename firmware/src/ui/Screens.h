@@ -44,4 +44,14 @@ constexpr uint16_t DISPLAY_DIRTY_PLAYERS = (1 << 6);
 constexpr uint16_t DISPLAY_DIRTY_ALL     = 0xFFFF;
 
 } // namespace ui
+
+using ui::DISPLAY_DIRTY_GPS;
+using ui::DISPLAY_DIRTY_RADIO;
+using ui::DISPLAY_DIRTY_BATTERY;
+using ui::DISPLAY_DIRTY_BLE;
+using ui::DISPLAY_DIRTY_GAME;
+using ui::DISPLAY_DIRTY_MESSAGE;
+using ui::DISPLAY_DIRTY_PLAYERS;
+using ui::DISPLAY_DIRTY_ALL;
+
 } // namespace mash

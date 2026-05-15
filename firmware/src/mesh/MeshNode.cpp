@@ -10,7 +10,7 @@
 #include "game/PlayerState.h"
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
-#include "firmware/include/config.h"
+#include "config.h"
 #include <Arduino.h>
 #include <cstring>
 #include <cstdio>

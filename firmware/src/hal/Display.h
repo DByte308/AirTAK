@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstdint>
+#include <FreeRTOS.h>
 #include <event_groups.h>
 #include "ui/Screens.h"   // ScreenId, ROW_*, DISPLAY_DIRTY_*, EINK_WIDTH/HEIGHT
 

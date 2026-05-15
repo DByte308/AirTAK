@@ -30,6 +30,7 @@
 #include "hal/Battery.h"
 #include "hal/Button.h"
 #include "ble/BLEServer.h"
+#include "ble/MashService.h"
 #include "mesh/MeshNode.h"
 #include "mesh/Router.h"
 #include "mesh/ChannelManager.h"
@@ -73,6 +74,8 @@ void setup() {
     mash::PacketPool::init();
     mash::config::FlashStore::init();
     mash::config::ConfigManager::init();
+    mash::ChannelManager::init();
+    mash::Button::init();
 
     // Create inter-task communication primitives.
     g_radio_tx_queue      = xQueueCreate(8,  sizeof(void*));
@@ -120,8 +123,8 @@ void task_radio_rxtx(void* params) {
     // Phase 1.2: SX1262 bring-up | Phase 2.5: flood router
     // Triggered by SX1262 DIO1 interrupt via g_radio_event_group.
     mash::Radio::init();
-    mash::Router::init();
     mash::MeshNode::init();
+    mash::Router::init();
     mash::MeshNode::broadcastNodeInfo(g_radio_tx_queue);
     for (;;) {
         mash::Radio::process(g_radio_rx_queue, g_radio_tx_queue, g_radio_event_group);
@@ -154,6 +157,7 @@ void task_gps_parser(void* params) {
 
 void task_ble_server(void* params) {
     // Phase 1.5: BLE GATT server skeleton
+    mash::ble::MashService::setRadioTxQueue(g_radio_tx_queue);
     mash::ble::BLEServer::init(g_radio_rx_queue);
     for (;;) {
         mash::ble::BLEServer::process(g_ble_tx_queue, g_config_change_queue);
@@ -191,6 +195,7 @@ void task_display_refresh(void* params) {
 
 void task_battery_monitor(void* params) {
     // Phase 1.7: battery ADC task
+    mash::Battery::init();
     for (;;) {
         mash::Battery::sample(g_system_event_group);
         vTaskDelay(pdMS_TO_TICKS(60000)); // sample every 60 s

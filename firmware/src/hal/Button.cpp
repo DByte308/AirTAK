@@ -3,7 +3,7 @@
 // Planning: §12.6, §7.1 | Roadmap: 1.7
 
 #include "hal/Button.h"
-#include "firmware/include/config.h"
+#include "config.h"
 #include <Arduino.h>
 
 namespace mash {

@@ -9,12 +9,17 @@
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "mesh/ChannelManager.h"
-#include "firmware/include/config.h"
+#include "mesh/PacketPool.h"
+#include "config.h"
 
 // RadioLib include — provided via lib/RadioLib/ (platformio.ini dependency)
 #include <RadioLib.h>
 #include <SPI.h>
 #include <cstring>
+
+#ifndef IRAM_ATTR
+#define IRAM_ATTR
+#endif
 
 namespace mash {
 
@@ -110,7 +115,7 @@ void Radio::init() {
 
     // Global PHY parameters (§8.1) — same across all profiles.
     s_radio.setCRC(true);         // CRC enabled
-    s_radio.setHeaderType(RADIOLIB_SX126X_LORA_HEADER_EXPLICIT); // explicit header
+    s_radio.explicitHeader();
 
     // T-Echo Plus RF switch control (TXEN = P1.13, RXEN = P1.14).
     // setRfSwitchPins(rxen, txen) — HIGH = active.
@@ -167,7 +172,7 @@ void Radio::reinit() {
     if (result != RADIOLIB_ERR_NONE) return;
 
     s_radio.setCRC(true);
-    s_radio.setHeaderType(RADIOLIB_SX126X_LORA_HEADER_EXPLICIT);
+    s_radio.explicitHeader();
     s_radio.setRfSwitchPins(PIN_SX1262_RXEN, PIN_SX1262_TXEN);
     s_radio.setPacketReceivedAction(on_packet_received);
     s_radio.setPacketSentAction(on_packet_sent);

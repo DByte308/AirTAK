@@ -1,0 +1,2 @@
+platformio==6.1.18
+ziglang==0.13.0

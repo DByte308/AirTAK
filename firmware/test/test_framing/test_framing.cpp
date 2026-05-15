@@ -3,9 +3,9 @@
 // Planning: §10.2, §19.1 | Roadmap: Phase 1 exit criteria
 //
 // Validates:
-//   1. Single-chunk encode/decode for payload ≤ 511 bytes.
-//   2. Multi-chunk encode/decode: 512–1023 byte payloads → 2 chunks.
-//   3. MTU-boundary encode/decode: exactly 511, 512, 513 byte payloads.
+//   1. Single-chunk encode/decode for payload ≤ FRAME_CHUNK_SIZE bytes.
+//   2. Multi-chunk encode/decode across FRAME_CHUNK_SIZE boundaries.
+//   3. MTU-boundary encode/decode at FRAME_CHUNK_SIZE ± 1 byte.
 //   4. Header fields (total_length, chunk_index, chunk_count) are correct little-endian.
 //   5. Reassemble: complete when all chunks received; partial when any chunk missing.
 //   6. Reassemble: out-of-order chunk delivery produces correct output.
@@ -41,15 +41,15 @@ void test_single_chunk_small_payload() {
     TEST_ASSERT_EQUAL_MEMORY(s_payload, payload, 100);
 }
 
-void test_chunk_count_at_511_boundary() {
-    TEST_ASSERT_EQUAL(1, Framing::chunkCount(511));
-    TEST_ASSERT_EQUAL(2, Framing::chunkCount(512));
-    TEST_ASSERT_EQUAL(2, Framing::chunkCount(1022));
-    TEST_ASSERT_EQUAL(3, Framing::chunkCount(1023));
+void test_chunk_count_at_mtu_boundary() {
+    TEST_ASSERT_EQUAL(1, Framing::chunkCount(FRAME_CHUNK_SIZE));
+    TEST_ASSERT_EQUAL(2, Framing::chunkCount(FRAME_CHUNK_SIZE + 1));
+    TEST_ASSERT_EQUAL(2, Framing::chunkCount(FRAME_CHUNK_SIZE * 2));
+    TEST_ASSERT_EQUAL(3, Framing::chunkCount(FRAME_CHUNK_SIZE * 2 + 1));
 }
 
 void test_multi_chunk_reassemble() {
-    size_t total = 600; // 2 chunks: 511 + 89
+    size_t total = FRAME_CHUNK_SIZE + 92;
     uint16_t mask = 0;
 
     // Chunk 0
@@ -74,7 +74,7 @@ void test_multi_chunk_reassemble() {
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_single_chunk_small_payload);
-    RUN_TEST(test_chunk_count_at_511_boundary);
+    RUN_TEST(test_chunk_count_at_mtu_boundary);
     RUN_TEST(test_multi_chunk_reassemble);
     return UNITY_END();
 }
