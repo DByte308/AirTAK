@@ -23,6 +23,7 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <cstdint>
+#include <stdint.h>
 #include <cstring>
 
 using namespace airtak;
@@ -82,7 +83,7 @@ static uint16_t build_data(uint8_t* out, Portnum portnum,
     return pos;
 }
 
-static uint8_t build_ota(uint8_t* out, uint32_t src_node_id, uint8_t packet_id_low,
+static uint8_t build_ota(uint8_t* out, uint32_t src_node_id, uint32_t packet_id,
                          uint8_t hop_limit, Portnum portnum,
                          const uint8_t* payload = nullptr,
                          uint16_t payload_len = 0,
@@ -95,14 +96,15 @@ static uint8_t build_ota(uint8_t* out, uint32_t src_node_id, uint8_t packet_id_l
     uint32_t dest = 0xFFFFFFFF;
     memcpy(out + 0, &dest, 4);
     memcpy(out + 4, &src_node_id, 4);
-    out[8] = packet_id_low;
-    out[9] = static_cast<uint8_t>(((hop_limit & 0x07) << 5)
-                                  | (want_ack ? (1 << 4) : 0)
-                                  | (hop_limit & 0x07));
-    out[10] = 0; // native ChannelManager stub primary slot hash
-    out[11] = 0;
-    memcpy(out + 12, data, data_len);
-    return static_cast<uint8_t>(12 + data_len);
+    memcpy(out + 8, &packet_id, 4);
+    out[12] = static_cast<uint8_t>(((hop_limit & 0x07) << 5)
+                                   | (want_ack ? (1 << 4) : 0)
+                                   | (hop_limit & 0x07));
+    out[13] = 0; // native ChannelManager stub primary slot hash
+    out[14] = 0;
+    out[15] = 0;
+    memcpy(out + OTA_HEADER_BYTES, data, data_len);
+    return static_cast<uint8_t>(OTA_HEADER_BYTES + data_len);
 }
 
 static uint16_t build_position_request_payload(uint8_t* out, uint32_t target_node_id) {
@@ -143,6 +145,8 @@ void test_all_non_audio_types_use_hop7() {
     TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::TEXT_MESSAGE_APP));
     TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::POSITION_APP));
     TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::NODEINFO_APP));
+    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::TRACEROUTE_APP));
+    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::NEIGHBORINFO_APP));
     TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_PLAYER));
     TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_GAME));
     TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_ZONE));
@@ -221,8 +225,8 @@ void test_heard_by_suppression_matches_exact_packet() {
     // call handleOverheardRelay twice with different dup_keys from the same src.
     // Neither should crash and the function must return.
     uint32_t src_id   = 0xAABBCCDD;
-    uint32_t dup_key_a = src_id ^ (0x11u << 24);
-    uint32_t dup_key_b = src_id ^ (0x22u << 24);
+    uint32_t dup_key_a = 0x00000011;
+    uint32_t dup_key_b = 0x00000022;
     Router::handleOverheardRelay(src_id, dup_key_a, 8.0f);
     Router::handleOverheardRelay(src_id, dup_key_b, 8.0f);
     TEST_PASS(); // must not crash; relay queue is empty so no slots are affected
@@ -243,8 +247,8 @@ void test_incoming_packet_queues_snr_delayed_relay() {
     float relay_snr = 0.0f;
     TEST_ASSERT_TRUE(Router::testFirstRelay(relay, relay_len, send_after_ms, relay_snr));
     TEST_ASSERT_EQUAL(raw_len, relay_len);
-    TEST_ASSERT_EQUAL_UINT8(2, (relay[9] >> 5) & 0x07);
-    TEST_ASSERT_EQUAL_UINT8(3, relay[9] & 0x07);
+    TEST_ASSERT_EQUAL_UINT8(2, (relay[12] >> 5) & 0x07);
+    TEST_ASSERT_EQUAL_UINT8(3, relay[12] & 0x07);
     TEST_ASSERT_EQUAL_UINT32(1100, send_after_ms); // (10 - 8) * 50 + random(0, 50=0)
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 8.0f, relay_snr);
 }
@@ -268,6 +272,19 @@ void test_duplicate_suppression_prevents_second_relay() {
     Router::processIncoming(raw, raw_len, -42.0f, 4.0f, reinterpret_cast<QueueHandle_t>(0x1));
 
     TEST_ASSERT_EQUAL_UINT32(1, Router::testPendingRelayCount());
+}
+
+void test_duplicate_suppression_uses_full_packet_id() {
+    Router::init();
+
+    uint8_t raw[192];
+    uint8_t raw_len = build_ota(raw, 0xAABBCCDD, 0x00000046, 3, Portnum::TEXT_MESSAGE_APP);
+    Router::processIncoming(raw, raw_len, -42.0f, 5.0f, reinterpret_cast<QueueHandle_t>(0x1));
+
+    raw_len = build_ota(raw, 0xAABBCCDD, 0x01000046, 3, Portnum::TEXT_MESSAGE_APP);
+    Router::processIncoming(raw, raw_len, -42.0f, 5.0f, reinterpret_cast<QueueHandle_t>(0x1));
+
+    TEST_ASSERT_EQUAL_UINT32(2, Router::testPendingRelayCount());
 }
 
 void test_heard_by_suppression_cancels_when_better_snr_overheard() {
@@ -310,6 +327,17 @@ void test_position_request_dispatches_only_when_target_matches() {
                         payload, payload_len);
     Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
     TEST_ASSERT_EQUAL_UINT32(1, airtak::test::positionRequestCount());
+}
+
+void test_malformed_position_request_does_not_broadcast_response() {
+    Router::init();
+
+    uint8_t raw[192];
+    uint8_t raw_len = build_ota(raw, 0xAABBCCDD, 0x4C, 7,
+                                Portnum::AIRTAK_POSITION_REQUEST);
+    Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
+
+    TEST_ASSERT_EQUAL_UINT32(0, airtak::test::positionRequestCount());
 }
 
 void test_nodeinfo_dispatch_tracks_remote_node() {
@@ -428,9 +456,11 @@ int main(int argc, char** argv) {
     RUN_TEST(test_incoming_packet_queues_snr_delayed_relay);
     RUN_TEST(test_hop_limit_zero_does_not_relay);
     RUN_TEST(test_duplicate_suppression_prevents_second_relay);
+    RUN_TEST(test_duplicate_suppression_uses_full_packet_id);
     RUN_TEST(test_heard_by_suppression_cancels_when_better_snr_overheard);
     RUN_TEST(test_airtak_audio_never_relayed);
     RUN_TEST(test_position_request_dispatches_only_when_target_matches);
+    RUN_TEST(test_malformed_position_request_does_not_broadcast_response);
     RUN_TEST(test_nodeinfo_dispatch_tracks_remote_node);
     RUN_TEST(test_send_data_packet_adds_ack_retry_and_handle_ack_clears_it);
     RUN_TEST(test_send_data_packet_text_unicast_auto_acknowledges);

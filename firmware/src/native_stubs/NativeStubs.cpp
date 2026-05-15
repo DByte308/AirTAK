@@ -64,6 +64,9 @@ void ChannelManager::rekey() {}
 const ChannelSlot* ChannelManager::findByHash(uint8_t hash) {
     return hash == s_primary_slot.channel_hash ? &s_primary_slot : nullptr;
 }
+const ChannelSlot* ChannelManager::findByHash(uint8_t hash, uint8_t start_index) {
+    return start_index == 0 ? findByHash(hash) : nullptr;
+}
 const ChannelSlot* ChannelManager::primarySlot() { return &s_primary_slot; }
 const ChannelSlot* ChannelManager::slotByIndex(uint8_t index) { return index == 0 ? &s_primary_slot : nullptr; }
 bool ChannelManager::requiresMultiPhy() { return false; }

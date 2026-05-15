@@ -13,24 +13,25 @@
 
 ## 1. OTA Wire Format (§8.2)
 
-Every AirTAK/Meshtastic over-the-air packet uses the following 12-byte header, followed by an encrypted payload:
+Every AirTAK/Meshtastic over-the-air packet uses the following 16-byte header, followed by an encrypted payload:
 
 ```
 Offset  Size  Field            Description
 ──────  ────  ───────────────  ──────────────────────────────────────────────────────────
   0      4    dest_node_id     Destination node ID (0xFFFFFFFF = broadcast), LE uint32
   4      4    src_node_id      Originating node ID (FICR.DEVICEID[0] lower 32 bits), LE uint32
-  8      1    packet_id_low    Low 8 bits of the transport packet ID
-  9      1    flags            [7:5] hop_limit (3 bits)
+  8      4    packet_id        Transport packet ID, LE uint32
+ 12      1    flags            [7:5] hop_limit (3 bits)
                                [4]   want_ack  (1 bit)
                                [3]   via_mqtt  (1 bit, always 0 for AirTAK)
                                [2:0] hop_start (3 bits) ← v1.4 amendment A (was "reserved")
- 10      1    channel_hash     Channel disambiguation byte (§8.6)
- 11      1    next_hop_low     Next-hop node ID low byte (0x00 for broadcast)
- 12+     N    payload          AES-128-CTR encrypted nanopb-encoded Data message (§8.3)
+ 13      1    channel_hash     Channel disambiguation byte (§8.6)
+ 14      1    next_hop_low     Next-hop node ID low byte (0x00 for broadcast)
+ 15      1    relay_node_low   Relay node ID low byte (0x00 from original sender)
+ 16+     N    payload          AES-128-CTR encrypted nanopb-encoded Data message (§8.3)
 ```
 
-**Total minimum packet size:** 12 bytes header + payload.
+**Total minimum packet size:** 16 bytes header + payload.
 
 ### Flags byte detail
 
@@ -58,11 +59,11 @@ The payload is the nanopb-encoded `meshtastic.Data` message, encrypted in-place 
 | Parameter  | Value                                              |
 |------------|----------------------------------------------------|
 | Algorithm  | AES-128-CTR                                        |
-| Key        | `SHA256(psk_bytes_padded_to_32)[0:16]`             |
-| Nonce      | `packet_id_low` zero-extended to 32-bit LE ‖ `from_node_id` 32-bit LE ‖ `0x00…` (128 bits) |
-| PSK pad    | Raw PSK zero-padded to 32 bytes before SHA256      |
+| Key        | `SHA256(psk_bytes)[0:16]`                          |
+| Nonce      | `packet_id` 32-bit LE ‖ `from_node_id` 32-bit LE ‖ `0x00…` (128 bits) |
+| PSK input  | Raw PSK bytes, truncated to 32 bytes if longer     |
 
-The AES key is derived once per PSK change via `Crypto::deriveKey()`. AirTAK uses the OTA-visible packet ID byte for nonce construction because receivers can only reconstruct the low 8 bits from the compact wire header.
+The AES key is derived once per PSK change via `Crypto::deriveKey()`. AirTAK uses the full OTA-visible 32-bit packet ID for nonce construction, matching the Phase 2.1 Meshtastic interop requirement.
 
 ### `meshtastic.Data` fields used by AirTAK
 
@@ -84,7 +85,7 @@ reply_id          uint32    request_id of the message being replied to
 
 | Portnum | Value | Hop Limit | Reliability   | Description                        |
 |---------|-------|-----------|---------------|------------------------------------|
-| `UNKNOWN_APP`            |   0 | 3 | BEST_EFFORT   | Unused                             |
+| `UNKNOWN_APP`            |   0 | 7 | BEST_EFFORT   | Unused                             |
 | `TEXT_MESSAGE_APP`       |   1 | 7 | BEST_EFFORT / ACK when requested | UTF-8 text message      |
 | `POSITION_APP`           |   3 | 7 | BEST_EFFORT   | GPS position; `PositionConfig.position_hop_limit` can override when set |
 | `NODEINFO_APP`           |   4 | 7 | BEST_EFFORT   | Node identity (HardwareModel, callsign) |
@@ -116,6 +117,8 @@ Each channel slot is identified on-air by a single hash byte in the OTA header. 
 Slot 0 uses the XOR-fold algorithm for byte-for-byte compatibility with Meshtastic channel hash computation. Slots 1–7 use SHA-256 for improved collision resistance.
 
 Packets on different channels with the same hash byte (hash collision) will be **decrypted with both keys** by the receiver; the packet that successfully decodes to a valid proto structure is accepted.
+
+Transmit slot selection is portnum-aware. Standard Meshtastic portnums prefer the primary slot for interop; AirTAK private non-audio portnums prefer an active non-primary slot with a PSK, falling back to primary when no such slot is configured. `AIRTAK_AUDIO` uses the designated audio slot only.
 
 ---
 

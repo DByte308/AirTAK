@@ -2,13 +2,13 @@
 // Planning: §11, §13.2 | Roadmap: 3.2, 3.3
 //
 // Parses incoming MESH_RX BLE notifications and persists their content to Room.
-// Decodes the OTA wire format (12-byte header + encrypted payload) and dispatches
+// Decodes the firmware MESH_RX envelope (portnum hint + OTA header + decrypted payload) and dispatches
 // by portnum:
-//   NODEINFO_APP (8)   → parse meshtastic.User proto → upsert NodeEntity
+//   NODEINFO_APP (4)   → parse meshtastic.User proto → upsert NodeEntity
 //   POSITION_APP (3)   → parse meshtastic.Position proto → upsert NodeEntity lat/lon
 //   TEXT_MESSAGE_APP (1) → parse string payload → insert MessageEntity
-//   AIRTAK_PLAYER (261)  → forward to GameRepository
-//   AIRTAK_GAME (262)    → forward to GameRepository
+//   AIRTAK_PLAYER (256)  → forward to GameRepository
+//   AIRTAK_GAME (257)    → forward to GameRepository
 //
 // NOTE: AES-128-CTR decryption is NOT performed on the Android side in Phase 3.
 // The firmware delivers decrypted packet content via BLE MESH_RX, already in
@@ -34,10 +34,14 @@ import javax.inject.Singleton
 private object Portnum {
     const val TEXT_MESSAGE_APP = 1
     const val POSITION_APP     = 3
-    const val NODEINFO_APP     = 8
+    const val NODEINFO_APP     = 4
     const val AIRTAK_PLAYER      = 256
     const val AIRTAK_GAME        = 257
 }
+
+private const val MESH_RX_PORTNUM_HINT_BYTES = 1
+private const val OTA_HEADER_BYTES = 16
+private const val MESH_RX_DATA_OFFSET = MESH_RX_PORTNUM_HINT_BYTES + OTA_HEADER_BYTES
 
 @Singleton
 class MeshRepository @Inject constructor(
@@ -58,20 +62,22 @@ class MeshRepository @Inject constructor(
     // ── OTA packet dispatcher ─────────────────────────────────────────────────
 
     private suspend fun processMeshRx(raw: ByteArray) {
-        // OTA wire header (§8.2): 12 bytes
-        // [0:3]  dest_node_id (LE uint32)
-        // [4:7]  src_node_id  (LE uint32)
-        // [8]    packet_id_low
-        // [9]    flags: [7:5]=hop_limit [4]=want_ack [3]=via_mqtt [2:0]=hop_start
-        // [10]   channel_hash
-        // [11]   next_hop_low
-        // [12..] decrypted Data proto bytes
-        if (raw.size < 12) return
+        // MESH_RX envelope:
+        // [0]     low byte of Data.portnum, for legacy BLE consumers
+        // [1:4]   dest_node_id (LE uint32)
+        // [5:8]   src_node_id  (LE uint32)
+        // [9:12]  packet_id    (LE uint32)
+        // [13]    flags: [7:5]=hop_limit [4]=want_ack [3]=via_mqtt [2:0]=hop_start
+        // [14]    channel_hash
+        // [15]    next_hop_low
+        // [16]    relay_node_low
+        // [17..]  decrypted Data proto bytes
+        if (raw.size < MESH_RX_DATA_OFFSET) return
 
         val bb = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
-        @Suppress("UNUSED_VARIABLE") val destNodeId = bb.getInt(0).toLong() and 0xFFFFFFFFL
-        val srcNodeId = bb.getInt(4).toLong() and 0xFFFFFFFFL
-        val payload   = raw.sliceArray(12 until raw.size)
+        @Suppress("UNUSED_VARIABLE") val destNodeId = bb.getInt(1).toLong() and 0xFFFFFFFFL
+        val srcNodeId = bb.getInt(5).toLong() and 0xFFFFFFFFL
+        val payload   = raw.sliceArray(MESH_RX_DATA_OFFSET until raw.size)
 
         // Parse the meshtastic.Data proto (field 1 = portnum, field 2 = payload bytes).
         val (portnum, data) = parseData(payload) ?: return

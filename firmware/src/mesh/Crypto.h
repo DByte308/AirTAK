@@ -16,7 +16,7 @@
 
 namespace airtak {
 
-// Maximum PSK length: 32 bytes (256-bit). Shorter PSKs are zero-padded before hashing.
+// Maximum PSK length: 32 bytes (256-bit).
 constexpr size_t PSK_MAX_BYTES = 32;
 // AES-128 key length derived from SHA256(psk)[0:16]
 constexpr size_t AES_KEY_BYTES = 16;

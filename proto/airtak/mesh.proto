@@ -11,6 +11,10 @@
 syntax = "proto3";
 package airtak;
 
+option java_package = "com.airtak.proto";
+option java_multiple_files = true;
+option optimize_for = LITE_RUNTIME;
+
 // Reserved for future AirTAK OTA extensions.
 // All current AirTAK packets use the standard Meshtastic wire format (§8.2)
 // with AirTAK-specific Data.payload content defined in airtak/game.proto.

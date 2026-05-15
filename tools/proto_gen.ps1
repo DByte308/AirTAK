@@ -5,7 +5,8 @@
 # Generates:
 #   1. nanopb C/C++ bindings → firmware/src/proto/
 #      Sources: proto/airtak/*.proto (NOT proto/meshtastic/ — those are vendored, do not regenerate)
-#   2. Kotlin lite bindings → android/app/src/main/proto/ (copied for Gradle protobuf plugin)
+#   2. Kotlin/Java lite bindings → android/app/src/main/kotlin/com/airtak/proto/
+#      Sources are also copied to android/app/src/main/proto/ for review/reference.
 #
 # Requirements:
 #   - protoc in PATH (https://github.com/protocolbuffers/protobuf/releases)
@@ -26,6 +27,8 @@ $ProjectRoot   = Split-Path -Parent $PSScriptRoot
 $ProtoAirTAK     = Join-Path $ProjectRoot "proto\airtak"
 $FirmwareProto = Join-Path $ProjectRoot "firmware\src\proto\airtak"
 $AndroidProto  = Join-Path $ProjectRoot "android\app\src\main\proto\com\airtak\proto"
+$AndroidKotlin = Join-Path $ProjectRoot "android\app\src\main\kotlin"
+$ProtoRoot     = Join-Path $ProjectRoot "proto"
 
 # Verify protoc is available
 if (-not (Get-Command protoc -ErrorAction SilentlyContinue)) {
@@ -66,7 +69,7 @@ if (-not $AndroidOnly) {
         Write-Host "  Generating nanopb for: $(Split-Path -Leaf $proto)"
         & python $nanopbGen `
             --proto-path $ProtoAirTAK `
-            --proto-path (Join-Path $ProjectRoot "proto") `
+            --proto-path $ProtoRoot `
             --output-dir $FirmwareProto `
             $proto
         if ($LASTEXITCODE -ne 0) {
@@ -78,12 +81,13 @@ if (-not $AndroidOnly) {
 
 # ── Android Kotlin/Java protobuf generation ───────────────────────────────────
 if (-not $FirmwareOnly) {
-    Write-Host "`n[proto_gen.ps1] Copying proto sources for Android Gradle protobuf plugin → $AndroidProto" -ForegroundColor Cyan
+    Write-Host "`n[proto_gen.ps1] Generating Android protobuf sources → $AndroidKotlin" -ForegroundColor Cyan
 
-    # The Android Gradle protobuf plugin (protobuf-gradle-plugin) generates Kotlin from
-    # proto sources placed under src/main/proto/. We copy the AirTAK protos there.
-    # The plugin handles compilation; we do NOT run protoc manually for Android.
+    # Android compiles the committed generated sources directly to avoid duplicate
+    # classes from Gradle-time protobuf generation.
+    # java_package options in proto/airtak/*.proto place output under com/airtak/proto.
     New-Item -ItemType Directory -Force -Path $AndroidProto | Out-Null
+    New-Item -ItemType Directory -Force -Path $AndroidKotlin | Out-Null
 
     foreach ($proto in $ProtoFiles) {
         $dest = Join-Path $AndroidProto (Split-Path -Leaf $proto)
@@ -91,7 +95,15 @@ if (-not $FirmwareOnly) {
         Write-Host "  Copied: $(Split-Path -Leaf $proto)"
     }
 
-    Write-Host "  Android proto sources ready. Run './gradlew :app:generateDebugProto' to compile."
+    & protoc `
+        "--proto_path=$ProtoRoot" `
+        --java_out="lite:$AndroidKotlin" `
+        --kotlin_out="lite:$AndroidKotlin" `
+        $ProtoFiles
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Android protobuf generation failed"
+        exit $LASTEXITCODE
+    }
 }
 
 Write-Host "`n[proto_gen.ps1] Done." -ForegroundColor Green

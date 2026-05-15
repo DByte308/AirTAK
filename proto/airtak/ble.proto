@@ -8,6 +8,10 @@
 syntax = "proto3";
 package airtak;
 
+option java_package = "com.airtak.proto";
+option java_multiple_files = true;
+option optimize_for = LITE_RUNTIME;
+
 import "airtak/config.proto";
 
 // ── Config protocol (§10.3) ───────────────────────────────────────────────────

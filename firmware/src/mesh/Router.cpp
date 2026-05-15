@@ -23,7 +23,7 @@ namespace airtak {
 // ── Duplicate-suppression cache (§8.7) ────────────────────────────────────────
 struct DupEntry {
     uint32_t src_id;
-    uint32_t packet_id;   // (src_id XOR packet_id_low) — simplified unique key
+    uint32_t packet_id;
     uint32_t expires_ms;
     float    rx_snr;      // SNR of our reception (for heard-by suppression, §8.7)
     bool     in_use;
@@ -206,6 +206,11 @@ static bool airtakPlayerIsStateTransition(const uint8_t* data_pb, uint16_t data_
     return readVarintField(inner, inner_len, 7, value) && value != 0;
 }
 
+static bool playerPayloadIsStateTransition(const uint8_t* payload, uint16_t payload_len) {
+    uint32_t value = 0;
+    return readVarintField(payload, payload_len, 7, value) && value != 0;
+}
+
 static bool parseDataMetadata(const uint8_t* data, uint16_t data_len, DataMetadata& out) {
     uint16_t pos = 0;
     bool saw_portnum = false;
@@ -268,6 +273,42 @@ static bool buildDataMessage(Portnum portnum, uint32_t dest, uint32_t src,
     return true;
 }
 
+static bool slotUsableForTx(const ChannelSlot* slot, bool require_downlink) {
+    return slot && slot->role != ChannelRole::DISABLED &&
+           (!require_downlink || slot->downlink_enabled);
+}
+
+static const ChannelSlot* selectTxSlot(Portnum portnum, bool require_downlink) {
+    const ChannelSlot* primary = ChannelManager::primarySlot();
+
+    if (portnum == Portnum::AIRTAK_AUDIO) {
+        const ChannelSlot* audio = ChannelManager::slotByIndex(static_cast<uint8_t>(defaults::AUDIO_CHANNEL_SLOT));
+        if (slotUsableForTx(audio, require_downlink)) return audio;
+    }
+
+    bool private_airtak = isAirTAKPortnum(portnum) &&
+                          portnum != Portnum::AIRTAK_ACK &&
+                          portnum != Portnum::AIRTAK_AUDIO;
+    if (private_airtak) {
+        for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
+            if (i == static_cast<uint8_t>(defaults::AUDIO_CHANNEL_SLOT)) continue;
+            const ChannelSlot* slot = ChannelManager::slotByIndex(i);
+            if (slot == primary) continue;
+            if (slotUsableForTx(slot, require_downlink) && slot->psk_len > 0) {
+                return slot;
+            }
+        }
+    }
+
+    if (slotUsableForTx(primary, require_downlink)) return primary;
+
+    for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
+        const ChannelSlot* slot = ChannelManager::slotByIndex(i);
+        if (slotUsableForTx(slot, require_downlink)) return slot;
+    }
+    return nullptr;
+}
+
 static bool isAppDuplicate(uint32_t src_id, uint32_t request_id, uint32_t now_ms) {
     if (request_id == 0) return false;
     for (auto& entry : s_app_dedup) {
@@ -301,59 +342,68 @@ void Router::init() {
 }
 
 // ── buildOtaHeader() ─────────────────────────────────────────────────────────
-// Serialize the §8.2 OTA wire header into buf[0..11].
+// Serialize the §8.2 OTA wire header into buf[0..15].
 static void buildOtaHeader(uint8_t* buf, const OtaHeader& hdr) {
     memcpy(buf + 0, &hdr.dest_node_id, 4);
     memcpy(buf + 4, &hdr.src_node_id,  4);
-    buf[8]  = hdr.packet_id_low;
-    buf[9]  = hdr.flags;
-    buf[10] = hdr.channel_hash;
-    buf[11] = hdr.next_hop_low;
+    memcpy(buf + 8, &hdr.packet_id, 4);
+    buf[12] = hdr.flags;
+    buf[13] = hdr.channel_hash;
+    buf[14] = hdr.next_hop_low;
+    buf[15] = hdr.relay_node_low;
 }
 
 // ── Router::processIncoming() ─────────────────────────────────────────────────
 void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                              float rssi, float snr,
                              QueueHandle_t tx_queue) {
-    if (raw_len < 12) return;
+    if (raw_len < OTA_HEADER_BYTES) return;
 
     // Parse OTA header (§8.2).
     OtaHeader hdr;
     memcpy(&hdr.dest_node_id, raw + 0, 4);
     memcpy(&hdr.src_node_id,  raw + 4, 4);
-    hdr.packet_id_low = raw[8];
-    hdr.flags         = raw[9];
-    hdr.channel_hash  = raw[10];
-    hdr.next_hop_low  = raw[11];
+    memcpy(&hdr.packet_id, raw + 8, 4);
+    hdr.flags          = raw[12];
+    hdr.channel_hash   = raw[13];
+    hdr.next_hop_low   = raw[14];
+    hdr.relay_node_low = raw[15];
 
-    const uint8_t* payload     = raw + 12;
-    uint8_t        payload_len = raw_len - 12;
+    const uint8_t* payload     = raw + OTA_HEADER_BYTES;
+    uint8_t        payload_len = raw_len - OTA_HEADER_BYTES;
 
-    // Find matching channel by hash (§8.6).
-    const ChannelSlot* slot = ChannelManager::findByHash(hdr.channel_hash);
-    if (!slot) return; // unknown channel — discard
+    if (payload_len > MESH_MAX_PAYLOAD_BYTES) return;
 
-    // Build a simplified unique key for duplicate suppression.
-    uint32_t dup_key = hdr.src_node_id ^ ((uint32_t)hdr.packet_id_low << 24);
+    // Find matching channel by hash (§8.6). Hash collisions are possible, so try
+    // every active slot with this hash and accept the one that decrypts to Data.
+    const ChannelSlot* slot = nullptr;
+    uint8_t decrypted[MESH_MAX_PAYLOAD_BYTES];
+    DataMetadata data_meta;
+    bool data_valid = false;
+    uint8_t search_index = 0;
+    while (const ChannelSlot* candidate = ChannelManager::findByHash(hdr.channel_hash, search_index)) {
+        search_index = candidate->index + 1;
+        memcpy(decrypted, payload, payload_len);
+
+        if (candidate->psk_len > 0) {
+            uint8_t nonce[AES_NONCE_BYTES];
+            Crypto::buildNonce(hdr.packet_id, hdr.src_node_id, nonce);
+            Crypto::crypt(candidate->aes_key, nonce, decrypted, payload_len);
+        }
+
+        DataMetadata candidate_meta;
+        if (parseDataMetadata(decrypted, payload_len, candidate_meta)) {
+            slot = candidate;
+            data_meta = candidate_meta;
+            data_valid = true;
+            break;
+        }
+    }
+    if (!slot) return; // unknown channel or undecryptable payload — discard
+
+    uint32_t dup_key = hdr.packet_id;
     uint32_t now_ms  = millis();
 
-    // Decrypt payload using channel AES key (§15.1).
-    // Work on a local copy to avoid modifying the pool buffer.
-    uint8_t decrypted[MESH_MAX_PAYLOAD_BYTES];
-    if (payload_len > sizeof(decrypted)) return;
-    memcpy(decrypted, payload, payload_len);
-
-    if (slot->psk_len > 0) {
-        // Nonce = packet_id_low (8-bit OTA field, zero-extended) || src_node_id (§15.1).
-        // Receivers can only reconstruct the nonce from the 8-bit OTA field; both sides
-        // must use the same 8-bit-extended value for decryption to succeed.
-        uint8_t nonce[AES_NONCE_BYTES];
-        Crypto::buildNonce((uint32_t)hdr.packet_id_low, hdr.src_node_id, nonce);
-        Crypto::crypt(slot->aes_key, nonce, decrypted, payload_len);
-    }
-
-    DataMetadata data_meta;
-    bool data_valid = parseDataMetadata(decrypted, payload_len, data_meta);
     uint32_t portnum_value = data_valid ? static_cast<uint32_t>(data_meta.portnum) : 0;
 
     // Implicit ACK: if we overhear a relay of our own ACKNOWLEDGED packet,
@@ -397,15 +447,15 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
 
     // Deliver to BLE MESH_RX if uplink is enabled for this slot.
     // The payload is the raw protobuf Data message (including portnum).
-    // We prefix the decrypted payload with the 12-byte OTA header for the Android app.
+    // We prefix the decrypted payload with the 16-byte OTA header for the Android app.
     if (slot->uplink_enabled && data_valid && !app_duplicate) {
         // Build a ble_tx_queue entry: type byte 0x01 (MESH_RX) + OTA header + decrypted payload.
         PooledPacket* bpkt = PacketPool::alloc();
         if (bpkt) {
             bpkt->data[0] = 0x01; // MESH_RX type tag
-            memcpy(bpkt->data + 1, raw, 12);               // OTA header
-            memcpy(bpkt->data + 13, decrypted, payload_len); // decrypted payload
-            bpkt->length = 1 + 12 + payload_len;
+            memcpy(bpkt->data + 1, raw, OTA_HEADER_BYTES); // OTA header
+            memcpy(bpkt->data + 1 + OTA_HEADER_BYTES, decrypted, payload_len); // decrypted payload
+            bpkt->length = 1 + OTA_HEADER_BYTES + payload_len;
             if (xQueueSendToBack(::g_ble_tx_queue, &bpkt, 0) != pdTRUE) {
                 PacketPool::free(bpkt);
             }
@@ -419,12 +469,12 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     }
 
     // ── AIRTAK_POSITION_REQUEST dispatch (§2.12) ──────────────────────────────
-    // When we receive a PositionRequestPacket addressed to us (or broadcast),
+    // When we receive a PositionRequestPacket addressed to us,
     // respond with a unicast POSITION_APP within 2 s, bypassing the beaconing timer.
     if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::AIRTAK_POSITION_REQUEST)) {
-        uint32_t target_node_id = 0xFFFFFFFF; // broadcast = any node responds
-        readPositionRequestTarget(decrypted, payload_len, target_node_id);
-        if (target_node_id == MeshNode::nodeId() || target_node_id == 0xFFFFFFFF) {
+        uint32_t target_node_id = 0;
+        if (readPositionRequestTarget(decrypted, payload_len, target_node_id) &&
+            target_node_id == MeshNode::nodeId()) {
             MeshNode::handlePositionRequest(hdr.src_node_id, tx_queue);
         }
         // AIRTAK_POSITION_REQUEST is BEST_EFFORT; still relay below if hop_limit > 0.
@@ -464,22 +514,23 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             ack_hdr.dest_node_id  = hdr.src_node_id;
             ack_hdr.src_node_id   = MeshNode::nodeId();
             uint32_t ack_pkt_id   = nextPacketId();
-            ack_hdr.packet_id_low = (uint8_t)(ack_pkt_id & 0xFF);
+            ack_hdr.packet_id     = ack_pkt_id;
             ack_hdr.flags         = ((ack_hop & 0x07) << 5) | (ack_hop & 0x07); // no want_ack on ACK
             ack_hdr.channel_hash  = slot->channel_hash;
             ack_hdr.next_hop_low  = 0;
+            ack_hdr.relay_node_low = 0;
             uint8_t ack_enc[64];
             memcpy(ack_enc, ack_data, ap);
             if (slot->psk_len > 0) {
                 uint8_t nonce2[AES_NONCE_BYTES];
-                Crypto::buildNonce((uint32_t)ack_hdr.packet_id_low, ack_hdr.src_node_id, nonce2);
+                Crypto::buildNonce(ack_hdr.packet_id, ack_hdr.src_node_id, nonce2);
                 Crypto::crypt(slot->aes_key, nonce2, ack_enc, ap);
             }
             PooledPacket* ack_pkt = PacketPool::alloc();
             if (ack_pkt) {
                 buildOtaHeader(ack_pkt->data, ack_hdr);
-                memcpy(ack_pkt->data + 12, ack_enc, ap);
-                ack_pkt->length = 12 + ap;
+                memcpy(ack_pkt->data + OTA_HEADER_BYTES, ack_enc, ap);
+                ack_pkt->length = OTA_HEADER_BYTES + ap;
                 if (xQueueSendToBack(tx_queue, &ack_pkt, 0) != pdTRUE) {
                     PacketPool::free(ack_pkt);
                 } else {
@@ -505,14 +556,15 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             OtaHeader relay_hdr = hdr;
             relay_hdr.setHopLimit(hdr.hopLimit() - 1);
             relay_hdr.next_hop_low = 0; // cleared by relay node
+            relay_hdr.relay_node_low = static_cast<uint8_t>(MeshNode::nodeId() & 0xFF);
             buildOtaHeader(relay_buf, relay_hdr);
             // Re-encrypt with the original (still-encrypted) payload for relay.
-            memcpy(relay_buf + 12, payload, payload_len);
+            memcpy(relay_buf + OTA_HEADER_BYTES, payload, payload_len);
 
             // Add to pending relay queue.
             for (size_t i = 0; i < 16; i++) {
                 if (!s_relay_queue[i].in_use) {
-                    uint8_t relay_len = 12 + payload_len;
+                    uint8_t relay_len = OTA_HEADER_BYTES + payload_len;
                     memcpy(s_relay_queue[i].data, relay_buf, relay_len);
                     s_relay_queue[i].length       = relay_len;
                     s_relay_queue[i].send_after_ms = now_ms + delay_ms;
@@ -559,26 +611,27 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
     OtaHeader hdr;
     hdr.dest_node_id  = dest;
     hdr.src_node_id   = MeshNode::nodeId();
-    hdr.packet_id_low = static_cast<uint8_t>(packet_id & 0xFF);
+    hdr.packet_id     = packet_id;
     hdr.flags         = ((hop_limit & 0x07) << 5)
                       | (want_ack ? (1 << 4) : 0)
                       | (hop_limit & 0x07);
     hdr.channel_hash  = slot->channel_hash;
     hdr.next_hop_low  = 0;
+    hdr.relay_node_low = 0;
 
     uint8_t enc[MESH_MAX_PAYLOAD_BYTES];
     memcpy(enc, data_pb, data_len);
     if (slot->psk_len > 0) {
         uint8_t nonce[16];
-        Crypto::buildNonce(static_cast<uint32_t>(hdr.packet_id_low), hdr.src_node_id, nonce);
+        Crypto::buildNonce(hdr.packet_id, hdr.src_node_id, nonce);
         Crypto::crypt(slot->aes_key, nonce, enc, data_len);
     }
 
     PooledPacket* pkt = PacketPool::alloc();
     if (!pkt) return false;
     buildOtaHeader(pkt->data, hdr);
-    memcpy(pkt->data + 12, enc, data_len);
-    pkt->length = 12 + data_len;
+    memcpy(pkt->data + OTA_HEADER_BYTES, enc, data_len);
+    pkt->length = OTA_HEADER_BYTES + data_len;
 
     if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
         PacketPool::free(pkt);
@@ -589,6 +642,7 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
 }
 
 static void addRetryEntry(Portnum portnum, uint32_t dest, uint32_t msg_id,
+                          uint8_t slot_index,
                           uint8_t hop_start, const uint8_t* data_pb,
                           uint16_t data_len) {
     if (!Router::isAcknowledgedPortnum(portnum) || data_len > sizeof(s_retry_queue[0].payload)) return;
@@ -613,6 +667,7 @@ static void addRetryEntry(Portnum portnum, uint32_t dest, uint32_t msg_id,
         millis() + timeout,
         0,
         hop_start,
+        slot_index,
         static_cast<uint32_t>(portnum),
         {},
         data_len,
@@ -625,12 +680,16 @@ static void addRetryEntry(Portnum portnum, uint32_t dest, uint32_t msg_id,
 void Router::sendPacket(Portnum portnum, uint32_t dest,
                         const uint8_t* payload, uint16_t payload_len,
                         bool want_ack, QueueHandle_t tx_queue) {
-    const ChannelSlot* slot = ChannelManager::primarySlot();
+    const ChannelSlot* slot = selectTxSlot(portnum, false);
     if (!slot) return;
 
     uint8_t hop_limit = defaultHopLimit(portnum);
     uint32_t packet_id = nextPacketId();
     uint32_t msg_id = packet_id;
+
+    if (portnum == Portnum::AIRTAK_PLAYER) {
+        want_ack = playerPayloadIsStateTransition(payload, payload_len);
+    }
 
     uint8_t data_pb[MESH_MAX_PAYLOAD_BYTES];
     uint16_t data_len = 0;
@@ -645,7 +704,7 @@ void Router::sendPacket(Portnum portnum, uint32_t dest,
     }
 
     if (want_ack && isAcknowledgedPortnum(portnum)) {
-        addRetryEntry(portnum, dest, msg_id, hop_limit, data_pb, data_len);
+        addRetryEntry(portnum, dest, msg_id, slot->index, hop_limit, data_pb, data_len);
     }
 }
 
@@ -654,11 +713,11 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
                             QueueHandle_t tx_queue) {
     if (!data_pb || data_len == 0 || data_len > MESH_MAX_PAYLOAD_BYTES) return false;
 
-    const ChannelSlot* slot = ChannelManager::primarySlot();
-    if (!slot || !slot->downlink_enabled) return false;
-
     DataMetadata meta;
     if (!parseDataMetadata(data_pb, data_len, meta)) return false;
+
+    const ChannelSlot* slot = selectTxSlot(meta.portnum, true);
+    if (!slot) return false;
 
     bool want_ack = meta.want_response;
     switch (meta.portnum) {
@@ -707,7 +766,7 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
     }
 
     if (want_ack && isAcknowledgedPortnum(meta.portnum)) {
-        addRetryEntry(meta.portnum, meta.dest, msg_id, hop_limit, outgoing, outgoing_len);
+        addRetryEntry(meta.portnum, meta.dest, msg_id, slot->index, hop_limit, outgoing, outgoing_len);
     }
     return true;
 }
@@ -727,32 +786,34 @@ void Router::tickRetryQueue(QueueHandle_t tx_queue) {
         if (now_ms >= e.timeout_ms) {
             // Retransmit with a NEW packet_id but same msg_id (Data.request_id) (§8.9).
             uint32_t new_packet_id = nextPacketId();
-            const ChannelSlot* slot = ChannelManager::primarySlot();
+            const ChannelSlot* slot = ChannelManager::slotByIndex(e.slot_index);
+            if (!slot || slot->role == ChannelRole::DISABLED) slot = ChannelManager::primarySlot();
             if (!slot) { e.in_use = false; continue; }
 
             OtaHeader hdr;
             hdr.dest_node_id  = e.dest_node_id;
             hdr.src_node_id   = MeshNode::nodeId();
-            hdr.packet_id_low = (uint8_t)(new_packet_id & 0xFF);
+            hdr.packet_id     = new_packet_id;
             hdr.flags         = ((e.hop_start & 0x07) << 5)
                               | (1 << 4)           // want_ack=true
                               | (e.hop_start & 0x07);
             hdr.channel_hash  = slot->channel_hash;
             hdr.next_hop_low  = 0;
+            hdr.relay_node_low = 0;
 
             uint8_t enc[MESH_MAX_PAYLOAD_BYTES];
             memcpy(enc, e.payload, e.payload_len);
             if (slot->psk_len > 0) {
                 uint8_t nonce[16];
-                Crypto::buildNonce((uint32_t)hdr.packet_id_low, MeshNode::nodeId(), nonce);
+                Crypto::buildNonce(hdr.packet_id, MeshNode::nodeId(), nonce);
                 Crypto::crypt(slot->aes_key, nonce, enc, e.payload_len);
             }
 
             PooledPacket* pkt = PacketPool::alloc();
             if (pkt) {
                 buildOtaHeader(pkt->data, hdr);
-                memcpy(pkt->data + 12, enc, e.payload_len);
-                pkt->length = 12 + e.payload_len;
+                memcpy(pkt->data + OTA_HEADER_BYTES, enc, e.payload_len);
+                pkt->length = OTA_HEADER_BYTES + e.payload_len;
                 if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
                     PacketPool::free(pkt);
                 } else {
@@ -791,9 +852,8 @@ void Router::handleOverheardRelay(uint32_t src_id, uint32_t dup_key, float overh
         uint32_t relay_src;
         memcpy(&relay_src, e.data + 4, 4);
         if (relay_src != src_id) continue;
-        // Reconstruct dup_key from the relay buffer header using the same formula
-        // as processIncoming(): src_node_id XOR (packet_id_low << 24).
-        uint32_t relay_dup_key = relay_src ^ ((uint32_t)e.data[8] << 24);
+        uint32_t relay_dup_key;
+        memcpy(&relay_dup_key, e.data + 8, 4);
         if (relay_dup_key == dup_key && overheard_snr >= e.rx_snr) {
             e.in_use = false;
         }
@@ -810,6 +870,8 @@ uint8_t Router::defaultHopLimit(Portnum portnum) {
         }
         case Portnum::NODEINFO_APP:        return defaults::HOP_LIMIT_NODEINFO;
         case Portnum::TELEMETRY_APP:       return defaults::HOP_LIMIT_TELEMETRY;
+        case Portnum::TRACEROUTE_APP:      return defaults::HOP_LIMIT_TRACEROUTE;
+        case Portnum::NEIGHBORINFO_APP:    return defaults::HOP_LIMIT_NEIGHBORINFO;
         case Portnum::AIRTAK_PLAYER:         return defaults::HOP_LIMIT_AIRTAK_PLAYER;
         case Portnum::AIRTAK_GAME:           return defaults::HOP_LIMIT_AIRTAK_GAME;
         case Portnum::AIRTAK_ZONE:           return defaults::HOP_LIMIT_AIRTAK_ZONE;
@@ -818,7 +880,7 @@ uint8_t Router::defaultHopLimit(Portnum portnum) {
         case Portnum::AIRTAK_ACK:            return defaults::HOP_LIMIT_AIRTAK_ACK;
         case Portnum::AIRTAK_POSITION_REQUEST: return defaults::HOP_LIMIT_POSITION_REQUEST;
         case Portnum::AIRTAK_AUDIO:          return defaults::HOP_LIMIT_AIRTAK_AUDIO;
-        default:                           return 3;
+        default:                           return 7;
     }
 }
 

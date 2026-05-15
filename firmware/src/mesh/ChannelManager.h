@@ -43,6 +43,7 @@ public:
     // Phase 2.7: Find a channel slot matching the given hash byte.
     // Returns nullptr if no active slot matches (packet should be discarded).
     static const ChannelSlot* findByHash(uint8_t hash);
+    static const ChannelSlot* findByHash(uint8_t hash, uint8_t start_index);
 
     // Returns the PRIMARY slot (slot 0 by default).
     static const ChannelSlot* primarySlot();

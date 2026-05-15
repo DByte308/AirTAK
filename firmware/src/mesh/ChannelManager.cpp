@@ -156,7 +156,11 @@ void ChannelManager::rekey() {
 }
 
 const ChannelSlot* ChannelManager::findByHash(uint8_t hash) {
-    for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
+    return findByHash(hash, 0);
+}
+
+const ChannelSlot* ChannelManager::findByHash(uint8_t hash, uint8_t start_index) {
+    for (uint8_t i = start_index; i < MAX_CHANNEL_SLOTS; i++) {
         if (s_slots[i].role != ChannelRole::DISABLED &&
             s_slots[i].channel_hash == hash) {
             return &s_slots[i];

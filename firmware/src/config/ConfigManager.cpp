@@ -253,6 +253,7 @@ int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t 
 
 size_t ConfigManager::readGroup(ConfigGroup group, uint8_t* buf, size_t buf_len) {
     uint8_t idx = static_cast<uint8_t>(group);
+    if (idx >= CONFIG_GROUP_COUNT || !buf) return 0;
     size_t  n   = s_sizes[idx];
     if (n == 0 || n > buf_len) return 0;
     memcpy(buf, s_buffers[idx], n);

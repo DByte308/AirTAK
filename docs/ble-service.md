@@ -55,21 +55,26 @@ Offset  Size  Field           Description
 
 For payloads ≤ 508 bytes: `chunk_count = 1`, `chunk_index = 0`.
 
-### Flow (CONFIG_RW write)
+### Flow (CONFIG_RW read/write)
 
 1. Android serializes `ConfigPayload` proto → raw bytes.
 2. Android splits into chunks of ≤ 508 bytes, prepends 6-byte header.
 3. Android writes each chunk to CONFIG_RW (Write characteristic).
 4. Firmware reassembles all chunks, parses `ConfigPayload` proto.
-5. Firmware applies config and sends `ConfigAck` back via CONFIG_RW Indicate (single chunk).
+5. If `data` is empty and `commit=false`, firmware reads the current group and indicates a `ConfigPayload` containing the current bytes.
+6. Otherwise, firmware applies/stages config and sends `ConfigAck` back via CONFIG_RW Indicate after any required radio restart completes.
 
 ### Flow (MESH_TX write)
 
 1. Android serializes a decoded `meshtastic.Data` protobuf.
 2. Android writes it to MESH_TX with the same 6-byte framing header.
-3. Firmware reassembles the Data payload, selects channel 0, applies hop limit and ACK policy, then encrypts and emits the OTA packet.
+3. Firmware reassembles the Data payload, selects the appropriate channel slot, applies hop limit and ACK policy, then encrypts and emits the OTA packet.
 
-For compatibility with early tooling, firmware still accepts an already-encoded OTA frame on MESH_TX when the payload does not parse as `meshtastic.Data` and is at least 12 bytes long.
+For compatibility with early tooling, firmware still accepts an already-encoded OTA frame on MESH_TX when the payload does not parse as `meshtastic.Data` and is at least 16 bytes long.
+
+### Flow (MESH_RX notify)
+
+Firmware decrypts accepted OTA packets before notifying Android. The notified payload is `portnum_hint_low_byte` (1 byte), followed by the 16-byte OTA header, followed by the decrypted `meshtastic.Data` protobuf bytes. Android treats the hint as legacy metadata and parses the protobuf for the full portnum.
 
 ---
 
@@ -80,19 +85,19 @@ Android                                     Firmware
    │                                            │
    │── Write ConfigPayload (chunk 0/N) ────────>│
    │── Write ConfigPayload (chunk N-1/N) ───────>│ ← reassemble
-   │                                            │── apply config
-   │<── Indicate ConfigAck ─────────────────────│
-   │    (success=true or error_code)            │
+  │                                            │── read/apply config
+  │<── Indicate ConfigPayload or ConfigAck ────│
+  │    (read bytes, success, or error_code)    │
 ```
 
 `ConfigPayload` proto fields:
 - `group` — `ConfigGroup` enum (0–7)
-- `payload_pb` — nanopb-encoded config group proto
-- `commit` — bool: `false` = validate only; `true` = persist to flash
+- `data` — nanopb-encoded config group proto; empty with `commit=false` requests the current group
+- `commit` — bool: `false` = stage/validate only; `true` = persist all staged groups to flash
 
 ### Radio restart notification
 
-When `commit=true` and the group is LORA or CHANNELS, the firmware performs the radio restart procedure (§9.4.2). The `ConfigAck` is returned **after** the restart completes (≤ 300 ms). During restart, `DEVICE_STATUS.radio_status = RESTARTING`.
+When `commit=true` persists any dirty LORA or CHANNELS group, the firmware performs the radio restart procedure (§9.4.2). The `ConfigAck` is returned **after** the restart completes and reports `radio_restarted=true`. During restart, `DEVICE_STATUS.radio_status = RESTARTING`.
 
 ---
 

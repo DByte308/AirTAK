@@ -12,6 +12,10 @@
 syntax = "proto3";
 package airtak;
 
+option java_package = "com.airtak.proto";
+option java_multiple_files = true;
+option optimize_for = LITE_RUNTIME;
+
 // ── Config group enumeration ───────────────────────────────────────────────────
 
 // Identifies which config group is being read or written over BLE CONFIG_RW (§10.3).

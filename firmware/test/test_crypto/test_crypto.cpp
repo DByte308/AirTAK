@@ -45,6 +45,17 @@ void test_key_derivation_length() {
     TEST_ASSERT_EQUAL(16, sizeof(key)); // structural check
 }
 
+void test_key_derivation_raw_psk_sha256_vector() {
+    const uint8_t psk[] = {'a', 'b', 'c'};
+    const uint8_t expected[16] = {
+        0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea,
+        0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
+    };
+    uint8_t key[16];
+    Crypto::deriveKey(psk, sizeof(psk), key);
+    TEST_ASSERT_EQUAL_MEMORY(expected, key, sizeof(expected));
+}
+
 void test_encrypt_decrypt_roundtrip() {
     uint8_t plaintext[32] = "AirTAK test payload data 123456";
     uint8_t ciphertext[32];
@@ -131,6 +142,7 @@ void test_channel_hash_slot1_differs_from_slot0_xor() {
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_key_derivation_length);
+    RUN_TEST(test_key_derivation_raw_psk_sha256_vector);
     RUN_TEST(test_encrypt_decrypt_roundtrip);
     RUN_TEST(test_different_packet_ids_produce_different_ciphertext);
     RUN_TEST(test_nonce_construction);

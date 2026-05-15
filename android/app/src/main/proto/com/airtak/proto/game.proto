@@ -1,0 +1,198 @@
+// AirTAK — Airsoft Team Awareness Kit
+// proto/airtak/game.proto — Game state, player state, zones, objectives, audio
+// Planning: §14.3, §8.4, §8.9, §12.1–12.5, §12.7 | Roadmap: T.2
+//
+// Generated outputs: firmware/src/proto/ (nanopb), android/.../com/airtak/proto/ (Kotlin)
+// Regenerate with: tools/proto_gen.ps1
+//
+// Port numbers (256–263) are in the AirTAK private range; Meshtastic nodes relay
+// but cannot decrypt them (different PSK on the game channel slot).
+
+syntax = "proto3";
+package airtak;
+
+option java_package = "com.airtak.proto";
+option java_multiple_files = true;
+option optimize_for = LITE_RUNTIME;
+
+// ── Player (portnum 256) ──────────────────────────────────────────────────────
+
+enum PlayerStatus {
+  PLAYER_STATUS_ACTIVE     = 0;
+  PLAYER_STATUS_HIT        = 1;
+  PLAYER_STATUS_RESPAWNING = 2;
+  PLAYER_STATUS_ELIMINATED = 3;
+  PLAYER_STATUS_SPECTATING = 4;   // team_id=0; excluded from hit/respawn mechanics and scoring
+}
+
+// Roadmap: 2.11, 4.2, 5.3 | Sent on state transition (ACKNOWLEDGED) or heartbeat (BEST_EFFORT).
+// is_state_transition distinguishes the two cases — critical for §8.9 ACK rule:
+//   is_state_transition=true  → want_response=true  (ACKNOWLEDGED delivery)
+//   is_state_transition=false → want_response=false (BEST_EFFORT heartbeat)
+// See §8.9 for the AIRTAK_PLAYER ACK vs BEST_EFFORT rule.
+message PlayerStatePacket {
+  uint32       node_id             = 1;
+  string       callsign            = 2;
+  uint32       team_id             = 3;
+  PlayerStatus status              = 4;
+  uint32       respawn_at_unix     = 5;   // epoch seconds; non-zero when RESPAWNING
+  uint32       color_rgb           = 6;
+  bool         is_state_transition = 7;   // true = status changed; false = position heartbeat
+}
+
+// ── Game state (portnum 257) ──────────────────────────────────────────────────
+
+enum GamePhase {
+  GAME_PHASE_LOBBY  = 0;
+  GAME_PHASE_ACTIVE = 1;
+  GAME_PHASE_PAUSED = 2;
+  GAME_PHASE_ENDED  = 3;
+}
+
+enum GameMode {
+  GAME_MODE_ELIMINATION = 0;   // Last team with at least one active player wins
+  GAME_MODE_TIME_LIMIT  = 1;   // Team with most active players at timer expiry wins
+  GAME_MODE_DOMINATION  = 2;   // Team controlling most objectives (weighted by score_value) wins
+}
+
+// Per-team configuration broadcast at game start. Defines respawn rules.
+message TeamDefinition {
+  uint32 team_id       = 1;
+  string name          = 2;   // max 16 chars
+  uint32 color_rgb     = 3;
+  uint32 max_players   = 4;
+  uint32 respawn_count = 5;   // allowed respawns; 0 = unlimited
+  uint32 respawn_secs  = 6;   // respawn timer duration in seconds
+}
+
+message TeamScore {
+  uint32 team_id        = 1;
+  uint32 score          = 2;
+  uint32 active_players = 3;
+}
+
+// Roadmap: 5.2 | Broadcast by admin on phase changes and score updates.
+// All ACKNOWLEDGED delivery; hop_limit=7 (must reach everyone). See §8.7.
+message GameStatePacket {
+  uint32                  admin_node_id   = 1;
+  GamePhase               phase           = 2;
+  GameMode                mode            = 3;
+  uint32                  started_at_unix = 4;
+  uint32                  ends_at_unix    = 5;   // 0 = no timer
+  repeated TeamDefinition teams           = 6;
+  repeated TeamScore      scores          = 7;
+}
+
+// ── Zones (portnum 258) ───────────────────────────────────────────────────────
+
+enum ZoneType {
+  ZONE_TYPE_BOUNDARY  = 0;   // Hard field boundary — red dashed border
+  ZONE_TYPE_SAFE_ZONE = 1;   // Team respawn area — team color 30% opacity
+  ZONE_TYPE_OBJECTIVE = 2;   // Capturable point — yellow 40% opacity
+  ZONE_TYPE_EXCLUSION = 3;   // Out-of-bounds — dark grey 50% opacity
+}
+
+// WGS-84 coordinate pair for zone polygon vertices.
+message LatLng {
+  double lat = 1;
+  double lng = 2;
+}
+
+// Roadmap: 5.5 | Admin broadcasts zone definitions. empty polygon = delete zone by zone_id.
+// Full zone table re-broadcast by admin at ACTIVE phase start.
+// ACKNOWLEDGED delivery; hop_limit=7. See §8.7.
+message ZonePacket {
+  uint32          zone_id       = 1;
+  ZoneType        type          = 2;
+  string          name          = 3;
+  repeated LatLng polygon       = 4;   // empty = delete zone
+  uint32          owner_team_id = 5;   // relevant for SAFE_ZONE only
+}
+
+// ── Objectives (portnum 259) ──────────────────────────────────────────────────
+
+// Roadmap: 5.6 | Admin broadcasts objective state updates.
+// Admin device aggregates AIRTAK_PLAYER position data to compute capture_percent.
+// ACKNOWLEDGED delivery; hop_limit=7. See §8.7.
+message ObjectivePacket {
+  uint32 objective_id        = 1;
+  uint32 zone_id             = 2;   // references a ZonePacket with type=OBJECTIVE
+  uint32 controlling_team_id = 3;   // 0 = NEUTRAL
+  uint32 capture_percent     = 4;   // 0–100; displayed as arc on map icon
+  uint32 score_value         = 5;   // points awarded per unit time while held (DOMINATION mode)
+}
+
+// ── Admin (portnum 260) ───────────────────────────────────────────────────────
+
+enum AdminAction {
+  ADMIN_ACTION_FORCE_PLAYER_STATE = 0;   // target_node_id + value=PlayerStatus
+  ADMIN_ACTION_FORCE_PLAYER_TEAM  = 1;   // target_node_id + value=team_id
+  ADMIN_ACTION_FORCE_RESPAWN_ALL  = 2;   // no target; resets all players to active
+  ADMIN_ACTION_RESET_SCORES       = 3;   // clears all team scores
+  ADMIN_ACTION_BROADCAST_ZONES    = 4;   // admin re-broadcasts all zone packets
+}
+
+// Roadmap: 5.7 | Admin control commands. hop_limit=7 (must reach everyone). See §8.7.
+// ACKNOWLEDGED delivery.
+message AdminPacket {
+  uint32      admin_node_id  = 1;
+  AdminAction action         = 2;
+  uint32      target_node_id = 3;   // for player-specific actions; 0 for global
+  uint32      value          = 4;   // PlayerStatus (FORCE_PLAYER_STATE) or team_id (FORCE_PLAYER_TEAM)
+}
+
+// ── Application-layer ACK (portnum 261) ──────────────────────────────────────
+
+// Roadmap: 2.11 | Application-layer acknowledgment for ACKNOWLEDGED-class packets.
+//
+// KEY FIELDS:
+//   ack_request_id = Data.request_id of the packet being ACKed (NOT MeshPacket.id,
+//                   which changes on each retry attempt). Used by the sender's retry
+//                   queue to correlate this ACK with the outstanding entry.
+//
+//   hop_limit on this packet = hop_start of the original packet (Flags bits [2:0] of
+//                   the OTA wire header), so the ACK can traverse the full mesh diameter
+//                   back to the sender. If hop_start is zero (legacy device), use 7.
+//
+// See §8.9 for the full ACKNOWLEDGED delivery flow including timeout formula and
+// retry backoff.
+message AirTAKAck {
+  uint32 ack_request_id     = 1;   // Data.request_id of the ACKed packet
+  uint32 from_node_id       = 2;   // node ID of the ACK sender
+  uint32 original_hop_start = 3;   // hop_start of the ACKed packet; used for sender validation
+}
+
+// ── Position Request (portnum 262) ───────────────────────────────────────────
+
+// Roadmap: 2.12, 5.9 | Unicast request to refresh a stale map pin on demand.
+// target_node_id must respond with POSITION_APP within 2 seconds (§8.7 Smart Beaconing).
+// BEST_EFFORT delivery; hop_limit=7. See §8.7.
+message PositionRequestPacket {
+  uint32 target_node_id    = 1;   // node to respond
+  uint32 requester_node_id = 2;
+}
+
+// ── PTT Audio (portnum 263) — Phase 7 ────────────────────────────────────────
+
+// Roadmap: 7.3, 7.4 | Codec2-encoded PTT audio frame.
+// MUST be sent on the audio channel slot only (phy_profile_index → spreading_factor ≤ 8).
+// hop_limit MUST always be 1 — audio MUST NOT be relayed (§8.7, §12.7).
+//
+// FEC SESSION BOUNDARY RULE (§12.7, PLANNING v1.4 amendment H):
+//   fec_prev_audio_data MUST be empty on the FIRST packet of each PTT session
+//   (after no previous session, or after a packet with end_of_transmission=true).
+//   Receivers MUST NOT attempt FEC across a session boundary; apply PLC instead.
+//   session_id enables session boundary detection even when end_of_transmission is lost.
+//
+// Packet size with FEC (frame_count=8): ~92 bytes → ~84 ms ToA on Profile 1 (§12.7).
+// EU duty-cycle compliance requires frame_count ≥ 42 for sub-band g1 (10% limit).
+message AudioPacket {
+  uint32 from_node_id        = 1;
+  uint32 sequence_num        = 2;   // monotonically increasing per session; resets to 0 at session start
+  uint32 codec2_mode_bps     = 3;   // must match AudioConfig.codec2_mode_bps (default 1300)
+  bytes  audio_data          = 4;   // Codec2-encoded frames (frame_count frames)
+  bool   end_of_transmission = 5;   // set on the final packet of each PTT press
+  bytes  fec_prev_audio_data = 6;   // MUST be empty on first packet of each session
+  uint32 frame_count         = 7;   // number of Codec2 frames in audio_data
+  uint32 session_id          = 8;   // increments by 1 per PTT press; wraps at 2^32
+}

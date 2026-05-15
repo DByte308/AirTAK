@@ -22,14 +22,17 @@
 
 namespace airtak {
 
+constexpr uint8_t OTA_HEADER_BYTES = 16;
+
 // Parsed representation of the OTA wire header (§8.2).
 struct OtaHeader {
     uint32_t dest_node_id;   // bytes 0–3
     uint32_t src_node_id;    // bytes 4–7
-    uint8_t  packet_id_low;  // byte 8
-    uint8_t  flags;          // byte 9: [7:5]=hop_limit [4]=want_ack [3]=via_mqtt [2:0]=hop_start
-    uint8_t  channel_hash;   // byte 10
-    uint8_t  next_hop_low;   // byte 11
+    uint32_t packet_id;      // bytes 8–11
+    uint8_t  flags;          // byte 12: [7:5]=hop_limit [4]=want_ack [3]=via_mqtt [2:0]=hop_start
+    uint8_t  channel_hash;   // byte 13
+    uint8_t  next_hop_low;   // byte 14
+    uint8_t  relay_node_low; // byte 15
 
     // Helpers
     uint8_t hopLimit()  const { return (flags >> 5) & 0x07; }
@@ -45,6 +48,7 @@ struct AckRetryEntry {
     uint32_t timeout_ms;       // absolute deadline
     uint8_t  attempts;         // retries so far (0 = first send)
     uint8_t  hop_start;        // original hop_start for timeout formula
+    uint8_t  slot_index;       // channel slot used for the original transmission
     uint32_t portnum;          // for diagnostics/retry policy
     uint8_t  payload[237];     // original payload bytes
     uint16_t payload_len;

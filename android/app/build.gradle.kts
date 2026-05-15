@@ -10,7 +10,6 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.protobuf)
 }
 
 android {
@@ -62,18 +61,10 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
-}
 
-protobuf {
-    protoc {
-        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
-    }
-    generateProtoTasks {
-        all().forEach { task ->
-            task.builtins {
-                create("kotlin") { option("lite") }
-                create("java")   { option("lite") }
-            }
+    sourceSets {
+        getByName("main") {
+            java.srcDirs("src/main/kotlin")
         }
     }
 }

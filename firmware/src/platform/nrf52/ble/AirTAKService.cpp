@@ -16,6 +16,7 @@
 #include <pb_encode.h>
 #include <pb_decode.h>
 #include <bluefruit.h>
+#include <nrf.h>
 #include <Arduino.h>
 #include <cstring>
 
@@ -40,6 +41,7 @@ static uint8_t  s_mesh_tx_assembly[LORA_MAX_PAYLOAD_BYTES];
 static uint64_t s_mesh_tx_recv_mask = 0;
 static uint8_t  s_admin_assembly[128];
 static uint64_t s_admin_recv_mask = 0;
+static uint64_t s_config_apply_started_ms = 0;
 
 static void sendFramed(BLECharacteristic& chr, const uint8_t* payload, uint16_t len, bool indicate) {
     uint16_t chunks = Framing::chunkCount(len);
@@ -56,6 +58,9 @@ static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
                           uint8_t* data, uint16_t len) {
     (void)conn_hdl;
     (void)chr;
+
+    bool radio_restarted = false;
+    int result = 0;
 
     FrameHeader hdr;
     const uint8_t* chunk_payload;
@@ -78,13 +83,36 @@ static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
     if (request.group > airtak_ConfigGroup_AUDIO) return;
 
     ConfigGroup group = static_cast<ConfigGroup>(request.group);
-    int result = config::ConfigManager::applyGroup(group,
+
+    if (request.data.size == 0 && !request.commit) {
+        airtak_ConfigPayload response = {};
+        response.group = request.group;
+        response.data.size = config::ConfigManager::readGroup(
+            group, response.data.bytes, sizeof(response.data.bytes));
+        response.commit = false;
+
+        uint8_t response_buf[sizeof(s_config_assembly)];
+        pb_ostream_t response_stream = pb_ostream_from_buffer(response_buf, sizeof(response_buf));
+        if (pb_encode(&response_stream, airtak_ConfigPayload_fields, &response)) {
+            sendFramed(s_config_rw, response_buf, static_cast<uint16_t>(response_stream.bytes_written), true);
+        }
+        return;
+    }
+
+    s_config_apply_started_ms = millis();
+    result = config::ConfigManager::applyGroup(group,
         request.data.bytes, request.data.size, request.commit);
+
+    if (result == 0 && request.commit && config::ConfigManager::isRadioRestartPending()) {
+        config::ConfigManager::radioRestartProcedure();
+        radio_restarted = true;
+    }
 
     airtak_ConfigAck ack = airtak_ConfigAck_init_zero;
     ack.group = request.group;
     ack.success = (result == 0);
-    ack.radio_restarted = request.commit && config::groupRequiresRadioRestart(group);
+    ack.radio_restarted = radio_restarted;
+    ack.apply_duration_ms = millis() - s_config_apply_started_ms;
     if (!ack.success) {
         strncpy(ack.error, "invalid_config_payload", sizeof(ack.error) - 1);
     }
@@ -119,7 +147,7 @@ static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
         return;
     }
 
-    if (hdr.total_length < 12) return;
+    if (hdr.total_length < OTA_HEADER_BYTES) return;
 
     PooledPacket* pkt = PacketPool::alloc();
     if (!pkt) return;

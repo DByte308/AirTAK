@@ -20,13 +20,10 @@ namespace airtak {
 // ── Crypto::deriveKey() ───────────────────────────────────────────────────────
 void Crypto::deriveKey(const uint8_t* psk, size_t psk_len, uint8_t key_out[AES_KEY_BYTES]) {
     // SHA256(psk_bytes)[0:16] — first 16 bytes of SHA-256 of the raw PSK.
-    // psk is zero-padded to PSK_MAX_BYTES before hashing (Meshtastic compatibility).
-    uint8_t padded[PSK_MAX_BYTES] = {};
     if (psk_len > PSK_MAX_BYTES) psk_len = PSK_MAX_BYTES;
-    memcpy(padded, psk, psk_len);
 
     uint8_t hash[32];
-    mbedtls_sha256(padded, PSK_MAX_BYTES, hash, 0 /* is224=false */);
+    mbedtls_sha256(psk, psk_len, hash, 0 /* is224=false */);
     memcpy(key_out, hash, AES_KEY_BYTES);
 }
 
