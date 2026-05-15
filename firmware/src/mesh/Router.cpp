@@ -299,6 +299,7 @@ static const ChannelSlot* selectTxSlot(Portnum portnum, bool require_downlink) {
                           portnum != Portnum::AIRTAK_ACK &&
                           portnum != Portnum::AIRTAK_AUDIO;
     if (private_airtak) {
+        // Prefer an encrypted, non-primary, non-audio slot for game traffic.
         for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
             if (i == static_cast<uint8_t>(defaults::AUDIO_CHANNEL_SLOT)) continue;
             const ChannelSlot* slot = ChannelManager::slotByIndex(i);
@@ -307,10 +308,21 @@ static const ChannelSlot* selectTxSlot(Portnum portnum, bool require_downlink) {
                 return slot;
             }
         }
+        // No dedicated encrypted slot — use the primary slot if it is
+        // encrypted.  Encryption policy for game traffic is enforced at
+        // config-validation time (BLE layer); here we make a best-effort
+        // selection and let the caller handle a nullptr return.
+        if (slotUsableForTx(primary, require_downlink) && primary->psk_len > 0)
+            return primary;
+        // Primary is unencrypted — fall through to the generic path below
+        // so the packet is still transmitted (the config validator should
+        // have prevented this scenario).
     }
 
+    // Non-private (Meshtastic-standard) portnums: prefer the primary slot.
     if (slotUsableForTx(primary, require_downlink)) return primary;
 
+    // Last resort: any usable slot.
     for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
         const ChannelSlot* slot = ChannelManager::slotByIndex(i);
         if (slotUsableForTx(slot, require_downlink)) return slot;
@@ -457,14 +469,24 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         }
     }
 
-    // Add to duplicate-suppression cache.
-    for (size_t i = 0; i < defaults::ROUTER_DUP_CACHE_SIZE; i++) {
-        if (!s_dup_cache[i].in_use) {
-            s_dup_cache[i] = { hdr.src_node_id, dup_key,
-                               now_ms + defaults::ROUTER_DUP_CACHE_TTL_MS,
-                               snr, true };
-            break;
+    // Add to duplicate-suppression cache.  If full, evict the entry with the
+    // earliest expiry (FIFO) so the most recent traffic stays suppressed.
+    {
+        size_t slot_idx = defaults::ROUTER_DUP_CACHE_SIZE;
+        uint32_t earliest_ms = UINT32_MAX;
+        size_t earliest_idx = 0;
+        for (size_t i = 0; i < defaults::ROUTER_DUP_CACHE_SIZE; i++) {
+            if (!s_dup_cache[i].in_use) { slot_idx = i; break; }
+            if (s_dup_cache[i].expires_ms < earliest_ms) {
+                earliest_ms = s_dup_cache[i].expires_ms;
+                earliest_idx = i;
+            }
         }
+        if (slot_idx == defaults::ROUTER_DUP_CACHE_SIZE)
+            slot_idx = earliest_idx;
+        s_dup_cache[slot_idx] = { hdr.src_node_id, dup_key,
+                                  now_ms + defaults::ROUTER_DUP_CACHE_TTL_MS,
+                                  snr, true };
     }
 
     bool app_duplicate = false;
@@ -664,13 +686,16 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
                           QueueHandle_t tx_queue) {
     if (!slot || !tx_queue || data_len > MESH_MAX_PAYLOAD_BYTES) return false;
 
+    // For the originator, hop_limit == hop_start (§8.2).  Both are set to the
+    // same value here; the relay path in processIncoming() decrements hop_limit
+    // while preserving hop_start so the ACK receiver can mirror it.
     OtaHeader hdr;
     hdr.dest_node_id  = dest;
     hdr.src_node_id   = MeshNode::nodeId();
     hdr.packet_id     = packet_id;
-    hdr.flags         = ((hop_limit & 0x07) << 5)
-                      | (want_ack ? (1 << 4) : 0)
-                      | (hop_limit & 0x07);
+    hdr.flags         = ((hop_limit & 0x07) << 5)   // [7:5] hop_limit
+                      | (want_ack ? (1 << 4) : 0)    // [4]   want_ack
+                      | (hop_limit & 0x07);           // [2:0] hop_start (= hop_limit for origin)
     hdr.channel_hash  = slot->channel_hash;
     hdr.next_hop_low  = 0;
     hdr.relay_node_low = 0;
@@ -947,6 +972,13 @@ void Router::handleOverheardRelay(uint32_t src_id, uint32_t dup_key, float overh
         if (relay_dup_key == dup_key && overheard_snr >= e.rx_snr) {
             e.in_use = false;
         }
+    }
+}
+
+// ── Router::clearPendingRelays() ─────────────────────────────────────────────
+void Router::clearPendingRelays() {
+    for (size_t i = 0; i < 16; i++) {
+        s_relay_queue[i].in_use = false;
     }
 }
 

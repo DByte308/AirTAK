@@ -9,8 +9,8 @@
 
 namespace airtak {
 
-static GamePhase   s_phase      = GamePhase::IDLE;
-static GameMode    s_mode       = GameMode::DEATHMATCH;
+static GamePhase   s_phase      = GamePhase::LOBBY;
+static GameMode    s_mode       = GameMode::ELIMINATION;
 static uint32_t    s_time_rem   = 0;
 static uint32_t    s_last_update_ms = 0;
 static ZoneMirror  s_zones[MAX_ZONES];
@@ -19,7 +19,7 @@ static TeamScore   s_teams[MAX_TEAMS];
 static uint8_t     s_team_count = 0;
 
 void GameState::init() {
-    s_phase      = GamePhase::IDLE;
+    s_phase      = GamePhase::LOBBY;
     s_zone_count = 0;
     s_team_count = 0;
     s_time_rem   = 0;

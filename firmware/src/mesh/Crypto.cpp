@@ -11,6 +11,12 @@
 #include "mesh/Crypto.h"
 #include <cstring>
 
+// The nonce construction relies on little-endian byte order (memcpy of uint32_t).
+// nRF52840 is Cortex-M4F LE; this assertion guards against accidental big-endian
+// toolchain selection that would break Meshtastic channel-0 interop.
+static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__,
+              "AirTAK Crypto nonce construction requires little-endian host");
+
 // mbedTLS headers (available via Adafruit nRF52 BSP)
 #include <mbedtls/aes.h>
 #include <mbedtls/sha256.h>

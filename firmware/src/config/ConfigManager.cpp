@@ -8,6 +8,7 @@
 #include "config/Defaults.h"
 #include "hal/Radio.h"
 #include "mesh/ChannelManager.h"
+#include "mesh/Router.h"
 #include "mesh/PacketPool.h"
 #include "ble/BLEQueue.h"
 #include "config.h"
@@ -268,8 +269,8 @@ int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t 
         // persisted config desynchronized from the active radio state.
         void* sentinel = nullptr;
         if (!::g_config_change_queue ||
-            xQueueSend(::g_config_change_queue, &sentinel, pdMS_TO_TICKS(2000)) != pdTRUE) {
-            // Queue still full after 2 s — the config task is stalled.
+            xQueueSend(::g_config_change_queue, &sentinel, pdMS_TO_TICKS(500)) != pdTRUE) {
+            // Queue still full after 500 ms — the config task is stalled.
             // Run the restart inline on the BLE task stack as a last resort.
             // This blocks the BLE event loop but prevents indefinite config/radio
             // mismatch.  Target ≤ 300 ms per §9.4.2.
@@ -331,6 +332,10 @@ void ConfigManager::radioRestartProcedure() {
         queued = nullptr;
         queueTxDropError();
     }
+
+    // Discard pending relay entries — their phy_profile_index may now be stale
+    // after rekey() changes the channel-to-PHY binding.
+    Router::clearPendingRelays();
 
     Radio::reinit();
     ChannelManager::rekey();

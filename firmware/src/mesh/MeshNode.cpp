@@ -58,7 +58,8 @@ static uint16_t encodeFixed32(uint8_t* buf, uint16_t pos, uint32_t field, uint32
 // ── serializeUser() ───────────────────────────────────────────────────────────
 // Serializes a meshtastic.User proto for NODEINFO_APP (§13.2).
 // Fields: id(1,string), long_name(2,string), short_name(3,string),
-//         hw_model(6,varint), is_licensed(7,bool), role(8,varint).
+//         macaddr(4,bytes), hw_model(6,varint).
+// Fields 5 (is_licensed) and 7 (role) are omitted as optional.
 static uint16_t serializeUser(uint8_t* buf, uint16_t buf_len) {
     // id: "!XXXXXXXX" where X = lower 8 hex digits of node_id (Meshtastic convention).
     char id_str[12];

@@ -22,20 +22,21 @@ constexpr uint8_t MAX_ZONES      = 16;
 constexpr uint8_t MAX_OBJECTIVES = 8;
 constexpr uint8_t MAX_TEAMS      = 4;
 
+// Values MUST match proto/airtak/game.proto GamePhase enum exactly.
+// The nanopb-generated enum (airtak_GamePhase) is the wire authority.
+// Use static_cast<GamePhase>(airtak_GamePhase_value) when bridging.
 enum class GamePhase : uint8_t {
-    IDLE    = 0,
-    LOBBY   = 1,
-    ACTIVE  = 2,
-    PAUSED  = 3,
-    ENDED   = 4,
+    LOBBY   = 0,   // GAME_PHASE_LOBBY
+    ACTIVE  = 1,   // GAME_PHASE_ACTIVE
+    PAUSED  = 2,   // GAME_PHASE_PAUSED
+    ENDED   = 3,   // GAME_PHASE_ENDED
 };
 
+// Values MUST match proto/airtak/game.proto GameMode enum exactly.
 enum class GameMode : uint8_t {
-    DEATHMATCH   = 0,
-    DOMINATION   = 1,
-    CAPTURE_FLAG = 2,
-    ELIMINATION  = 3,
-    CUSTOM       = 15,
+    ELIMINATION = 0,   // GAME_MODE_ELIMINATION — last team standing
+    TIME_LIMIT  = 1,   // GAME_MODE_TIME_LIMIT  — most players at timer expiry
+    DOMINATION  = 2,   // GAME_MODE_DOMINATION  — most objective points
 };
 
 struct ZoneMirror {
@@ -58,7 +59,7 @@ struct TeamScore {
 
 class GameState {
 public:
-    // Phase 5.1: Initialize empty game state (IDLE phase).
+    // Phase 5.1: Initialize game state (LOBBY phase).
     static void init();
 
     // Phase 5.1: Handle incoming GameStatePacket (deserialized from AIRTAK_GAME portnum).

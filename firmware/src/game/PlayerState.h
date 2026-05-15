@@ -24,7 +24,7 @@ enum class PlayerStatus : uint8_t {
     HIT          = 1,
     RESPAWNING   = 2,
     ELIMINATED   = 3,
-    SPECTATOR    = 4,
+    SPECTATING   = 4,   // matches PLAYER_STATUS_SPECTATING in game.proto
 };
 
 class PlayerState {

@@ -101,6 +101,10 @@ public:
     // If overheard SNR ≥ own received SNR, cancel the queued relay.
     static void handleOverheardRelay(uint32_t src_id, uint32_t packet_id, float overheard_snr);
 
+    // Phase 2.8: Discard all pending relay entries. Called during radio restart
+    // (§9.4.2) so stale relays aren't transmitted with a now-wrong PHY profile.
+    static void clearPendingRelays();
+
     // Returns the default hop_limit for a given portnum (§8.7 table, Defaults.h).
     static uint8_t defaultHopLimit(Portnum portnum);
 

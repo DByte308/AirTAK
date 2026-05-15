@@ -94,7 +94,7 @@ void setup() {
     g_radio_tx_queue      = xQueueCreate(8,  sizeof(void*));
     g_radio_rx_queue      = xQueueCreate(16, sizeof(void*));
     g_ble_tx_queue        = xQueueCreate(8,  sizeof(void*));
-    g_config_change_queue = xQueueCreate(8,  sizeof(void*));
+    g_config_change_queue = xQueueCreate(16, sizeof(void*));
     g_radio_event_group   = xEventGroupCreate();
     g_system_event_group  = xEventGroupCreate();
 

@@ -32,9 +32,13 @@ enum class Portnum : uint32_t {
     AIRTAK_AUDIO            = 263,  // AudioPacket; hop_limit=1; BEST_EFFORT; MUST NOT relay
 };
 
-// Returns true if portnum is in the AirTAK private range.
+// Returns true if portnum is an AirTAK-defined port number.
+// Only AirTAK-specific values (256–263) are recognised; other
+// portnums in the 256–511 private range may belong to Meshtastic
+// and must be treated as standard Meshtastic traffic.
 inline bool isAirTAKPortnum(Portnum p) {
-    return static_cast<uint32_t>(p) >= 256 && static_cast<uint32_t>(p) <= 511;
+    uint32_t v = static_cast<uint32_t>(p);
+    return v >= 256 && v <= 263;
 }
 
 // ACKNOWLEDGED delivery eligibility is defined by Router::isAcknowledgedPortnum

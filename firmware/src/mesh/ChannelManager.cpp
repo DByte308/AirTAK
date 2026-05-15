@@ -116,11 +116,14 @@ static void loadConfiguredSlots() {
                 uint32_t submsg_len = 0; shift = 0;
                 while (pos < buf_len) { uint8_t b = buf[pos++]; submsg_len |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
                 if (pos + submsg_len > buf_len) break;
-                ChannelSlot tmp{};
-                uint8_t idx = parseChannelSlot(buf + pos, submsg_len, tmp);
+
+                // Parse once into a temporary.  The returned index tells us which
+                // slot to overwrite; then copy the temporary into the live slot.
+                ChannelSlot parsed{};
+                uint8_t idx = parseChannelSlot(buf + pos, submsg_len, parsed);
                 if (idx < MAX_CHANNEL_SLOTS) {
-                    parseChannelSlot(buf + pos, submsg_len, s_slots[idx]);
-                    s_slots[idx].index = idx; // ensure index field is authoritative
+                    parsed.index = idx;         // index field is authoritative
+                    s_slots[idx] = parsed;
                 }
                 pos += submsg_len;
             } else {
@@ -146,7 +149,11 @@ void ChannelManager::rekey() {
         auto& slot = s_slots[i];
         if (slot.role == ChannelRole::DISABLED) continue;
         if (slot.psk_len == 0) {
-            slot.channel_hash = 0;
+            // Unencrypted slot — derive a stable hash from the slot name so
+            // multiple unencrypted slots don't collide on hash 0.
+            slot.channel_hash = Crypto::channelHash(
+                reinterpret_cast<const uint8_t*>(slot.name),
+                strnlen(slot.name, sizeof(slot.name)), i);
             memset(slot.aes_key, 0, sizeof(slot.aes_key));
             continue;
         }
