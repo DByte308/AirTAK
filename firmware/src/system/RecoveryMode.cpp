@@ -12,6 +12,8 @@
 namespace mash {
 
 constexpr uint32_t RECOVERY_BUTTON_HOLD_MS = 5000;
+constexpr uint32_t RECOVERY_SHORT_PRESS_MIN_MS = 50;
+constexpr uint32_t RECOVERY_USB_SERIAL_HOLD_MS = 5000;
 constexpr uint32_t RECOVERY_CONFIG_ERASE_HOLD_MS = 10000;
 constexpr uint32_t RECOVERY_POLL_MS = 10;
 
@@ -32,7 +34,7 @@ bool RecoveryMode::requestedAtBoot() {
 }
 
 [[noreturn]] void RecoveryMode::run() {
-    Serial.println("MASH recovery mode: DFU BLE only; config kept");
+    Serial.println("MASH recovery mode: BLE DFU active; config kept");
 
     Display::init();
     Display::showRecoveryMode(false, false);
@@ -52,23 +54,44 @@ bool RecoveryMode::requestedAtBoot() {
     Bluefruit.Advertising.setFastTimeout(30);
     Bluefruit.Advertising.start(0);
 
-    bool erase_armed = false;
+    bool action_armed = false;
     bool erase_done = false;
-    uint32_t erase_press_started_ms = 0;
+    uint32_t press_started_ms = 0;
 
     for (;;) {
         bool pressed = userButtonPressed();
-        if (!pressed) {
-            erase_armed = true;
-            erase_press_started_ms = 0;
-        } else if (erase_armed && !erase_done) {
-            if (erase_press_started_ms == 0) erase_press_started_ms = millis();
-            if ((millis() - erase_press_started_ms) >= RECOVERY_CONFIG_ERASE_HOLD_MS) {
-                bool flash_ok = config::FlashStore::init();
-                erase_done = flash_ok && config::FlashStore::eraseAll();
-                Display::showRecoveryMode(erase_done, false);
-                Serial.println(erase_done ? "MASH recovery mode: config erased" :
-                                           "MASH recovery mode: config erase failed");
+
+        if (!action_armed) {
+            if (!pressed) action_armed = true;
+            delay(100);
+            continue;
+        }
+
+        if (pressed && press_started_ms == 0) {
+            press_started_ms = millis();
+        }
+
+        if (pressed && press_started_ms != 0 && !erase_done &&
+            (millis() - press_started_ms) >= RECOVERY_CONFIG_ERASE_HOLD_MS) {
+            bool flash_ok = config::FlashStore::init();
+            erase_done = flash_ok && config::FlashStore::eraseAll();
+            Display::showRecoveryMode(erase_done, false);
+            Serial.println(erase_done ? "MASH recovery mode: config erased" :
+                                       "MASH recovery mode: config erase failed");
+            action_armed = false;
+            press_started_ms = 0;
+        } else if (!pressed && press_started_ms != 0) {
+            uint32_t held_ms = millis() - press_started_ms;
+            press_started_ms = 0;
+
+            if (held_ms >= RECOVERY_USB_SERIAL_HOLD_MS) {
+                Serial.println("MASH recovery mode: entering USB serial DFU bootloader");
+                delay(250);
+                enterSerialDfu();
+            } else if (held_ms >= RECOVERY_SHORT_PRESS_MIN_MS) {
+                Serial.println("MASH recovery mode: entering USB UF2 bootloader");
+                delay(250);
+                enterUf2Dfu();
             }
         }
         delay(100);

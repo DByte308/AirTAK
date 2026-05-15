@@ -263,12 +263,14 @@ void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
         s_display.print("BLE DFU advertising");
         s_display.setCursor(4, 122);
         s_display.print("Name: MASH Recovery");
-        s_display.setCursor(4, 148);
-        s_display.print("Release, then hold");
-        s_display.setCursor(4, 164);
-        s_display.print("10s to erase config.");
+        s_display.setCursor(4, 144);
+        s_display.print("Tap: USB UF2");
+        s_display.setCursor(4, 160);
+        s_display.print("Hold 5s: serial DFU");
+        s_display.setCursor(4, 176);
+        s_display.print("Hold 10s: erase cfg");
         s_display.setCursor(4, 188);
-        s_display.print("Power cycle to exit.");
+        s_display.print("Power cycle exits.");
     } while (s_display.nextPage());
 
     s_dirty_mask = 0;

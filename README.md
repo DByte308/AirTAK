@@ -47,7 +47,13 @@ Hold the T-Echo Plus user button while powering on or resetting the device. Keep
 
 Safe mode runs before the shared peripheral power rail, normal radio, GPS, config apply, and FreeRTOS tasks. It keeps persisted config and BLE bonds intact by default, shows `SAFE MODE` on the e-ink display, and advertises over BLE as `MASH Recovery` with Nordic DFU available. Use this when faulty app firmware prevents normal access. Power-cycle without holding the button to boot normally after recovery.
 
-To erase persisted MASH config from safe mode, release the button after the `SAFE MODE` screen appears, then hold it again for 10 seconds. Config erase is intentionally a separate confirmation gesture.
+After the `SAFE MODE` screen appears, release the button. Then:
+
+- Tap the button to reset into the Adafruit UF2 USB bootloader.
+- Hold for 5 seconds to reset into USB serial DFU bootloader mode.
+- Hold for 10 seconds to erase persisted MASH config.
+
+Config erase is intentionally a separate confirmation gesture.
 
 If USB/BLE DFU cannot be reached, recover with SWD/J-Link using the existing PlatformIO `nrfjprog` upload path.
 
