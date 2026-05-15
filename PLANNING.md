@@ -5,6 +5,7 @@
 ### Amendments: v1.2 — 2026-05-13 — 100-node airtime budget analysis; smart beaconing replacing fixed 30 s interval (movement-triggered + 90 s heartbeat); POSITION_APP and MASH_PLAYER hop_limit reduced 5→3; EU 868 MHz duty-cycle compliance guidance; audio packet size redesigned 73-frame→8-frame; FEC piggyback (fec_prev_audio_data); jitter buffer and PLC; AudioConfig.frame_count; infrastructure relay node guidance (§13.4); 3 new risks; Duty Cycle, FEC, PLC, Smart Beaconing, TDM glossary entries
 ### Amendments: v1.3 — 2026-05-13 — Three ACK reliability bugs fixed: (1) MASH_ACK hop_limit now mirrors original packet's hop_start so ACK can return across any mesh diameter; (2) ACK timeout scaled to 2×hop_start×400 ms (was flat 200 ms, too short for multi-hop); (3) retries use new packet_id + Data.request_id correlation to bypass relay duplicate-suppression cache; honest MeshCore comparison added to §8.9; MashAck proto updated; Phase 2.11 and integration tests updated
 ### Amendments: v1.4 — 2026-05-13 — Full protocol audit, 10 bugs fixed: (A) §8.2 Flags byte [2:0] corrected from reserved to hop_start — required for v1.3 ACK fix to be implementable; (B) §8.7 position relay exception removed — was dead code that could never trigger, gave false assurance; (C) §12.7/§8.1 audio ToA corrected from ~13 ms to ~84 ms with FEC (correct LoRa calculation for 92-byte packet); EU duty-cycle compliance guidance corrected — sub-band g (1%) is not viable at 1300 bps, sub-band g1 (10%) requires frame_count ≥ 42; (D) §8.7 MASH_POSITION_REQUEST hop_limit raised 3→5 for 10 km field coverage; (E) §12.7/§14.3 FEC cross-session contamination fixed — fec_prev_audio_data must be empty on first packet of each PTT session; (F) §8.9/§14.3 MASH_PLAYER ACK vs BEST_EFFORT ambiguity resolved — is_state_transition field added to PlayerStatePacket; (G) §14.3/§8.9 MashAck.ack_packet_id renamed to ack_request_id to prevent implementer confusion; (H) §14.3/§12.7 AudioPacket session_id field added — prevents lost end_of_transmission causing FEC chaos on session boundary; (I) §12.7 firmware-level audio PHY enforcement requirement added; (J) §8.9 retry backoff formula corrected 1000→200 ms base to match §20 risks table
+### Amendments: v1.5 — 2026-05-14 — Five categories corrected: (1) All duty-cycle §8.1/§8.7/§12.7/§20/glossary/README reframed — EU duty cycle is a per-device regulatory obligation, not a mesh-governance concern; 100-node airtime figures are worst-case estimates, not guarantees one operator can control; smart beaconing helps each device comply but does not enforce mesh-wide limits. (2) Per-packet-type hop limit rationales updated — all players in the command hierarchy need information from all other players; text removed implying only certain role categories need certain messages. (3) Hop limits unified to 7 for all packet types except MASH_AUDIO (hop_limit=1, physical latency constraint); hop_limit does not create extra relay traffic — relay count is bounded by mesh topology, not the hop_limit field; airtime control is via smart beaconing TX interval, not restricted hop budgets. (4) §8.1 expanded with practical SF/BW/CR definitions explaining what each parameter means, how they interact, and why mismatches cause silent failures. (5) SHORT_SLOW-equivalent PHY profile added as Profile 3 (Medium/Slow, SF10/BW250/CR4/5); profile table expanded from 4 to 5 entries; all dependent sections updated (§8.1, §9.4.1, §11.9, §14.2)
 
 ---
 
@@ -266,16 +267,29 @@ MASH uses LoRa modulation via the SX1262. The parameters that govern range, thro
 
 **PHY profiles** — each channel slot references one profile by index; see §8.5 for the per-slot binding mechanism.
 
-MASH defines up to 4 named PHY profiles per device. Profiles 0 and 1 are pre-defined defaults; profiles 2 and 3 are user-configurable. The Meshtastic equivalent column is provided for cross-reference only; MASH's UI displays the raw SF/BW/CR parameters, not Meshtastic codenames.
+MASH defines up to 5 named PHY profiles per device. Profiles 0, 1, 3 are pre-defined defaults; profiles 2 and 4 are user-configurable. The Meshtastic equivalent column is provided for cross-reference only; MASH's UI displays the raw SF/BW/CR parameters, not Meshtastic codenames.
 
 | Profile Index | Name | SF | BW | CR | Max Payload Air Time | Effective Data Rate | Range (open, +22 dBm) | Meshtastic Ref |
 |--------------|------|----|----|----|----------------------|---------------------|-----------------------|----------------|
 | 0 | Long / Mesh | SF11 | 250 kHz | 4/5 | ~680 ms | ~0.9 kbps | 3–8 km LOS | LONG_FAST |
 | 1 | Short / Speed | SF7 | 250 kHz | 4/5 | ~85 ms | ~5.5 kbps | 0.5–2 km LOS | SHORT_FAST |
 | 2 | Long / Reliable | SF12 | 125 kHz | 4/8 | ~3 500 ms | ~0.2 kbps | 5–15 km LOS | LONG_SLOW |
-| 3 | User Defined | configurable | configurable | configurable | — | — | — | — |
+| 3 | Medium / Slow | SF10 | 250 kHz | 4/5 | ~340 ms | ~1.9 kbps | 2–5 km LOS | SHORT_SLOW |
+| 4 | User Defined | configurable | configurable | configurable | — | — | — | — |
 
-All four profiles use the identical sync word, preamble, header mode, CRC, and IQ settings shown in the global parameters table. This ensures that a MASH node with profile 0 on slot A and profile 1 on slot B is interoperable with Meshtastic LONG_FAST and SHORT_FAST nodes respectively on those respective slots.
+All five profiles use the identical sync word, preamble, header mode, CRC, and IQ settings shown in the global parameters table. This ensures that a MASH node with profile 0 on slot A and profile 1 on slot B is interoperable with Meshtastic LONG_FAST and SHORT_FAST nodes respectively on those respective slots.
+
+**What SF, BW, and CR mean in practice:**
+
+LoRa modulation trades speed for range along three independent axes. Every node on a channel must agree on all three values — a mismatch on any one axis makes communication impossible.
+
+- **Spreading Factor (SF, range 7–12).** SF controls how many "chirps" encode each data symbol. Each increment of +1 doubles the number of chirps per symbol, which doubles the time-on-air for the same payload. Higher SF improves receiver sensitivity by roughly 2.5 dB per step (i.e., the receiver can decode a weaker signal), extending range at the cost of throughput. SF7 is the fastest (shortest range), SF12 is the slowest (longest range). Think of SF as *how many times each bit is repeated* — a higher SF repeats each bit more, so the receiver can still hear it through noise and distance.
+
+- **Bandwidth (BW, 125 / 250 / 500 kHz).** BW is the width of the radio channel. Wider bandwidth carries data faster because each chirp is shorter in time. Doubling the bandwidth roughly halves the time-on-air but also halves the receiver sensitivity (≈ −3 dB per doubling). 125 kHz gives the longest range but slowest speed; 500 kHz gives the shortest range but highest speed; 250 kHz is the default balance point. Think of BW as *how wide the pipe is* — a wider pipe moves water faster but spreads it thinner.
+
+- **Coding Rate (CR, expressed as 4/N where N = 5, 6, 7, or 8).** CR controls the ratio of error-correction bits appended to each payload chunk. 4/5 means for every 4 data bits, 1 error-correction bit is added (20 % overhead). 4/8 means for every 4 data bits, 4 error-correction bits are added (100 % overhead). Higher overhead (larger N) makes the transmission more resilient to interference at the cost of longer time-on-air. The default 4/5 is sufficient for most outdoor airsoft conditions. Think of CR as *how many spare copies of the payload are included* — more copies = more resilient to corruption, but takes longer to send.
+
+**Interaction example:** SF7 + BW500 + CR 4/5 is the fastest possible combination (shortest range, ~1 km). SF12 + BW125 + CR 4/8 is the slowest (longest range, >10 km). Profile 0 (SF11 + BW250 + CR 4/5) is the recommended starting point — it balances range and throughput for a typical outdoor airsoft field.
 
 **Field size guidance:**
 
@@ -283,24 +297,26 @@ All four profiles use the identical sync word, preamble, header mode, CRC, and I
 |------------|--------------------|---------|
 | ≤ 300 m | Profile 1 (Short/Speed) | Higher throughput; lower per-packet latency; supports PTT audio (Phase 7) |
 | 300 m – 3 km | Profile 0 (Long/Mesh) | Default; appropriate for most outdoor airsoft events |
+| 1–5 km | Profile 3 (Medium/Slow) | Higher throughput than Long/Mesh while retaining good range; useful for game-event traffic on mid-size fields |
 | > 3 km | Profile 2 (Long/Reliable) or User Defined | Extended range at the cost of very low throughput |
 
 All nodes participating on a given channel must use the same PHY profile. The Android app channel editor displays a compatibility indicator warning when a channel slot's profile differs from that of known nearby nodes.
 
 **Airtime budget — 100-node deployment:**
 
-The table below shows typical time-on-air (ToA) for a 50-byte mesh packet and the resulting shared-channel utilisation when 100 nodes each transmit at the given interval. EU 868 MHz sub-band g (1 % duty cycle, ETSI EN 300 220-2) limits each node to ≤ 10 ms TX/s regardless of other traffic on the channel.
+The table below shows typical time-on-air (ToA) for a 50-byte mesh packet and the resulting shared-channel utilisation in a theoretical 100-player deployment where every node transmits at the given interval. EU 868 MHz sub-band g (1 % duty cycle, ETSI EN 300 220-2) limits **each device individually** to ≤ 1 % transmission time over a rolling 1-hour window — this is a per-device legal obligation of each operator, not a limit MASH can enforce across the mesh. The 100-node column is a worst-case capacity estimate; actual channel load depends on how many independent operators are present and how they have configured their devices.
 
 | Profile | ToA / 50-byte pkt | EU DC limit per node | 100-node load @ 30 s interval | 100-node load @ 90 s interval |
 |---------|-------------------|-----------------------|-------------------------------|-------------------------------|
 | 0 — Long/Mesh (SF11/BW250) | ~310 ms | ≈ 2 pkts/min | ~103 % ⚠ SATURATED | ~34 % |
 | 1 — Short/Speed (SF7/BW250) | ~38 ms | ≈ 15 pkts/min | ~13 % | ~4 % |
 | 2 — Long/Reliable (SF12/BW125) | ~2 700 ms | ≈ 0.2 pkts/min | > 900 % ⚠ | > 300 % ⚠ |
+| 3 — Medium/Slow (SF10/BW250) | ~150 ms | ≈ 4 pkts/min | ~50 % ⚠ | ~17 % |
 
 Key constraints:
-- **EU 1 % duty cycle**: Profile 0 at 310 ms ToA limits each node to ≈ 1 packet per 31 s legally on sub-band g. Position intervals shorter than 31 s violate EU regulations.
-- **Hop amplification**: hop_limit=5 generates 3–5 relay transmissions per source packet in a 3–4 cluster topology. Reducing position hop_limit to 3 and applying smart beaconing (§8.7) keeps the 100-node, 90-second-interval load at ≈ 34 %, leaving headroom for game events and text messages.
-- **MASH game events on Profile 1**: routing game-critical packets (MASH_GAME, MASH_ZONE, etc.) on a Profile 1 channel slot consumes 8× less airtime per packet and is necessary for sub-second game-state propagation at scale.
+- **EU 1 % duty cycle (sub-band g)**: Profile 0 at 310 ms ToA means each device may legally transmit ≈ 1 packet per 31 s on sub-band g. MASH's smart beaconing defaults (§8.7) are designed so that a device with default settings operates within this limit; the operator is ultimately responsible for ensuring their device's configuration complies with their region's regulations.
+- **Hop amplification and the hop_limit safety margin**: Each source packet triggers one relay per node within radio range, bounded by the mesh topology — not by the hop_limit field. A hop_limit of 7 on a 5-hop diameter mesh does not create extra relay transmissions because no nodes exist at hop distances 6 or 7. Setting hop_limit to the maximum available (7) ensures delivery to the furthest node and costs nothing in airtime beyond what the mesh topology already dictates. The table's 100-node load columns account only for source transmissions; relay amplification adds roughly `(diameter − 1)` copies per packet. At a 4-hop mesh diameter this is a ~3× multiplier — the reason smart beaconing's 90 s heartbeat (§8.7) is the primary airtime control, not hop_limit restrictions.
+- **MASH game events**: Routing game-critical packets (MASH_GAME, MASH_ZONE, etc.) on Profile 1 or Profile 3 consumes less airtime per packet than Profile 0 and is recommended when sub-second game-state propagation is required.
 
 ### 8.2 Over-the-Air Packet Format
 
@@ -417,31 +433,31 @@ MASH uses a modified flooding router compatible with Meshtastic's `ManagedFlood`
 
 | Packet Type | Default hop_limit | Rationale |
 |-------------|-------------------|-----------|
-| TEXT_MESSAGE_APP | 3 | Standard text; does not need to reach every node |
-| POSITION_APP | 3 | 3 hops sufficient for a 3–4 cluster topology on ≤ 10 km fields; hop_limit=5 doubles relay traffic with no meaningful coverage gain |
-| NODEINFO_APP | 3 | Only needs to reach nearby nodes |
-| TELEMETRY_APP | 2 | Low-priority sensor data; short range intentional |
-| MASH_PLAYER | 3 | Player state changes reach all clusters in ≤ 3 hops in the target topology |
-| MASH_GAME | 7 | Admin game phase broadcast must reach everyone |
-| MASH_ZONE | 7 | Zone definitions must reach everyone |
-| MASH_OBJECTIVE | 5 | Objective state must reach all |
-| MASH_ADMIN | 7 | Admin commands must reach everyone |
+| TEXT_MESSAGE_APP | 7 | Standard text; must reach every player regardless of position on the field; a squad leader on one side of the map must receive messages from the commander on the opposite side |
+| POSITION_APP | 7 | Every player's position must be visible to every other player; hop_limit must match the full mesh diameter so no position goes stale for nodes at the far edge |
+| NODEINFO_APP | 7 | Node identity must propagate across the full mesh so every device knows about every other device |
+| TELEMETRY_APP | 7 | Battery and environment telemetry reaches all nodes; situational awareness includes which devices are running low on power |
+| MASH_PLAYER | 7 | Player state (active/hit/respawning/eliminated) must propagate to every node in the command hierarchy; a squad leader on the opposite end of the map must see player state changes from all fireteams |
+| MASH_GAME | 7 | Game phase broadcast must reach every player; maximum hop budget |
+| MASH_ZONE | 7 | Zone definitions must reach every player; maximum hop budget |
+| MASH_OBJECTIVE | 7 | Objective capture state must reach every player; maximum hop budget |
+| MASH_ADMIN | 7 | Admin commands must reach every player; maximum hop budget |
 | MASH_ACK | mirrors original | ACK must be able to return to the sender along any path the original took; hop_limit is set to the original packet's hop_start (see §8.9) |
-| MASH_POSITION_REQUEST | 5 | Unicast request to refresh a stale map pin; must reach any player on a 10 km field including those 4–5 hops from the requester; full-mesh flooding (hop_limit=7) is unnecessary |
-| MASH_AUDIO | 1 | Audio must never be relayed; relay latency makes audio unintelligible |
+| MASH_POSITION_REQUEST | 7 | Unicast position request must reach the target node regardless of distance; maximum hop budget |
+| MASH_AUDIO | 1 | Audio must never be relayed; relay latency makes audio unintelligible — the sole packet type with a restricted hop budget due to a hard physical constraint |
 
 The hop_limit for POSITION_APP can be overridden by the user via `PositionConfig.position_hop_limit`. Other per-type defaults are hardcoded in the firmware router's packet-type dispatch table.
 
 **Smart Beaconing**
 
-Transmitting position at a fixed short interval is incompatible with EU duty-cycle limits and saturates a 100-node mesh (see §8.1 airtime budget). MASH uses a movement-triggered broadcast policy:
+Transmitting position at a fixed short interval is incompatible with EU duty-cycle limits and would contribute to channel load in a typical 100-player deployment (see §8.1 airtime budget). MASH uses a movement-triggered broadcast policy:
 
 - Position is sent when **GPS displacement ≥ 10 m** since the last TX, provided at least **15 s** have elapsed since the last TX (prevents bursts during rapid GPS updates).
 - Position is sent when **90 s have elapsed** since the last TX regardless of movement (heartbeat).
 - Players marked **dead or respawning** extend the heartbeat to **5 min** (no tactically relevant movement occurs in this state).
 - A MASH_POSITION_REQUEST unicast (portnum 262) causes the target to send a position packet within **2 s**, bypassing the beaconing timer. This lets the Android map screen refresh a stale pin on demand.
 
-Under typical active-player movement, this yields an average TX rate of ≈ 1 packet per 60 s, keeping each node within EU duty-cycle limits at Profile 0 and holding 100-node channel utilisation below 35 %.
+Under typical active-player movement, this yields an average TX rate of ≈ 1 packet per 60 s, helping each device stay within its EU duty-cycle obligations at Profile 0 and keeping typical channel utilisation low in a 100-player deployment.
 
 The `POSITION.broadcast_interval_secs` config field (§9.4.1) sets the heartbeat maximum; default 90. The movement threshold is fixed at 10 m in `Defaults.h` and is not user-configurable.
 
@@ -572,7 +588,7 @@ Configuration is organized into groups. Each group is versioned independently, c
 | `DEVICE` | Node long name, short name | No — broadcasts updated NODEINFO immediately |
 | `POSITION` | GPS precision bits, broadcast interval, min TX interval, movement threshold, per-type hop limits | No |
 | `CHANNELS` | Channel slot definitions, PSKs, roles, per-slot PHY profile index | Yes — PSK re-keying or PHY profile change requires radio restart |
-| `LORA` | Region, TX power, PHY profile table (up to 4 entries of SF/BW/CR + name) | Yes — PHY reconfiguration requires radio restart |
+| `LORA` | Region, TX power, PHY profile table (up to 5 entries of SF/BW/CR + name) | Yes — PHY reconfiguration requires radio restart |
 | `POWER` | GPS duty cycle, display sleep timeout | No |
 | `GAME` | Callsign, team ID, player color, admin flag | No |
 | `SECURITY` | Max bonded BLE devices | No |
@@ -892,7 +908,7 @@ Settings are organized by config group. All changes are staged; an **Apply** but
 | Section | Contents |
 |---------|----------|
 | Device | Node name (max 39 chars), short name (max 4 chars) |
-| LoRa | Region (dropdown), TX power (slider 2–22 dBm), PHY profile editor (up to 4 profiles; each shows SF / BW / CR as raw values with a plain-language range/speed label; Meshtastic preset name shown in parentheses for cross-reference) |
+| LoRa | Region (dropdown), TX power (slider 2–22 dBm), PHY profile editor (up to 5 profiles; each shows SF / BW / CR as raw values with a plain-language range/speed label; Meshtastic preset name shown in parentheses for cross-reference) |
 | Channels | Channel slot list: tap slot to edit name, PSK (password field), role, position precision, PHY profile (picker shows profile name + SF/BW/CR; compatibility indicator flags mismatch with known nearby nodes on that slot) |
 | Position | Broadcast interval (slider), precision bits (slider), smart broadcast toggle, movement threshold |
 | Power | GPS duty cycle toggle, GPS on/off durations, display sleep timeout |
@@ -1037,7 +1053,7 @@ LoRa RX on receiving devices
 - **Reliability — FEC piggyback**: Each AudioPacket carries a `fec_prev_audio_data` field containing the Codec2 bytes of the **immediately preceding packet within the same PTT session**. If a receiver detects a gap in `sequence_num` (exactly one packet lost), it reconstructs the missing audio from the FEC field of the next received packet. This recovers single-packet-loss events — the most common failure mode on a congested LoRa channel — without any retransmit request. **Session boundary rule**: on the **first packet of each PTT session** (i.e., the first packet after no previous transmission or after a packet with `end_of_transmission = true`), the sender MUST set `fec_prev_audio_data` to an empty bytes field. A receiver that sees `fec_prev_audio_data` empty on the first packet of a new session MUST NOT attempt FEC recovery for sequence gaps spanning the session boundary; it MUST instead apply PLC or silence for any gap. This prevents corrupted audio output when `end_of_transmission` from the previous session was lost.
 - **Reliability — jitter buffer**: The Android receiver maintains a 3-packet jitter buffer (480 ms at 8 frames/packet). Packets arriving out of order within the buffer window are resequenced before decode. Packets arriving more than 480 ms late are discarded.
 - **Reliability — packet loss concealment (PLC)**: If a packet is lost and FEC recovery is not possible (two or more consecutive losses), the Codec2 decoder runs in PLC mode, synthesising comfort noise for the missing interval rather than producing a click or silence gap.
-- **EU duty-cycle compliance (audio)**: At 8 frames/packet (160 ms interval), each AudioPacket with FEC has **~84 ms ToA** on Profile 1 (SF7/BW250). At 160 ms packet interval, this is **~52 % duty cycle** — far above any EU limit. EU sub-band g1 (10 % limit): operators MUST use `frame_count ≥ 42` (42 × 20 ms = 840 ms interval; DC = 84/840 = 10 %). EU sub-band g (1 % limit): PTT audio at 1300 bps **is not feasible** on EU 868 MHz at any frame_count — reaching 1 % DC would require frame_count ≥ 420, making real-time voice impossible; operators on sub-band g MUST use 915 MHz. The AudioConfig screen in the Android app displays the calculated duty cycle (using the correct ToA formula with FEC overhead) and highlights it in amber when frame_count < 42 on EU868 (sub-band g1 non-compliant) and in red always for sub-band g at 868 MHz.
+- **EU duty-cycle compliance (audio)**: At 8 frames/packet (160 ms interval), each AudioPacket with FEC has **~84 ms ToA** on Profile 1 (SF7/BW250). At 160 ms packet interval, this is **~52 % duty cycle** — far above any EU limit. EU sub-band g1 (10 % limit): each operator MUST configure `frame_count ≥ 42` (42 × 20 ms = 840 ms interval; DC = 84/840 = 10 %). EU sub-band g (1 % limit): PTT audio at 1300 bps **is not feasible** on EU 868 MHz at any frame_count — reaching 1 % DC would require frame_count ≥ 420, making real-time voice impossible; operators on sub-band g MUST use 915 MHz. The AudioConfig screen in the Android app displays the calculated per-device duty cycle (using the correct ToA formula with FEC overhead) and highlights it in amber when frame_count < 42 on EU868 (sub-band g1 non-compliant) and in red always for sub-band g at 868 MHz. Compliance is the operator's responsibility; the app provides guidance only.
 - **Direct range only**: `hop_limit = 1`. Relaying audio would add ≥ 13 ms per hop minimum latency and introduce re-ordering; combined with the jitter buffer this degrades quality significantly. All PTT participants must be within single-hop range on the Short/Speed channel slot. On a 10 km field, fixed relay nodes on elevated positions are the solution for range extension — not multi-hop audio.
 - **PHY requirement**: Audio requires a channel slot configured with Profile 1 (Short/Speed). The Android app shows a warning if the user attempts to enable PTT while the audio slot uses Profile 0. **The firmware MUST also enforce this**: before enabling PTT transmission, the firmware checks that the audio channel slot's `phy_profile_index` references a profile with `spreading_factor ≤ 8`. If the check fails, the firmware sends an error notification on the ADMIN BLE characteristic (`error = "audio_slot_phy_too_slow"`) and refuses to transmit audio. This prevents a Profile 0 misconfiguration from causing the device to attempt a 680 ms ToA transmission on a 160 ms audio cadence.
 - **Encoding on Android**: Codec2 is compiled as a native library (C) bundled in the Android app via JNI. `AudioRepository` runs encoding and decoding on a dedicated coroutine dispatcher to avoid audio jitter.
@@ -1086,7 +1102,7 @@ On fields larger than ≈ 2 km in any dimension, tree canopy and building attenu
 
 - **Elevation**: mount at ≥ 5 m height (tree line, flagpole, building roof) to clear foliage. Each relay node effectively extends mesh radius by ≈ 800 m under forest canopy at Profile 0.
 - **Power**: relay nodes typically run on USB power banks; the MASH firmware duty-cycle logic still applies (GPS beaconing at 90 s heartbeat), so a 10 000 mAh power bank runs a relay node for ≈ 40 hours.
-- **Count**: for a 10 km × 10 km field with 3–4 player clusters, 4–6 relay nodes at elevated positions provides hop_limit=3 coverage of ≥ 95 % of the field area under moderate forest density.
+- **Count**: for a 10 km × 10 km field with 3–4 player clusters, 4–6 relay nodes at elevated positions provides ≥ 95 % of the field area under moderate forest density with the default hop_limit=7.
 - **Audio**: relay nodes do NOT relay `MASH_AUDIO` packets (`hop_limit = 1`). PTT audio is direct-range on the Short/Speed profile. Players expecting voice communication must ensure they are within ≈ 800 m LOS of each other on the audio channel slot.
 
 ---
@@ -1150,16 +1166,17 @@ message PhyProfile {
   uint32 coding_rate      = 4;   // 5=4/5  6=4/6  7=4/7  8=4/8
 }
 
-// Default PhyProfile values (factory defaults at index 0-3 in LoraConfig.profiles):
+// Default PhyProfile values (factory defaults at index 0-4 in LoraConfig.profiles):
 //   [0] name="Long/Mesh"      SF=11 BW=250000 CR=5  (= Meshtastic LONG_FAST)
 //   [1] name="Short/Speed"    SF=7  BW=250000 CR=5  (= Meshtastic SHORT_FAST; audio capable)
 //   [2] name="Long/Reliable"  SF=12 BW=125000 CR=8  (= Meshtastic LONG_SLOW)
-//   [3] name="User Defined"   -- user must set all fields
+//   [3] name="Medium/Slow"    SF=10 BW=250000 CR=5  (= Meshtastic SHORT_SLOW)
+//   [4] name="User Defined"   -- user must set all fields
 
 message LoraConfig {
   LoraRegion          region       = 1;
   uint32              tx_power_dbm = 2;   // 2-22 inclusive
-  repeated PhyProfile profiles     = 3;   // exactly 4 entries; indexed by ChannelSlot.phy_profile_index
+  repeated PhyProfile profiles     = 3;   // exactly 5 entries; indexed by ChannelSlot.phy_profile_index
 }
 
 enum ChannelRole {
@@ -1520,7 +1537,7 @@ Phases are sequential. A phase is not considered complete until all items within
 | 2.6 | SNR-based relay delay (measured, not just compiled) |
 | 2.7 | Multi-channel: two channel slots simultaneously active; separate PSKs; packet routing verified |
 | 2.8 | Hot-reload config: all config groups apply without MCU reboot; radio restart path verified |
-| 2.9 | Per-packet-type hop limits: verify POSITION_APP uses hop_limit=3 and MASH_GAME uses hop_limit=7 |
+| 2.9 | Per-packet-type hop limits: verify all packet types (TEXT_MESSAGE_APP, POSITION_APP, MASH_PLAYER, MASH_GAME, etc.) use hop_limit=7; verify MASH_AUDIO uses hop_limit=1; verify hop_start in Flags bits [2:0] preserves the original value across relay hops |
 | 2.10 | Heard-by suppression: 3-device linear chain test; middle node cancels relay after overhearing relay from end node |
 | 2.11 | Application-layer reliability: (a) ACKNOWLEDGED packet delivered over 3-hop chain; verify MASH_ACK hop_limit mirrors original hop_start and reaches sender; (b) mid-path packet drop (jamming R1→D link): verify retry with new packet_id passes through R1 and is received by D; verify single delivery at D; (c) timeout validation: hop_start=3 → timeout=2400 ms; hop_start=7 → timeout=5600 ms |
 | 2.12 | MASH_POSITION_REQUEST: unicast request causes target to re-broadcast POSITION_APP within 2 s |
@@ -1800,7 +1817,7 @@ Generated files are committed to the repository. Proto compilation is not part o
 - Channel isolation: MASH_PLAYER packet on MASH game slot not received by a device with only the interop channel slot active (different PSK).
 - Hot-reload: change `DeviceConfig.long_name` over BLE; verify NODEINFO_APP broadcast within 5 s; no reboot.
 - Radio restart: change `LoraConfig.tx_power_dbm` over BLE; verify radio restart completes in ≤ 300 ms; BLE connection maintained.
-- Per-type hop limit: POSITION_APP packet traced across 4-device chain; verify hop_limit starts at 3 and is zero at node 4 (not relayed); TELEMETRY_APP same chain, verify stops at node 3 (hop_limit=2).
+- Per-type hop limit: TEXT_MESSAGE_APP packet traced across 4-device chain; verify hop_limit starts at 7 and decrements correctly at each hop; verify MASH_AUDIO starts at hop_limit=1 and is not relayed.
 - Heard-by suppression: 3-device triangle; all three can hear each other; device A sends; verify that B and C each relay at most once.
 - Application-layer retry — relay-drop scenario: 3-device chain A→R→B; jam R→B link; verify A retries with new MeshPacket.id but same Data.request_id; verify R forwards retry; verify B receives and applies message exactly once; verify A receives ACK and removes from retry queue.
 - Application-layer retry — ACK-lost scenario: 3-device chain A→R→B; B receives but ACK is jammed; verify A retries; verify B deduplicates by Data.request_id and re-sends ACK; verify A ultimately clears queue.
@@ -1877,9 +1894,9 @@ The following test must pass before Phase 6 is considered complete:
 | Codec2 decode on nRF52840 Cortex-M4F exceeds real-time budget | Low | High | Codec2 1300 bps decode requires ~1.5 ms per 20 ms frame on M4F; well within budget; if needed fall back to 700C mode (~0.8 ms) and notify Android app |
 | Android RECORD_AUDIO permission denied on hardened OEM builds | Low | Low | PTT audio is opt-in; denial disables PTT button with explanation; does not affect any other app functionality |
 | Application-layer retry storms during congestion cause further congestion | Low | Medium | Retry backoff uses full-jitter formula: `wait_ms = random(0, 200 * 2^attempt)`; maximum 3 retries; firmware retry queue bounded at 8 in-flight packets; oldest entries evicted if queue is full |
-| Per-packet-type hop limit misconfiguration causes MASH_GAME not to reach distant nodes | Low | High | Default hop_limit=7 for MASH_GAME and MASH_ZONE; Android app Settings > Channels shows estimated mesh diameter based on last known node positions, with a warning if the field diameter suggests hop_limit is insufficient |
-| 100-node mesh channel saturation on Profile 0 at default broadcast interval | High | High | Smart beaconing (§8.7) replaces fixed 30 s interval with movement-triggered TX + 90 s heartbeat; hop_limit for POSITION_APP reduced from 5 to 3; target utilisation ≤ 35 % at 100 active nodes |
-| EU 868 MHz 1 % duty-cycle limit violated by short position intervals or audio frame_count too low | Medium | High | Smart beaconing yields ≈ 310 ms ToA per 90 s = 0.34 % DC per node; audio with FEC has ~84 ms ToA on Profile 1 — frame_count ≥ 42 required for sub-band g1 (10 %) compliance; sub-band g (1 %) is not viable at 1300 bps and requires 915 MHz; AudioConfig screen shows calculated DC using correct ToA formula and warns on non-compliance |
+| Per-packet-type hop limit misconfiguration causes packets not to reach distant nodes | Low | High | All packet types default to hop_limit=7 (maximum); relay count is bounded by mesh topology, not hop_limit, so the safety margin costs no extra airtime; Android app settings show estimated mesh diameter based on last known node positions, with a warning if any node reports a hop distance exceeding the configured hop_limit |
+| 100-node mesh channel saturation on Profile 0 at default broadcast interval | High | High | Smart beaconing (§8.7) replaces fixed 30 s interval with movement-triggered TX + 90 s heartbeat; all packet types use hop_limit=7 but relay count is bounded by mesh topology, not hop_limit; airtime control is achieved through TX interval policy, not restricted hop budgets |
+| EU 868 MHz 1 % duty-cycle limit violated by short position intervals or audio frame_count too low | Medium | High | Duty cycle is a per-device regulatory obligation; smart beaconing defaults yield ≈ 310 ms ToA per 90 s = 0.34 % DC per device on Profile 0; audio with FEC has ~84 ms ToA on Profile 1 — frame_count ≥ 42 required for sub-band g1 (10 %) compliance; sub-band g (1 %) is not viable at 1300 bps and requires 915 MHz; AudioConfig screen displays calculated per-device DC and warns on non-compliance; final responsibility rests with the operator |
 | PTT audio single-hop range insufficient on 10 km fields | Medium | Medium | Documented in §12.7 and §13.4; fixed relay nodes on elevation extend mesh range; audio itself does not relay (hop_limit=1); players rely on mesh relay nodes for text/game data and accept direct-range limitation for voice |
 | Flood-based ACK is probabilistic, not guaranteed (unlike MeshCore routed ACK) | Low | Low | Ten systematic issues addressed in v1.3–v1.4: MASH_ACK hop_limit mirrors original hop_start (wire header Flags [2:0]); retries use new packet_id; timeout scaled to 2×hop_start×400 ms; hop_start fallback=7 for legacy devices; MASH_PLAYER ACK rule clarified (state transitions only); retry backoff standardised at 200 ms base; residual failure mode is genuine unreachability, not a protocol artifact |
 
@@ -1912,10 +1929,10 @@ The following test must pass before Phase 6 is considered complete:
 | **PHY Profile** | A named set of SF/BW/CR parameters assigned to a MASH channel slot; nodes must share the same PHY profile to communicate on a channel |
 | **PTT** | Push-to-Talk — half-duplex voice communication mode; user holds a button to transmit voice and releases to receive |
 | **PSK** | Pre-Shared Key — symmetric encryption key distributed out-of-band to game participants |
-| **Duty Cycle** | Regulatory limit on the fraction of time a radio may transmit on a given frequency band; EU 868 MHz sub-band g = 1 %, sub-band g1 = 10 %; MASH smart beaconing is designed to keep each node within these limits at Profile 0 |
+| **Duty Cycle** | Regulatory limit on the fraction of time a radio may transmit on a given frequency band; EU 868 MHz sub-band g = 1 %, sub-band g1 = 10 %; each device operator is individually responsible for compliance; MASH smart beaconing and AudioConfig DC display help operators stay within their legal limits |
 | **FEC** | Forward Error Correction — MASH audio uses a piggyback FEC scheme: each AudioPacket carries the previous packet's Codec2 bytes so the receiver can reconstruct a single lost packet without retransmission |
 | **PLC** | Packet Loss Concealment — when two or more consecutive audio packets are lost and FEC cannot recover them, the Codec2 decoder synthesises comfort noise to mask the gap |
-| **Smart Beaconing** | MASH position broadcast policy: transmit when GPS displacement ≥ 10 m (min 15 s apart) or when 90 s heartbeat fires; replaces fixed-interval beaconing to stay within EU duty-cycle limits at 100 nodes |
+| **Smart Beaconing** | MASH position broadcast policy: transmit when GPS displacement ≥ 10 m (min 15 s apart) or when 90 s heartbeat fires; replaces fixed-interval beaconing to help each device operate within regulatory duty-cycle limits while minimising channel load in typical deployments |
 | **TDM** | Time-Division Multiplexing — used by MASH to share the single SX1262 radio between channel slots that use different PHY profiles |
 | **SNR** | Signal-to-Noise Ratio — radio link quality metric; higher is better |
 | **SX1262** | Semtech SX1262 — the LoRa transceiver IC used in the T-Echo Plus |
