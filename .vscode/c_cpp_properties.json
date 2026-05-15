@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "name": "PlatformIO",
+      "compilerPath": "~/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-g++.exe",
+      "compileCommands": "${workspaceFolder}/firmware/compile_commands.json",
+      "includePath": [
+        "${workspaceFolder}/firmware/include",
+        "${workspaceFolder}/firmware/src",
+        "${workspaceFolder}/firmware/src/proto",
+        "${workspaceFolder}/firmware/test",
+        "${workspaceFolder}/firmware/.pio/libdeps/native/**",
+        "${workspaceFolder}/firmware/.pio/libdeps/t_echo_plus/**",
+        "${workspaceFolder}/firmware/variants/t_echo_plus",
+        "~/.platformio/packages/framework-arduinoadafruitnrf52/**"
+      ],
+      "defines": [
+        "MASH_NATIVE_TEST"
+      ],
+      "intelliSenseMode": "windows-gcc-arm"
+    }
+  ],
+  "version": 4
+}

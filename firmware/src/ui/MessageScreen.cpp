@@ -1,10 +1,8 @@
 // MASH — Mesh Airsoft Situational Hub
-// firmware/src/ui/MessageScreen.cpp — Message screen renderer
+// firmware/src/ui/MessageScreen.cpp — Message screen state hook
 // Planning: §9.6 | Roadmap: 1.4
 //
-// Displays the last 3 received TEXT_MESSAGE_APP messages.
-// Each entry: "FROM_NODE: message text" truncated to fit 200 px width.
-// Shows "[N more]" footer when more than 3 messages have been received.
+// Active GxEPD2 rendering is centralized in hal/Display.cpp for Phase 1.
 
 #include "ui/Screens.h"
 #include <Arduino.h>
@@ -36,19 +34,11 @@ void onMessageReceived(const char* from_callsign, const char* text) {
 }
 
 void renderMessageScreen() {
-    // Header
-    // TODO Phase 1.4: drawText("MESSAGES", header row);
-
-    // Render up to 3 most recent messages
     uint8_t shown = 0;
     for (int8_t i = s_msg_head; shown < 3 && i >= 0; i--) {
         if (!s_messages[i].valid) break;
-        // TODO: printf("%s: %s", s_messages[i].from_callsign, s_messages[i].text);
         shown++;
         if (i == 0) i = 8; // wrap
-    }
-    if (s_msg_count > 3) {
-        // TODO: printf("[+%d more]", s_msg_count - 3);
     }
 }
 

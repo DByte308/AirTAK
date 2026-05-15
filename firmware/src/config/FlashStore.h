@@ -2,7 +2,7 @@
 // firmware/src/config/FlashStore.h — LittleFS persistent config storage
 // Planning: §9.4.4 | Roadmap: 1.6
 //
-// Wraps LittleFS on the GD25Q32C SPI NOR flash (4 MB).
+// Wraps LittleFS on the external NOR flash exposed by the board QSPI pins.
 // Each ConfigGroup is serialized with nanopb and stored as a flat binary file.
 // Files are written atomically (write-to-tmp, rename) to prevent corruption on power loss.
 
@@ -17,7 +17,7 @@ namespace config {
 
 class FlashStore {
 public:
-    // Phase 1.6: Initialize LittleFS on GD25Q32C SPI NOR flash.
+    // Phase 1.6: Initialize LittleFS on external NOR flash.
     // Creates /config/ directory if not present.
     // Must be called before any read/write.
     static bool init();
