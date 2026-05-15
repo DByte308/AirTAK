@@ -22,6 +22,7 @@
 
 #include <unity.h>
 #include "mesh/Crypto.h"
+#include "config.h"
 #include <cstring>
 #include <cstdio>
 
@@ -161,6 +162,45 @@ void test_key_derivation_32_byte_psk_boundary() {
     TEST_ASSERT_EQUAL_MEMORY(key_a, key_b, 16);
 }
 
+// AES-CTR must be deterministic: same key, nonce, and plaintext → same ciphertext.
+// This is critical for the duplicate-suppression cache and relay logic which
+// compare encrypted bytes byte-for-byte.
+void test_encrypt_deterministic_same_output_for_same_input() {
+    const uint8_t plaintext[16] = {'d','e','t','e','r','m','i','n','i','s','m',' ','t','e','s','t'};
+    uint8_t ct_a[16], ct_b[16];
+    memcpy(ct_a, plaintext, 16);
+    memcpy(ct_b, plaintext, 16);
+
+    Crypto::encrypt(TEST_PSK, 32, 0x00000042, 0xAABBCCDD, ct_a, 16);
+    Crypto::encrypt(TEST_PSK, 32, 0x00000042, 0xAABBCCDD, ct_b, 16);
+    TEST_ASSERT_EQUAL_MEMORY(ct_a, ct_b, 16);
+}
+
+// Max LoRa payload (237 bytes) round-trip with the Meshtastic LongFast PSK.
+// Exercises AES-CTR streaming across multiple 16-byte blocks and verifies
+// the cipher does not corrupt data at non-mod-16 boundaries.
+void test_encrypt_decrypt_max_payload_roundtrip() {
+    uint8_t plaintext[MESH_MAX_PAYLOAD_BYTES];
+    uint8_t ciphertext[MESH_MAX_PAYLOAD_BYTES];
+    uint8_t recovered[MESH_MAX_PAYLOAD_BYTES];
+
+    // Fill with a known pattern: each byte equals its index.
+    for (size_t i = 0; i < MESH_MAX_PAYLOAD_BYTES; i++) {
+        plaintext[i] = (uint8_t)(i & 0xFF);
+    }
+    memcpy(ciphertext, plaintext, MESH_MAX_PAYLOAD_BYTES);
+
+    Crypto::encrypt(TEST_PSK, 32, 0xDEADBEEF, 0xCAFEBABE,
+                    ciphertext, MESH_MAX_PAYLOAD_BYTES);
+    // Ciphertext must differ from plaintext (AES-CTR is not a no-op).
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(plaintext, ciphertext, MESH_MAX_PAYLOAD_BYTES));
+
+    memcpy(recovered, ciphertext, MESH_MAX_PAYLOAD_BYTES);
+    Crypto::decrypt(TEST_PSK, 32, 0xDEADBEEF, 0xCAFEBABE,
+                    recovered, MESH_MAX_PAYLOAD_BYTES);
+    TEST_ASSERT_EQUAL_MEMORY(plaintext, recovered, MESH_MAX_PAYLOAD_BYTES);
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_key_derivation_length);
@@ -173,5 +213,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_channel_hash_slot1_differs_from_slot0_xor);
     RUN_TEST(test_key_derivation_zero_length_psk);
     RUN_TEST(test_key_derivation_32_byte_psk_boundary);
+    RUN_TEST(test_encrypt_deterministic_same_output_for_same_input);
+    RUN_TEST(test_encrypt_decrypt_max_payload_roundtrip);
     return UNITY_END();
 }

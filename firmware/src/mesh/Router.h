@@ -129,6 +129,7 @@ public:
     static size_t testPendingRelayCount();
     static size_t testRetryEntryCount();
     static size_t testAppDedupCount();
+    static size_t testDupCacheCount();
     static bool testFirstRelay(uint8_t* out, uint8_t& out_len,
                                uint32_t& send_after_ms, float& rx_snr);
     static bool testFirstRetry(uint32_t& msg_id, uint8_t& attempts,

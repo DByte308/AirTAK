@@ -109,7 +109,9 @@ constexpr uint8_t HOP_LIMIT_AIRTAK_GAME        = 7;
 constexpr uint8_t HOP_LIMIT_AIRTAK_ZONE        = 7;
 constexpr uint8_t HOP_LIMIT_AIRTAK_OBJECTIVE   = 7;
 constexpr uint8_t HOP_LIMIT_AIRTAK_ADMIN       = 7;
-constexpr uint8_t HOP_LIMIT_AIRTAK_ACK         = 0;  // Set by receiver to original packet's hop_start (§8.9)
+constexpr uint8_t HOP_LIMIT_AIRTAK_ACK         = 7;  // Fallback: ACK built dynamically in processIncoming()
+                                                    // uses hop_start of the original packet; this is the
+                                                    // safety default if sendPacket is called directly. (§8.9)
 constexpr uint8_t HOP_LIMIT_POSITION_REQUEST = 7;
 constexpr uint8_t HOP_LIMIT_AIRTAK_AUDIO       = 1;  // MUST never relay audio — sole exception (§12.7)
 

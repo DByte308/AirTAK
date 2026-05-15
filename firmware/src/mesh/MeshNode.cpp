@@ -109,6 +109,11 @@ static uint16_t serializePosition(uint8_t* buf, uint16_t buf_len) {
     pos = encodeFixed32(buf, pos, 4, unix_sec);
     uint32_t precision_bits = config::ConfigManager::positionPrecisionBits();
     if (precision_bits > 32) precision_bits = 32;
+    // NOTE: PositionConfig.gps_precision_bits is the authoritative global
+    // setting.  The per-slot ChannelSlot.position_precision field is reserved
+    // for a future per-slot override (not yet implemented).  If both are set,
+    // the per-slot value should take precedence when transmitting on that slot.
+    // For now, the global value is used for all slots.
     pos = encodeTag    (buf, pos, 14, 0); pos = encodeVarint(buf, pos, precision_bits);
 
     (void)buf_len;

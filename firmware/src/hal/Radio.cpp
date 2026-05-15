@@ -25,8 +25,12 @@
 namespace airtak {
 
 // ── Static state ──────────────────────────────────────────────────────────────
-static SX1262 s_radio = new Module(AIRTAK_PIN_SX1262_NSS, AIRTAK_PIN_SX1262_DIO1,
-                                   AIRTAK_PIN_SX1262_RESET, AIRTAK_PIN_SX1262_BUSY);
+// Module is a plain struct (RadioLib 6.x); allocate it statically to avoid
+// heap reliance at static-init time (A2 fix — see audit.md).
+static Module        s_module(AIRTAK_PIN_SX1262_NSS, AIRTAK_PIN_SX1262_DIO1,
+                              AIRTAK_PIN_SX1262_RESET, AIRTAK_PIN_SX1262_BUSY);
+static SX1262        s_radio(&s_module);
+static volatile bool s_radio_failed = false;  // set when init/reinit fails (A3 fix)
 static volatile float    s_last_rssi    = 0.0f;
 static volatile float    s_last_snr     = 0.0f;
 static volatile uint32_t s_packets_rx   = 0;
@@ -101,7 +105,9 @@ void Radio::init() {
     uint8_t  cr    = 0;
     if (!resolvePhyProfile(initial_phy, sf, bw_hz, cr)) {
         // Even the fallback failed — radio is non-functional.
-        // The display will show an error state.
+        // The display will show an error state.  Set the failure flag so
+        // process() does not attempt hardware operations on a dead radio (A3).
+        s_radio_failed = true;
         return;
     }
 
@@ -125,6 +131,7 @@ void Radio::init() {
     if (result != RADIOLIB_ERR_NONE) {
         // Log and continue — device is non-functional without radio, but do not
         // assert/reboot here; the display will show an error state.
+        s_radio_failed = true;
         return;
     }
 
@@ -166,6 +173,7 @@ void Radio::reinit() {
     uint8_t  cr    = 0;
     if (!resolvePhyProfile(new_phy, sf, bw_hz, cr)) {
         ble::queueAdminError("radio_reinit_phy_failed");
+        s_radio_failed = true;
         return;
     }
 
@@ -190,8 +198,12 @@ void Radio::reinit() {
         // The firmware will continue operating without radio; the display
         // and BLE remain functional for diagnostics.
         ble::queueAdminError("radio_reinit_begin_failed");
+        s_radio_failed = true;
         return;
     }
+
+    // Radio reinitialized successfully — clear failure flag.
+    s_radio_failed = false;
 
     s_radio.setCRC(true);
     s_radio.explicitHeader();
@@ -219,6 +231,29 @@ bool Radio::isPaused() {
 void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
                     EventGroupHandle_t event_group) {
     s_event_group = event_group;
+
+    // If the radio hardware failed to initialize or reinitialize, do not
+    // attempt any SX1262 operations — the module is in an unknown state
+    // and register reads may hang the SPI bus indefinitely (A3 fix).
+    if (s_radio_failed) {
+        // Still drain the TX queue (discard silently) so callers don't stall.
+        PooledPacket* pkt = nullptr;
+        while (xQueueReceive(tx_queue, &pkt, 0) == pdTRUE && pkt) {
+            PacketPool::free(pkt);
+        }
+        // Block on events with a 1-second timeout to avoid busy-spinning,
+        // but still respond to PAUSE/RESUME for radio restart recovery.
+        EventBits_t bits = xEventGroupWaitBits(
+            event_group,
+            RADIO_EVENT_PAUSE | RADIO_EVENT_RESUME,
+            pdTRUE, pdFALSE, pdMS_TO_TICKS(1000));
+        if (bits & RADIO_EVENT_PAUSE) {
+            xEventGroupSetBits(event_group, RADIO_EVENT_PAUSED);
+            xEventGroupWaitBits(event_group, RADIO_EVENT_RESUME, pdTRUE, pdTRUE, portMAX_DELAY);
+            xEventGroupClearBits(event_group, RADIO_EVENT_PAUSED);
+        }
+        return;
+    }
 
     EventBits_t bits = xEventGroupWaitBits(
         event_group,

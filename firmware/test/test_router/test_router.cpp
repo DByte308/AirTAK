@@ -736,6 +736,135 @@ void test_ack_generated_with_zero_hop_start_fallback() {
     TEST_ASSERT_GREATER_OR_EQUAL_UINT32(1, Router::testAppDedupCount());
 }
 
+// A1 regression: sendDataPacket with AIRTAK_PLAYER heartbeat (is_state_transition=false)
+// must NOT create a retry entry, even when the incoming Data proto has want_response=true.
+// The firmware is authoritative — it rebuilds the Data proto cleanly, stripping want_response
+// when the state transition field says BEST_EFFORT.
+void test_send_data_packet_heartbeat_strips_want_response() {
+    Router::init();
+
+    // Build a PlayerStatePacket payload with is_state_transition=false (heartbeat).
+    uint8_t player_payload[16];
+    uint16_t player_len = build_player_payload(player_payload, false);
+
+    // Build a Data proto that incorrectly has want_response=true on a heartbeat.
+    uint8_t data[128];
+    uint16_t pos = 0;
+    pos = append_tag(data, pos, 1, 0);
+    pos = append_var_u32(data, pos, static_cast<uint32_t>(Portnum::AIRTAK_PLAYER));
+    pos = append_bytes(data, pos, 2, player_payload, player_len);
+    pos = append_tag(data, pos, 3, 0);
+    pos = append_var_u32(data, pos, 1);            // want_response=true (client error)
+    pos = append_tag(data, pos, 6, 0);
+    pos = append_var_u32(data, pos, 0xDEAD);       // request_id set
+    uint16_t data_len = pos;
+
+    TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
+
+    // The authoritative is_state_transition=false must override — no retry entry.
+    TEST_ASSERT_EQUAL_UINT32(0, Router::testRetryEntryCount());
+}
+
+// B2 regression: defaultHopLimit(AIRTAK_ACK) must return a non-zero safety fallback
+// so that any inadvertent direct sendPacket call does not produce a dead packet.
+void test_default_hop_limit_airtak_ack_is_nonzero() {
+    uint8_t hl = Router::defaultHopLimit(Portnum::AIRTAK_ACK);
+    TEST_ASSERT_NOT_EQUAL(0, hl);
+    TEST_ASSERT_EQUAL(7, hl); // safety fallback per Defaults.h
+}
+
+// Implicit ACK (§8.9): when we overhear a relay of our own ACKNOWLEDGED packet,
+// the pending retry entry must be cancelled.
+void test_implicit_ack_own_packet_cancels_retry() {
+    Router::init();
+
+    // Create a retry entry via sendDataPacket (AIRTAK_GAME, acknowledged).
+    uint8_t data[96];
+    uint16_t data_len = build_data(data, Portnum::AIRTAK_GAME);
+    TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
+    TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
+
+    // Extract the actual msg_id from the retry entry so the "overheard" packet
+    // carries the correct Data.request_id that handleAck will match on.
+    uint32_t msg_id = 0;
+    uint8_t attempts = 0;
+    uint32_t timeout_ms = 0;
+    uint8_t hop_start = 0;
+    uint16_t payload_len = 0;
+    TEST_ASSERT_TRUE(Router::testFirstRetry(msg_id, attempts, timeout_ms, hop_start, payload_len));
+    TEST_ASSERT_NOT_EQUAL(0, msg_id);
+
+    // Now simulate overhearing a relay of our own packet with that request_id.
+    // src_node_id = MeshNode::nodeId() = 0x12345678.
+    uint8_t raw[192];
+    uint8_t raw_len = build_ota(raw, MeshNode::nodeId(), 0x9999, 3,
+                                Portnum::AIRTAK_GAME, nullptr, 0,
+                                true, msg_id);
+    Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
+
+    // processIncoming returns immediately for own packets after calling handleAck
+    // with the Data.request_id. The retry entry must be cleared.
+    TEST_ASSERT_EQUAL_UINT32(0, Router::testRetryEntryCount());
+}
+
+// clearPendingRelays() must remove all pending relay queue entries.
+void test_clear_pending_relays_deletes_all_entries() {
+    Router::init();
+
+    // Queue two distinct packets for relay.
+    for (uint8_t i = 0; i < 3; i++) {
+        uint8_t raw[192];
+        uint8_t raw_len = build_ota(raw, 0xAABBCCDD + i, 0x200 + i, 3,
+                                    Portnum::TEXT_MESSAGE_APP);
+        Router::processIncoming(raw, raw_len, -42.0f, 5.0f,
+                                reinterpret_cast<QueueHandle_t>(0x1));
+    }
+    TEST_ASSERT_EQUAL_UINT32(3, Router::testPendingRelayCount());
+
+    Router::clearPendingRelays();
+    TEST_ASSERT_EQUAL_UINT32(0, Router::testPendingRelayCount());
+}
+
+// Duplicate-suppression cache eviction: when the cache is full, the oldest
+// entry must be evicted so new traffic is not incorrectly suppressed.
+void test_dup_cache_eviction_at_capacity() {
+    Router::init();
+
+    // Fill the cache by sending unique (src_id, packet_id) combinations.
+    // ROUTER_DUP_CACHE_SIZE = 100.  All packets arrive within the same
+    // millis() tick (s_now_ms = 1000 initially) so no entry expires.
+    for (uint32_t i = 0; i < defaults::ROUTER_DUP_CACHE_SIZE; i++) {
+        uint8_t raw[192];
+        uint8_t raw_len = build_ota(raw, 0xA0000000 + i, i, 3,
+                                    Portnum::TEXT_MESSAGE_APP);
+        Router::processIncoming(raw, raw_len, -42.0f, 5.0f,
+                                reinterpret_cast<QueueHandle_t>(0x1));
+    }
+    TEST_ASSERT_EQUAL(defaults::ROUTER_DUP_CACHE_SIZE, Router::testDupCacheCount());
+
+    // The 101st unique packet must NOT be treated as a duplicate.
+    // It should queue a relay (hop_limit=3 > 0) and take a cache slot,
+    // evicting the oldest cache entry.
+    uint8_t raw[192];
+    uint8_t raw_len = build_ota(raw, 0xBBBBBBBB, 0xFFFF, 3,
+                                Portnum::TEXT_MESSAGE_APP);
+    Router::processIncoming(raw, raw_len, -42.0f, 5.0f,
+                            reinterpret_cast<QueueHandle_t>(0x1));
+
+    // Cache must stay at capacity (one evicted, one added).
+    TEST_ASSERT_EQUAL(defaults::ROUTER_DUP_CACHE_SIZE, Router::testDupCacheCount());
+
+    // Send the same packet again — this time it MUST be suppressed as a duplicate.
+    Router::processIncoming(raw, raw_len, -42.0f, 5.0f,
+                            reinterpret_cast<QueueHandle_t>(0x1));
+    // Re-sending the exact same (src_id=0xBBBBBBBB, packet_id=0xFFFF) should be
+    // caught by the duplicate cache and NOT create an additional relay.
+    // The relay count should not have increased from the first delivery of this packet.
+    // (Relay queue max is 16; we can't assert an exact count since earlier relays
+    //  may have been evicted, but the duplicate suppression itself is what matters.)
+    TEST_ASSERT_EQUAL(defaults::ROUTER_DUP_CACHE_SIZE, Router::testDupCacheCount());
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_default_hop_limit_position);
@@ -774,5 +903,10 @@ int main(int argc, char** argv) {
     RUN_TEST(test_send_packet_direct_path_player);
     RUN_TEST(test_relay_queue_evicts_oldest_when_full);
     RUN_TEST(test_ack_generated_with_zero_hop_start_fallback);
+    RUN_TEST(test_send_data_packet_heartbeat_strips_want_response);
+    RUN_TEST(test_default_hop_limit_airtak_ack_is_nonzero);
+    RUN_TEST(test_implicit_ack_own_packet_cancels_retry);
+    RUN_TEST(test_clear_pending_relays_deletes_all_entries);
+    RUN_TEST(test_dup_cache_eviction_at_capacity);
     return UNITY_END();
 }

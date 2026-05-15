@@ -810,10 +810,15 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
     const ChannelSlot* slot = selectTxSlot(meta.portnum, true);
     if (!slot) return false;
 
-    bool want_ack = meta.want_response;
+    // Determine whether this packet requires ACKNOWLEDGED delivery.
+    // The authoritative sources are the per-portnum rules below and the
+    // is_state_transition field for AIRTAK_PLAYER.  The incoming Data proto's
+    // want_response field is advisory only: the firmware strips it when the
+    // portnum-specific rule overrides to BEST_EFFORT (A1, A5 fix — see audit.md).
+    bool want_ack = false;
     switch (meta.portnum) {
         case Portnum::TEXT_MESSAGE_APP:
-            want_ack = want_ack || (meta.dest != 0xFFFFFFFF);
+            want_ack = meta.want_response || (meta.dest != 0xFFFFFFFF);
             break;
         case Portnum::AIRTAK_GAME:
         case Portnum::AIRTAK_ZONE:
@@ -825,36 +830,28 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
             want_ack = airtakPlayerIsStateTransition(data_pb, data_len);
             break;
         default:
+            want_ack = meta.want_response;
             break;
     }
 
-    uint8_t outgoing[MESH_MAX_PAYLOAD_BYTES];
-    uint16_t outgoing_len = data_len;
-    memcpy(outgoing, data_pb, data_len);
+    // Extract the inner app payload from the incoming Data proto so that
+    // buildDataMessage can re-encode a clean Data protobuf.  Rebuilding
+    // avoids duplicate fields and guarantees that want_response only
+    // appears when the firmware's authoritative want_ack is true.
+    const uint8_t* app_payload = nullptr;
+    uint16_t app_payload_len = 0;
+    extractDataPayload(data_pb, data_len, app_payload, app_payload_len);
 
     uint32_t packet_id = nextPacketId();
     uint32_t msg_id = meta.has_request_id ? meta.request_id : packet_id;
 
-    if (want_ack) {
-        // Guard: appending tag+varint for want_response (field 3) and
-        // request_id (field 6) each needs up to 2+5 = 7 bytes.  Reserve 16
-        // bytes so the buffer cannot overflow when the incoming Data proto is
-        // close to MESH_MAX_PAYLOAD_BYTES.
-        if (outgoing_len + 16 > sizeof(outgoing)) {
-            return false; // payload too close to limit — cannot add ACK fields
-        }
-        if (!meta.want_response) {
-            if (!appendTag(outgoing, outgoing_len, sizeof(outgoing), 3, 0) ||
-                !appendVarU32(outgoing, outgoing_len, sizeof(outgoing), 1)) {
-                return false;
-            }
-        }
-        if (!meta.has_request_id) {
-            if (!appendTag(outgoing, outgoing_len, sizeof(outgoing), 6, 0) ||
-                !appendVarU32(outgoing, outgoing_len, sizeof(outgoing), msg_id)) {
-                return false;
-            }
-        }
+    uint8_t outgoing[MESH_MAX_PAYLOAD_BYTES];
+    uint16_t outgoing_len = 0;
+    if (!buildDataMessage(meta.portnum, meta.dest, MeshNode::nodeId(),
+                          app_payload, app_payload_len,
+                          want_ack, msg_id,
+                          outgoing, outgoing_len, sizeof(outgoing))) {
+        return false;
     }
 
     uint8_t hop_limit = defaultHopLimit(meta.portnum);
@@ -1081,6 +1078,18 @@ bool Router::testFirstRetry(uint32_t& msg_id, uint8_t& attempts,
         return true;
     }
     return false;
+}
+
+size_t Router::testDupCacheCount() {
+    uint32_t now_ms = millis();
+    size_t count = 0;
+    for (size_t i = 0; i < defaults::ROUTER_DUP_CACHE_SIZE; i++) {
+        if (s_dup_cache[i].in_use &&
+            (int32_t)(now_ms - s_dup_cache[i].expires_ms) < 0) {
+            count++;
+        }
+    }
+    return count;
 }
 #endif
 
