@@ -160,64 +160,64 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define airtak_DeviceConfig_init_default           {"", ""}
-#define airtak_PhyProfile_init_default             {"", 0, 0, 0}
-#define airtak_LoraConfig_init_default             {_airtak_LoraRegion_MIN, 0, 0, {airtak_PhyProfile_init_default, airtak_PhyProfile_init_default, airtak_PhyProfile_init_default, airtak_PhyProfile_init_default, airtak_PhyProfile_init_default}}
-#define airtak_ChannelSlot_init_default            {0, "", {0, {0}}, _airtak_ChannelRole_MIN, 0, 0, 0, 0}
-#define airtak_ChannelConfig_init_default          {0, {airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default}}
-#define airtak_AudioConfig_init_default            {0, 0, 0, 0}
-#define airtak_PositionConfig_init_default         {0, 0, 0, 0, 0, 0}
-#define airtak_PowerConfig_init_default            {0, 0, 0, 0}
-#define airtak_GameConfig_init_default             {"", 0, 0, 0}
-#define airtak_SecurityConfig_init_default         {0}
-#define airtak_DeviceConfig_init_zero              {"", ""}
-#define airtak_PhyProfile_init_zero                {"", 0, 0, 0}
-#define airtak_LoraConfig_init_zero                {_airtak_LoraRegion_MIN, 0, 0, {airtak_PhyProfile_init_zero, airtak_PhyProfile_init_zero, airtak_PhyProfile_init_zero, airtak_PhyProfile_init_zero, airtak_PhyProfile_init_zero}}
-#define airtak_ChannelSlot_init_zero               {0, "", {0, {0}}, _airtak_ChannelRole_MIN, 0, 0, 0, 0}
-#define airtak_ChannelConfig_init_zero             {0, {airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero}}
-#define airtak_AudioConfig_init_zero               {0, 0, 0, 0}
-#define airtak_PositionConfig_init_zero            {0, 0, 0, 0, 0, 0}
-#define airtak_PowerConfig_init_zero               {0, 0, 0, 0}
-#define airtak_GameConfig_init_zero                {"", 0, 0, 0}
-#define airtak_SecurityConfig_init_zero            {0}
+#define airtak_DeviceConfig_init_default         {"", ""}
+#define airtak_PhyProfile_init_default           {"", 0, 0, 0}
+#define airtak_LoraConfig_init_default           {_airtak_LoraRegion_MIN, 0, 0, {airtak_PhyProfile_init_default, airtak_PhyProfile_init_default, airtak_PhyProfile_init_default, airtak_PhyProfile_init_default, airtak_PhyProfile_init_default}}
+#define airtak_ChannelSlot_init_default          {0, "", {0, {0}}, _airtak_ChannelRole_MIN, 0, 0, 0, 0}
+#define airtak_ChannelConfig_init_default        {0, {airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default}}
+#define airtak_AudioConfig_init_default          {0, 0, 0, 0}
+#define airtak_PositionConfig_init_default       {0, 0, 0, 0, 0, 0}
+#define airtak_PowerConfig_init_default          {0, 0, 0, 0}
+#define airtak_GameConfig_init_default           {"", 0, 0, 0}
+#define airtak_SecurityConfig_init_default       {0}
+#define airtak_DeviceConfig_init_zero            {"", ""}
+#define airtak_PhyProfile_init_zero              {"", 0, 0, 0}
+#define airtak_LoraConfig_init_zero              {_airtak_LoraRegion_MIN, 0, 0, {airtak_PhyProfile_init_zero, airtak_PhyProfile_init_zero, airtak_PhyProfile_init_zero, airtak_PhyProfile_init_zero, airtak_PhyProfile_init_zero}}
+#define airtak_ChannelSlot_init_zero             {0, "", {0, {0}}, _airtak_ChannelRole_MIN, 0, 0, 0, 0}
+#define airtak_ChannelConfig_init_zero           {0, {airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero}}
+#define airtak_AudioConfig_init_zero             {0, 0, 0, 0}
+#define airtak_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0}
+#define airtak_PowerConfig_init_zero             {0, 0, 0, 0}
+#define airtak_GameConfig_init_zero              {"", 0, 0, 0}
+#define airtak_SecurityConfig_init_zero          {0}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define airtak_DeviceConfig_long_name_tag          1
-#define airtak_DeviceConfig_short_name_tag         2
-#define airtak_PhyProfile_name_tag                 1
-#define airtak_PhyProfile_spreading_factor_tag     2
-#define airtak_PhyProfile_bandwidth_hz_tag         3
-#define airtak_PhyProfile_coding_rate_tag          4
-#define airtak_LoraConfig_region_tag               1
-#define airtak_LoraConfig_tx_power_dbm_tag         2
-#define airtak_LoraConfig_profiles_tag             3
-#define airtak_ChannelSlot_index_tag               1
-#define airtak_ChannelSlot_name_tag                2
-#define airtak_ChannelSlot_psk_tag                 3
-#define airtak_ChannelSlot_role_tag                4
-#define airtak_ChannelSlot_uplink_enabled_tag      5
-#define airtak_ChannelSlot_downlink_enabled_tag    6
-#define airtak_ChannelSlot_position_precision_tag  7
-#define airtak_ChannelSlot_phy_profile_index_tag   8
-#define airtak_ChannelConfig_slots_tag             1
-#define airtak_AudioConfig_audio_channel_slot_tag  1
-#define airtak_AudioConfig_codec2_mode_bps_tag     2
-#define airtak_AudioConfig_ptt_enabled_tag         3
-#define airtak_AudioConfig_frame_count_tag         4
+#define airtak_DeviceConfig_long_name_tag        1
+#define airtak_DeviceConfig_short_name_tag       2
+#define airtak_PhyProfile_name_tag               1
+#define airtak_PhyProfile_spreading_factor_tag   2
+#define airtak_PhyProfile_bandwidth_hz_tag       3
+#define airtak_PhyProfile_coding_rate_tag        4
+#define airtak_LoraConfig_region_tag             1
+#define airtak_LoraConfig_tx_power_dbm_tag       2
+#define airtak_LoraConfig_profiles_tag           3
+#define airtak_ChannelSlot_index_tag             1
+#define airtak_ChannelSlot_name_tag              2
+#define airtak_ChannelSlot_psk_tag               3
+#define airtak_ChannelSlot_role_tag              4
+#define airtak_ChannelSlot_uplink_enabled_tag    5
+#define airtak_ChannelSlot_downlink_enabled_tag  6
+#define airtak_ChannelSlot_position_precision_tag 7
+#define airtak_ChannelSlot_phy_profile_index_tag 8
+#define airtak_ChannelConfig_slots_tag           1
+#define airtak_AudioConfig_audio_channel_slot_tag 1
+#define airtak_AudioConfig_codec2_mode_bps_tag   2
+#define airtak_AudioConfig_ptt_enabled_tag       3
+#define airtak_AudioConfig_frame_count_tag       4
 #define airtak_PositionConfig_broadcast_interval_secs_tag 1
 #define airtak_PositionConfig_gps_precision_bits_tag 2
-#define airtak_PositionConfig_smart_broadcast_tag  3
+#define airtak_PositionConfig_smart_broadcast_tag 3
 #define airtak_PositionConfig_movement_threshold_m_tag 4
 #define airtak_PositionConfig_min_tx_interval_secs_tag 5
 #define airtak_PositionConfig_position_hop_limit_tag 6
-#define airtak_PowerConfig_gps_duty_cycle_tag      1
-#define airtak_PowerConfig_gps_on_secs_tag         2
-#define airtak_PowerConfig_gps_off_secs_tag        3
-#define airtak_PowerConfig_display_off_secs_tag    4
-#define airtak_GameConfig_callsign_tag             1
-#define airtak_GameConfig_team_id_tag              2
-#define airtak_GameConfig_player_color_rgb_tag     3
-#define airtak_GameConfig_is_admin_tag             4
+#define airtak_PowerConfig_gps_duty_cycle_tag    1
+#define airtak_PowerConfig_gps_on_secs_tag       2
+#define airtak_PowerConfig_gps_off_secs_tag      3
+#define airtak_PowerConfig_display_off_secs_tag  4
+#define airtak_GameConfig_callsign_tag           1
+#define airtak_GameConfig_team_id_tag            2
+#define airtak_GameConfig_player_color_rgb_tag   3
+#define airtak_GameConfig_is_admin_tag           4
 #define airtak_SecurityConfig_max_bonded_devices_tag 1
 
 /* Struct field encoding specification for nanopb */
@@ -324,17 +324,17 @@ extern const pb_msgdesc_t airtak_SecurityConfig_msg;
 #define airtak_SecurityConfig_fields &airtak_SecurityConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AIRTAK_CONFIG_PB_H_MAX_SIZE                airtak_ChannelConfig_size
-#define airtak_AudioConfig_size                    20
-#define airtak_ChannelConfig_size                  624
-#define airtak_ChannelSlot_size                    76
-#define airtak_DeviceConfig_size                   47
-#define airtak_GameConfig_size                     32
-#define airtak_LoraConfig_size                     198
-#define airtak_PhyProfile_size                     36
-#define airtak_PositionConfig_size                 32
-#define airtak_PowerConfig_size                    20
-#define airtak_SecurityConfig_size                 6
+#define AIRTAK_CONFIG_PB_H_MAX_SIZE              airtak_ChannelConfig_size
+#define airtak_AudioConfig_size                  20
+#define airtak_ChannelConfig_size                624
+#define airtak_ChannelSlot_size                  76
+#define airtak_DeviceConfig_size                 47
+#define airtak_GameConfig_size                   32
+#define airtak_LoraConfig_size                   198
+#define airtak_PhyProfile_size                   36
+#define airtak_PositionConfig_size               32
+#define airtak_PowerConfig_size                  20
+#define airtak_SecurityConfig_size               6
 
 #ifdef __cplusplus
 } /* extern "C" */

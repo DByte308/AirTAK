@@ -226,82 +226,82 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define airtak_PlayerStatePacket_init_default      {0, "", 0, _airtak_PlayerStatus_MIN, 0, 0, 0}
-#define airtak_TeamDefinition_init_default         {0, "", 0, 0, 0, 0}
-#define airtak_TeamScore_init_default              {0, 0, 0}
-#define airtak_GameStatePacket_init_default        {0, _airtak_GamePhase_MIN, _airtak_GameMode_MIN, 0, 0, 0, {airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default}, 0, {airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default}}
-#define airtak_LatLng_init_default                 {0, 0}
-#define airtak_ZonePacket_init_default             {0, _airtak_ZoneType_MIN, "", 0, {airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default}, 0}
-#define airtak_ObjectivePacket_init_default        {0, 0, 0, 0, 0}
-#define airtak_AdminPacket_init_default            {0, _airtak_AdminAction_MIN, 0, 0}
-#define airtak_AirTAKAck_init_default                {0, 0, 0}
-#define airtak_PositionRequestPacket_init_default  {0, 0}
-#define airtak_AudioPacket_init_default            {0, 0, 0, {0, {0}}, 0, {0, {0}}, 0, 0}
-#define airtak_PlayerStatePacket_init_zero         {0, "", 0, _airtak_PlayerStatus_MIN, 0, 0, 0}
-#define airtak_TeamDefinition_init_zero            {0, "", 0, 0, 0, 0}
-#define airtak_TeamScore_init_zero                 {0, 0, 0}
-#define airtak_GameStatePacket_init_zero           {0, _airtak_GamePhase_MIN, _airtak_GameMode_MIN, 0, 0, 0, {airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero}, 0, {airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero}}
-#define airtak_LatLng_init_zero                    {0, 0}
-#define airtak_ZonePacket_init_zero                {0, _airtak_ZoneType_MIN, "", 0, {airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero}, 0}
-#define airtak_ObjectivePacket_init_zero           {0, 0, 0, 0, 0}
-#define airtak_AdminPacket_init_zero               {0, _airtak_AdminAction_MIN, 0, 0}
-#define airtak_AirTAKAck_init_zero                   {0, 0, 0}
-#define airtak_PositionRequestPacket_init_zero     {0, 0}
-#define airtak_AudioPacket_init_zero               {0, 0, 0, {0, {0}}, 0, {0, {0}}, 0, 0}
+#define airtak_PlayerStatePacket_init_default    {0, "", 0, _airtak_PlayerStatus_MIN, 0, 0, 0}
+#define airtak_TeamDefinition_init_default       {0, "", 0, 0, 0, 0}
+#define airtak_TeamScore_init_default            {0, 0, 0}
+#define airtak_GameStatePacket_init_default      {0, _airtak_GamePhase_MIN, _airtak_GameMode_MIN, 0, 0, 0, {airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default, airtak_TeamDefinition_init_default}, 0, {airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default, airtak_TeamScore_init_default}}
+#define airtak_LatLng_init_default               {0, 0}
+#define airtak_ZonePacket_init_default           {0, _airtak_ZoneType_MIN, "", 0, {airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default, airtak_LatLng_init_default}, 0}
+#define airtak_ObjectivePacket_init_default      {0, 0, 0, 0, 0}
+#define airtak_AdminPacket_init_default          {0, _airtak_AdminAction_MIN, 0, 0}
+#define airtak_AirTAKAck_init_default            {0, 0, 0}
+#define airtak_PositionRequestPacket_init_default {0, 0}
+#define airtak_AudioPacket_init_default          {0, 0, 0, {0, {0}}, 0, {0, {0}}, 0, 0}
+#define airtak_PlayerStatePacket_init_zero       {0, "", 0, _airtak_PlayerStatus_MIN, 0, 0, 0}
+#define airtak_TeamDefinition_init_zero          {0, "", 0, 0, 0, 0}
+#define airtak_TeamScore_init_zero               {0, 0, 0}
+#define airtak_GameStatePacket_init_zero         {0, _airtak_GamePhase_MIN, _airtak_GameMode_MIN, 0, 0, 0, {airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero, airtak_TeamDefinition_init_zero}, 0, {airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero, airtak_TeamScore_init_zero}}
+#define airtak_LatLng_init_zero                  {0, 0}
+#define airtak_ZonePacket_init_zero              {0, _airtak_ZoneType_MIN, "", 0, {airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero, airtak_LatLng_init_zero}, 0}
+#define airtak_ObjectivePacket_init_zero         {0, 0, 0, 0, 0}
+#define airtak_AdminPacket_init_zero             {0, _airtak_AdminAction_MIN, 0, 0}
+#define airtak_AirTAKAck_init_zero               {0, 0, 0}
+#define airtak_PositionRequestPacket_init_zero   {0, 0}
+#define airtak_AudioPacket_init_zero             {0, 0, 0, {0, {0}}, 0, {0, {0}}, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define airtak_PlayerStatePacket_node_id_tag       1
-#define airtak_PlayerStatePacket_callsign_tag      2
-#define airtak_PlayerStatePacket_team_id_tag       3
-#define airtak_PlayerStatePacket_status_tag        4
+#define airtak_PlayerStatePacket_node_id_tag     1
+#define airtak_PlayerStatePacket_callsign_tag    2
+#define airtak_PlayerStatePacket_team_id_tag     3
+#define airtak_PlayerStatePacket_status_tag      4
 #define airtak_PlayerStatePacket_respawn_at_unix_tag 5
-#define airtak_PlayerStatePacket_color_rgb_tag     6
+#define airtak_PlayerStatePacket_color_rgb_tag   6
 #define airtak_PlayerStatePacket_is_state_transition_tag 7
-#define airtak_TeamDefinition_team_id_tag          1
-#define airtak_TeamDefinition_name_tag             2
-#define airtak_TeamDefinition_color_rgb_tag        3
-#define airtak_TeamDefinition_max_players_tag      4
-#define airtak_TeamDefinition_respawn_count_tag    5
-#define airtak_TeamDefinition_respawn_secs_tag     6
-#define airtak_TeamScore_team_id_tag               1
-#define airtak_TeamScore_score_tag                 2
-#define airtak_TeamScore_active_players_tag        3
-#define airtak_GameStatePacket_admin_node_id_tag   1
-#define airtak_GameStatePacket_phase_tag           2
-#define airtak_GameStatePacket_mode_tag            3
+#define airtak_TeamDefinition_team_id_tag        1
+#define airtak_TeamDefinition_name_tag           2
+#define airtak_TeamDefinition_color_rgb_tag      3
+#define airtak_TeamDefinition_max_players_tag    4
+#define airtak_TeamDefinition_respawn_count_tag  5
+#define airtak_TeamDefinition_respawn_secs_tag   6
+#define airtak_TeamScore_team_id_tag             1
+#define airtak_TeamScore_score_tag               2
+#define airtak_TeamScore_active_players_tag      3
+#define airtak_GameStatePacket_admin_node_id_tag 1
+#define airtak_GameStatePacket_phase_tag         2
+#define airtak_GameStatePacket_mode_tag          3
 #define airtak_GameStatePacket_started_at_unix_tag 4
-#define airtak_GameStatePacket_ends_at_unix_tag    5
-#define airtak_GameStatePacket_teams_tag           6
-#define airtak_GameStatePacket_scores_tag          7
-#define airtak_LatLng_lat_tag                      1
-#define airtak_LatLng_lng_tag                      2
-#define airtak_ZonePacket_zone_id_tag              1
-#define airtak_ZonePacket_type_tag                 2
-#define airtak_ZonePacket_name_tag                 3
-#define airtak_ZonePacket_polygon_tag              4
-#define airtak_ZonePacket_owner_team_id_tag        5
-#define airtak_ObjectivePacket_objective_id_tag    1
-#define airtak_ObjectivePacket_zone_id_tag         2
+#define airtak_GameStatePacket_ends_at_unix_tag  5
+#define airtak_GameStatePacket_teams_tag         6
+#define airtak_GameStatePacket_scores_tag        7
+#define airtak_LatLng_lat_tag                    1
+#define airtak_LatLng_lng_tag                    2
+#define airtak_ZonePacket_zone_id_tag            1
+#define airtak_ZonePacket_type_tag               2
+#define airtak_ZonePacket_name_tag               3
+#define airtak_ZonePacket_polygon_tag            4
+#define airtak_ZonePacket_owner_team_id_tag      5
+#define airtak_ObjectivePacket_objective_id_tag  1
+#define airtak_ObjectivePacket_zone_id_tag       2
 #define airtak_ObjectivePacket_controlling_team_id_tag 3
 #define airtak_ObjectivePacket_capture_percent_tag 4
-#define airtak_ObjectivePacket_score_value_tag     5
-#define airtak_AdminPacket_admin_node_id_tag       1
-#define airtak_AdminPacket_action_tag              2
-#define airtak_AdminPacket_target_node_id_tag      3
-#define airtak_AdminPacket_value_tag               4
-#define airtak_AirTAKAck_ack_request_id_tag          1
-#define airtak_AirTAKAck_from_node_id_tag            2
-#define airtak_AirTAKAck_original_hop_start_tag      3
+#define airtak_ObjectivePacket_score_value_tag   5
+#define airtak_AdminPacket_admin_node_id_tag     1
+#define airtak_AdminPacket_action_tag            2
+#define airtak_AdminPacket_target_node_id_tag    3
+#define airtak_AdminPacket_value_tag             4
+#define airtak_AirTAKAck_ack_request_id_tag      1
+#define airtak_AirTAKAck_from_node_id_tag        2
+#define airtak_AirTAKAck_original_hop_start_tag  3
 #define airtak_PositionRequestPacket_target_node_id_tag 1
 #define airtak_PositionRequestPacket_requester_node_id_tag 2
-#define airtak_AudioPacket_from_node_id_tag        1
-#define airtak_AudioPacket_sequence_num_tag        2
-#define airtak_AudioPacket_codec2_mode_bps_tag     3
-#define airtak_AudioPacket_audio_data_tag          4
+#define airtak_AudioPacket_from_node_id_tag      1
+#define airtak_AudioPacket_sequence_num_tag      2
+#define airtak_AudioPacket_codec2_mode_bps_tag   3
+#define airtak_AudioPacket_audio_data_tag        4
 #define airtak_AudioPacket_end_of_transmission_tag 5
 #define airtak_AudioPacket_fec_prev_audio_data_tag 6
-#define airtak_AudioPacket_frame_count_tag         7
-#define airtak_AudioPacket_session_id_tag          8
+#define airtak_AudioPacket_frame_count_tag       7
+#define airtak_AudioPacket_session_id_tag        8
 
 /* Struct field encoding specification for nanopb */
 #define airtak_PlayerStatePacket_FIELDLIST(X, a) \
@@ -429,18 +429,18 @@ extern const pb_msgdesc_t airtak_AudioPacket_msg;
 #define airtak_AudioPacket_fields &airtak_AudioPacket_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AIRTAK_GAME_PB_H_MAX_SIZE                  airtak_ZonePacket_size
-#define airtak_AdminPacket_size                    20
-#define airtak_AudioPacket_size                    438
-#define airtak_GameStatePacket_size                582
-#define airtak_LatLng_size                         18
-#define airtak_AirTAKAck_size                        18
-#define airtak_ObjectivePacket_size                30
-#define airtak_PlayerStatePacket_size              46
-#define airtak_PositionRequestPacket_size          12
-#define airtak_TeamDefinition_size                 48
-#define airtak_TeamScore_size                      18
-#define airtak_ZonePacket_size                     672
+#define AIRTAK_GAME_PB_H_MAX_SIZE                airtak_ZonePacket_size
+#define airtak_AdminPacket_size                  20
+#define airtak_AirTAKAck_size                    18
+#define airtak_AudioPacket_size                  438
+#define airtak_GameStatePacket_size              582
+#define airtak_LatLng_size                       18
+#define airtak_ObjectivePacket_size              30
+#define airtak_PlayerStatePacket_size            46
+#define airtak_PositionRequestPacket_size        12
+#define airtak_TeamDefinition_size               48
+#define airtak_TeamScore_size                    18
+#define airtak_ZonePacket_size                   672
 
 #ifdef __cplusplus
 } /* extern "C" */

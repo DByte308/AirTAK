@@ -111,56 +111,56 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define airtak_ConfigPayload_init_default          {_airtak_ConfigGroup_MIN, {0, {0}}, 0}
-#define airtak_ConfigAck_init_default              {_airtak_ConfigGroup_MIN, 0, "", 0, 0}
-#define airtak_DeviceStatus_init_default           {0, "", 0, 0, false, airtak_GpsStatus_init_default, false, airtak_RadioStatus_init_default, 0, 0, "", ""}
-#define airtak_GpsStatus_init_default              {0, 0, 0, 0, 0, 0}
-#define airtak_RadioStatus_init_default            {"", 0, 0, 0, 0}
-#define airtak_AdminRequest_init_default           {_airtak_AdminCommand_MIN, ""}
-#define airtak_AdminResponse_init_default          {_airtak_AdminCommand_MIN, 0, ""}
-#define airtak_ConfigPayload_init_zero             {_airtak_ConfigGroup_MIN, {0, {0}}, 0}
-#define airtak_ConfigAck_init_zero                 {_airtak_ConfigGroup_MIN, 0, "", 0, 0}
-#define airtak_DeviceStatus_init_zero              {0, "", 0, 0, false, airtak_GpsStatus_init_zero, false, airtak_RadioStatus_init_zero, 0, 0, "", ""}
-#define airtak_GpsStatus_init_zero                 {0, 0, 0, 0, 0, 0}
-#define airtak_RadioStatus_init_zero               {"", 0, 0, 0, 0}
-#define airtak_AdminRequest_init_zero              {_airtak_AdminCommand_MIN, ""}
-#define airtak_AdminResponse_init_zero             {_airtak_AdminCommand_MIN, 0, ""}
+#define airtak_ConfigPayload_init_default        {_airtak_ConfigGroup_MIN, {0, {0}}, 0}
+#define airtak_ConfigAck_init_default            {_airtak_ConfigGroup_MIN, 0, "", 0, 0}
+#define airtak_DeviceStatus_init_default         {0, "", 0, 0, false, airtak_GpsStatus_init_default, false, airtak_RadioStatus_init_default, 0, 0, "", ""}
+#define airtak_GpsStatus_init_default            {0, 0, 0, 0, 0, 0}
+#define airtak_RadioStatus_init_default          {"", 0, 0, 0, 0}
+#define airtak_AdminRequest_init_default         {_airtak_AdminCommand_MIN, ""}
+#define airtak_AdminResponse_init_default        {_airtak_AdminCommand_MIN, 0, ""}
+#define airtak_ConfigPayload_init_zero           {_airtak_ConfigGroup_MIN, {0, {0}}, 0}
+#define airtak_ConfigAck_init_zero               {_airtak_ConfigGroup_MIN, 0, "", 0, 0}
+#define airtak_DeviceStatus_init_zero            {0, "", 0, 0, false, airtak_GpsStatus_init_zero, false, airtak_RadioStatus_init_zero, 0, 0, "", ""}
+#define airtak_GpsStatus_init_zero               {0, 0, 0, 0, 0, 0}
+#define airtak_RadioStatus_init_zero             {"", 0, 0, 0, 0}
+#define airtak_AdminRequest_init_zero            {_airtak_AdminCommand_MIN, ""}
+#define airtak_AdminResponse_init_zero           {_airtak_AdminCommand_MIN, 0, ""}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define airtak_ConfigPayload_group_tag             1
-#define airtak_ConfigPayload_data_tag              2
-#define airtak_ConfigPayload_commit_tag            3
-#define airtak_ConfigAck_group_tag                 1
-#define airtak_ConfigAck_success_tag               2
-#define airtak_ConfigAck_error_tag                 3
-#define airtak_ConfigAck_radio_restarted_tag       4
-#define airtak_ConfigAck_apply_duration_ms_tag     5
-#define airtak_GpsStatus_fix_tag                   1
-#define airtak_GpsStatus_satellites_tag            2
-#define airtak_GpsStatus_latitude_tag              3
-#define airtak_GpsStatus_longitude_tag             4
-#define airtak_GpsStatus_altitude_m_tag            5
-#define airtak_GpsStatus_accuracy_m_tag            6
-#define airtak_RadioStatus_channel_name_tag        1
-#define airtak_RadioStatus_last_rssi_tag           2
-#define airtak_RadioStatus_last_snr_tag            3
-#define airtak_RadioStatus_packets_rx_tag          4
-#define airtak_RadioStatus_packets_tx_tag          5
-#define airtak_DeviceStatus_node_id_tag            1
-#define airtak_DeviceStatus_node_name_tag          2
-#define airtak_DeviceStatus_battery_level_tag      3
-#define airtak_DeviceStatus_charging_tag           4
-#define airtak_DeviceStatus_gps_tag                5
-#define airtak_DeviceStatus_radio_tag              6
-#define airtak_DeviceStatus_mesh_node_count_tag    7
-#define airtak_DeviceStatus_uptime_seconds_tag     8
-#define airtak_DeviceStatus_firmware_version_tag   9
-#define airtak_DeviceStatus_bluetooth_address_tag  10
-#define airtak_AdminRequest_command_tag            1
-#define airtak_AdminRequest_confirm_token_tag      2
-#define airtak_AdminResponse_command_tag           1
-#define airtak_AdminResponse_success_tag           2
-#define airtak_AdminResponse_error_tag             3
+#define airtak_ConfigPayload_group_tag           1
+#define airtak_ConfigPayload_data_tag            2
+#define airtak_ConfigPayload_commit_tag          3
+#define airtak_ConfigAck_group_tag               1
+#define airtak_ConfigAck_success_tag             2
+#define airtak_ConfigAck_error_tag               3
+#define airtak_ConfigAck_radio_restarted_tag     4
+#define airtak_ConfigAck_apply_duration_ms_tag   5
+#define airtak_GpsStatus_fix_tag                 1
+#define airtak_GpsStatus_satellites_tag          2
+#define airtak_GpsStatus_latitude_tag            3
+#define airtak_GpsStatus_longitude_tag           4
+#define airtak_GpsStatus_altitude_m_tag          5
+#define airtak_GpsStatus_accuracy_m_tag          6
+#define airtak_RadioStatus_channel_name_tag      1
+#define airtak_RadioStatus_last_rssi_tag         2
+#define airtak_RadioStatus_last_snr_tag          3
+#define airtak_RadioStatus_packets_rx_tag        4
+#define airtak_RadioStatus_packets_tx_tag        5
+#define airtak_DeviceStatus_node_id_tag          1
+#define airtak_DeviceStatus_node_name_tag        2
+#define airtak_DeviceStatus_battery_level_tag    3
+#define airtak_DeviceStatus_charging_tag         4
+#define airtak_DeviceStatus_gps_tag              5
+#define airtak_DeviceStatus_radio_tag            6
+#define airtak_DeviceStatus_mesh_node_count_tag  7
+#define airtak_DeviceStatus_uptime_seconds_tag   8
+#define airtak_DeviceStatus_firmware_version_tag 9
+#define airtak_DeviceStatus_bluetooth_address_tag 10
+#define airtak_AdminRequest_command_tag          1
+#define airtak_AdminRequest_confirm_token_tag    2
+#define airtak_AdminResponse_command_tag         1
+#define airtak_AdminResponse_success_tag         2
+#define airtak_AdminResponse_error_tag           3
 
 /* Struct field encoding specification for nanopb */
 #define airtak_ConfigPayload_FIELDLIST(X, a) \
@@ -245,14 +245,14 @@ extern const pb_msgdesc_t airtak_AdminResponse_msg;
 #define airtak_AdminResponse_fields &airtak_AdminResponse_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AIRTAK_BLE_PB_H_MAX_SIZE                   airtak_ConfigPayload_size
-#define airtak_AdminRequest_size                   99
-#define airtak_AdminResponse_size                  101
-#define airtak_ConfigAck_size                      109
-#define airtak_ConfigPayload_size                  519
-#define airtak_DeviceStatus_size                   182
-#define airtak_GpsStatus_size                      36
-#define airtak_RadioStatus_size                    40
+#define AIRTAK_BLE_PB_H_MAX_SIZE                 airtak_ConfigPayload_size
+#define airtak_AdminRequest_size                 99
+#define airtak_AdminResponse_size                101
+#define airtak_ConfigAck_size                    109
+#define airtak_ConfigPayload_size                519
+#define airtak_DeviceStatus_size                 182
+#define airtak_GpsStatus_size                    36
+#define airtak_RadioStatus_size                  40
 
 #ifdef __cplusplus
 } /* extern "C" */
