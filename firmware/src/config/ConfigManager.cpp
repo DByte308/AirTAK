@@ -12,7 +12,6 @@
 #include "ble/BLEQueue.h"
 #include "config.h"
 #include "airtak/config.pb.h"
-#include "airtak/ble.pb.h"
 #include <pb_encode.h>
 #include <pb_decode.h>
 #include <FreeRTOS.h>
@@ -38,26 +37,12 @@ static size_t   s_sizes[CONFIG_GROUP_COUNT];
 static uint8_t  s_staged_buffers[CONFIG_GROUP_COUNT][CONFIG_BUF_SIZE];
 static size_t   s_staged_sizes[CONFIG_GROUP_COUNT];
 
-static void queueAdminError(const char* error) {
-    if (!::g_ble_tx_queue || !error) return;
+static void queueRadioRestartTimeoutError() {
+    ble::queueAdminError("radio_pause_timeout");
+}
 
-    airtak_AdminResponse response = airtak_AdminResponse_init_zero;
-    response.command = airtak_AdminCommand_RADIO_RESTART;
-    response.success = false;
-    strncpy(response.error, error, sizeof(response.error) - 1);
-
-    PooledPacket* pkt = PacketPool::alloc();
-    if (!pkt) return;
-    pkt->data[0] = ble::BLE_QUEUE_ADMIN;
-    pb_ostream_t stream = pb_ostream_from_buffer(pkt->data + 1, PACKET_POOL_BUF_SIZE - 1);
-    if (!pb_encode(&stream, airtak_AdminResponse_fields, &response)) {
-        PacketPool::free(pkt);
-        return;
-    }
-    pkt->length = static_cast<uint16_t>(1 + stream.bytes_written);
-    if (xQueueSendToBack(::g_ble_tx_queue, &pkt, 0) != pdTRUE) {
-        PacketPool::free(pkt);
-    }
+static void queueTxDropError() {
+    ble::queueAdminError("tx_dropped_radio_restart");
 }
 
 // ── Protobuf structural validation ───────────────────────────────────────────
@@ -325,7 +310,7 @@ void ConfigManager::radioRestartProcedure() {
 
     if (!Radio::isPaused()) {
         Radio::resume();
-        queueAdminError("radio_pause_timeout");
+        queueRadioRestartTimeoutError();
         s_radio_restart_pending = false;
         return;
     }
@@ -334,7 +319,7 @@ void ConfigManager::radioRestartProcedure() {
     while (::g_radio_tx_queue && xQueueReceive(::g_radio_tx_queue, &queued, 0) == pdTRUE) {
         PacketPool::free(queued);
         queued = nullptr;
-        queueAdminError("tx_dropped_radio_restart");
+        queueTxDropError();
     }
 
     Radio::reinit();
@@ -345,51 +330,7 @@ void ConfigManager::radioRestartProcedure() {
 
 bool ConfigManager::isRadioRestartPending() { return s_radio_restart_pending; }
 
-// Device long name: scan DEVICE group buffer for tag 0x12 (field 2, string).
-static char s_device_long_name[65];
-static char s_device_short_name[8];
-
-const char* ConfigManager::deviceLongName() {
-    uint8_t idx = static_cast<uint8_t>(ConfigGroup::DEVICE);
-    if (s_sizes[idx] == 0) return defaults::DEVICE_LONG_NAME;
-
-    const uint8_t* buf = s_buffers[idx];
-    size_t n = s_sizes[idx];
-    for (size_t i = 0; i + 1 < n; i++) {
-        if (buf[i] == 0x0A) { // field 1, wire 2 = DeviceConfig.long_name
-            uint8_t len = buf[i + 1];
-            if (i + 2 + len <= n && len < sizeof(s_device_long_name)) {
-                memcpy(s_device_long_name, buf + i + 2, len);
-                s_device_long_name[len] = '\0';
-                return s_device_long_name;
-            }
-        }
-    }
-    return defaults::DEVICE_LONG_NAME;
-}
-
-const char* ConfigManager::deviceShortName() {
-    uint8_t idx = static_cast<uint8_t>(ConfigGroup::DEVICE);
-    if (s_sizes[idx] == 0) return defaults::DEVICE_SHORT_NAME;
-
-    const uint8_t* buf = s_buffers[idx];
-    size_t n = s_sizes[idx];
-    for (size_t i = 0; i + 1 < n; i++) {
-        if (buf[i] == 0x12) { // field 2, wire 2 = DeviceConfig.short_name
-            uint8_t len = buf[i + 1];
-            if (i + 2 + len <= n && len < sizeof(s_device_short_name)) {
-                memcpy(s_device_short_name, buf + i + 2, len);
-                s_device_short_name[len] = '\0';
-                return s_device_short_name;
-            }
-        }
-    }
-    return defaults::DEVICE_SHORT_NAME;
-}
-
-// ── LoRa parameter accessors ─────────────────────────────────────────────────
-// Sequential proto parsers so Radio::reinit() reads the committed config rather
-// than compile-time defaults. Required for hot-reload (§9.4.2, Roadmap 2.8).
+// ── Proto field helpers (used by LoRa, Position, and Device accessors) ────────
 
 // Helper: advance pos over one proto field (any wire type). Returns false on error.
 static bool skipProtoField(const uint8_t* buf, size_t n, size_t& pos, uint8_t wire) {
@@ -426,6 +367,52 @@ static bool readProtoVarint(const uint8_t* buf, size_t n, size_t& pos, uint32_t&
         shift += 7;
     }
     return false;
+}
+
+// Device long name / short name: parse the DEVICE group buffer using a proper
+// proto field iterator so that length-delimited field boundaries are honoured
+// and random byte-values inside other fields cannot be mistaken for field tags.
+static char s_device_long_name[65];
+static char s_device_short_name[8];
+
+static const char* readDeviceStringField(uint32_t wanted_field, const char* fallback, char* out, size_t out_capacity) {
+    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::DEVICE);
+    const uint8_t* buf = s_buffers[gidx];
+    size_t n = s_sizes[gidx];
+    if (n == 0) return fallback;
+
+    size_t pos = 0;
+    while (pos < n) {
+        uint32_t tag;
+        if (!readProtoVarint(buf, n, pos, tag)) break;
+        uint8_t wire = tag & 7;
+        uint32_t field = tag >> 3;
+        if (wire == 2) {
+            uint32_t slen;
+            if (!readProtoVarint(buf, n, pos, slen)) break;
+            if (pos + slen > n) break;
+            if (field == wanted_field) {
+                size_t copy_len = (slen < out_capacity - 1) ? slen : out_capacity - 1;
+                memcpy(out, buf + pos, copy_len);
+                out[copy_len] = '\0';
+                return out;
+            }
+            pos += slen;
+        } else {
+            if (!skipProtoField(buf, n, pos, wire)) break;
+        }
+    }
+    return fallback;
+}
+
+const char* ConfigManager::deviceLongName() {
+    return readDeviceStringField(1, defaults::DEVICE_LONG_NAME,
+                                 s_device_long_name, sizeof(s_device_long_name));
+}
+
+const char* ConfigManager::deviceShortName() {
+    return readDeviceStringField(2, defaults::DEVICE_SHORT_NAME,
+                                 s_device_short_name, sizeof(s_device_short_name));
 }
 
 static uint32_t readPositionVarintField(uint32_t wanted_field, uint32_t fallback) {
@@ -480,7 +467,18 @@ float ConfigManager::loraFrequencyMhz() {
         uint32_t field = tag >> 3;
         if (wire == 0) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
-            if (field == 1) return (v == 1) ? (float)LORA_FREQ_US915 : (float)LORA_FREQ_EU868;
+            if (field == 1) {
+                switch (v) {
+                    case 0:  return (float)LORA_FREQ_EU868;
+                    case 1:  return (float)LORA_FREQ_US915;
+                    case 2:  return (float)LORA_FREQ_AU915;
+                    case 3:  return (float)LORA_FREQ_CN470;
+                    case 4:  return (float)LORA_FREQ_JP920;
+                    case 5:  return (float)LORA_FREQ_KR920;
+                    case 6:  return (float)LORA_FREQ_IN865;
+                    default: return (float)LORA_FREQ_EU868;
+                }
+            }
         } else { if (!skipProtoField(buf, n, pos, wire)) break; }
     }
     return (float)LORA_FREQ_EU868;

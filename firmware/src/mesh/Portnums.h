@@ -37,18 +37,9 @@ inline bool isAirTAKPortnum(Portnum p) {
     return static_cast<uint32_t>(p) >= 256 && static_cast<uint32_t>(p) <= 511;
 }
 
-// Returns true if portnum should be delivered with ACKNOWLEDGED reliability (§8.9).
-// AIRTAK_PLAYER is handled specially: ACKNOWLEDGED only when is_state_transition=true.
-inline bool isAcknowledgedPortnum(Portnum p) {
-    switch (p) {
-        case Portnum::AIRTAK_GAME:
-        case Portnum::AIRTAK_ZONE:
-        case Portnum::AIRTAK_OBJECTIVE:
-        case Portnum::AIRTAK_ADMIN:
-            return true;
-        default:
-            return false;
-    }
-}
+// ACKNOWLEDGED delivery eligibility is defined by Router::isAcknowledgedPortnum
+// (Router.h). That version includes TEXT_MESSAGE_APP and AIRTAK_PLAYER, which are
+// conditionally ACKed at the call site (unicast vs broadcast, is_state_transition).
+// Do not add a separate copy here — it will diverge.
 
 } // namespace airtak

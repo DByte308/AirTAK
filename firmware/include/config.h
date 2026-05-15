@@ -25,6 +25,11 @@
 #define LORA_TX_POWER_MAX        22      // dBm (SX1262 maximum)
 #define LORA_FREQ_EU868          869.525 // MHz (EU 868 MHz, sub-band g1)
 #define LORA_FREQ_US915          906.875 // MHz (US 915 MHz)
+#define LORA_FREQ_AU915          917.000 // MHz (Australia 915 MHz)
+#define LORA_FREQ_CN470          486.800 // MHz (China 470 MHz, band centre)
+#define LORA_FREQ_JP920          922.000 // MHz (Japan 920 MHz, AS923-compatible)
+#define LORA_FREQ_KR920          922.000 // MHz (Korea 920 MHz, AS923-compatible)
+#define LORA_FREQ_IN865          865.200 // MHz (India 865 MHz)
 
 // ── BLE GATT service UUID ──────────────────────────────────────────────────────
 // Service UUID: 4d415348-0000-1000-8000-00805f9b34fb

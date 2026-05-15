@@ -207,6 +207,7 @@ void task_display_refresh(void* params) {
     // Phase 1.4: E-Ink display bring-up | Phase 9.6: refresh management
     airtak::Display::init();
     uint32_t last_refresh_check_ms = 0;
+    uint32_t last_player_tick_ms   = 0;
     for (;;) {
         airtak::ButtonGesture gesture = airtak::Button::poll();
         if (gesture == airtak::ButtonGesture::SHORT_PRESS) {
@@ -223,6 +224,13 @@ void task_display_refresh(void* params) {
         if ((now - last_refresh_check_ms) >= 5000) {
             airtak::Display::refresh(g_system_event_group);
             last_refresh_check_ms = now;
+        }
+        // PlayerState respawn countdown and HIT-cancel-window expiry rely on a
+        // 1-second tick. The display task loop runs at ~20 Hz (50 ms) which is
+        // more than enough granularity (§12.6, §5.4).
+        if ((now - last_player_tick_ms) >= 1000) {
+            airtak::PlayerState::tick(g_radio_tx_queue);
+            last_player_tick_ms = now;
         }
         vTaskDelay(pdMS_TO_TICKS(50));
     }

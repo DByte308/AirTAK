@@ -53,5 +53,8 @@ using ui::DISPLAY_DIRTY_GAME;
 using ui::DISPLAY_DIRTY_MESSAGE;
 using ui::DISPLAY_DIRTY_PLAYERS;
 using ui::DISPLAY_DIRTY_ALL;
+using ui::EINK_WIDTH;
+using ui::EINK_HEIGHT;
+using ui::SCREEN_COUNT;
 
 } // namespace airtak

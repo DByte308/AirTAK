@@ -44,6 +44,17 @@ constexpr PhyProfileDefault PHY_PROFILES[5] = {
     { "User Defined",    0,      0, 0 },
 };
 
+// Per-PHY-profile SNR maxima used by the relay delay formula (§8.7).
+// SNR_max varies with spreading factor — higher SF tolerates more noise.
+// These are conservative estimates for SX1262 at 250 kHz BW.
+constexpr float PHY_SNR_MAX[5] = {
+    10.0f,   // [0] SF11 — Long/Mesh
+     6.0f,   // [1] SF7  — Short/Speed
+    12.0f,   // [2] SF12 — Long/Reliable
+     9.0f,   // [3] SF10 — Medium/Slow
+    10.0f,   // [4] User Defined — fall back to Long/Mesh value
+};
+
 // ── ChannelConfig — 8 slots (§8.5) ───────────────────────────────────────────
 // PSK must be set by user at first-time setup. Empty = no encryption (insecure).
 constexpr uint8_t CHANNEL_COUNT = 8;

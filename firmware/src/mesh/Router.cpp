@@ -12,8 +12,6 @@
 #include "config/ConfigManager.h"
 #include "hal/Radio.h"
 #include "config.h"
-#include "airtak/ble.pb.h"
-#include <pb_encode.h>
 #include <cstring>
 #include <cstdio>
 #include <Arduino.h>
@@ -335,34 +333,12 @@ static bool isAppDuplicate(uint32_t src_id, uint32_t request_id, uint32_t now_ms
     return false;
 }
 
-static void queueAdminError(const char* error) {
-    if (!::g_ble_tx_queue || !error) return;
-
-    airtak_AdminResponse response = airtak_AdminResponse_init_zero;
-    response.command = airtak_AdminCommand_RADIO_RESTART;
-    response.success = false;
-    strncpy(response.error, error, sizeof(response.error) - 1);
-
-    PooledPacket* pkt = PacketPool::alloc();
-    if (!pkt) return;
-    pkt->data[0] = ble::BLE_QUEUE_ADMIN;
-    pb_ostream_t stream = pb_ostream_from_buffer(pkt->data + 1, PACKET_POOL_BUF_SIZE - 1);
-    if (!pb_encode(&stream, airtak_AdminResponse_fields, &response)) {
-        PacketPool::free(pkt);
-        return;
-    }
-    pkt->length = static_cast<uint16_t>(1 + stream.bytes_written);
-    if (xQueueSendToBack(::g_ble_tx_queue, &pkt, 0) != pdTRUE) {
-        PacketPool::free(pkt);
-    }
-}
-
 static void queueDeliveryFailure(uint32_t portnum, uint32_t msg_id) {
     char error[96];
     snprintf(error, sizeof(error), "delivery_failed port=%lu request_id=%lu",
              static_cast<unsigned long>(portnum),
              static_cast<unsigned long>(msg_id));
-    queueAdminError(error);
+    ble::queueAdminError(error);
 }
 
 static bool isPacketAddressedToMe(const OtaHeader& hdr, const DataMetadata& data_meta) {
@@ -597,8 +573,11 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
 
         if (!is_audio) {
             // SNR-based relay delay: delay_ms = (SNR_max - SNR_received) × 50 + random(0, 50) (§8.7).
-            // SNR_max ≈ 10 dB for SX1262 at SF11/BW250 in line-of-sight.
-            float snr_max  = 10.0f;
+            // SNR_max varies by PHY profile (higher SF tolerates lower SNR).
+            float snr_max = defaults::PHY_SNR_MAX[0]; // fallback: Long/Mesh
+            if (slot->phy_profile_index < 5) {
+                snr_max = defaults::PHY_SNR_MAX[slot->phy_profile_index];
+            }
             uint32_t delay_ms = (uint32_t)(max(0.0f, snr_max - snr) * 50.0f)
                                 + (uint32_t)(random(0, 50));
 
@@ -612,18 +591,30 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             // Re-encrypt with the original (still-encrypted) payload for relay.
             memcpy(relay_buf + OTA_HEADER_BYTES, payload, payload_len);
 
-            // Add to pending relay queue.
-            for (size_t i = 0; i < 16; i++) {
-                if (!s_relay_queue[i].in_use) {
-                    uint8_t relay_len = OTA_HEADER_BYTES + payload_len;
-                    memcpy(s_relay_queue[i].data, relay_buf, relay_len);
-                    s_relay_queue[i].length       = relay_len;
-                    s_relay_queue[i].send_after_ms = now_ms + delay_ms;
-                    s_relay_queue[i].rx_snr        = snr;
-                    s_relay_queue[i].phy_profile_index = slot->phy_profile_index;
-                    s_relay_queue[i].in_use        = true;
-                    break;
+            // Add to pending relay queue. If full, evict the entry with the earliest
+            // send_after_ms (oldest queued relay) so the most recent packet — likely
+            // more relevant — stays queued.
+            {
+                size_t target = 16;
+                for (size_t j = 0; j < 16; j++) {
+                    if (!s_relay_queue[j].in_use) { target = j; break; }
                 }
+                if (target == 16) {
+                    uint32_t earliest = UINT32_MAX;
+                    for (size_t j = 0; j < 16; j++) {
+                        if (s_relay_queue[j].send_after_ms < earliest) {
+                            earliest = s_relay_queue[j].send_after_ms;
+                            target = j;
+                        }
+                    }
+                }
+                uint8_t relay_len = OTA_HEADER_BYTES + payload_len;
+                memcpy(s_relay_queue[target].data, relay_buf, relay_len);
+                s_relay_queue[target].length       = relay_len;
+                s_relay_queue[target].send_after_ms = now_ms + delay_ms;
+                s_relay_queue[target].rx_snr        = snr;
+                s_relay_queue[target].phy_profile_index = slot->phy_profile_index;
+                s_relay_queue[target].in_use        = true;
             }
         }
     }
