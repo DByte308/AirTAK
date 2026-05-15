@@ -1,0 +1,8 @@
+airtak.PlayerStatePacket.callsign max_size:17
+airtak.GameStatePacket.teams max_count:8
+airtak.GameStatePacket.scores max_count:8
+airtak.TeamDefinition.name max_size:17
+airtak.ZonePacket.name max_size:17
+airtak.ZonePacket.polygon max_count:32
+airtak.AudioPacket.audio_data max_size:200
+airtak.AudioPacket.fec_prev_audio_data max_size:200

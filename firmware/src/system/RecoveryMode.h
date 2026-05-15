@@ -1,9 +1,9 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/system/RecoveryMode.h — Boot-time safe mode and recovery
 
 #pragma once
 
-namespace mash {
+namespace airtak {
 
 class RecoveryMode {
 public:
@@ -11,4 +11,4 @@ public:
     [[noreturn]] static void run();
 };
 
-} // namespace mash
+} // namespace airtak

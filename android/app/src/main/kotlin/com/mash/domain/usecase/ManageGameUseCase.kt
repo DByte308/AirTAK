@@ -1,9 +1,9 @@
-// MASH Android — domain/usecase/ManageGameUseCase.kt
+// AirTAK Android — domain/usecase/ManageGameUseCase.kt
 // Planning: §12, §11.8 | Roadmap: 5.1–5.6
 
-package com.mash.domain.usecase
+package com.airtak.domain.usecase
 
-import com.mash.data.ble.BleRepository
+import com.airtak.data.ble.BleRepository
 import javax.inject.Inject
 
 class ManageGameUseCase @Inject constructor(

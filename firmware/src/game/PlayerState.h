@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/game/PlayerState.h — Own player state machine
 // Planning: §12.1, §12.6 | Roadmap: 5.3, 5.4
 //
@@ -7,7 +7,7 @@
 //   HIT may be cancelled by SHORT_PRESS within 3 s (accidental press protection)
 //   ELIMINATED: final state, no respawn (game mode dependent)
 //
-// Broadcasts MASH_PLAYER (PlayerStatePacket) with is_state_transition=true on every
+// Broadcasts AIRTAK_PLAYER (PlayerStatePacket) with is_state_transition=true on every
 // state change (§12.6). Uses ACKNOWLEDGED delivery (§8.9).
 // Uses 5-minute position heartbeat while in HIT/RESPAWNING/ELIMINATED (§8.7).
 
@@ -17,7 +17,7 @@
 #include <FreeRTOS.h>
 #include <queue.h>
 
-namespace mash {
+namespace airtak {
 
 enum class PlayerStatus : uint8_t {
     ACTIVE       = 0,
@@ -54,4 +54,4 @@ public:
     static bool isCancellable();
 };
 
-} // namespace mash
+} // namespace airtak

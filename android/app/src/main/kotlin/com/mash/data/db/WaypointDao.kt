@@ -1,10 +1,10 @@
-// MASH Android — data/db/WaypointDao.kt
+// AirTAK Android — data/db/WaypointDao.kt
 // Planning: §11.4 | Roadmap: 3.5
 //
 // Local waypoints created by the user on the map (long-press).
 // NEVER broadcast over the mesh — local-only persistent storage.
 
-package com.mash.data.db
+package com.airtak.data.db
 
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow

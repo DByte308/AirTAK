@@ -1,8 +1,8 @@
-// MASH — Mesh Airsoft Situational Hub
-// proto/mash/config.proto — MASH device configuration schema
+// AirTAK — Airsoft Team Awareness Kit
+// proto/airtak/config.proto — AirTAK device configuration schema
 // Planning: §14.2, §9.4.1 | Roadmap: T.1
 //
-// Generated outputs: firmware/src/proto/ (nanopb), android/.../com/mash/proto/ (Kotlin)
+// Generated outputs: firmware/src/proto/ (nanopb), android/.../com/airtak/proto/ (Kotlin)
 // Regenerate with: tools/proto_gen.ps1
 //
 // Config groups apply independently and without MCU reboot (§9.4).
@@ -10,7 +10,7 @@
 // radio-restart procedure (≤ 300 ms, BLE connection preserved) — see §9.4.2.
 
 syntax = "proto3";
-package mash;
+package airtak;
 
 // ── Config group enumeration ───────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ enum LoraRegion {
 
 // PHY profile: a named set of LoRa modulation parameters (§8.1).
 // All nodes on a channel must share the same SF, BW, and CR to communicate.
-// MASH exposes these raw values instead of Meshtastic's opaque preset names.
+// AirTAK exposes these raw values instead of Meshtastic's opaque preset names.
 message PhyProfile {
   string name             = 1;   // user-visible name, max 16 bytes
   uint32 spreading_factor = 2;   // 7–12
@@ -93,8 +93,8 @@ message ChannelSlot {
   uint32      phy_profile_index  = 8;   // index into LoraConfig.profiles; default 0
 
   // Factory defaults:
-  //   Slot 0: PRIMARY   "MASH"  profile=0  Meshtastic-interop + MASH game traffic
-  //   Slot 1: SECONDARY "Game"  profile=0  MASH game-only traffic (separate PSK)
+  //   Slot 0: PRIMARY   "AirTAK"  profile=0  Meshtastic-interop + AirTAK game traffic
+  //   Slot 1: SECONDARY "Game"  profile=0  AirTAK game-only traffic (separate PSK)
   //   Slot 2: DISABLED  "Audio" profile=1  Pre-configured for Phase 7 PTT audio
   //   Slots 3–7: DISABLED
 }

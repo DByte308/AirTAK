@@ -1,9 +1,9 @@
-// MASH Android — MashNavGraph.kt
+// AirTAK Android — AirTAKNavGraph.kt
 // Planning: §11 | Roadmap: Phase 3
 //
 // Bottom-navigation host: Map, Messages, Players, Settings.
 
-package com.mash
+package com.airtak
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -18,10 +18,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
-import com.mash.ui.map.MapScreen
-import com.mash.ui.messages.MessagesScreen
-import com.mash.ui.players.PlayersScreen
-import com.mash.ui.settings.SettingsScreen
+import com.airtak.ui.map.MapScreen
+import com.airtak.ui.messages.MessagesScreen
+import com.airtak.ui.players.PlayersScreen
+import com.airtak.ui.settings.SettingsScreen
 
 private enum class Screen(
     val route: String,
@@ -35,7 +35,7 @@ private enum class Screen(
 }
 
 @Composable
-fun MashNavGraph() {
+fun AirTAKNavGraph() {
     val navController = rememberNavController()
 
     Scaffold(

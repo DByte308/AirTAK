@@ -1,12 +1,12 @@
-// MASH Android — ui/players/PlayersViewModel.kt
+// AirTAK Android — ui/players/PlayersViewModel.kt
 // Planning: §11.7 | Roadmap: 3.3
 
-package com.mash.ui.players
+package com.airtak.ui.players
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mash.data.db.NodeDao
-import com.mash.data.db.NodeEntity
+import com.airtak.data.db.NodeDao
+import com.airtak.data.db.NodeEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject

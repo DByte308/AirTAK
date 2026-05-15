@@ -1,11 +1,11 @@
-# MASH — Mesh Airsoft Situational Hub
+# AirTAK — Airsoft Team Awareness Kit
 ## Master Planning Document v1.5
 ### Status: IMMUTABLE AFTER ACCEPTANCE — 2026-05-13
-### Amendments: v1.1 — 2026-05-13 — Multi-PHY per-channel-slot architecture; transparent PHY parameter model replacing opaque modem presets; all channel slots interchangeable between Meshtastic and MASH use; GPS position multi-hop relay fix; MASH_POSITION_REQUEST; per-packet-type hop limits; heard-by relay suppression; application-layer reliability (MeshCore-derived); PTT audio Phase 7; RECORD_AUDIO conditional permission
-### Amendments: v1.2 — 2026-05-13 — 100-node airtime budget analysis; smart beaconing replacing fixed 30 s interval (movement-triggered + 90 s heartbeat); POSITION_APP and MASH_PLAYER hop_limit reduced 5→3; EU 868 MHz duty-cycle compliance guidance; audio packet size redesigned 73-frame→8-frame; FEC piggyback (fec_prev_audio_data); jitter buffer and PLC; AudioConfig.frame_count; infrastructure relay node guidance (§13.4); 3 new risks; Duty Cycle, FEC, PLC, Smart Beaconing, TDM glossary entries
-### Amendments: v1.3 — 2026-05-13 — Three ACK reliability bugs fixed: (1) MASH_ACK hop_limit now mirrors original packet's hop_start so ACK can return across any mesh diameter; (2) ACK timeout scaled to 2×hop_start×400 ms (was flat 200 ms, too short for multi-hop); (3) retries use new packet_id + Data.request_id correlation to bypass relay duplicate-suppression cache; honest MeshCore comparison added to §8.9; MashAck proto updated; Phase 2.11 and integration tests updated
-### Amendments: v1.4 — 2026-05-13 — Full protocol audit, 10 bugs fixed: (A) §8.2 Flags byte [2:0] corrected from reserved to hop_start — required for v1.3 ACK fix to be implementable; (B) §8.7 position relay exception removed — was dead code that could never trigger, gave false assurance; (C) §12.7/§8.1 audio ToA corrected from ~13 ms to ~84 ms with FEC (correct LoRa calculation for 92-byte packet); EU duty-cycle compliance guidance corrected — sub-band g (1%) is not viable at 1300 bps, sub-band g1 (10%) requires frame_count ≥ 42; (D) §8.7 MASH_POSITION_REQUEST hop_limit raised 3→5 for 10 km field coverage; (E) §12.7/§14.3 FEC cross-session contamination fixed — fec_prev_audio_data must be empty on first packet of each PTT session; (F) §8.9/§14.3 MASH_PLAYER ACK vs BEST_EFFORT ambiguity resolved — is_state_transition field added to PlayerStatePacket; (G) §14.3/§8.9 MashAck.ack_packet_id renamed to ack_request_id to prevent implementer confusion; (H) §14.3/§12.7 AudioPacket session_id field added — prevents lost end_of_transmission causing FEC chaos on session boundary; (I) §12.7 firmware-level audio PHY enforcement requirement added; (J) §8.9 retry backoff formula corrected 1000→200 ms base to match §20 risks table
-### Amendments: v1.5 — 2026-05-14 — Five categories corrected: (1) All duty-cycle §8.1/§8.7/§12.7/§20/glossary/README reframed — EU duty cycle is a per-device regulatory obligation, not a mesh-governance concern; 100-node airtime figures are worst-case estimates, not guarantees one operator can control; smart beaconing helps each device comply but does not enforce mesh-wide limits. (2) Per-packet-type hop limit rationales updated — all players in the command hierarchy need information from all other players; text removed implying only certain role categories need certain messages. (3) Hop limits unified to 7 for all packet types except MASH_AUDIO (hop_limit=1, physical latency constraint); hop_limit does not create extra relay traffic — relay count is bounded by mesh topology, not the hop_limit field; airtime control is via smart beaconing TX interval, not restricted hop budgets. (4) §8.1 expanded with practical SF/BW/CR definitions explaining what each parameter means, how they interact, and why mismatches cause silent failures. (5) SHORT_SLOW-equivalent PHY profile added as Profile 3 (Medium/Slow, SF10/BW250/CR4/5); profile table expanded from 4 to 5 entries; all dependent sections updated (§8.1, §9.4.1, §11.9, §14.2)
+### Amendments: v1.1 — 2026-05-13 — Multi-PHY per-channel-slot architecture; transparent PHY parameter model replacing opaque modem presets; all channel slots interchangeable between Meshtastic and AirTAK use; GPS position multi-hop relay fix; AIRTAK_POSITION_REQUEST; per-packet-type hop limits; heard-by relay suppression; application-layer reliability (MeshCore-derived); PTT audio Phase 7; RECORD_AUDIO conditional permission
+### Amendments: v1.2 — 2026-05-13 — 100-node airtime budget analysis; smart beaconing replacing fixed 30 s interval (movement-triggered + 90 s heartbeat); POSITION_APP and AIRTAK_PLAYER hop_limit reduced 5→3; EU 868 MHz duty-cycle compliance guidance; audio packet size redesigned 73-frame→8-frame; FEC piggyback (fec_prev_audio_data); jitter buffer and PLC; AudioConfig.frame_count; infrastructure relay node guidance (§13.4); 3 new risks; Duty Cycle, FEC, PLC, Smart Beaconing, TDM glossary entries
+### Amendments: v1.3 — 2026-05-13 — Three ACK reliability bugs fixed: (1) AIRTAK_ACK hop_limit now mirrors original packet's hop_start so ACK can return across any mesh diameter; (2) ACK timeout scaled to 2×hop_start×400 ms (was flat 200 ms, too short for multi-hop); (3) retries use new packet_id + Data.request_id correlation to bypass relay duplicate-suppression cache; honest MeshCore comparison added to §8.9; AirTAKAck proto updated; Phase 2.11 and integration tests updated
+### Amendments: v1.4 — 2026-05-13 — Full protocol audit, 10 bugs fixed: (A) §8.2 Flags byte [2:0] corrected from reserved to hop_start — required for v1.3 ACK fix to be implementable; (B) §8.7 position relay exception removed — was dead code that could never trigger, gave false assurance; (C) §12.7/§8.1 audio ToA corrected from ~13 ms to ~84 ms with FEC (correct LoRa calculation for 92-byte packet); EU duty-cycle compliance guidance corrected — sub-band g (1%) is not viable at 1300 bps, sub-band g1 (10%) requires frame_count ≥ 42; (D) §8.7 AIRTAK_POSITION_REQUEST hop_limit raised 3→5 for 10 km field coverage; (E) §12.7/§14.3 FEC cross-session contamination fixed — fec_prev_audio_data must be empty on first packet of each PTT session; (F) §8.9/§14.3 AIRTAK_PLAYER ACK vs BEST_EFFORT ambiguity resolved — is_state_transition field added to PlayerStatePacket; (G) §14.3/§8.9 AirTAKAck.ack_packet_id renamed to ack_request_id to prevent implementer confusion; (H) §14.3/§12.7 AudioPacket session_id field added — prevents lost end_of_transmission causing FEC chaos on session boundary; (I) §12.7 firmware-level audio PHY enforcement requirement added; (J) §8.9 retry backoff formula corrected 1000→200 ms base to match §20 risks table
+### Amendments: v1.5 — 2026-05-14 — Five categories corrected: (1) All duty-cycle §8.1/§8.7/§12.7/§20/glossary/README reframed — EU duty cycle is a per-device regulatory obligation, not a mesh-governance concern; 100-node airtime figures are worst-case estimates, not guarantees one operator can control; smart beaconing helps each device comply but does not enforce mesh-wide limits. (2) Per-packet-type hop limit rationales updated — all players in the command hierarchy need information from all other players; text removed implying only certain role categories need certain messages. (3) Hop limits unified to 7 for all packet types except AIRTAK_AUDIO (hop_limit=1, physical latency constraint); hop_limit does not create extra relay traffic — relay count is bounded by mesh topology, not the hop_limit field; airtime control is via smart beaconing TX interval, not restricted hop budgets. (4) §8.1 expanded with practical SF/BW/CR definitions explaining what each parameter means, how they interact, and why mismatches cause silent failures. (5) SHORT_SLOW-equivalent PHY profile added as Profile 3 (Medium/Slow, SF10/BW250/CR4/5); profile table expanded from 4 to 5 entries; all dependent sections updated (§8.1, §9.4.1, §11.9, §14.2)
 
 ---
 
@@ -39,13 +39,13 @@
 
 | Field | Value |
 |-------|-------|
-| **Project Name** | MASH |
-| **Full Name** | Mesh Airsoft Situational Hub |
+| **Project Name** | AirTAK |
+| **Full Name** | Airsoft Team Awareness Kit |
 | **Version** | 1.0 |
 | **Date** | 2026-05-13 |
 | **Status** | Immutable After Acceptance |
 
-MASH is a purpose-built mesh radio and situational awareness system for airsoft. It consists of firmware for the LilyGo T-Echo Plus and a native Android companion app. MASH is interoperable with Meshtastic at the radio layer but replaces Meshtastic's configuration experience entirely and introduces a dedicated game-mode protocol and a situational awareness interface designed natively for airsoft — not retrofitted from military ATAK.
+AirTAK is a purpose-built mesh radio and situational awareness system for airsoft. It consists of firmware for the LilyGo T-Echo Plus and a native Android companion app. AirTAK is interoperable with Meshtastic at the radio layer but replaces Meshtastic's configuration experience entirely and introduces a dedicated game-mode protocol and a situational awareness interface designed natively for airsoft — not retrofitted from military ATAK.
 
 ---
 
@@ -77,25 +77,25 @@ The Android Team Awareness Kit is used as a situational awareness layer on top o
 
 Meshcore improves on some Meshtastic technical limitations but is not protocol-compatible with the Meshtastic device ecosystem. Since a large number of existing devices run Meshtastic, protocol incompatibility is a hard deal-breaker.
 
-### 2.4 MASH's Position
+### 2.4 AirTAK's Position
 
-MASH speaks Meshtastic's protocol on the shared channel, making it a first-class participant in any existing Meshtastic mesh. On its dedicated game channel it runs an extended protocol optimized for airsoft game-mode operation. The Android app is a ground-up replacement for the Meshtastic app + ATAK combination, built with modern Android practices and a minimal permission footprint.
+AirTAK speaks Meshtastic's protocol on the shared channel, making it a first-class participant in any existing Meshtastic mesh. On its dedicated game channel it runs an extended protocol optimized for airsoft game-mode operation. The Android app is a ground-up replacement for the Meshtastic app + ATAK combination, built with modern Android practices and a minimal permission footprint.
 
 ---
 
 ## 3. Project Goals
 
 ### G1 — Meshtastic Radio Interoperability
-MASH devices MUST be able to send and receive standard Meshtastic packets on the primary channel. A MASH device MUST appear as a valid node to a stock Meshtastic device and MUST relay Meshtastic packets correctly.
+AirTAK devices MUST be able to send and receive standard Meshtastic packets on the primary channel. A AirTAK device MUST appear as a valid node to a stock Meshtastic device and MUST relay Meshtastic packets correctly.
 
 ### G2 — Hot-Reload Configuration
 Configuration changes MUST NOT require a device reboot unless they demand physical re-initialization of non-reconfigurable hardware (defined in §9.4). The target for any configuration change is: visible effect within 500 ms, no user-visible device restart.
 
 ### G3 — Working Multi-Channel
-MASH MUST support at minimum 2 simultaneous active channels. Both channels MUST independently receive and decrypt packets in real time. Channel 0 is the Meshtastic-interop channel; channel 1 is the MASH game channel.
+AirTAK MUST support at minimum 2 simultaneous active channels. Both channels MUST independently receive and decrypt packets in real time. Channel 0 is the Meshtastic-interop channel; channel 1 is the AirTAK game channel.
 
 ### G4 — Native Airsoft Feature Set
-The system MUST natively support: player position sharing, team assignment, per-player state (active / hit / eliminated), game zone boundaries, game start/stop signaling, and field-wide text messaging. These features MUST require zero external plugins or companion apps beyond the MASH Android app.
+The system MUST natively support: player position sharing, team assignment, per-player state (active / hit / eliminated), game zone boundaries, game start/stop signaling, and field-wide text messaging. These features MUST require zero external plugins or companion apps beyond the AirTAK Android app.
 
 ### G5 — Minimal Android Permissions
 The Android app MUST function with only the permissions strictly required by the Android API for Bluetooth LE and location access. It MUST NOT request permissions for camera, microphone, contacts, phone state, or external storage unless a specific optional feature is enabled by the user and that feature demonstrably requires it.
@@ -116,8 +116,8 @@ The firmware MUST produce a fully functional build for the LilyGo T-Echo Plus. S
 The following are deliberately out of scope and will not be implemented:
 
 - **iOS support.** Android only.
-- **Meshtastic app compatibility.** MASH does not aim to be usable from the Meshtastic Android or iOS apps beyond basic mesh membership (text messages received by Meshtastic users on the shared channel).
-- **ATAK compatibility.** The MASH Android app does not implement the ATAK plugin API or the Cursor-on-Target (CoT) format.
+- **Meshtastic app compatibility.** AirTAK does not aim to be usable from the Meshtastic Android or iOS apps beyond basic mesh membership (text messages received by Meshtastic users on the shared channel).
+- **ATAK compatibility.** The AirTAK Android app does not implement the ATAK plugin API or the Cursor-on-Target (CoT) format.
 - **Web interface.** No browser-based admin or configuration UI.
 - **Cloud sync.** No server-side components, no user accounts, no telemetry.
 - **Multi-region automatic switching.** LoRa region is set at first-time setup and requires an explicit user action to change.
@@ -192,7 +192,7 @@ The following are deliberately out of scope and will not be implemented:
                               │ LoRa RF
 ┌─────────────────────────────▼────────────────────────────────┐
 │                       Mesh Network                           │
-│          MASH nodes   +   Meshtastic nodes (interop)        │
+│          AirTAK nodes   +   Meshtastic nodes (interop)        │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -251,7 +251,7 @@ The following are deliberately out of scope and will not be implemented:
 
 ### 8.1 PHY Layer
 
-MASH uses LoRa modulation via the SX1262. The parameters that govern range, throughput, and air time are: Spreading Factor (SF), Bandwidth (BW), and Coding Rate (CR). **Two devices can only communicate if they share the same SF, BW, CR, and frequency.** This is a LoRa physics constraint, not a MASH design choice. Meshtastic's opaque preset names (LONG_FAST, SHORT_SLOW, etc.) abstract these parameters in a way that makes this constraint invisible — a leading cause of silent configuration failures. MASH exposes the parameters explicitly.
+AirTAK uses LoRa modulation via the SX1262. The parameters that govern range, throughput, and air time are: Spreading Factor (SF), Bandwidth (BW), and Coding Rate (CR). **Two devices can only communicate if they share the same SF, BW, CR, and frequency.** This is a LoRa physics constraint, not a AirTAK design choice. Meshtastic's opaque preset names (LONG_FAST, SHORT_SLOW, etc.) abstract these parameters in a way that makes this constraint invisible — a leading cause of silent configuration failures. AirTAK exposes the parameters explicitly.
 
 **Global parameters** — apply to all channel slots; set once per device:
 
@@ -267,7 +267,7 @@ MASH uses LoRa modulation via the SX1262. The parameters that govern range, thro
 
 **PHY profiles** — each channel slot references one profile by index; see §8.5 for the per-slot binding mechanism.
 
-MASH defines up to 5 named PHY profiles per device. Profiles 0, 1, 3 are pre-defined defaults; profiles 2 and 4 are user-configurable. The Meshtastic equivalent column is provided for cross-reference only; MASH's UI displays the raw SF/BW/CR parameters, not Meshtastic codenames.
+AirTAK defines up to 5 named PHY profiles per device. Profiles 0, 1, 3 are pre-defined defaults; profiles 2 and 4 are user-configurable. The Meshtastic equivalent column is provided for cross-reference only; AirTAK's UI displays the raw SF/BW/CR parameters, not Meshtastic codenames.
 
 | Profile Index | Name | SF | BW | CR | Max Payload Air Time | Effective Data Rate | Range (open, +22 dBm) | Meshtastic Ref |
 |--------------|------|----|----|----|----------------------|---------------------|-----------------------|----------------|
@@ -277,7 +277,7 @@ MASH defines up to 5 named PHY profiles per device. Profiles 0, 1, 3 are pre-def
 | 3 | Medium / Slow | SF10 | 250 kHz | 4/5 | ~340 ms | ~1.9 kbps | 2–5 km LOS | SHORT_SLOW |
 | 4 | User Defined | configurable | configurable | configurable | — | — | — | — |
 
-All five profiles use the identical sync word, preamble, header mode, CRC, and IQ settings shown in the global parameters table. This ensures that a MASH node with profile 0 on slot A and profile 1 on slot B is interoperable with Meshtastic LONG_FAST and SHORT_FAST nodes respectively on those respective slots.
+All five profiles use the identical sync word, preamble, header mode, CRC, and IQ settings shown in the global parameters table. This ensures that a AirTAK node with profile 0 on slot A and profile 1 on slot B is interoperable with Meshtastic LONG_FAST and SHORT_FAST nodes respectively on those respective slots.
 
 **What SF, BW, and CR mean in practice:**
 
@@ -304,7 +304,7 @@ All nodes participating on a given channel must use the same PHY profile. The An
 
 **Airtime budget — 100-node deployment:**
 
-The table below shows typical time-on-air (ToA) for a 50-byte mesh packet and the resulting shared-channel utilisation in a theoretical 100-player deployment where every node transmits at the given interval. EU 868 MHz sub-band g (1 % duty cycle, ETSI EN 300 220-2) limits **each device individually** to ≤ 1 % transmission time over a rolling 1-hour window — this is a per-device legal obligation of each operator, not a limit MASH can enforce across the mesh. The 100-node column is a worst-case capacity estimate; actual channel load depends on how many independent operators are present and how they have configured their devices.
+The table below shows typical time-on-air (ToA) for a 50-byte mesh packet and the resulting shared-channel utilisation in a theoretical 100-player deployment where every node transmits at the given interval. EU 868 MHz sub-band g (1 % duty cycle, ETSI EN 300 220-2) limits **each device individually** to ≤ 1 % transmission time over a rolling 1-hour window — this is a per-device legal obligation of each operator, not a limit AirTAK can enforce across the mesh. The 100-node column is a worst-case capacity estimate; actual channel load depends on how many independent operators are present and how they have configured their devices.
 
 | Profile | ToA / 50-byte pkt | EU DC limit per node | 100-node load @ 30 s interval | 100-node load @ 90 s interval |
 |---------|-------------------|-----------------------|-------------------------------|-------------------------------|
@@ -314,13 +314,13 @@ The table below shows typical time-on-air (ToA) for a 50-byte mesh packet and th
 | 3 — Medium/Slow (SF10/BW250) | ~150 ms | ≈ 4 pkts/min | ~50 % ⚠ | ~17 % |
 
 Key constraints:
-- **EU 1 % duty cycle (sub-band g)**: Profile 0 at 310 ms ToA means each device may legally transmit ≈ 1 packet per 31 s on sub-band g. MASH's smart beaconing defaults (§8.7) are designed so that a device with default settings operates within this limit; the operator is ultimately responsible for ensuring their device's configuration complies with their region's regulations.
+- **EU 1 % duty cycle (sub-band g)**: Profile 0 at 310 ms ToA means each device may legally transmit ≈ 1 packet per 31 s on sub-band g. AirTAK's smart beaconing defaults (§8.7) are designed so that a device with default settings operates within this limit; the operator is ultimately responsible for ensuring their device's configuration complies with their region's regulations.
 - **Hop amplification and the hop_limit safety margin**: Each source packet triggers one relay per node within radio range, bounded by the mesh topology — not by the hop_limit field. A hop_limit of 7 on a 5-hop diameter mesh does not create extra relay transmissions because no nodes exist at hop distances 6 or 7. Setting hop_limit to the maximum available (7) ensures delivery to the furthest node and costs nothing in airtime beyond what the mesh topology already dictates. The table's 100-node load columns account only for source transmissions; relay amplification adds roughly `(diameter − 1)` copies per packet. At a 4-hop mesh diameter this is a ~3× multiplier — the reason smart beaconing's 90 s heartbeat (§8.7) is the primary airtime control, not hop_limit restrictions.
-- **MASH game events**: Routing game-critical packets (MASH_GAME, MASH_ZONE, etc.) on Profile 1 or Profile 3 consumes less airtime per packet than Profile 0 and is recommended when sub-second game-state propagation is required.
+- **AirTAK game events**: Routing game-critical packets (AIRTAK_GAME, AIRTAK_ZONE, etc.) on Profile 1 or Profile 3 consumes less airtime per packet than Profile 0 and is recommended when sub-second game-state propagation is required.
 
 ### 8.2 Over-the-Air Packet Format
 
-MASH uses Meshtastic's packet wire format without modification. The frame transmitted over LoRa is:
+AirTAK uses Meshtastic's packet wire format without modification. The frame transmitted over LoRa is:
 
 ```
 Offset  Length  Field
@@ -332,7 +332,7 @@ Offset  Length  Field
 11      1       Next-hop node ID (low byte; 0 = not yet relayed)
 12      N       Encrypted payload (protobuf Data message, AES-128-CTR)
 
-> **`hop_start`** (Flags bits [2:0]): the original `hop_limit` value set by the sender, preserved unchanged across all relay hops. Relay nodes decrement `hop_limit` but leave `hop_start` intact. The ACK receiver uses `hop_start` to set the return `hop_limit` on MASH_ACK so the acknowledgment can traverse the full mesh diameter back to the sender (see §8.9). This matches the Meshtastic wire format at the pinned commit; `[2:0]` was incorrectly documented as `reserved` in earlier versions of this document. If a packet is received from a device that does not encode `hop_start` (zero value), the ACK receiver MUST default to `hop_limit = 7` on the reply.
+> **`hop_start`** (Flags bits [2:0]): the original `hop_limit` value set by the sender, preserved unchanged across all relay hops. Relay nodes decrement `hop_limit` but leave `hop_start` intact. The ACK receiver uses `hop_start` to set the return `hop_limit` on AIRTAK_ACK so the acknowledgment can traverse the full mesh diameter back to the sender (see §8.9). This matches the Meshtastic wire format at the pinned commit; `[2:0]` was incorrectly documented as `reserved` in earlier versions of this document. If a packet is received from a device that does not encode `hop_start` (zero value), the ACK receiver MUST default to `hop_limit = 7` on the reply.
 ```
 
 This format is byte-for-byte identical to the Meshtastic wire format, enabling native mesh participation and relay by stock Meshtastic devices.
@@ -369,22 +369,22 @@ Standard Meshtastic portnums are fully supported on channel 0:
 | 71 | TRACEROUTE_APP | Hop-path tracing |
 | 73 | NEIGHBORINFO_APP | Neighbor SNR table |
 
-MASH-specific portnums occupy the private range 256–511. These packets are sent on any channel slot whose `downlink_enabled = true` and that is configured with the MASH game PSK. They are silently relayed but not decryptable by stock Meshtastic nodes on other channel slots.
+AirTAK-specific portnums occupy the private range 256–511. These packets are sent on any channel slot whose `downlink_enabled = true` and that is configured with the AirTAK game PSK. They are silently relayed but not decryptable by stock Meshtastic nodes on other channel slots.
 
 | Portnum | Name | Description |
 |---------|------|-------------|
-| 256 | MASH_PLAYER | Player state update (callsign, team, status) |
-| 257 | MASH_GAME | Game phase broadcast (start, pause, stop, scores) |
-| 258 | MASH_ZONE | Zone polygon definition or update |
-| 259 | MASH_OBJECTIVE | Objective capture state |
-| 260 | MASH_ADMIN | Admin command (game control, player override) |
-| 261 | MASH_ACK | Application-layer acknowledgment for acknowledged-delivery packets |
-| 262 | MASH_POSITION_REQUEST | Request immediate position re-broadcast from a specific node |
-| 263 | MASH_AUDIO | Codec2-encoded PTT audio frame (Phase 7; Short/Speed PHY only) |
+| 256 | AIRTAK_PLAYER | Player state update (callsign, team, status) |
+| 257 | AIRTAK_GAME | Game phase broadcast (start, pause, stop, scores) |
+| 258 | AIRTAK_ZONE | Zone polygon definition or update |
+| 259 | AIRTAK_OBJECTIVE | Objective capture state |
+| 260 | AIRTAK_ADMIN | Admin command (game control, player override) |
+| 261 | AIRTAK_ACK | Application-layer acknowledgment for acknowledged-delivery packets |
+| 262 | AIRTAK_POSITION_REQUEST | Request immediate position re-broadcast from a specific node |
+| 263 | AIRTAK_AUDIO | Codec2-encoded PTT audio frame (Phase 7; Short/Speed PHY only) |
 
 ### 8.5 Channel Architecture
 
-MASH manages 8 channel slots numbered 0–7. Each slot is independently configured and stored. Any slot can carry Meshtastic-protocol traffic, MASH game traffic, or both — the distinction is determined purely by the PSK and portnum, not by the slot number. There is no hard assignment of “slot 0 = Meshtastic” and “slot 1 = game”; users may configure any layout that matches their network.
+AirTAK manages 8 channel slots numbered 0–7. Each slot is independently configured and stored. Any slot can carry Meshtastic-protocol traffic, AirTAK game traffic, or both — the distinction is determined purely by the PSK and portnum, not by the slot number. There is no hard assignment of “slot 0 = Meshtastic” and “slot 1 = game”; users may configure any layout that matches their network.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -398,8 +398,8 @@ MASH manages 8 channel slots numbered 0–7. Each slot is independently configur
 | `phy_profile_index` | uint8 | Index into the device's PHY profile table (see §8.1); default 0 |
 
 **Default slot assignments (factory defaults):**
-- Slot 0: role=PRIMARY, name="MASH", phy_profile_index=0 (Long/Mesh). PSK configured to match local Meshtastic network or a shared MASH group key. Carries Meshtastic-compatible AND MASH game traffic.
-- Slot 1: role=SECONDARY, name="Game", phy_profile_index=0 (Long/Mesh). Separate PSK for MASH game-only traffic when channel isolation from Meshtastic is desired.
+- Slot 0: role=PRIMARY, name="AirTAK", phy_profile_index=0 (Long/Mesh). PSK configured to match local Meshtastic network or a shared AirTAK group key. Carries Meshtastic-compatible AND AirTAK game traffic.
+- Slot 1: role=SECONDARY, name="Game", phy_profile_index=0 (Long/Mesh). Separate PSK for AirTAK game-only traffic when channel isolation from Meshtastic is desired.
 - Slot 2: role=DISABLED, name="Audio", phy_profile_index=1 (Short/Speed). Pre-configured but disabled; activated in Phase 7 for PTT audio.
 - Slots 3–7: role=DISABLED.
 
@@ -420,14 +420,14 @@ The channel hash is an 8-bit value placed in every packet header to allow fast p
 
 ### 8.7 Routing
 
-MASH uses a modified flooding router compatible with Meshtastic's `ManagedFlood` algorithm:
+AirTAK uses a modified flooding router compatible with Meshtastic's `ManagedFlood` algorithm:
 
 - Packets are re-broadcast up to `hop_limit` times (maximum 7; default varies by packet type — see table below).
 - `hop_limit` is decremented per hop; packets at hop_limit=0 are received but not relayed.
 - Duplicate suppression: a rolling cache of (source_id, packet_id) pairs; any duplicate is discarded without relay.
 - **SNR-based relay delay**: Before relaying, a node waits a random backoff time inversely proportional to received SNR. Nodes with better SNR relay sooner and suppress redundant relays from worse-SNR neighbors. Formula: `delay_ms = (SNR_max − SNR_received) × 50 + random(0, 50)`.
 - **Heard-by suppression**: If a node overhears a relay of a packet it has queued to relay (same source_id + packet_id from a different relayer), and the overheard relay's SNR was ≥ its own received SNR, the queued relay is cancelled. This fires during the relay backoff window, preventing the exponential rebroadcast problem without a central coordinator.
-- **Position packet freshness**: Every new position broadcast generates a new `MeshPacket.id`. Duplicate suppression operates on `(source_id, packet_id)`; because each broadcast has a unique packet ID, no special timestamp exception is needed. Position freshness is maintained by the smart beaconing policy (§8.7) and by the MASH_POSITION_REQUEST on-demand refresh (portnum 262). There is no timestamp-based relay exception — such a mechanism would be dead code because the same packet ID cannot carry a different timestamp.
+- **Position packet freshness**: Every new position broadcast generates a new `MeshPacket.id`. Duplicate suppression operates on `(source_id, packet_id)`; because each broadcast has a unique packet ID, no special timestamp exception is needed. Position freshness is maintained by the smart beaconing policy (§8.7) and by the AIRTAK_POSITION_REQUEST on-demand refresh (portnum 262). There is no timestamp-based relay exception — such a mechanism would be dead code because the same packet ID cannot carry a different timestamp.
 
 **Per-packet-type default hop limits** (configurable via firmware `Defaults.h`):
 
@@ -437,25 +437,25 @@ MASH uses a modified flooding router compatible with Meshtastic's `ManagedFlood`
 | POSITION_APP | 7 | Every player's position must be visible to every other player; hop_limit must match the full mesh diameter so no position goes stale for nodes at the far edge |
 | NODEINFO_APP | 7 | Node identity must propagate across the full mesh so every device knows about every other device |
 | TELEMETRY_APP | 7 | Battery and environment telemetry reaches all nodes; situational awareness includes which devices are running low on power |
-| MASH_PLAYER | 7 | Player state (active/hit/respawning/eliminated) must propagate to every node in the command hierarchy; a squad leader on the opposite end of the map must see player state changes from all fireteams |
-| MASH_GAME | 7 | Game phase broadcast must reach every player; maximum hop budget |
-| MASH_ZONE | 7 | Zone definitions must reach every player; maximum hop budget |
-| MASH_OBJECTIVE | 7 | Objective capture state must reach every player; maximum hop budget |
-| MASH_ADMIN | 7 | Admin commands must reach every player; maximum hop budget |
-| MASH_ACK | mirrors original | ACK must be able to return to the sender along any path the original took; hop_limit is set to the original packet's hop_start (see §8.9) |
-| MASH_POSITION_REQUEST | 7 | Unicast position request must reach the target node regardless of distance; maximum hop budget |
-| MASH_AUDIO | 1 | Audio must never be relayed; relay latency makes audio unintelligible — the sole packet type with a restricted hop budget due to a hard physical constraint |
+| AIRTAK_PLAYER | 7 | Player state (active/hit/respawning/eliminated) must propagate to every node in the command hierarchy; a squad leader on the opposite end of the map must see player state changes from all fireteams |
+| AIRTAK_GAME | 7 | Game phase broadcast must reach every player; maximum hop budget |
+| AIRTAK_ZONE | 7 | Zone definitions must reach every player; maximum hop budget |
+| AIRTAK_OBJECTIVE | 7 | Objective capture state must reach every player; maximum hop budget |
+| AIRTAK_ADMIN | 7 | Admin commands must reach every player; maximum hop budget |
+| AIRTAK_ACK | mirrors original | ACK must be able to return to the sender along any path the original took; hop_limit is set to the original packet's hop_start (see §8.9) |
+| AIRTAK_POSITION_REQUEST | 7 | Unicast position request must reach the target node regardless of distance; maximum hop budget |
+| AIRTAK_AUDIO | 1 | Audio must never be relayed; relay latency makes audio unintelligible — the sole packet type with a restricted hop budget due to a hard physical constraint |
 
 The hop_limit for POSITION_APP can be overridden by the user via `PositionConfig.position_hop_limit`. Other per-type defaults are hardcoded in the firmware router's packet-type dispatch table.
 
 **Smart Beaconing**
 
-Transmitting position at a fixed short interval is incompatible with EU duty-cycle limits and would contribute to channel load in a typical 100-player deployment (see §8.1 airtime budget). MASH uses a movement-triggered broadcast policy:
+Transmitting position at a fixed short interval is incompatible with EU duty-cycle limits and would contribute to channel load in a typical 100-player deployment (see §8.1 airtime budget). AirTAK uses a movement-triggered broadcast policy:
 
 - Position is sent when **GPS displacement ≥ 10 m** since the last TX, provided at least **15 s** have elapsed since the last TX (prevents bursts during rapid GPS updates).
 - Position is sent when **90 s have elapsed** since the last TX regardless of movement (heartbeat).
 - Players marked **dead or respawning** extend the heartbeat to **5 min** (no tactically relevant movement occurs in this state).
-- A MASH_POSITION_REQUEST unicast (portnum 262) causes the target to send a position packet within **2 s**, bypassing the beaconing timer. This lets the Android map screen refresh a stale pin on demand.
+- A AIRTAK_POSITION_REQUEST unicast (portnum 262) causes the target to send a position packet within **2 s**, bypassing the beaconing timer. This lets the Android map screen refresh a stale pin on demand.
 
 Under typical active-player movement, this yields an average TX rate of ≈ 1 packet per 60 s, helping each device stay within its EU duty-cycle obligations at Profile 0 and keeping typical channel utilisation low in a 100-player deployment.
 
@@ -463,20 +463,20 @@ The `POSITION.broadcast_interval_secs` config field (§9.4.1) sets the heartbeat
 
 ### 8.8 Node ID Assignment
 
-Node IDs are 32-bit values. MASH derives the node ID from the lower 32 bits of the nRF52840's hardware UID register (FICR.DEVICEID[0]), matching Meshtastic's assignment scheme. This guarantees uniqueness within reasonable mesh sizes.
+Node IDs are 32-bit values. AirTAK derives the node ID from the lower 32 bits of the nRF52840's hardware UID register (FICR.DEVICEID[0]), matching Meshtastic's assignment scheme. This guarantees uniqueness within reasonable mesh sizes.
 
 ### 8.9 Application-Layer Reliability
 
-Meshtastic's flood router provides best-effort delivery. MASH adds a lightweight application-layer reliability layer inspired by MeshCore, without breaking wire-format compatibility with Meshtastic nodes.
+Meshtastic's flood router provides best-effort delivery. AirTAK adds a lightweight application-layer reliability layer inspired by MeshCore, without breaking wire-format compatibility with Meshtastic nodes.
 
 **Reliability classes:**
 
 | Class | Behavior | Used For |
 |-------|----------|----------|
-| BEST_EFFORT | Standard flood, no retry | POSITION_APP, TELEMETRY_APP, MASH_AUDIO |
-| ACKNOWLEDGED | Send + wait for MASH_ACK (portnum 261); retry up to 3 times with jittered exponential backoff | TEXT_MESSAGE_APP (unicast), MASH_PLAYER **state transitions** (see note below), MASH_GAME, MASH_ZONE, MASH_OBJECTIVE, MASH_ADMIN |
+| BEST_EFFORT | Standard flood, no retry | POSITION_APP, TELEMETRY_APP, AIRTAK_AUDIO |
+| ACKNOWLEDGED | Send + wait for AIRTAK_ACK (portnum 261); retry up to 3 times with jittered exponential backoff | TEXT_MESSAGE_APP (unicast), AIRTAK_PLAYER **state transitions** (see note below), AIRTAK_GAME, AIRTAK_ZONE, AIRTAK_OBJECTIVE, AIRTAK_ADMIN |
 
-> **MASH_PLAYER ACKNOWLEDGED vs BEST_EFFORT rule**: A MASH_PLAYER packet is sent ACKNOWLEDGED (`Data.want_response = true`, `PlayerStatePacket.is_state_transition = true`) **only when the player's status field changes** (e.g., ACTIVE→HIT, HIT→RESPAWNING, RESPAWNING→ACTIVE, any admin-forced transition). Heartbeat position-update packets where status is **unchanged** are sent BEST_EFFORT (`Data.want_response = false`, `PlayerStatePacket.is_state_transition = false`). This prevents the 8-entry retry queue from being saturated by heartbeats and ensures state transitions receive all three retry slots. MASH_POSITION_REQUEST responses are always BEST_EFFORT.
+> **AIRTAK_PLAYER ACKNOWLEDGED vs BEST_EFFORT rule**: A AIRTAK_PLAYER packet is sent ACKNOWLEDGED (`Data.want_response = true`, `PlayerStatePacket.is_state_transition = true`) **only when the player's status field changes** (e.g., ACTIVE→HIT, HIT→RESPAWNING, RESPAWNING→ACTIVE, any admin-forced transition). Heartbeat position-update packets where status is **unchanged** are sent BEST_EFFORT (`Data.want_response = false`, `PlayerStatePacket.is_state_transition = false`). This prevents the 8-entry retry queue from being saturated by heartbeats and ensures state transitions receive all three retry slots. AIRTAK_POSITION_REQUEST responses are always BEST_EFFORT.
 
 **ACKNOWLEDGED delivery flow:**
 
@@ -484,8 +484,8 @@ All ACKNOWLEDGED packets set `Data.want_response = true`. On the first send, `Da
 
 1. Sender generates a logical message ID (`msg_id`) and a LoRa packet ID (`pkt_id = msg_id`); sets `Data.request_id = msg_id`, `Data.want_response = true`.
 2. Sender adds `msg_id` to the retry queue (max 8 concurrent in-flight).
-3. Receiver decodes the packet, deduplicates by `(source_id, Data.request_id)` at the application layer (idempotent for all ACKNOWLEDGED types — game state and player state applied twice is safe; text messages dedup by source + request_id), then sends MASH_ACK with `ack_request_id = Data.request_id` and `hop_limit = received packet's hop_start` (from Flags bits [2:0] of the wire header; if zero, use hop_limit=7 as safe default).
-4. If sender receives a MASH_ACK with `ack_request_id == msg_id` within `ack_timeout_ms`, the entry is removed from the retry queue. **Timeout formula**: `ack_timeout_ms = max(500, 2 × hop_start × 400)`. At hop_start=3 this is 2 400 ms; at hop_start=7 this is 5 600 ms. The 400 ms per-hop budget covers 310 ms ToA (Profile 0) plus relay backoff headroom.
+3. Receiver decodes the packet, deduplicates by `(source_id, Data.request_id)` at the application layer (idempotent for all ACKNOWLEDGED types — game state and player state applied twice is safe; text messages dedup by source + request_id), then sends AIRTAK_ACK with `ack_request_id = Data.request_id` and `hop_limit = received packet's hop_start` (from Flags bits [2:0] of the wire header; if zero, use hop_limit=7 as safe default).
+4. If sender receives a AIRTAK_ACK with `ack_request_id == msg_id` within `ack_timeout_ms`, the entry is removed from the retry queue. **Timeout formula**: `ack_timeout_ms = max(500, 2 × hop_start × 400)`. At hop_start=3 this is 2 400 ms; at hop_start=7 this is 5 600 ms. The 400 ms per-hop budget covers 310 ms ToA (Profile 0) plus relay backoff headroom.
 5. On timeout, generate a new `pkt_id` (leaving `Data.request_id = msg_id` unchanged), retransmit. Backoff between retries: `wait_ms = random(0, 200 × 2^attempt)`. Retransmit up to 3 times. After 3 failures, notify the BLE client of delivery failure.
 6. **Implicit ACK**: if the sender overhears a relay of a packet with the same `source_id + Data.request_id` from a different node, this is treated as a successful delivery and cancels pending retries. This is an optimisation for broadcast packets, not a reliability guarantee — an isolated border node may never overhear its own relay.
 
@@ -497,7 +497,7 @@ The 60-second relay duplicate-suppression window applies to individual LoRa pack
 
 **Comparison to MeshCore:**
 
-MeshCore's ACK travels a known routed path (router backbone) and is therefore guaranteed to reach the originator if any path exists. MASH's ACK is flooded; delivery is probabilistic — it relies on the flooding mesh reaching the sender. The key advantage of MASH's approach is zero routing state and full Meshtastic wire-format compatibility. For the MASH use case (100-player field, 1–2 minute accuracy requirement), probabilistic but high-confidence delivery of game state is sufficient. If three retries over a 5-second window fail, it is very likely the sender is genuinely unreachable, not a protocol artifact.
+MeshCore's ACK travels a known routed path (router backbone) and is therefore guaranteed to reach the originator if any path exists. AirTAK's ACK is flooded; delivery is probabilistic — it relies on the flooding mesh reaching the sender. The key advantage of AirTAK's approach is zero routing state and full Meshtastic wire-format compatibility. For the AirTAK use case (100-player field, 1–2 minute accuracy requirement), probabilistic but high-confidence delivery of game state is sufficient. If three retries over a 5-second window fail, it is very likely the sender is genuinely unreachable, not a protocol artifact.
 
 ---
 
@@ -512,8 +512,8 @@ The Meshtastic firmware source is used as an upstream reference. The following c
 | Component | Source | Treatment |
 |-----------|--------|-----------|
 | SX1262 LoRa driver | RadioLib | Adopted directly via library dependency |
-| GPS NMEA parser | TinyGPS++ | Adopted with MASH-specific sentence configuration |
-| E-Ink driver (SSD1681) | Meshtastic HAL | Adopted and extended for MASH screen layouts |
+| GPS NMEA parser | TinyGPS++ | Adopted with AirTAK-specific sentence configuration |
+| E-Ink driver (SSD1681) | Meshtastic HAL | Adopted and extended for AirTAK screen layouts |
 | AES-128-CTR crypto | Meshtastic / mbedTLS | Adopted; key derivation kept identical for channel 0 |
 
 The following components are replaced entirely:
@@ -523,7 +523,7 @@ The following components are replaced entirely:
 | Configuration system | Meshtastic's requires reboot for almost all changes; replaced with hot-reload engine |
 | BLE GATT layer | Meshtastic's BLE framing has MTU-handling issues; replaced with clean framed protocol |
 | Mesh router | Refactored for multi-channel correctness; algorithm kept compatible |
-| App / plugin layer | Meshtastic's module system is not used; replaced with direct MASH packet handlers |
+| App / plugin layer | Meshtastic's module system is not used; replaced with direct AirTAK packet handlers |
 
 ### 9.2 Module Structure
 
@@ -542,7 +542,7 @@ firmware/src/
 │   ├── ChannelManager.h / ...      Channel slot table, hash dispatch
 │   ├── PacketPool.h / ...          Fixed-size preallocated packet buffers
 │   ├── Crypto.h / Crypto.cpp       AES-128-CTR encrypt/decrypt
-│   └── Portnums.h                  Portnum enum (Meshtastic + MASH)
+│   └── Portnums.h                  Portnum enum (Meshtastic + AirTAK)
 ├── config/
 │   ├── ConfigManager.h / ...       Hot-reload engine, change queue, apply logic
 │   ├── ConfigGroups.h              Config group enum and metadata
@@ -550,7 +550,7 @@ firmware/src/
 │   └── Defaults.h                  Factory default values for all groups
 ├── ble/
 │   ├── BLEServer.h / ...           GATT server lifecycle, bonding
-│   ├── MashService.h / ...         MASH GATT service characteristics
+│   ├── AirTAKService.h / ...         AirTAK GATT service characteristics
 │   ├── DFUService.h / ...          Nordic DFU service (OTA update)
 │   └── Framing.h / ...             Length-prefixed chunked BLE framing
 ├── game/
@@ -605,7 +605,7 @@ Procedure:
 4. Call `ChannelManager::rekey(newChannelConfig)` — recomputes channel hashes and AES key schedules.
 5. Signal Radio RX/TX task to resume.
 
-No step in this procedure requires an MCU reboot. The phrase "requires a reboot" is explicitly abolished from the MASH user-facing vocabulary.
+No step in this procedure requires an MCU reboot. The phrase "requires a reboot" is explicitly abolished from the AirTAK user-facing vocabulary.
 
 #### 9.4.3 Pending Changes & Grouped Apply
 
@@ -617,7 +617,7 @@ Config groups are stored in LittleFS on the SPI NOR flash. Each group is a separ
 
 ### 9.5 GPS Management
 
-The L76K is initialized via UART at 9600 baud, then upgraded to 115200 baud after the first valid NMEA sentence is received. The firmware sends standard PMTK configuration commands to enable only the sentences MASH requires (GNGGA, GNRMC) and disable all others, minimizing UART load.
+The L76K is initialized via UART at 9600 baud, then upgraded to 115200 baud after the first valid NMEA sentence is received. The firmware sends standard PMTK configuration commands to enable only the sentences AirTAK requires (GNGGA, GNRMC) and disable all others, minimizing UART load.
 
 GPS behaviors:
 
@@ -645,16 +645,16 @@ The nRF52840 SoftDevice S140 BLE stack is used, accessed via the Adafruit nRF52 
 
 Security: All write-capable characteristics require an authenticated (bonded) connection. The `DEVICE_STATUS` read characteristic is accessible to unauthenticated connections so that any BLE scanner can identify the device before pairing.
 
-Nordic DFU service is registered alongside the MASH service, enabling OTA firmware updates via Nordic's standard DFU protocol (nRF Connect app or custom app integration).
+Nordic DFU service is registered alongside the AirTAK service, enabling OTA firmware updates via Nordic's standard DFU protocol (nRF Connect app or custom app integration).
 
 ---
 
 ## 10. BLE Interface Specification
 
-### 10.1 MASH GATT Service
+### 10.1 AirTAK GATT Service
 
 **Service UUID**: `4d415348-0000-1000-8000-00805f9b34fb`
-(Mnemonic: `4d415348` = ASCII "MASH")
+(Mnemonic: `4d415348` = ASCII "AirTAK")
 
 | Characteristic | UUID Suffix | Properties | Security | Description |
 |----------------|-------------|------------|----------|-------------|
@@ -802,8 +802,8 @@ The following permissions are declared in the manifest. No other permissions are
 
 | Permission | Reason | Revokable |
 |------------|--------|-----------|
-| `BLUETOOTH_SCAN` | Discover nearby MASH devices | No |
-| `BLUETOOTH_CONNECT` | Connect to and communicate with a MASH device | No |
+| `BLUETOOTH_SCAN` | Discover nearby AirTAK devices | No |
+| `BLUETOOTH_CONNECT` | Connect to and communicate with a AirTAK device | No |
 | `ACCESS_FINE_LOCATION` | Required by Android 12+ for BLE scan; used for map centering | No |
 | `ACCESS_BACKGROUND_LOCATION` | Continue position updates when app is backgrounded | Yes — user opt-in, explained in-context |
 | `FOREGROUND_SERVICE` | Maintain BLE connection when app is not in foreground | No |
@@ -851,7 +851,7 @@ The primary screen, shown at app launch.
 **Features:**
 - MapLibre GL rendering with offline vector tile support.
 - Own position: blue directional arrow (bearing from device compass, if available, else heading from GPS track).
-- Remote nodes: colored circular pin with short-name label; color reflects team assignment from MASH_PLAYER data.
+- Remote nodes: colored circular pin with short-name label; color reflects team assignment from AIRTAK_PLAYER data.
 - Node status overlay: active = solid pin; hit = hollow pin; eliminated = pin with X; no recent position = grayed out.
 - Tap a pin: bottom sheet with player details (callsign, team, battery %, status, last-seen time).
 - Long-press map: place a local waypoint (label + icon; stored in Room DB; not broadcast).
@@ -877,7 +877,7 @@ The primary screen, shown at app launch.
 
 - Section headers by team name (team color as left border accent).
 - Per player row: callsign, relative last-seen time, battery level indicator, status chip (ACTIVE / HIT / RESPAWNING / ELIMINATED / OFFLINE).
-- OFFLINE = no MASH_PLAYER packet received in the last 5 minutes.
+- OFFLINE = no AIRTAK_PLAYER packet received in the last 5 minutes.
 - Filter toggle: Show All / Online Only.
 - Admin accounts (see §11.8) see additional controls per row: reassign team (dropdown), force status change (button).
 
@@ -887,7 +887,7 @@ All users see the full game screen. Admin-specific controls are conditionally sh
 
 **All users:**
 - Own status badge (large, prominent — ACTIVE / HIT / RESPAWNING / ELIMINATED).
-- **HIT button**: large red button; triggers HIT state on own device and broadcasts MASH_PLAYER packet. Requires confirmation hold (500 ms) to prevent accidental activation.
+- **HIT button**: large red button; triggers HIT state on own device and broadcasts AIRTAK_PLAYER packet. Requires confirmation hold (500 ms) to prevent accidental activation.
 - **Cancel hit**: visible for 3 seconds after a HIT is reported; cancels the report if tapped before propagation window closes.
 - Respawn countdown timer when status = RESPAWNING.
 - Game phase indicator (LOBBY / ACTIVE / PAUSED / ENDED).
@@ -896,7 +896,7 @@ All users see the full game screen. Admin-specific controls are conditionally sh
 **Admin only:**
 - Game phase controls: Start / Pause / Resume / Stop (with confirmation dialog for Stop).
 - Round timer: set duration, visible countdown.
-- Zone editor: button to enter zone-draw mode on the map (draws polygon → MASH_ZONE broadcast).
+- Zone editor: button to enter zone-draw mode on the map (draws polygon → AIRTAK_ZONE broadcast).
 - Player override panel: force any player's status, reassign teams.
 - Force respawn all.
 - Reset scores.
@@ -920,7 +920,7 @@ The PSK field in channel config is shown as a password field (obscured) with a r
 
 ### 11.10 BLE Connection Lifecycle
 
-The app maintains a persistent BLE connection to one MASH device at a time (single-device model).
+The app maintains a persistent BLE connection to one AirTAK device at a time (single-device model).
 
 State machine:
 
@@ -938,12 +938,12 @@ CONNECTED  ──(link loss)──► RECONNECTING ──(backoff: 1 s, 2 s, 4 s
 ```
 
 - A `FOREGROUND_SERVICE_CONNECTED_DEVICE` foreground service maintains the BLE connection when the app is backgrounded.
-- The persistent notification reads "MASH — Connected to [node name]" with a disconnect action.
+- The persistent notification reads "AirTAK — Connected to [node name]" with a disconnect action.
 - Reconnect backoff resets to 1 s on any successful connection.
 
 ### 11.11 Game Admin Authorization
 
-Admin status is stored in `GameConfig.is_admin` on the device, not on the server (there is no server). A device acting as game admin broadcasts MASH_GAME, MASH_ZONE, MASH_OBJECTIVE, and MASH_ADMIN packets. Other devices accept game-state packets from any source (trust is implicit within the PSK-encrypted game channel). The admin role is therefore enforced by convention within a game group and by the PSK, not by cryptographic authorization. This is an accepted limitation for the airsoft use case; see §15.4.
+Admin status is stored in `GameConfig.is_admin` on the device, not on the server (there is no server). A device acting as game admin broadcasts AIRTAK_GAME, AIRTAK_ZONE, AIRTAK_OBJECTIVE, and AIRTAK_ADMIN packets. Other devices accept game-state packets from any source (trust is implicit within the PSK-encrypted game channel). The admin role is therefore enforced by convention within a game group and by the PSK, not by cryptographic authorization. This is an accepted limitation for the airsoft use case; see §15.4.
 
 ---
 
@@ -972,21 +972,21 @@ Admin status is stored in `GameConfig.is_admin` on the device, not on the server
                   Admin force-eliminate
 ```
 
-- State is stored on the device and broadcast as a MASH_PLAYER packet on every transition.
-- Respawn count and timer duration are set by the game admin via a MASH_GAME packet at game start.
-- Admin can force any state transition via MASH_ADMIN packet.
+- State is stored on the device and broadcast as a AIRTAK_PLAYER packet on every transition.
+- Respawn count and timer duration are set by the game admin via a AIRTAK_GAME packet at game start.
+- Admin can force any state transition via AIRTAK_ADMIN packet.
 - On game STOP, all player states reset to ACTIVE.
 
 ### 12.2 Teams
 
 - Up to 8 teams per game.
-- Configurable by game admin via MASH_GAME packet: name (max 16 chars), color (24-bit RGB), max player count.
-- Team assignment is stored in `GameConfig.team_id` on each device. The player sets their own team in Settings > Game before the game. Admin can override any player's team via MASH_ADMIN.
+- Configurable by game admin via AIRTAK_GAME packet: name (max 16 chars), color (24-bit RGB), max player count.
+- Team assignment is stored in `GameConfig.team_id` on each device. The player sets their own team in Settings > Game before the game. Admin can override any player's team via AIRTAK_ADMIN.
 - Team 0 is reserved for SPECTATOR role (no hit/respawn mechanics, not included in scoring).
 
 ### 12.3 Game Zones
 
-Zones are polygonal geographic boundaries defined by the game admin and broadcast as MASH_ZONE packets to all nodes. Zones are rendered on the map as filled polygons with per-type styling:
+Zones are polygonal geographic boundaries defined by the game admin and broadcast as AIRTAK_ZONE packets to all nodes. Zones are rendered on the map as filled polygons with per-type styling:
 
 | Zone Type | Fill Color | Border | Description |
 |-----------|-----------|--------|-------------|
@@ -997,7 +997,7 @@ Zones are polygonal geographic boundaries defined by the game admin and broadcas
 
 Players whose GPS position falls outside the BOUNDARY zone trigger a visual warning in the Android app (amber banner). No automatic enforcement is applied; enforcement is by game organizer.
 
-Zones are stored by ID. A MASH_ZONE packet with the same `zone_id` as an existing zone replaces it. A MASH_ZONE packet with `polygon` empty deletes the zone. The full zone table is re-broadcast by the admin at game start.
+Zones are stored by ID. A AIRTAK_ZONE packet with the same `zone_id` as an existing zone replaces it. A AIRTAK_ZONE packet with `polygon` empty deletes the zone. The full zone table is re-broadcast by the admin at game start.
 
 ### 12.4 Objectives
 
@@ -1008,11 +1008,11 @@ Each objective references a zone and carries:
 - `capture_percent`: 0–100, displayed as a progress arc on the map icon
 - `score_value`: points awarded per unit time while held
 
-Objective state is administered exclusively by the game admin device. The admin app increments `capture_percent` based on proximity data it aggregates from received MASH_PLAYER (position) packets.
+Objective state is administered exclusively by the game admin device. The admin app increments `capture_percent` based on proximity data it aggregates from received AIRTAK_PLAYER (position) packets.
 
 ### 12.5 Game Modes
 
-Three built-in modes. Mode is set in the MASH_GAME packet at game start and determines the scoring display and win-condition banner.
+Three built-in modes. Mode is set in the AIRTAK_GAME packet at game start and determines the scoring display and win-condition banner.
 
 | Mode | Win Condition |
 |------|--------------|
@@ -1031,7 +1031,7 @@ Three built-in modes. Mode is set in the MASH_GAME packet at game start and dete
 
 ### 12.7 PTT Audio (Phase 7)
 
-PTT audio enables half-duplex voice communication across the MASH mesh, routed through the phone as the audio input/output device. The T-Echo Plus has no onboard microphone or speaker; all audio I/O is handled by the Android device over BLE.
+PTT audio enables half-duplex voice communication across the AirTAK mesh, routed through the phone as the audio input/output device. The T-Echo Plus has no onboard microphone or speaker; all audio I/O is handled by the Android device over BLE.
 
 **Audio pipeline:**
 
@@ -1049,7 +1049,7 @@ LoRa RX on receiving devices
 
 **Design decisions:**
 
-- **Codec and packet size**: Codec2 at 1300 bps. Each 20 ms frame is 26 bits (~3.25 bytes). MASH packs **8 Codec2 frames (160 ms of audio) per LoRa packet** at ~26 bytes of raw audio payload. The total LoRa frame is larger: the wire header (16 bytes), protobuf Data wrapper, and AudioPacket fields (from_node_id, sequence_num, session_id, codec2_mode_bps, frame_count, end_of_transmission) add ~22 bytes of overhead before the audio data. With the `fec_prev_audio_data` FEC field (another ~26 bytes), the total LoRa payload is approximately **92 bytes**, giving **~84 ms on air** on Profile 1 (SF7/BW250/CR4/5, 16-symbol preamble). Without FEC the payload is ~66 bytes and ToA ~59 ms. The ~84 ms figure should be used for all duty-cycle and airtime planning when FEC is enabled (the default).
+- **Codec and packet size**: Codec2 at 1300 bps. Each 20 ms frame is 26 bits (~3.25 bytes). AirTAK packs **8 Codec2 frames (160 ms of audio) per LoRa packet** at ~26 bytes of raw audio payload. The total LoRa frame is larger: the wire header (16 bytes), protobuf Data wrapper, and AudioPacket fields (from_node_id, sequence_num, session_id, codec2_mode_bps, frame_count, end_of_transmission) add ~22 bytes of overhead before the audio data. With the `fec_prev_audio_data` FEC field (another ~26 bytes), the total LoRa payload is approximately **92 bytes**, giving **~84 ms on air** on Profile 1 (SF7/BW250/CR4/5, 16-symbol preamble). Without FEC the payload is ~66 bytes and ToA ~59 ms. The ~84 ms figure should be used for all duty-cycle and airtime planning when FEC is enabled (the default).
 - **Reliability — FEC piggyback**: Each AudioPacket carries a `fec_prev_audio_data` field containing the Codec2 bytes of the **immediately preceding packet within the same PTT session**. If a receiver detects a gap in `sequence_num` (exactly one packet lost), it reconstructs the missing audio from the FEC field of the next received packet. This recovers single-packet-loss events — the most common failure mode on a congested LoRa channel — without any retransmit request. **Session boundary rule**: on the **first packet of each PTT session** (i.e., the first packet after no previous transmission or after a packet with `end_of_transmission = true`), the sender MUST set `fec_prev_audio_data` to an empty bytes field. A receiver that sees `fec_prev_audio_data` empty on the first packet of a new session MUST NOT attempt FEC recovery for sequence gaps spanning the session boundary; it MUST instead apply PLC or silence for any gap. This prevents corrupted audio output when `end_of_transmission` from the previous session was lost.
 - **Reliability — jitter buffer**: The Android receiver maintains a 3-packet jitter buffer (480 ms at 8 frames/packet). Packets arriving out of order within the buffer window are resequenced before decode. Packets arriving more than 480 ms late are discarded.
 - **Reliability — packet loss concealment (PLC)**: If a packet is lost and FEC recovery is not possible (two or more consecutive losses), the Codec2 decoder runs in PLC mode, synthesising comfort noise for the missing interval rather than producing a click or silence gap.
@@ -1059,7 +1059,7 @@ LoRa RX on receiving devices
 - **Encoding on Android**: Codec2 is compiled as a native library (C) bundled in the Android app via JNI. `AudioRepository` runs encoding and decoding on a dedicated coroutine dispatcher to avoid audio jitter.
 - **Channel isolation**: Audio packets (portnum 263) are sent on the designated audio channel slot with its own PSK. Non-audio channel slots are unaffected. Meshtastic nodes relay audio packets if they can decrypt the channel slot, but do not process them (unknown portnum).
 - **PTT UI in the Android app**: A persistent PTT button appears in the bottom navigation bar when PTT audio is enabled in Settings. Hold to transmit, release to stop. The button shows "TRANSMITTING" in red while active and "LISTENING" otherwise. Simultaneous PTT from multiple users is not prevented at the protocol level; users hear both transmissions overlaid (standard PTT behaviour).
-- **Android permission**: `RECORD_AUDIO` is requested the first time the user holds the PTT button, with a rationale: "MASH needs microphone access to transmit voice over the mesh." If permission is denied, the PTT button is disabled with an explanation. No other feature is affected.
+- **Android permission**: `RECORD_AUDIO` is requested the first time the user holds the PTT button, with a rationale: "AirTAK needs microphone access to transmit voice over the mesh." If permission is denied, the PTT button is disabled with an explanation. No other feature is affected.
 
 ---
 
@@ -1067,21 +1067,21 @@ LoRa RX on receiving devices
 
 ### 13.1 Guaranteed Interop Behaviors
 
-When a MASH device shares channel 0 PHY parameters and PSK with a Meshtastic device:
+When a AirTAK device shares channel 0 PHY parameters and PSK with a Meshtastic device:
 
 | Capability | Works? | Notes |
 |------------|--------|-------|
-| MASH receives text messages from Meshtastic | ✓ | Standard TEXT_MESSAGE_APP portnum |
-| MASH sends text messages to Meshtastic | ✓ | Standard TEXT_MESSAGE_APP portnum |
-| MASH position visible in Meshtastic app | ✓ | POSITION_APP + NODEINFO_APP broadcast |
-| MASH relays Meshtastic packets | ✓ | Flood router is compatible |
-| Meshtastic relays MASH packets | ✓ | Unknown portnums are relayed, not dropped |
-| Meshtastic app shows MASH as a node | ✓ | NODEINFO_APP with hw_model |
-| Meshtastic sees MASH game data (MASH_PLAYER, etc.) | ✗ | Sent on MASH game channel slot (different PSK); relayed but not decryptable by Meshtastic |
+| AirTAK receives text messages from Meshtastic | ✓ | Standard TEXT_MESSAGE_APP portnum |
+| AirTAK sends text messages to Meshtastic | ✓ | Standard TEXT_MESSAGE_APP portnum |
+| AirTAK position visible in Meshtastic app | ✓ | POSITION_APP + NODEINFO_APP broadcast |
+| AirTAK relays Meshtastic packets | ✓ | Flood router is compatible |
+| Meshtastic relays AirTAK packets | ✓ | Unknown portnums are relayed, not dropped |
+| Meshtastic app shows AirTAK as a node | ✓ | NODEINFO_APP with hw_model |
+| Meshtastic sees AirTAK game data (AIRTAK_PLAYER, etc.) | ✗ | Sent on AirTAK game channel slot (different PSK); relayed but not decryptable by Meshtastic |
 
 ### 13.2 NODEINFO Broadcast
 
-At startup and every 3 hours, MASH broadcasts a NODEINFO_APP packet on channel 0:
+At startup and every 3 hours, AirTAK broadcasts a NODEINFO_APP packet on channel 0:
 
 ```
 hw_model:     LILYGO_TECHO
@@ -1090,7 +1090,7 @@ short_name:   <DeviceConfig.short_name>
 macaddr:      <lower 6 bytes of nRF52840 FICR device address>
 ```
 
-This makes MASH nodes identifiable in the Meshtastic app's node list.
+This makes AirTAK nodes identifiable in the Meshtastic app's node list.
 
 ### 13.3 Vendored Meshtastic Protobuf Files
 
@@ -1098,12 +1098,12 @@ The Meshtastic protobuf definitions in `/proto/meshtastic/` are vendored at a sp
 
 ### 13.4 Infrastructure Relay Nodes (Large Fields)
 
-On fields larger than ≈ 2 km in any dimension, tree canopy and building attenuation can make single-hop coverage unreliable. MASH nodes used as **fixed relays** require no special firmware configuration: any MASH node (or stock Meshtastic node) with the correct channel PSKs and PHY profile will relay all packets automatically. Recommended relay node placement:
+On fields larger than ≈ 2 km in any dimension, tree canopy and building attenuation can make single-hop coverage unreliable. AirTAK nodes used as **fixed relays** require no special firmware configuration: any AirTAK node (or stock Meshtastic node) with the correct channel PSKs and PHY profile will relay all packets automatically. Recommended relay node placement:
 
 - **Elevation**: mount at ≥ 5 m height (tree line, flagpole, building roof) to clear foliage. Each relay node effectively extends mesh radius by ≈ 800 m under forest canopy at Profile 0.
-- **Power**: relay nodes typically run on USB power banks; the MASH firmware duty-cycle logic still applies (GPS beaconing at 90 s heartbeat), so a 10 000 mAh power bank runs a relay node for ≈ 40 hours.
+- **Power**: relay nodes typically run on USB power banks; the AirTAK firmware duty-cycle logic still applies (GPS beaconing at 90 s heartbeat), so a 10 000 mAh power bank runs a relay node for ≈ 40 hours.
 - **Count**: for a 10 km × 10 km field with 3–4 player clusters, 4–6 relay nodes at elevated positions provides ≥ 95 % of the field area under moderate forest density with the default hop_limit=7.
-- **Audio**: relay nodes do NOT relay `MASH_AUDIO` packets (`hop_limit = 1`). PTT audio is direct-range on the Short/Speed profile. Players expecting voice communication must ensure they are within ≈ 800 m LOS of each other on the audio channel slot.
+- **Audio**: relay nodes do NOT relay `AIRTAK_AUDIO` packets (`hop_limit = 1`). PTT audio is direct-range on the Short/Speed profile. Players expecting voice communication must ensure they are within ≈ 800 m LOS of each other on the audio channel slot.
 
 ---
 
@@ -1118,18 +1118,18 @@ proto/
 │   ├── config.proto
 │   ├── portnums.proto
 │   └── VERSION            Pinned commit SHA
-└── mash/
-    ├── config.proto       MASH config group messages
+└── airtak/
+    ├── config.proto       AirTAK config group messages
     ├── ble.proto          BLE transport messages (ConfigPayload, ConfigAck, DeviceStatus, AdminRequest)
     ├── game.proto         Game state, player state, zones, objectives, audio; portnums 256–263
-    └── mesh.proto         Reserved for future MASH over-the-air packet extensions (schema TBD)
+    └── mesh.proto         Reserved for future AirTAK over-the-air packet extensions (schema TBD)
 ```
 
-### 14.2 `mash/config.proto`
+### 14.2 `airtak/config.proto`
 
 ```protobuf
 syntax = "proto3";
-package mash;
+package airtak;
 
 enum ConfigGroup {
   DEVICE   = 0;
@@ -1234,11 +1234,11 @@ message SecurityConfig {
 }
 ```
 
-### 14.3 `mash/game.proto`
+### 14.3 `airtak/game.proto`
 
 ```protobuf
 syntax = "proto3";
-package mash;
+package airtak;
 
 // ── Player ────────────────────────────────────────────────────
 
@@ -1365,7 +1365,7 @@ message AdminPacket {
 // which changes on each retry attempt). hop_limit for this packet is set to the
 // hop_start value of the original packet (Flags bits [2:0] of the wire header) so the
 // ACK can return over the full mesh diameter. If hop_start is zero (legacy device), use 7.
-message MashAck {
+message AirTAKAck {
   uint32 ack_request_id     = 1;   // = Data.request_id of the acknowledged packet (NOT MeshPacket.id)
   uint32 from_node_id       = 2;
   uint32 original_hop_start = 3;   // hop_start of the packet being ACKed; used by sender to validate
@@ -1405,11 +1405,11 @@ message AudioPacket {
 }
 ```
 
-### 14.4 `mash/ble.proto`
+### 14.4 `airtak/ble.proto`
 
 ```protobuf
 syntax = "proto3";
-package mash;
+package airtak;
 
 // See §10.3 for usage
 message ConfigPayload {
@@ -1505,7 +1505,7 @@ message AdminResponse {
 
 ### 15.4 Threat Model
 
-The operational threat model is: **participants sharing a field in an airsoft game may attempt to cheat by spoofing or replaying game state packets**. The PSK-encrypted game channel provides basic protection against participants who do not know the PSK. Participants who do know the PSK (all players) can construct arbitrary game packets. Full per-packet cryptographic authentication is not implemented and is not planned. Game integrity is enforced socially by the game admin and field organizers, not technically by MASH.
+The operational threat model is: **participants sharing a field in an airsoft game may attempt to cheat by spoofing or replaying game state packets**. The PSK-encrypted game channel provides basic protection against participants who do not know the PSK. Participants who do know the PSK (all players) can construct arbitrary game packets. Full per-packet cryptographic authentication is not implemented and is not planned. Game integrity is enforced socially by the game admin and field organizers, not technically by AirTAK.
 
 ---
 
@@ -1521,7 +1521,7 @@ Phases are sequential. A phase is not considered complete until all items within
 | 1.2 | SX1262 bring-up via RadioLib: TX/RX loopback between two devices |
 | 1.3 | L76K GPS bring-up: UART init, NMEA parse, cold fix acquisition verified |
 | 1.4 | E-Ink display bring-up: static main screen renders |
-| 1.5 | BLE GATT server: MASH service registered, `DEVICE_STATUS` readable |
+| 1.5 | BLE GATT server: AirTAK service registered, `DEVICE_STATUS` readable |
 | 1.6 | LittleFS config store: read, write, default load verified |
 | 1.7 | FreeRTOS task skeleton: all tasks created, inter-task queues defined |
 
@@ -1530,17 +1530,17 @@ Phases are sequential. A phase is not considered complete until all items within
 | ID | Item |
 |----|------|
 | 2.1 | AES-128-CTR packet encryption/decryption; interop-verified against Meshtastic channel 0 |
-| 2.2 | NODEINFO_APP broadcast; MASH node visible in Meshtastic Android app |
+| 2.2 | NODEINFO_APP broadcast; AirTAK node visible in Meshtastic Android app |
 | 2.3 | TEXT_MESSAGE_APP TX and RX; text messages exchanged with Meshtastic device |
 | 2.4 | POSITION_APP TX with GPS position; position visible in Meshtastic Android app |
 | 2.5 | Flooding router with duplicate-suppression cache |
 | 2.6 | SNR-based relay delay (measured, not just compiled) |
 | 2.7 | Multi-channel: two channel slots simultaneously active; separate PSKs; packet routing verified |
 | 2.8 | Hot-reload config: all config groups apply without MCU reboot; radio restart path verified |
-| 2.9 | Per-packet-type hop limits: verify all packet types (TEXT_MESSAGE_APP, POSITION_APP, MASH_PLAYER, MASH_GAME, etc.) use hop_limit=7; verify MASH_AUDIO uses hop_limit=1; verify hop_start in Flags bits [2:0] preserves the original value across relay hops |
+| 2.9 | Per-packet-type hop limits: verify all packet types (TEXT_MESSAGE_APP, POSITION_APP, AIRTAK_PLAYER, AIRTAK_GAME, etc.) use hop_limit=7; verify AIRTAK_AUDIO uses hop_limit=1; verify hop_start in Flags bits [2:0] preserves the original value across relay hops |
 | 2.10 | Heard-by suppression: 3-device linear chain test; middle node cancels relay after overhearing relay from end node |
-| 2.11 | Application-layer reliability: (a) ACKNOWLEDGED packet delivered over 3-hop chain; verify MASH_ACK hop_limit mirrors original hop_start and reaches sender; (b) mid-path packet drop (jamming R1→D link): verify retry with new packet_id passes through R1 and is received by D; verify single delivery at D; (c) timeout validation: hop_start=3 → timeout=2400 ms; hop_start=7 → timeout=5600 ms |
-| 2.12 | MASH_POSITION_REQUEST: unicast request causes target to re-broadcast POSITION_APP within 2 s |
+| 2.11 | Application-layer reliability: (a) ACKNOWLEDGED packet delivered over 3-hop chain; verify AIRTAK_ACK hop_limit mirrors original hop_start and reaches sender; (b) mid-path packet drop (jamming R1→D link): verify retry with new packet_id passes through R1 and is received by D; verify single delivery at D; (c) timeout validation: hop_start=3 → timeout=2400 ms; hop_start=7 → timeout=5600 ms |
+| 2.12 | AIRTAK_POSITION_REQUEST: unicast request causes target to re-broadcast POSITION_APP within 2 s |
 
 ### Phase 3 — Android App Foundation
 
@@ -1559,7 +1559,7 @@ Phases are sequential. A phase is not considered complete until all items within
 | ID | Item |
 |----|------|
 | 4.1 | Node positions on map: POSITION_APP packets render as colored pins with callsigns |
-| 4.2 | MASH_PLAYER TX/RX: team color applied to pins; status overlay renders |
+| 4.2 | AIRTAK_PLAYER TX/RX: team color applied to pins; status overlay renders |
 | 4.3 | Players screen: team grouping, status chips, online/offline filter |
 | 4.4 | Tile downloader: bounding box UI, download, offline verification (airplane mode) |
 | 4.5 | Local waypoints: place, label, persist in Room DB, render on map |
@@ -1569,14 +1569,14 @@ Phases are sequential. A phase is not considered complete until all items within
 | ID | Item |
 |----|------|
 | 5.1 | Game state engine: phase management, timer, team score tracking |
-| 5.2 | MASH_GAME TX/RX: game phase changes propagate to all devices |
-| 5.3 | Hit button: device button → HIT state → MASH_PLAYER broadcast |
+| 5.2 | AIRTAK_GAME TX/RX: game phase changes propagate to all devices |
+| 5.3 | Hit button: device button → HIT state → AIRTAK_PLAYER broadcast |
 | 5.4 | Respawn timer: countdown on device display and in app; ACTIVE set on expiry |
-| 5.5 | MASH_ZONE TX/RX: zone polygons render on map with correct type styling |
-| 5.6 | MASH_OBJECTIVE TX/RX: capture state renders on map |
+| 5.5 | AIRTAK_ZONE TX/RX: zone polygons render on map with correct type styling |
+| 5.6 | AIRTAK_OBJECTIVE TX/RX: capture state renders on map |
 | 5.7 | Admin controls: start / pause / stop game; force player state; force respawn all |
 | 5.8 | All three game modes: win condition detection and result screen |
-| 5.9 | Position request: Android app "Request position" tap on player pin triggers MASH_POSITION_REQUEST; stale pin updates within 2 s |
+| 5.9 | Position request: Android app "Request position" tap on player pin triggers AIRTAK_POSITION_REQUEST; stale pin updates within 2 s |
 
 ### Phase 6 — Polish & Hardening
 
@@ -1597,18 +1597,18 @@ Phases are sequential. A phase is not considered complete until all items within
 | ID | Item |
 |----|------|
 | 7.1 | Codec2 library integration into firmware: encode/decode round-trip on nRF52840 verified; 1300 bps mode; 20 ms frames |
-| 7.2 | Short/Speed PHY profile (SF7/BW250/CR4/5) channel slot configured; LoRa loopback between two MASH devices at Short/Speed verified |
+| 7.2 | Short/Speed PHY profile (SF7/BW250/CR4/5) channel slot configured; LoRa loopback between two AirTAK devices at Short/Speed verified |
 | 7.3 | Firmware audio pipeline: BLE MESH_RX audio frame -> Codec2 decode -> Audio task -> BLE MESH_TX to phone |
 | 7.4 | Android audio pipeline: AudioRecord (8 kHz PCM) -> Codec2 encode -> BLE MESH_TX -> device; receive path from BLE MESH_RX -> Codec2 decode -> AudioTrack (8 kHz PCM) |
 | 7.5 | PTT button in Android app: hold-to-transmit; TRANSMITTING / LISTENING state display; RECORD_AUDIO permission request flow on first use |
 | 7.6 | Time-multiplexing validation: Long/Mesh packet loss during a 5-second PTT burst measured <= 15%; application-layer retry recovers ACKNOWLEDGED packets missed during audio window |
-| 7.7 | PTT audio field test: voice exchange between 3 MASH devices at typical airsoft field distances (50 m, 150 m); audio intelligible; both mesh channel (Profile 0) and audio channel (Profile 1) active simultaneously |
+| 7.7 | PTT audio field test: voice exchange between 3 AirTAK devices at typical airsoft field distances (50 m, 150 m); audio intelligible; both mesh channel (Profile 0) and audio channel (Profile 1) active simultaneously |
 | 7.8 | FEC single-packet-loss recovery: inject one dropped packet mid-PTT session; verify receiver reconstructs audio from fec_prev_audio_data without audible gap |
 | 7.9 | EU duty-cycle display: configure region to EU868; set frame_count=8; verify AudioConfig screen shows calculated duty cycle ~52 % (amber/red, non-compliant for sub-band g1); set frame_count=42; verify calculated DC = 10 % (green for sub-band g1); set frame_count=50; verify green for sub-band g1, still red for sub-band g (1 % limit) |
 | 7.10 | FEC session boundary: transmit PTT session 1; verify first packet of session 2 has empty fec_prev_audio_data; inject a gap at the session boundary (drop end_of_transmission); verify receiver uses session_id change to detect new session and applies PLC rather than cross-session FEC |
 
 ```
-mash/
+airtak/
 ├── PLANNING.md                          This document — do not modify
 ├── README.md                            Project overview and quick-start
 │
@@ -1618,7 +1618,7 @@ mash/
 │   │   ├── config.proto
 │   │   ├── portnums.proto
 │   │   └── VERSION                      Pinned upstream commit SHA
-│   └── mash/
+│   └── airtak/
 │       ├── config.proto
 │       ├── ble.proto
 │       ├── game.proto
@@ -1650,7 +1650,7 @@ mash/
 │   │   │   └── Defaults.h
 │   │   ├── ble/
 │   │   │   ├── BLEServer.h / BLEServer.cpp
-│   │   │   ├── MashService.h / MashService.cpp
+│   │   │   ├── AirTAKService.h / AirTAKService.cpp
 │   │   │   ├── DFUService.h / DFUService.cpp
 │   │   │   └── Framing.h / Framing.cpp
 │   │   ├── game/
@@ -1689,8 +1689,8 @@ mash/
 │           ├── main/
 │           │   ├── AndroidManifest.xml
 │           │   ├── kotlin/
-│           │   │   └── com/mash/
-│           │   │       ├── MashApplication.kt
+│           │   │   └── com/airtak/
+│           │   │       ├── AirTAKApplication.kt
 │           │   │       ├── ui/
 │           │   │       │   ├── map/
 │           │   │       │   ├── messages/
@@ -1706,7 +1706,7 @@ mash/
 │           │   │           ├── game/
 │           │   │           ├── audio/              PTT audio pipeline, Codec2 JNI wrapper (Phase 7)
 │           │   │           └── tiles/
-│           │   ├── proto/               Symlink → /proto/mash/
+│           │   ├── proto/               Symlink → /proto/airtak/
 │           │   └── res/
 │           ├── test/                    JVM unit tests
 │           └── androidTest/             Instrumented tests
@@ -1792,8 +1792,8 @@ Common commands:
 
 Run `tools/proto_gen.ps1` to regenerate all protobuf outputs. The script:
 
-1. Calls `protoc` with the nanopb plugin on all files in `/proto/mash/`, outputting `.pb.h` and `.pb.c` files to `firmware/src/proto/`.
-2. Calls `protoc` with the Kotlin plugin on all files in `/proto/mash/`, outputting Kotlin sources to `android/app/src/main/kotlin/com/mash/proto/`.
+1. Calls `protoc` with the nanopb plugin on all files in `/proto/airtak/`, outputting `.pb.h` and `.pb.c` files to `firmware/src/proto/`.
+2. Calls `protoc` with the Kotlin plugin on all files in `/proto/airtak/`, outputting Kotlin sources to `android/app/src/main/kotlin/com/airtak/proto/`.
 3. Does **not** regenerate the vendored Meshtastic protos.
 
 Generated files are committed to the repository. Proto compilation is not part of the CI build pipeline; it is a developer action performed when `.proto` files change.
@@ -1811,32 +1811,32 @@ Generated files are committed to the repository. Proto compilation is not part o
 - Config: serialize/deserialize all 7 config groups; default value application; LittleFS round-trip (mocked).
 - Channel hash: channel 0 hash matches Meshtastic reference; channels 1–7 SHA-256 computation.
 
-**Integration tests** (2 MASH devices required):
+**Integration tests** (2 AirTAK devices required):
 - Loopback text message: device A sends TEXT_MESSAGE_APP, device B receives and delivers to BLE client.
 - Multi-hop relay: 3-device linear chain; message from device A reaches device C via device B; hop count correct.
-- Channel isolation: MASH_PLAYER packet on MASH game slot not received by a device with only the interop channel slot active (different PSK).
+- Channel isolation: AIRTAK_PLAYER packet on AirTAK game slot not received by a device with only the interop channel slot active (different PSK).
 - Hot-reload: change `DeviceConfig.long_name` over BLE; verify NODEINFO_APP broadcast within 5 s; no reboot.
 - Radio restart: change `LoraConfig.tx_power_dbm` over BLE; verify radio restart completes in ≤ 300 ms; BLE connection maintained.
-- Per-type hop limit: TEXT_MESSAGE_APP packet traced across 4-device chain; verify hop_limit starts at 7 and decrements correctly at each hop; verify MASH_AUDIO starts at hop_limit=1 and is not relayed.
+- Per-type hop limit: TEXT_MESSAGE_APP packet traced across 4-device chain; verify hop_limit starts at 7 and decrements correctly at each hop; verify AIRTAK_AUDIO starts at hop_limit=1 and is not relayed.
 - Heard-by suppression: 3-device triangle; all three can hear each other; device A sends; verify that B and C each relay at most once.
 - Application-layer retry — relay-drop scenario: 3-device chain A→R→B; jam R→B link; verify A retries with new MeshPacket.id but same Data.request_id; verify R forwards retry; verify B receives and applies message exactly once; verify A receives ACK and removes from retry queue.
 - Application-layer retry — ACK-lost scenario: 3-device chain A→R→B; B receives but ACK is jammed; verify A retries; verify B deduplicates by Data.request_id and re-sends ACK; verify A ultimately clears queue.
-- ACK hop_limit: send MASH_GAME (hop_start=7) over 5-hop chain; verify MASH_ACK is generated with hop_limit=7 and reaches sender at hop 5.
-- Implicit ACK: device A broadcasts MASH_PLAYER; device A overhears B's relay; verify A cancels pending retries.
-- MASH_POSITION_REQUEST: device A sends MASH_POSITION_REQUEST targeting device B; verify device B broadcasts POSITION_APP within 2 s.
-- PHY profile isolation: two MASH devices -- one Profile 0, one Profile 1 on the same slot; verify they cannot receive each other's transmissions.
-- Multi-PHY same device: one MASH device with slot 0 on Profile 0 and slot 2 on Profile 1; verify it can receive transmissions on both profiles.
+- ACK hop_limit: send AIRTAK_GAME (hop_start=7) over 5-hop chain; verify AIRTAK_ACK is generated with hop_limit=7 and reaches sender at hop 5.
+- Implicit ACK: device A broadcasts AIRTAK_PLAYER; device A overhears B's relay; verify A cancels pending retries.
+- AIRTAK_POSITION_REQUEST: device A sends AIRTAK_POSITION_REQUEST targeting device B; verify device B broadcasts POSITION_APP within 2 s.
+- PHY profile isolation: two AirTAK devices -- one Profile 0, one Profile 1 on the same slot; verify they cannot receive each other's transmissions.
+- Multi-PHY same device: one AirTAK device with slot 0 on Profile 0 and slot 2 on Profile 1; verify it can receive transmissions on both profiles.
 
-**Interop test** (1 MASH device + 1 stock Meshtastic device):
+**Interop test** (1 AirTAK device + 1 stock Meshtastic device):
 - Text message exchange in both directions.
-- MASH node appears in Meshtastic Android app node list.
-- Meshtastic node appears in MASH Android app player list.
-- Mesh relay: MASH device relays a Meshtastic packet correctly (hop_limit decremented).
+- AirTAK node appears in Meshtastic Android app node list.
+- Meshtastic node appears in AirTAK Android app player list.
+- Mesh relay: AirTAK device relays a Meshtastic packet correctly (hop_limit decremented).
 
-**Audio integration tests** (Phase 7; 2 MASH devices required):
+**Audio integration tests** (Phase 7; 2 AirTAK devices required):
 - Codec2 unit test: 1300 bps encode -> decode round-trip on nRF52840; decoded PCM SNR >= 15 dB relative to original.
 - PTT loopback: device A transmits audio on Profile 1 slot; device B receives and delivers decoded audio to Android app; confirmed audible.
-- Time-multiplexing: device A has Profile 0 mesh channel and Profile 1 audio channel active; transmit 100 MASH_PLAYER packets at 1 Hz; simultaneously conduct 5-second PTT; count MASH_PLAYER packets received by device B; verify loss <= 15%.
+- Time-multiplexing: device A has Profile 0 mesh channel and Profile 1 audio channel active; transmit 100 AIRTAK_PLAYER packets at 1 Hz; simultaneously conduct 5-second PTT; count AIRTAK_PLAYER packets received by device B; verify loss <= 15%.
 
 ### 19.2 Android Tests
 
@@ -1862,7 +1862,7 @@ Generated files are committed to the repository. Proto compilation is not part o
 
 The following test must pass before Phase 6 is considered complete:
 
-- **Devices**: 10 MASH devices active simultaneously.
+- **Devices**: 10 AirTAK devices active simultaneously.
 - **Teams**: At minimum 2 teams with at least 3 players each; 1 admin device (may overlap).
 - **Duration**: 60-minute simulated game.
 - **Validators**:
@@ -1885,7 +1885,7 @@ The following test must pass before Phase 6 is considered complete:
 | Multi-channel simultaneous RX has higher-than-expected packet loss | Medium | Medium | Both channels share PHY so no frequency switching occurs; channel hash filtering is O(1) per received packet; validate loss rate in integration test 2.7 |
 | BLE MTU negotiation fails on older Android 12 devices | Low | Medium | The framing protocol handles any MTU ≥ 23 bytes; test on a minimum-spec Android 12 device in Phase 3 |
 | 400 mAh battery insufficient for 8-hour target | Medium | Medium | Implement GPS duty cycle in Phase 6; run power profiler measurement after Phase 2 completion to calibrate duty-cycle parameters before field test |
-| Protobuf-encoded MASH game packet exceeds 237-byte LoRa payload limit | Medium | Low | Enforce max_size annotations in nanopb proto definitions; Android app shows byte count before send; oversized packets are logged and dropped, never silently truncated |
+| Protobuf-encoded AirTAK game packet exceeds 237-byte LoRa payload limit | Medium | Low | Enforce max_size annotations in nanopb proto definitions; Android app shows byte count before send; oversized packets are logged and dropped, never silently truncated |
 | Android foreground service killed by OS battery optimization on aggressive OEM firmware | Medium | Medium | Use `startForeground` with `FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE`; Settings screen includes a direct deep-link to battery optimization exemption for the app |
 | Meshtastic upstream changes wire format between project start and field use | Low | High | Pin Meshtastic protobuf files at a specific commit (recorded in `VERSION`); no automatic proto updates; treat any Meshtastic proto update as a deliberate compatibility-tested action |
 | SPI NOR flash wear from frequent config writes during development | Low | Low | LittleFS handles wear leveling; additionally, avoid writing config on every BLE packet; write only on explicit commit |
@@ -1898,7 +1898,7 @@ The following test must pass before Phase 6 is considered complete:
 | 100-node mesh channel saturation on Profile 0 at default broadcast interval | High | High | Smart beaconing (§8.7) replaces fixed 30 s interval with movement-triggered TX + 90 s heartbeat; all packet types use hop_limit=7 but relay count is bounded by mesh topology, not hop_limit; airtime control is achieved through TX interval policy, not restricted hop budgets |
 | EU 868 MHz 1 % duty-cycle limit violated by short position intervals or audio frame_count too low | Medium | High | Duty cycle is a per-device regulatory obligation; smart beaconing defaults yield ≈ 310 ms ToA per 90 s = 0.34 % DC per device on Profile 0; audio with FEC has ~84 ms ToA on Profile 1 — frame_count ≥ 42 required for sub-band g1 (10 %) compliance; sub-band g (1 %) is not viable at 1300 bps and requires 915 MHz; AudioConfig screen displays calculated per-device DC and warns on non-compliance; final responsibility rests with the operator |
 | PTT audio single-hop range insufficient on 10 km fields | Medium | Medium | Documented in §12.7 and §13.4; fixed relay nodes on elevation extend mesh range; audio itself does not relay (hop_limit=1); players rely on mesh relay nodes for text/game data and accept direct-range limitation for voice |
-| Flood-based ACK is probabilistic, not guaranteed (unlike MeshCore routed ACK) | Low | Low | Ten systematic issues addressed in v1.3–v1.4: MASH_ACK hop_limit mirrors original hop_start (wire header Flags [2:0]); retries use new packet_id; timeout scaled to 2×hop_start×400 ms; hop_start fallback=7 for legacy devices; MASH_PLAYER ACK rule clarified (state transitions only); retry backoff standardised at 200 ms base; residual failure mode is genuine unreachability, not a protocol artifact |
+| Flood-based ACK is probabilistic, not guaranteed (unlike MeshCore routed ACK) | Low | Low | Ten systematic issues addressed in v1.3–v1.4: AIRTAK_ACK hop_limit mirrors original hop_start (wire header Flags [2:0]); retries use new packet_id; timeout scaled to 2×hop_start×400 ms; hop_start fallback=7 for legacy devices; AIRTAK_PLAYER ACK rule clarified (state transitions only); retry backoff standardised at 200 ms base; residual failure mode is genuine unreachability, not a protocol artifact |
 
 ---
 
@@ -1907,11 +1907,11 @@ The following test must pass before Phase 6 is considered complete:
 | Term | Definition |
 |------|-----------|
 | **AES-128-CTR** | Advanced Encryption Standard in Counter mode with 128-bit key; used for channel encryption |
-| **Codec2** | Open-source speech codec designed for narrow-band voice at very low bit rates; MASH uses the 1300 bps mode (26 bits per 20 ms frame) for PTT audio over LoRa |
+| **Codec2** | Open-source speech codec designed for narrow-band voice at very low bit rates; AirTAK uses the 1300 bps mode (26 bits per 20 ms frame) for PTT audio over LoRa |
 | **BLE** | Bluetooth Low Energy (Bluetooth 4.0+) |
 | **BW** | Bandwidth — LoRa PHY parameter; values: 125 kHz, 250 kHz, 500 kHz |
 | **BSP** | Board Support Package — the hardware-specific layer of the firmware toolchain |
-| **CoT** | Cursor-on-Target — the XML message format used by ATAK; not used in MASH |
+| **CoT** | Cursor-on-Target — the XML message format used by ATAK; not used in AirTAK |
 | **CR** | Coding Rate — LoRa PHY parameter; values: 4/5, 4/6, 4/7, 4/8 |
 | **DFU** | Device Firmware Update — Nordic's BLE OTA firmware update protocol |
 | **FICR** | Factory Information Configuration Registers — nRF52840 read-only hardware ID registers |
@@ -1919,26 +1919,26 @@ The following test must pass before Phase 6 is considered complete:
 | **HDOP** | Horizontal Dilution of Precision — dimensionless GPS accuracy metric; lower is better |
 | **LittleFS** | Lightweight filesystem designed for NOR flash storage; provides wear leveling |
 | **LoRa** | Long Range — spread-spectrum radio modulation by Semtech |
-| **MASH** | Mesh Airsoft Situational Hub — this project |
+| **AirTAK** | Airsoft Team Awareness Kit — this project |
 | **MBTiles** | An SQLite-based container format for map tile data |
-| **Meshtastic** | Open-source LoRa mesh networking project (Apache 2.0); MASH is interoperable with it |
+| **Meshtastic** | Open-source LoRa mesh networking project (Apache 2.0); AirTAK is interoperable with it |
 | **MTU** | Maximum Transmission Unit — maximum byte count per BLE ATT packet |
 | **NMEA** | National Marine Electronics Association — standard GPS sentence format |
 | **NOR flash** | Non-volatile flash memory used for config storage on the T-Echo Plus |
 | **PHY** | Physical layer — the LoRa modulation parameters (SF, BW, CR, frequency) |
-| **PHY Profile** | A named set of SF/BW/CR parameters assigned to a MASH channel slot; nodes must share the same PHY profile to communicate on a channel |
+| **PHY Profile** | A named set of SF/BW/CR parameters assigned to a AirTAK channel slot; nodes must share the same PHY profile to communicate on a channel |
 | **PTT** | Push-to-Talk — half-duplex voice communication mode; user holds a button to transmit voice and releases to receive |
 | **PSK** | Pre-Shared Key — symmetric encryption key distributed out-of-band to game participants |
-| **Duty Cycle** | Regulatory limit on the fraction of time a radio may transmit on a given frequency band; EU 868 MHz sub-band g = 1 %, sub-band g1 = 10 %; each device operator is individually responsible for compliance; MASH smart beaconing and AudioConfig DC display help operators stay within their legal limits |
-| **FEC** | Forward Error Correction — MASH audio uses a piggyback FEC scheme: each AudioPacket carries the previous packet's Codec2 bytes so the receiver can reconstruct a single lost packet without retransmission |
+| **Duty Cycle** | Regulatory limit on the fraction of time a radio may transmit on a given frequency band; EU 868 MHz sub-band g = 1 %, sub-band g1 = 10 %; each device operator is individually responsible for compliance; AirTAK smart beaconing and AudioConfig DC display help operators stay within their legal limits |
+| **FEC** | Forward Error Correction — AirTAK audio uses a piggyback FEC scheme: each AudioPacket carries the previous packet's Codec2 bytes so the receiver can reconstruct a single lost packet without retransmission |
 | **PLC** | Packet Loss Concealment — when two or more consecutive audio packets are lost and FEC cannot recover them, the Codec2 decoder synthesises comfort noise to mask the gap |
-| **Smart Beaconing** | MASH position broadcast policy: transmit when GPS displacement ≥ 10 m (min 15 s apart) or when 90 s heartbeat fires; replaces fixed-interval beaconing to help each device operate within regulatory duty-cycle limits while minimising channel load in typical deployments |
-| **TDM** | Time-Division Multiplexing — used by MASH to share the single SX1262 radio between channel slots that use different PHY profiles |
+| **Smart Beaconing** | AirTAK position broadcast policy: transmit when GPS displacement ≥ 10 m (min 15 s apart) or when 90 s heartbeat fires; replaces fixed-interval beaconing to help each device operate within regulatory duty-cycle limits while minimising channel load in typical deployments |
+| **TDM** | Time-Division Multiplexing — used by AirTAK to share the single SX1262 radio between channel slots that use different PHY profiles |
 | **SNR** | Signal-to-Noise Ratio — radio link quality metric; higher is better |
 | **SX1262** | Semtech SX1262 — the LoRa transceiver IC used in the T-Echo Plus |
 | **T-Echo Plus** | LilyGo T-Echo Plus development board; the sole supported firmware hardware target |
 
 ---
 
-*End of MASH Master Planning Document v1.4*
+*End of AirTAK Master Planning Document v1.4*
 *This document is immutable after acceptance. Implementation decisions that deviate from this document require a new versioned planning document, not amendments here.*

@@ -1,4 +1,4 @@
-# MASH BLE Service
+# AirTAK BLE Service
 
 **Planning:** §10 | **Roadmap:** T.8
 
@@ -8,7 +8,7 @@
 
 **Service UUID:** `4d415348-0000-1000-8000-00805f9b34fb`
 
-All MASH-specific UUIDs follow the pattern `4d415348-{char_id:04x}-1000-8000-00805f9b34fb`.
+All AirTAK-specific UUIDs follow the pattern `4d415348-{char_id:04x}-1000-8000-00805f9b34fb`.
 
 ---
 
@@ -39,7 +39,7 @@ All MASH-specific UUIDs follow the pattern `4d415348-{char_id:04x}-1000-8000-008
 
 ## 4. Framing Protocol (§10.2)
 
-All MASH characteristics use a 6-byte chunked framing header to support payloads larger than a single ATT value.
+All AirTAK characteristics use a 6-byte chunked framing header to support payloads larger than a single ATT value.
 
 ### Frame header (6 bytes, little-endian)
 

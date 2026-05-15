@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/ui/Screens.h — Screen ID enum and E-Ink layout constants
 // Planning: §9.6 | Roadmap: 1.4
 //
@@ -9,7 +9,7 @@
 
 #include <cstdint>
 
-namespace mash {
+namespace airtak {
 namespace ui {
 
 enum class ScreenId : uint8_t {
@@ -54,4 +54,4 @@ using ui::DISPLAY_DIRTY_MESSAGE;
 using ui::DISPLAY_DIRTY_PLAYERS;
 using ui::DISPLAY_DIRTY_ALL;
 
-} // namespace mash
+} // namespace airtak

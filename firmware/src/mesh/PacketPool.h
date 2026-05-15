@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/PacketPool.h — Fixed-size preallocated packet buffer pool
 // Planning: §9.2 | Roadmap: 1.7, 2.5
 //
@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace mash {
+namespace airtak {
 
 // Maximum number of concurrently live packets in the system.
 // Sized to hold: radio RX queue (16) + TX queue (8) + ACK retry queue (8) + headroom (8).
@@ -43,4 +43,4 @@ public:
     static size_t usedCount();
 };
 
-} // namespace mash
+} // namespace airtak

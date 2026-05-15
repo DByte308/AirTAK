@@ -1,8 +1,8 @@
-// MASH — Mesh Airsoft Situational Hub
-// firmware/src/ble/MashService.h — MASH GATT service definition
+// AirTAK — Airsoft Team Awareness Kit
+// firmware/src/ble/AirTAKService.h — AirTAK GATT service definition
 // Planning: §10.1, §10.3, §10.4, §10.5 | Roadmap: 1.5
 //
-// MASH GATT Service UUID: 4d415348-0000-1000-8000-00805f9b34fb
+// AirTAK GATT Service UUID: 4d415348-0000-1000-8000-00805f9b34fb
 //
 // Characteristics:
 //   CONFIG_RW    4d415348-0001-…  Read/Write (authenticated), Indicate  — §10.3
@@ -19,20 +19,20 @@
 #include <FreeRTOS.h>
 #include <queue.h>
 
-namespace mash {
+namespace airtak {
 namespace ble {
 
 // UUIDs (128-bit, little-endian byte order as required by BLEService)
-constexpr char MASH_SERVICE_UUID[]         = "4d415348-0000-1000-8000-00805f9b34fb";
+constexpr char AIRTAK_SERVICE_UUID[]         = "4d415348-0000-1000-8000-00805f9b34fb";
 constexpr char CHAR_CONFIG_RW_UUID[]       = "4d415348-0001-1000-8000-00805f9b34fb";
 constexpr char CHAR_MESH_TX_UUID[]         = "4d415348-0002-1000-8000-00805f9b34fb";
 constexpr char CHAR_MESH_RX_UUID[]         = "4d415348-0003-1000-8000-00805f9b34fb";
 constexpr char CHAR_DEVICE_STATUS_UUID[]   = "4d415348-0004-1000-8000-00805f9b34fb";
 constexpr char CHAR_ADMIN_UUID[]           = "4d415348-0005-1000-8000-00805f9b34fb";
 
-class MashService {
+class AirTAKService {
 public:
-    // Phase 1.5: Register MASH GATT service and all 5 characteristics.
+    // Phase 1.5: Register AirTAK GATT service and all 5 characteristics.
     // Sets up write callbacks and security requirements.
     static void init(QueueHandle_t mesh_rx_queue);
 
@@ -53,4 +53,4 @@ public:
 };
 
 } // namespace ble
-} // namespace mash
+} // namespace airtak

@@ -13,6 +13,6 @@ The firmware keeps mesh, config, game, BLE framing, and public HAL APIs in the s
 ## Adding A Board
 
 1. Add `src/platform/boards/<board>/BoardConfig.h` with pins, feature flags, and module selections.
-2. Add a PlatformIO environment that defines `MASH_BOARD_<BOARD_NAME>` and excludes unrelated platform implementation folders.
+2. Add a PlatformIO environment that defines `AIRTAK_BOARD_<BOARD_NAME>` and excludes unrelated platform implementation folders.
 3. If the board uses a new MCU family, add platform implementations for identity, BLE, DFU/recovery, and config storage before enabling the full firmware build.
 4. Keep public interfaces in `src/hal/`, `src/ble/`, and `src/config/` stable so mesh and application code do not need target-specific branches.

@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/test/test_framing/test_framing.cpp — BLE chunk framing unit tests
 // Planning: §10.2, §19.1 | Roadmap: Phase 1 exit criteria
 //
@@ -14,7 +14,7 @@
 #include "ble/Framing.h"
 #include <cstring>
 
-using namespace mash::ble;
+using namespace airtak::ble;
 
 static uint8_t s_payload[2048];
 static uint8_t s_out[BLE_MTU];

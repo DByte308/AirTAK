@@ -1,4 +1,4 @@
-// MASH Android — data/ble/BleFraming.kt
+// AirTAK Android — data/ble/BleFraming.kt
 // Planning: §10.2 | Roadmap: 3.6
 //
 // Android-side mirror of firmware Framing.h/.cpp.
@@ -7,7 +7,7 @@
 //
 // NOTE: Matches the firmware BLE_MTU (517) minus the ATT Handle-Value Notification overhead (3 bytes).
 
-package com.mash.data.ble
+package com.airtak.data.ble
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

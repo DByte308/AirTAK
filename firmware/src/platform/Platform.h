@@ -1,4 +1,4 @@
-// MASH - Mesh Airsoft Situational Hub
+// AirTAK - Airsoft Team Awareness Kit
 // firmware/src/platform/Platform.h - board and MCU integration boundary
 
 #pragma once
@@ -6,7 +6,7 @@
 #include <cstdint>
 #include "platform/BoardConfig.h"
 
-namespace mash {
+namespace airtak {
 namespace platform {
 
 const char* boardName();
@@ -21,4 +21,4 @@ uint32_t nodeId();
 void macAddress(uint8_t out[6]);
 
 } // namespace platform
-} // namespace mash
+} // namespace airtak

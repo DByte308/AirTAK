@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/ui/MainScreen.cpp — Main status screen hook
 // Planning: §9.6 | Roadmap: 1.4
 //
@@ -6,10 +6,10 @@
 
 #include "ui/Screens.h"
 
-namespace mash {
+namespace airtak {
 namespace ui {
 
 void renderMainScreen() {}
 
 } // namespace ui
-} // namespace mash
+} // namespace airtak

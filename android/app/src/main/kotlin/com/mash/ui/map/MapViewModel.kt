@@ -1,12 +1,12 @@
-// MASH Android — ui/map/MapViewModel.kt
+// AirTAK Android — ui/map/MapViewModel.kt
 // Planning: §11.4, §11.5 | Roadmap: 3.1, 3.4, 3.5
 
-package com.mash.ui.map
+package com.airtak.ui.map
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mash.data.db.NodeDao
-import com.mash.data.db.NodeEntity
+import com.airtak.data.db.NodeDao
+import com.airtak.data.db.NodeEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject

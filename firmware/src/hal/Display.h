@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/hal/Display.h — SSD1681 E-Ink display driver
 // Planning: §9.6, §7.1 | Roadmap: 1.4
 //
@@ -16,7 +16,7 @@
 #include <event_groups.h>
 #include "ui/Screens.h"   // ScreenId, ROW_*, DISPLAY_DIRTY_*, EINK_WIDTH/HEIGHT
 
-namespace mash {
+namespace airtak {
 
 class Display {
 public:
@@ -50,4 +50,4 @@ public:
     static void showRecoveryMode(bool config_erased, bool bonds_cleared);
 };
 
-} // namespace mash
+} // namespace airtak

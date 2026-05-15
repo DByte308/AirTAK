@@ -1,4 +1,4 @@
-// MASH - Mesh Airsoft Situational Hub
+// AirTAK - Airsoft Team Awareness Kit
 // firmware/src/platform/nrf52/config/FlashStore.cpp - Adafruit LittleFS QSPI storage
 
 #include "config/FlashStore.h"
@@ -10,7 +10,7 @@
 #include <cstdio>
 #include <cstring>
 
-namespace mash {
+namespace airtak {
 namespace config {
 
 static bool s_initialized = false;
@@ -19,12 +19,12 @@ constexpr uint32_t FLASH_BLOCK_SIZE = 4096;
 constexpr uint32_t FLASH_PROG_SIZE  = 256;
 
 static Adafruit_FlashTransport_QSPI s_flash_transport(
-    MASH_PIN_QSPI_SCK,
-    MASH_PIN_QSPI_CS,
-    MASH_PIN_QSPI_IO0,
-    MASH_PIN_QSPI_IO1,
-    MASH_PIN_QSPI_IO2,
-    MASH_PIN_QSPI_IO3
+    AIRTAK_PIN_QSPI_SCK,
+    AIRTAK_PIN_QSPI_CS,
+    AIRTAK_PIN_QSPI_IO0,
+    AIRTAK_PIN_QSPI_IO1,
+    AIRTAK_PIN_QSPI_IO2,
+    AIRTAK_PIN_QSPI_IO3
 );
 static Adafruit_SPIFlashBase s_flash(&s_flash_transport);
 static Adafruit_LittleFS s_config_fs;
@@ -173,4 +173,4 @@ size_t FlashStore::freeBytes() {
 }
 
 } // namespace config
-} // namespace mash
+} // namespace airtak

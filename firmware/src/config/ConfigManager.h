@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/config/ConfigManager.h — Hot-reload config engine
 // Planning: §9.4, §9.4.2 | Roadmap: 2.8
 //
@@ -14,9 +14,9 @@
 #include "config/ConfigGroups.h"
 
 // Factory defaults are serialized with the committed nanopb bindings generated
-// from proto/mash/config.proto by tools/proto_gen.ps1.
+// from proto/airtak/config.proto by tools/proto_gen.ps1.
 
-namespace mash {
+namespace airtak {
 namespace config {
 
 // Callback invoked after a config group is successfully committed.
@@ -93,4 +93,4 @@ public:
 };
 
 } // namespace config
-} // namespace mash
+} // namespace airtak

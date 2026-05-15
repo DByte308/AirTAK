@@ -1,4 +1,4 @@
-// MASH Android — build.gradle.kts (root)
+// AirTAK Android — build.gradle.kts (root)
 // Planning: §11 | Roadmap: Phase 3
 
 plugins {

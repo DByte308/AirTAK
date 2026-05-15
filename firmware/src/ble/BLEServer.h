@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/ble/BLEServer.h — GATT server lifecycle and security
 // Planning: §9.7, §10.6 | Roadmap: 1.5
 
@@ -9,12 +9,12 @@
 #include <queue.h>
 #include "mesh/PacketPool.h"
 
-namespace mash {
+namespace airtak {
 namespace ble {
 
 class BLEServer {
 public:
-    // Phase 1.5: Initialize the platform BLE stack, register MASH and DFU services,
+    // Phase 1.5: Initialize the platform BLE stack, register AirTAK and DFU services,
     // configure LE Secure Connections pairing, begin advertising.
     static void init(QueueHandle_t mesh_rx_queue);
 
@@ -39,4 +39,4 @@ public:
 };
 
 } // namespace ble
-} // namespace mash
+} // namespace airtak

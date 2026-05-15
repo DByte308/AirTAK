@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/MeshNode.cpp — Node identity and NODEINFO/POSITION broadcast
 // Planning: §8.8, §13.2, §8.7 | Roadmap: 2.2, 2.4
 
@@ -16,7 +16,7 @@
 #include <cstring>
 #include <cstdio>
 
-namespace mash {
+namespace airtak {
 
 static uint32_t s_node_id           = 0;
 static uint32_t s_last_nodeinfo_ms  = 0;
@@ -231,4 +231,4 @@ void MeshNode::onNodeInfoReceived(uint32_t src_node_id) {
     Display::markDirty(DISPLAY_DIRTY_RADIO);
 }
 
-} // namespace mash
+} // namespace airtak

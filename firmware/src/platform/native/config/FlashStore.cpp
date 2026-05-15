@@ -1,4 +1,4 @@
-// MASH - Mesh Airsoft Situational Hub
+// AirTAK - Airsoft Team Awareness Kit
 // firmware/src/platform/native/config/FlashStore.cpp - native test config storage
 
 #include "config/FlashStore.h"
@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace mash {
+namespace airtak {
 namespace config {
 
 static bool s_initialized = false;
@@ -20,7 +20,7 @@ static const char* tempDir() {
 }
 
 static void nativePath(ConfigGroup group, char* out, size_t out_len) {
-    snprintf(out, out_len, "%s\\mash_flashstore_%u.pb", tempDir(), static_cast<unsigned>(group));
+    snprintf(out, out_len, "%s\\airtak_flashstore_%u.pb", tempDir(), static_cast<unsigned>(group));
 }
 
 bool FlashStore::init() {
@@ -81,4 +81,4 @@ size_t FlashStore::freeBytes() {
 }
 
 } // namespace config
-} // namespace mash
+} // namespace airtak

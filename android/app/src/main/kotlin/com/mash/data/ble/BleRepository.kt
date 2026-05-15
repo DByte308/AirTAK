@@ -1,16 +1,16 @@
-// MASH Android — data/ble/BleRepository.kt
+// AirTAK Android — data/ble/BleRepository.kt
 // Planning: §11.3 | Roadmap: 3.1, 3.2
 //
 // Manages BLE scan → pair → connect → reconnect lifecycle.
 // Reconnect strategy: exponential backoff (1 s, 2 s, 4 s, … capped at 60 s).
 // All BLE callbacks are bridged to Kotlin Flows for consumption by ViewModels.
 //
-// SECURITY: MASH firmware uses LE Secure Connections + Numeric Comparison (§10.6).
+// SECURITY: AirTAK firmware uses LE Secure Connections + Numeric Comparison (§10.6).
 // Android handles LESC pairing automatically when the remote requests it; the user
 // confirms the 6-digit passkey on both the phone and E-Ink display.
 // No raw credentials are logged or stored outside the Android bond store.
 
-package com.mash.data.ble
+package com.airtak.data.ble
 
 import android.annotation.SuppressLint
 import android.bluetooth.*
@@ -33,8 +33,8 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// MASH GATT UUIDs (must match firmware/include/config.h).
-private val MASH_SERVICE_UUID   = UUID.fromString("4d415348-0000-1000-8000-00805f9b34fb")
+// AirTAK GATT UUIDs (must match firmware/include/config.h).
+private val AIRTAK_SERVICE_UUID   = UUID.fromString("4d415348-0000-1000-8000-00805f9b34fb")
 private val CHAR_CONFIG_RW_UUID = UUID.fromString("4d415348-0001-1000-8000-00805f9b34fb")
 private val CHAR_MESH_TX_UUID   = UUID.fromString("4d415348-0002-1000-8000-00805f9b34fb")
 private val CHAR_MESH_RX_UUID   = UUID.fromString("4d415348-0003-1000-8000-00805f9b34fb")
@@ -76,7 +76,7 @@ class BleRepository @Inject constructor(
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 this@BleRepository.gatt = gatt
                 _connectionState.value  = ConnectionState.CONNECTING
-                gatt.requestMtu(517)  // MASH firmware requires MTU 517 (§10.1)
+                gatt.requestMtu(517)  // AirTAK firmware requires MTU 517 (§10.1)
             } else {
                 this@BleRepository.gatt?.close()
                 this@BleRepository.gatt = null
@@ -146,7 +146,7 @@ class BleRepository @Inject constructor(
     // ── BLE setup helpers ─────────────────────────────────────────────────────
 
     private fun enableNotify(gatt: BluetoothGatt, charUuid: UUID) {
-        val char = gatt.getService(MASH_SERVICE_UUID)?.getCharacteristic(charUuid) ?: return
+        val char = gatt.getService(AIRTAK_SERVICE_UUID)?.getCharacteristic(charUuid) ?: return
         gatt.setCharacteristicNotification(char, true)
         val cccd = char.getDescriptor(CCCD_UUID) ?: return
         val value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
@@ -163,7 +163,7 @@ class BleRepository @Inject constructor(
 
     // ── Connection lifecycle ──────────────────────────────────────────────────
 
-    /** Begin scanning for MASH devices and connect to the first one found. */
+    /** Begin scanning for AirTAK devices and connect to the first one found. */
     fun connect() {
         _connectionState.value = ConnectionState.SCANNING
         val adapter: BluetoothAdapter? = context.getSystemService(BluetoothManager::class.java)?.adapter
@@ -176,7 +176,7 @@ class BleRepository @Inject constructor(
         }
 
         val filter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(MASH_SERVICE_UUID))
+            .setServiceUuid(ParcelUuid(AIRTAK_SERVICE_UUID))
             .build()
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -220,7 +220,7 @@ class BleRepository @Inject constructor(
      */
     suspend fun writeMeshTx(data: ByteArray): Boolean {
         val g = gatt ?: return false
-        val char = g.getService(MASH_SERVICE_UUID)?.getCharacteristic(CHAR_MESH_TX_UUID) ?: return false
+        val char = g.getService(AIRTAK_SERVICE_UUID)?.getCharacteristic(CHAR_MESH_TX_UUID) ?: return false
         val chunks = BleFraming.encode(data, mtu - 3 - 6)
         for (chunk in chunks) {
             if (!writeCharacteristicNoResponse(g, char, chunk)) return false
@@ -235,7 +235,7 @@ class BleRepository @Inject constructor(
      */
     suspend fun writeConfig(pbData: ByteArray): Boolean {
         val g = gatt ?: return false
-        val char = g.getService(MASH_SERVICE_UUID)?.getCharacteristic(CHAR_CONFIG_RW_UUID) ?: return false
+        val char = g.getService(AIRTAK_SERVICE_UUID)?.getCharacteristic(CHAR_CONFIG_RW_UUID) ?: return false
         val chunks = BleFraming.encode(pbData, mtu - 3 - 6) // ATT overhead + frame header
         for (chunk in chunks) {
             if (!writeCharacteristicWithResponse(g, char, chunk)) return false
@@ -249,7 +249,7 @@ class BleRepository @Inject constructor(
      */
     suspend fun writeAdmin(pbData: ByteArray): Boolean {
         val g = gatt ?: return false
-        val char = g.getService(MASH_SERVICE_UUID)?.getCharacteristic(CHAR_ADMIN_UUID) ?: return false
+        val char = g.getService(AIRTAK_SERVICE_UUID)?.getCharacteristic(CHAR_ADMIN_UUID) ?: return false
         return writeCharacteristicWithResponse(g, char, pbData)
     }
 

@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/config/FlashStore.h — LittleFS persistent config storage
 // Planning: §9.4.4 | Roadmap: 1.6
 //
@@ -12,7 +12,7 @@
 #include <cstddef>
 #include "config/ConfigGroups.h"
 
-namespace mash {
+namespace airtak {
 namespace config {
 
 class FlashStore {
@@ -45,4 +45,4 @@ public:
 };
 
 } // namespace config
-} // namespace mash
+} // namespace airtak

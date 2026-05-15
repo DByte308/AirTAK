@@ -1,0 +1,8 @@
+airtak.DeviceConfig.long_name max_size:40
+airtak.DeviceConfig.short_name max_size:5
+airtak.PhyProfile.name max_size:17
+airtak.LoraConfig.profiles max_count:5
+airtak.ChannelSlot.name max_size:17
+airtak.ChannelSlot.psk max_size:32
+airtak.ChannelConfig.slots max_count:8
+airtak.GameConfig.callsign max_size:17

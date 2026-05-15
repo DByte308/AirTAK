@@ -1,7 +1,7 @@
-// MASH Android — ui/game/GameViewModel.kt
+// AirTAK Android — ui/game/GameViewModel.kt
 // Planning: §11.8, §12 | Roadmap: 5.1–5.6
 
-package com.mash.ui.game
+package com.airtak.ui.game
 
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel

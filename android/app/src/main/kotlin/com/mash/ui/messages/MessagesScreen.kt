@@ -1,7 +1,7 @@
-// MASH Android — ui/messages/MessagesScreen.kt
+// AirTAK Android — ui/messages/MessagesScreen.kt
 // Planning: §11.6 | Roadmap: 3.2
 
-package com.mash.ui.messages
+package com.airtak.ui.messages
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,7 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.mash.data.db.MessageEntity
+import com.airtak.data.db.MessageEntity
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -39,7 +39,7 @@ fun MessagesScreen(viewModel: MessagesViewModel = hiltViewModel()) {
         if (!uiState.isConnected) {
             Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Not connected to MASH device",
+                    text = "Not connected to AirTAK device",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                     color = MaterialTheme.colorScheme.onErrorContainer,
                     fontSize = 12.sp,

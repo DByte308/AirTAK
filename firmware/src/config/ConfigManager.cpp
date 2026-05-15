@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/config/ConfigManager.cpp — Hot-reload config engine implementation
 // Planning: §9.4, §9.4.2 | Roadmap: 2.8
 
@@ -10,7 +10,7 @@
 #include "mesh/ChannelManager.h"
 #include "mesh/PacketPool.h"
 #include "config.h"
-#include "mash/config.pb.h"
+#include "airtak/config.pb.h"
 #include <pb_encode.h>
 #include <pb_decode.h>
 #include <FreeRTOS.h>
@@ -21,7 +21,7 @@
 extern QueueHandle_t g_config_change_queue;
 extern QueueHandle_t g_radio_tx_queue;
 
-namespace mash {
+namespace airtak {
 namespace config {
 
 static ConfigChangedCallback s_callback = nullptr;
@@ -96,15 +96,15 @@ static void copyString(char* dest, size_t dest_len, const char* src) {
 }
 
 static size_t encodeDeviceConfig(uint8_t* buf, size_t buf_len) {
-    mash_DeviceConfig msg = mash_DeviceConfig_init_zero;
+    airtak_DeviceConfig msg = airtak_DeviceConfig_init_zero;
     copyString(msg.long_name, sizeof(msg.long_name), defaults::DEVICE_LONG_NAME);
     copyString(msg.short_name, sizeof(msg.short_name), defaults::DEVICE_SHORT_NAME);
-    return encodeMessage(mash_DeviceConfig_fields, &msg, buf, buf_len);
+    return encodeMessage(airtak_DeviceConfig_fields, &msg, buf, buf_len);
 }
 
 static size_t encodeLoraConfig(uint8_t* buf, size_t buf_len) {
-    mash_LoraConfig msg = mash_LoraConfig_init_zero;
-    msg.region = static_cast<mash_LoraRegion>(defaults::LORA_REGION);
+    airtak_LoraConfig msg = airtak_LoraConfig_init_zero;
+    msg.region = static_cast<airtak_LoraRegion>(defaults::LORA_REGION);
     msg.tx_power_dbm = defaults::LORA_TX_POWER_DBM;
     msg.profiles_count = 5;
     for (uint8_t i = 0; i < msg.profiles_count; i++) {
@@ -114,11 +114,11 @@ static size_t encodeLoraConfig(uint8_t* buf, size_t buf_len) {
         msg.profiles[i].bandwidth_hz = ph.bandwidth_hz;
         msg.profiles[i].coding_rate = ph.coding_rate;
     }
-    return encodeMessage(mash_LoraConfig_fields, &msg, buf, buf_len);
+    return encodeMessage(airtak_LoraConfig_fields, &msg, buf, buf_len);
 }
 
 static size_t encodeChannelConfig(uint8_t* buf, size_t buf_len) {
-    mash_ChannelConfig msg = mash_ChannelConfig_init_zero;
+    airtak_ChannelConfig msg = airtak_ChannelConfig_init_zero;
     msg.slots_count = defaults::CHANNEL_COUNT;
     for (uint8_t i = 0; i < msg.slots_count; i++) {
         const auto& ch = defaults::CHANNEL_SLOTS[i];
@@ -126,57 +126,57 @@ static size_t encodeChannelConfig(uint8_t* buf, size_t buf_len) {
         slot.index = ch.index;
         copyString(slot.name, sizeof(slot.name), ch.name);
         slot.psk.size = 0;
-        slot.role = static_cast<mash_ChannelRole>(ch.role);
+        slot.role = static_cast<airtak_ChannelRole>(ch.role);
         slot.uplink_enabled = ch.uplink_enabled;
         slot.downlink_enabled = ch.downlink_enabled;
         slot.position_precision = ch.position_precision;
         slot.phy_profile_index = ch.phy_profile_index;
     }
-    return encodeMessage(mash_ChannelConfig_fields, &msg, buf, buf_len);
+    return encodeMessage(airtak_ChannelConfig_fields, &msg, buf, buf_len);
 }
 
 static size_t encodePositionConfig(uint8_t* buf, size_t buf_len) {
-    mash_PositionConfig msg = mash_PositionConfig_init_zero;
+    airtak_PositionConfig msg = airtak_PositionConfig_init_zero;
     msg.broadcast_interval_secs = defaults::POSITION_BROADCAST_INTERVAL_SECS;
     msg.gps_precision_bits = defaults::POSITION_GPS_PRECISION_BITS;
     msg.smart_broadcast = defaults::POSITION_SMART_BROADCAST;
     msg.movement_threshold_m = defaults::POSITION_MOVEMENT_THRESHOLD_M;
     msg.min_tx_interval_secs = defaults::POSITION_MIN_TX_INTERVAL_SECS;
     msg.position_hop_limit = 0;
-    return encodeMessage(mash_PositionConfig_fields, &msg, buf, buf_len);
+    return encodeMessage(airtak_PositionConfig_fields, &msg, buf, buf_len);
 }
 
 static size_t encodePowerConfig(uint8_t* buf, size_t buf_len) {
-    mash_PowerConfig msg = mash_PowerConfig_init_zero;
+    airtak_PowerConfig msg = airtak_PowerConfig_init_zero;
     msg.gps_duty_cycle = defaults::POWER_GPS_DUTY_CYCLE;
     msg.gps_on_secs = defaults::POWER_GPS_ON_SECS;
     msg.gps_off_secs = defaults::POWER_GPS_OFF_SECS;
     msg.display_off_secs = defaults::POWER_DISPLAY_OFF_SECS;
-    return encodeMessage(mash_PowerConfig_fields, &msg, buf, buf_len);
+    return encodeMessage(airtak_PowerConfig_fields, &msg, buf, buf_len);
 }
 
 static size_t encodeGameConfig(uint8_t* buf, size_t buf_len) {
-    mash_GameConfig msg = mash_GameConfig_init_zero;
+    airtak_GameConfig msg = airtak_GameConfig_init_zero;
     copyString(msg.callsign, sizeof(msg.callsign), defaults::GAME_CALLSIGN);
     msg.team_id = defaults::GAME_TEAM_ID;
     msg.player_color_rgb = defaults::GAME_PLAYER_COLOR_RGB;
     msg.is_admin = defaults::GAME_IS_ADMIN;
-    return encodeMessage(mash_GameConfig_fields, &msg, buf, buf_len);
+    return encodeMessage(airtak_GameConfig_fields, &msg, buf, buf_len);
 }
 
 static size_t encodeSecurityConfig(uint8_t* buf, size_t buf_len) {
-    mash_SecurityConfig msg = mash_SecurityConfig_init_zero;
+    airtak_SecurityConfig msg = airtak_SecurityConfig_init_zero;
     msg.max_bonded_devices = defaults::SECURITY_MAX_BONDED_DEVICES;
-    return encodeMessage(mash_SecurityConfig_fields, &msg, buf, buf_len);
+    return encodeMessage(airtak_SecurityConfig_fields, &msg, buf, buf_len);
 }
 
 static size_t encodeAudioConfig(uint8_t* buf, size_t buf_len) {
-    mash_AudioConfig msg = mash_AudioConfig_init_zero;
+    airtak_AudioConfig msg = airtak_AudioConfig_init_zero;
     msg.audio_channel_slot = defaults::AUDIO_CHANNEL_SLOT;
     msg.codec2_mode_bps = defaults::AUDIO_CODEC2_BPS;
     msg.ptt_enabled = defaults::AUDIO_PTT_ENABLED;
     msg.frame_count = defaults::AUDIO_FRAME_COUNT;
-    return encodeMessage(mash_AudioConfig_fields, &msg, buf, buf_len);
+    return encodeMessage(airtak_AudioConfig_fields, &msg, buf, buf_len);
 }
 
 static size_t encodeFactoryDefaults(ConfigGroup g, uint8_t* buf, size_t buf_len) {
@@ -494,9 +494,9 @@ bool ConfigManager::loraPhyProfile(uint8_t profile_index,
     uint8_t gidx = static_cast<uint8_t>(ConfigGroup::LORA);
     if (s_sizes[gidx] == 0) return false;
 
-    mash_LoraConfig msg = mash_LoraConfig_init_zero;
+    airtak_LoraConfig msg = airtak_LoraConfig_init_zero;
     pb_istream_t stream = pb_istream_from_buffer(s_buffers[gidx], s_sizes[gidx]);
-    if (!pb_decode(&stream, mash_LoraConfig_fields, &msg)) return false;
+    if (!pb_decode(&stream, airtak_LoraConfig_fields, &msg)) return false;
     if (profile_index >= msg.profiles_count) return false;
 
     const auto& profile = msg.profiles[profile_index];
@@ -510,4 +510,4 @@ bool ConfigManager::loraPhyProfile(uint8_t profile_index,
 }
 
 } // namespace config
-} // namespace mash
+} // namespace airtak

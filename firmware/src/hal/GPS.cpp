@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/hal/GPS.cpp — L76K GPS UART driver implementation
 // Planning: §9.5, §7.1 | Roadmap: 1.3
 
@@ -8,7 +8,7 @@
 #include <Arduino.h>
 #include <TinyGPS++.h>  // TinyGPS++ ≥ 1.0.3 (platformio.ini dependency)
 
-namespace mash {
+namespace airtak {
 
 // ── Static state ──────────────────────────────────────────────────────────────
 static TinyGPSPlus s_gps;
@@ -18,7 +18,7 @@ static double      s_last_tx_lng = 0.0;
 static bool        s_baud_upgraded = false;
 
 // Board-selected UART used for the GNSS module.
-static HardwareSerial& GPS_SERIAL = MASH_GPS_SERIAL;
+static HardwareSerial& GPS_SERIAL = AIRTAK_GPS_SERIAL;
 
 // ── PMTK command helpers ──────────────────────────────────────────────────────
 static void send_pmtk(const char* cmd) {
@@ -29,13 +29,13 @@ static void send_pmtk(const char* cmd) {
 // ── GPS::init() ───────────────────────────────────────────────────────────────
 void GPS::init() {
     // Enable L76K via GPIO
-    pinMode(MASH_PIN_GPS_ENABLE, OUTPUT);
-    digitalWrite(MASH_PIN_GPS_ENABLE, HIGH);
-    pinMode(MASH_PIN_GPS_RESET, OUTPUT);
-    digitalWrite(MASH_PIN_GPS_RESET, HIGH);
+    pinMode(AIRTAK_PIN_GPS_ENABLE, OUTPUT);
+    digitalWrite(AIRTAK_PIN_GPS_ENABLE, HIGH);
+    pinMode(AIRTAK_PIN_GPS_RESET, OUTPUT);
+    digitalWrite(AIRTAK_PIN_GPS_RESET, HIGH);
 
     // PPS pin — configure as input but do not use in logic (reserved, §9.5)
-    pinMode(MASH_PIN_GPS_PPS, INPUT);
+    pinMode(AIRTAK_PIN_GPS_PPS, INPUT);
 
     // Start UART at initial baud rate (§9.5)
     GPS_SERIAL.begin(GPS_BAUD_INITIAL, SERIAL_8N1);
@@ -99,7 +99,7 @@ bool GPS::hasFix() { return s_current_fix.valid; }
 // ── GPS::setPower() ──────────────────────────────────────────────────────────
 void GPS::setPower(bool on) {
     // Phase 6.2: GPS duty cycling via ENABLE pin (§9.5)
-    digitalWrite(MASH_PIN_GPS_ENABLE, on ? HIGH : LOW);
+    digitalWrite(AIRTAK_PIN_GPS_ENABLE, on ? HIGH : LOW);
 }
 
 // ── Displacement and smart beaconing support ─────────────────────────────────
@@ -127,4 +127,4 @@ static double haversine_m(double lat1, double lon1, double lat2, double lon2) {
     return R * 2.0 * atan2(sqrt(a), sqrt(1.0 - a));
 }
 
-} // namespace mash
+} // namespace airtak

@@ -1,9 +1,9 @@
-// MASH Android — domain/usecase/RequestPositionUseCase.kt
+// AirTAK Android — domain/usecase/RequestPositionUseCase.kt
 // Planning: §8.12, §12 | Roadmap: 2.12
 
-package com.mash.domain.usecase
+package com.airtak.domain.usecase
 
-import com.mash.data.ble.BleRepository
+import com.airtak.data.ble.BleRepository
 import javax.inject.Inject
 
 class RequestPositionUseCase @Inject constructor(

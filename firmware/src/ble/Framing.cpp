@@ -1,11 +1,11 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/ble/Framing.cpp — BLE GATT characteristic chunked framing implementation
 // Planning: §10.2 | Roadmap: 1.5
 
 #include "ble/Framing.h"
 #include <cstring>
 
-namespace mash {
+namespace airtak {
 namespace ble {
 
 size_t Framing::encodeChunk(const uint8_t* payload, size_t len,
@@ -71,4 +71,4 @@ bool Framing::reassemble(const FrameHeader& hdr,
 }
 
 } // namespace ble
-} // namespace mash
+} // namespace airtak

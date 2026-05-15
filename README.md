@@ -1,8 +1,8 @@
-# MASH — Mesh Airsoft Situational Hub
+# AirTAK — Airsoft Team Awareness Kit
 
 LoRa mesh radio firmware for the **LilyGo T-Echo Plus** and a native **Android** companion app, purpose-built for airsoft situational awareness.
 
-MASH is Meshtastic wire-format compatible on the shared channel and introduces a dedicated game-mode protocol on top.
+AirTAK is Meshtastic wire-format compatible on the shared channel and introduces a dedicated game-mode protocol on top.
 
 > **Status:** Phase 2 firmware mesh stack is buildable and covered by native config, framing, crypto, and router tests. Automated and hardware signoff status is tracked in [docs/phase2-acceptance.md](docs/phase2-acceptance.md).
 
@@ -45,13 +45,13 @@ The firmware toolchain is pinned in git and installed into a local, ignored venv
 
 Hold the T-Echo Plus user button while powering on or resetting the device. Keep it held for 5 seconds to enter safe mode.
 
-Safe mode runs before the shared peripheral power rail, normal radio, GPS, config apply, and FreeRTOS tasks. It keeps persisted config and BLE bonds intact by default, shows `SAFE MODE` on the e-ink display, and advertises over BLE as `MASH Recovery` with Nordic DFU available. Use this when faulty app firmware prevents normal access. Power-cycle without holding the button to boot normally after recovery.
+Safe mode runs before the shared peripheral power rail, normal radio, GPS, config apply, and FreeRTOS tasks. It keeps persisted config and BLE bonds intact by default, shows `SAFE MODE` on the e-ink display, and advertises over BLE as `AirTAK Recovery` with Nordic DFU available. Use this when faulty app firmware prevents normal access. Power-cycle without holding the button to boot normally after recovery.
 
 After the `SAFE MODE` screen appears, release the button. Then:
 
 - Tap the button to reset into the Adafruit UF2 USB bootloader.
 - Hold for 5 seconds to reset into USB serial DFU bootloader mode.
-- Hold for 10 seconds to erase persisted MASH config.
+- Hold for 10 seconds to erase persisted AirTAK config.
 
 Config erase is intentionally a separate confirmation gesture.
 
@@ -64,7 +64,7 @@ Safe mode is an application-level recovery path for the T-Echo Plus pin map. If 
 ```
 proto/
 ├── meshtastic/     Vendored Meshtastic protos (pinned commit — do not update)
-└── mash/           MASH proto definitions (config, ble, game, mesh)
+└── airtak/           AirTAK proto definitions (config, ble, game, mesh)
 
 firmware/           PlatformIO project — nRF52840 / T-Echo Plus
 android/            Kotlin + Jetpack Compose app (min API 31, target 35)

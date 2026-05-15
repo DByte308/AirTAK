@@ -1,4 +1,4 @@
-# MASH Phase 1 verification helper.
+# AirTAK Phase 1 verification helper.
 # Runs the automated Phase 1 checks and optionally uploads to a connected T-Echo Plus.
 
 param(

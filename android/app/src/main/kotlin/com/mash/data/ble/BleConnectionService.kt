@@ -1,11 +1,11 @@
-// MASH Android — data/ble/BleConnectionService.kt
+// AirTAK Android — data/ble/BleConnectionService.kt
 // Planning: §11.3 | Roadmap: 3.1
 //
 // ForegroundService (FOREGROUND_SERVICE_CONNECTED_DEVICE) that maintains the BLE
 // connection independently of the UI lifecycle. Shows a persistent notification
 // with connection state. Started by MainActivity; survives screen rotations.
 
-package com.mash.data.ble
+package com.airtak.data.ble
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -24,10 +24,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-private const val CHANNEL_ID        = "mash_ble_connection"
+private const val CHANNEL_ID        = "airtak_ble_connection"
 private const val NOTIFICATION_ID   = 1001
-const val ACTION_START              = "com.mash.ble.START"
-const val ACTION_STOP               = "com.mash.ble.STOP"
+const val ACTION_START              = "com.airtak.ble.START"
+const val ACTION_STOP               = "com.airtak.ble.STOP"
 
 @AndroidEntryPoint
 class BleConnectionService : Service() {
@@ -71,9 +71,9 @@ class BleConnectionService : Service() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "MASH Device Connection",
+            "AirTAK Device Connection",
             NotificationManager.IMPORTANCE_LOW
-        ).apply { description = "Maintains connection to MASH hardware" }
+        ).apply { description = "Maintains connection to AirTAK hardware" }
         getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
     }
 
@@ -90,7 +90,7 @@ class BleConnectionService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("MASH")
+            .setContentTitle("AirTAK")
             .setContentText(stateText)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setOngoing(true)

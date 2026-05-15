@@ -1,9 +1,9 @@
-// MASH Android — domain/usecase/SendMessageUseCase.kt
+// AirTAK Android — domain/usecase/SendMessageUseCase.kt
 // Planning: §11.6 | Roadmap: 3.2
 
-package com.mash.domain.usecase
+package com.airtak.domain.usecase
 
-import com.mash.data.ble.BleRepository
+import com.airtak.data.ble.BleRepository
 import javax.inject.Inject
 
 class SendMessageUseCase @Inject constructor(

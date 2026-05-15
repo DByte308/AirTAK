@@ -1,4 +1,4 @@
-// MASH Android — settings.gradle.kts
+// AirTAK Android — settings.gradle.kts
 // Planning: §11 | Roadmap: Phase 3
 
 pluginManagement {
@@ -17,5 +17,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "mash"
+rootProject.name = "airtak"
 include(":app")

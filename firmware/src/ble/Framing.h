@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/ble/Framing.h — BLE GATT characteristic chunked framing
 // Planning: §10.2 | Roadmap: 1.5
 //
@@ -9,7 +9,7 @@
 //
 // At MTU 517, usable payload per chunk = 508 bytes (517 − 3 ATT overhead − 6 frame header).
 // The BLE ATT notification PDU carries a 3-byte header (opcode + handle), leaving
-// 514 bytes of ATT payload. Subtracting the 6-byte MASH frame header gives 508 bytes
+// 514 bytes of ATT payload. Subtracting the 6-byte AirTAK frame header gives 508 bytes
 // of chunk data per notification. This matches §10.2: "MTU − 6 − 3 (ATT overhead)".
 // Used for both CONFIG_RW and ADMIN characteristics (§10.3, §10.5).
 
@@ -18,7 +18,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace mash {
+namespace airtak {
 namespace ble {
 
 constexpr size_t   FRAME_HEADER_SIZE = 6;
@@ -61,4 +61,4 @@ public:
 };
 
 } // namespace ble
-} // namespace mash
+} // namespace airtak

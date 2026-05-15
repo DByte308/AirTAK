@@ -6,25 +6,25 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(mash_ConfigPayload, mash_ConfigPayload, 2)
+PB_BIND(airtak_ConfigPayload, airtak_ConfigPayload, 2)
 
 
-PB_BIND(mash_ConfigAck, mash_ConfigAck, AUTO)
+PB_BIND(airtak_ConfigAck, airtak_ConfigAck, AUTO)
 
 
-PB_BIND(mash_DeviceStatus, mash_DeviceStatus, AUTO)
+PB_BIND(airtak_DeviceStatus, airtak_DeviceStatus, AUTO)
 
 
-PB_BIND(mash_GpsStatus, mash_GpsStatus, AUTO)
+PB_BIND(airtak_GpsStatus, airtak_GpsStatus, AUTO)
 
 
-PB_BIND(mash_RadioStatus, mash_RadioStatus, AUTO)
+PB_BIND(airtak_RadioStatus, airtak_RadioStatus, AUTO)
 
 
-PB_BIND(mash_AdminRequest, mash_AdminRequest, AUTO)
+PB_BIND(airtak_AdminRequest, airtak_AdminRequest, AUTO)
 
 
-PB_BIND(mash_AdminResponse, mash_AdminResponse, AUTO)
+PB_BIND(airtak_AdminResponse, airtak_AdminResponse, AUTO)
 
 
 

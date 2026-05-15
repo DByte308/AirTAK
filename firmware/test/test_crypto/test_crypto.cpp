@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/test/test_crypto/test_crypto.cpp — AES-128-CTR unit tests
 // Planning: §15.1, §19.1 | Roadmap: Phase 1 exit criteria
 //
@@ -25,7 +25,7 @@
 #include <cstring>
 #include <cstdio>
 
-using namespace mash;
+using namespace airtak;
 
 // Test PSK: "LongFast" default channel from Meshtastic (0xd4f1bb3a20290000... padded)
 static const uint8_t TEST_PSK[32] = {
@@ -46,7 +46,7 @@ void test_key_derivation_length() {
 }
 
 void test_encrypt_decrypt_roundtrip() {
-    uint8_t plaintext[32] = "MASH test payload data 12345678";
+    uint8_t plaintext[32] = "AirTAK test payload data 123456";
     uint8_t ciphertext[32];
     uint8_t recovered[32];
     memcpy(ciphertext, plaintext, 32);
@@ -101,7 +101,7 @@ void test_channel_hash_slot0_xor_fold() {
 //            0xad ^ 0x00...= 0xad
 // Expected:  0xad — this is the byte that appears in the Flags field of every
 // default Meshtastic LongFast packet and must match what stock Meshtastic devices
-// compute. A mismatch here means MASH and Meshtastic are on different logical
+// compute. A mismatch here means AirTAK and Meshtastic are on different logical
 // channels and will silently discard each other's packets (§8.6 §G1).
 void test_channel_hash_slot0_meshtastic_longfast_interop() {
     static const uint8_t LONGFAST_PSK[32] = {

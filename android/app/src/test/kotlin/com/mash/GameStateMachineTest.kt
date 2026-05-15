@@ -1,11 +1,11 @@
-// MASH Android — src/test/kotlin/com/mash/GameStateMachineTest.kt
+// AirTAK Android — src/test/kotlin/com/airtak/GameStateMachineTest.kt
 // Planning: §12.1–12.5, §19.1 | Roadmap: Phase 5 exit criteria
 //
 // Tests win condition algorithms and state transition correctness.
 
-package com.mash
+package com.airtak
 
-import com.mash.domain.model.*
+import com.airtak.domain.model.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 

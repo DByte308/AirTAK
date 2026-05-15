@@ -1,10 +1,10 @@
-// MASH Android — data/db/NodeDao.kt
+// AirTAK Android — data/db/NodeDao.kt
 // Planning: §13.2, §11 | Roadmap: 2.2, 3.3
 //
 // Stores known mesh nodes with position, status, and team information.
-// Updated on every NODEINFO_APP and MASH_PLAYER packet.
+// Updated on every NODEINFO_APP and AIRTAK_PLAYER packet.
 
-package com.mash.data.db
+package com.airtak.data.db
 
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow

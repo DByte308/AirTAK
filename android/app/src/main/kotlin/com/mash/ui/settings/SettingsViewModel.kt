@@ -1,12 +1,12 @@
-// MASH Android — ui/settings/SettingsViewModel.kt
+// AirTAK Android — ui/settings/SettingsViewModel.kt
 // Planning: §11.9, §14.2 | Roadmap: 3.6
 
-package com.mash.ui.settings
+package com.airtak.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mash.data.ble.BleRepository
-import com.mash.data.ble.ConnectionState
+import com.airtak.data.ble.BleRepository
+import com.airtak.data.ble.ConnectionState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch

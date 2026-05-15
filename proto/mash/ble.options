@@ -1,8 +1,0 @@
-mash.ConfigPayload.data max_size:512
-mash.ConfigAck.error max_size:96
-mash.DeviceStatus.node_name max_size:40
-mash.DeviceStatus.firmware_version max_size:16
-mash.DeviceStatus.bluetooth_address max_size:18
-mash.RadioStatus.channel_name max_size:17
-mash.AdminRequest.confirm_token max_size:96
-mash.AdminResponse.error max_size:96

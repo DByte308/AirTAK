@@ -1,8 +1,8 @@
-// MASH - Mesh Airsoft Situational Hub
-// firmware/src/platform/nrf52/ble/MashService.cpp - Bluefruit MASH GATT service
+// AirTAK - Airsoft Team Awareness Kit
+// firmware/src/platform/nrf52/ble/AirTAKService.cpp - Bluefruit AirTAK GATT service
 // Planning: section 10.1, section 10.3, section 10.4, section 10.5 | Roadmap: 1.5
 
-#include "ble/MashService.h"
+#include "ble/AirTAKService.h"
 #include "ble/DFUService.h"
 #include "ble/Framing.h"
 #include "config/ConfigManager.h"
@@ -12,7 +12,7 @@
 #include "hal/Radio.h"
 #include "hal/GPS.h"
 #include "config.h"
-#include "mash/ble.pb.h"
+#include "airtak/ble.pb.h"
 #include <pb_encode.h>
 #include <pb_decode.h>
 #include <bluefruit.h>
@@ -21,10 +21,10 @@
 
 extern EventGroupHandle_t g_radio_event_group;
 
-namespace mash {
+namespace airtak {
 namespace ble {
 
-static BLEService        s_svc       (MASH_SERVICE_UUID);
+static BLEService        s_svc       (AIRTAK_SERVICE_UUID);
 static BLECharacteristic s_config_rw (CHAR_CONFIG_RW_UUID);
 static BLECharacteristic s_mesh_tx   (CHAR_MESH_TX_UUID);
 static BLECharacteristic s_mesh_rx   (CHAR_MESH_RX_UUID);
@@ -72,16 +72,16 @@ static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
                                     s_config_assembly, &s_config_recv_mask);
     if (!done) return;
 
-    mash_ConfigPayload request = mash_ConfigPayload_init_zero;
+    airtak_ConfigPayload request = airtak_ConfigPayload_init_zero;
     pb_istream_t in_stream = pb_istream_from_buffer(s_config_assembly, hdr.total_length);
-    if (!pb_decode(&in_stream, mash_ConfigPayload_fields, &request)) return;
-    if (request.group > mash_ConfigGroup_AUDIO) return;
+    if (!pb_decode(&in_stream, airtak_ConfigPayload_fields, &request)) return;
+    if (request.group > airtak_ConfigGroup_AUDIO) return;
 
     ConfigGroup group = static_cast<ConfigGroup>(request.group);
     int result = config::ConfigManager::applyGroup(group,
         request.data.bytes, request.data.size, request.commit);
 
-    mash_ConfigAck ack = mash_ConfigAck_init_zero;
+    airtak_ConfigAck ack = airtak_ConfigAck_init_zero;
     ack.group = request.group;
     ack.success = (result == 0);
     ack.radio_restarted = request.commit && config::groupRequiresRadioRestart(group);
@@ -91,7 +91,7 @@ static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
 
     uint8_t ack_buf[128];
     pb_ostream_t out_stream = pb_ostream_from_buffer(ack_buf, sizeof(ack_buf));
-    if (pb_encode(&out_stream, mash_ConfigAck_fields, &ack)) {
+    if (pb_encode(&out_stream, airtak_ConfigAck_fields, &ack)) {
         sendFramed(s_config_rw, ack_buf, static_cast<uint16_t>(out_stream.bytes_written), true);
     }
 }
@@ -151,27 +151,27 @@ static void onAdminWrite(uint16_t conn_hdl, BLECharacteristic* chr,
                                     s_admin_assembly, &s_admin_recv_mask);
     if (!done) return;
 
-    mash_AdminRequest request = mash_AdminRequest_init_zero;
+    airtak_AdminRequest request = airtak_AdminRequest_init_zero;
     pb_istream_t in_stream = pb_istream_from_buffer(s_admin_assembly, hdr.total_length);
-    if (!pb_decode(&in_stream, mash_AdminRequest_fields, &request)) return;
+    if (!pb_decode(&in_stream, airtak_AdminRequest_fields, &request)) return;
 
     bool success = false;
     switch (request.command) {
-        case mash_AdminCommand_REBOOT:
+        case airtak_AdminCommand_REBOOT:
             NVIC_SystemReset();
             success = true;
             break;
-        case mash_AdminCommand_DFU_ENTER:
+        case airtak_AdminCommand_DFU_ENTER:
             DFUService::enterDfu();
             success = true;
             break;
-        case mash_AdminCommand_RADIO_RESTART:
+        case airtak_AdminCommand_RADIO_RESTART:
             Radio::pause();
             Radio::reinit();
             Radio::resume();
             success = true;
             break;
-        case mash_AdminCommand_GPS_RESET:
+        case airtak_AdminCommand_GPS_RESET:
             GPS::setPower(false);
             vTaskDelay(pdMS_TO_TICKS(200));
             GPS::setPower(true);
@@ -181,7 +181,7 @@ static void onAdminWrite(uint16_t conn_hdl, BLECharacteristic* chr,
             break;
     }
 
-    mash_AdminResponse response = mash_AdminResponse_init_zero;
+    airtak_AdminResponse response = airtak_AdminResponse_init_zero;
     response.command = request.command;
     response.success = success;
     if (!success) {
@@ -190,12 +190,12 @@ static void onAdminWrite(uint16_t conn_hdl, BLECharacteristic* chr,
 
     uint8_t resp[128];
     pb_ostream_t out_stream = pb_ostream_from_buffer(resp, sizeof(resp));
-    if (pb_encode(&out_stream, mash_AdminResponse_fields, &response)) {
+    if (pb_encode(&out_stream, airtak_AdminResponse_fields, &response)) {
         sendFramed(s_admin, resp, static_cast<uint16_t>(out_stream.bytes_written), true);
     }
 }
 
-void MashService::init(QueueHandle_t mesh_rx_queue) {
+void AirTAKService::init(QueueHandle_t mesh_rx_queue) {
     s_mesh_rx_queue = mesh_rx_queue;
 
     s_svc.begin();
@@ -229,23 +229,23 @@ void MashService::init(QueueHandle_t mesh_rx_queue) {
     s_admin.begin();
 }
 
-void MashService::setRadioTxQueue(QueueHandle_t q) { s_radio_tx_queue = q; }
+void AirTAKService::setRadioTxQueue(QueueHandle_t q) { s_radio_tx_queue = q; }
 
-void MashService::notifyDeviceStatus(const uint8_t* data, uint16_t len) {
+void AirTAKService::notifyDeviceStatus(const uint8_t* data, uint16_t len) {
     sendFramed(s_status, data, len, false);
 }
 
-void MashService::notifyMeshRx(const uint8_t* data, uint16_t len) {
+void AirTAKService::notifyMeshRx(const uint8_t* data, uint16_t len) {
     sendFramed(s_mesh_rx, data, len, false);
 }
 
-void MashService::indicateConfigResponse(const uint8_t* data, uint16_t len) {
+void AirTAKService::indicateConfigResponse(const uint8_t* data, uint16_t len) {
     sendFramed(s_config_rw, data, len, true);
 }
 
-void MashService::indicateAdminResponse(const uint8_t* data, uint16_t len) {
+void AirTAKService::indicateAdminResponse(const uint8_t* data, uint16_t len) {
     sendFramed(s_admin, data, len, true);
 }
 
 } // namespace ble
-} // namespace mash
+} // namespace airtak

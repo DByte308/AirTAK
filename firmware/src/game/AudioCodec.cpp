@@ -1,8 +1,8 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/game/AudioCodec.cpp — Codec2 encode/decode wrapper implementation (Phase 7)
 // Planning: §12.7, §8.11 | Roadmap: 7.1
 
-#ifdef MASH_PHASE7_AUDIO
+#ifdef AIRTAK_PHASE7_AUDIO
 
 #include "game/AudioCodec.h"
 #include "mesh/Router.h"
@@ -10,7 +10,7 @@
 #include <codec2.h>
 #include <cstring>
 
-namespace mash {
+namespace airtak {
 
 static struct CODEC2* s_enc = nullptr;
 static struct CODEC2* s_dec = nullptr;
@@ -51,8 +51,8 @@ void AudioCodec::encodePttPacket(const int16_t* samples_8frames,
     //   audio_data = encoded (32 bytes)
     //   fec_prev_audio_data = s_fec_prev_valid ? s_fec_prev : empty
     //   session_id = session_id
-    // Then call Router::sendPacket(Portnum::MASH_AUDIO, BROADCAST_ADDR, pb_data, len, false, tx_queue)
-    // hop_limit will be set to 1 by defaultHopLimit(MASH_AUDIO).
+    // Then call Router::sendPacket(Portnum::AIRTAK_AUDIO, BROADCAST_ADDR, pb_data, len, false, tx_queue)
+    // hop_limit will be set to 1 by defaultHopLimit(AIRTAK_AUDIO).
 
     // Store current packet as FEC for next packet
     memcpy(s_fec_prev, encoded, sizeof(encoded));
@@ -72,6 +72,6 @@ void AudioCodec::deinit() {
     if (s_dec) { codec2_destroy(s_dec); s_dec = nullptr; }
 }
 
-} // namespace mash
+} // namespace airtak
 
-#endif // MASH_PHASE7_AUDIO
+#endif // AIRTAK_PHASE7_AUDIO

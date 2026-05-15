@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/Router.cpp — Flood router implementation
 // Planning: §8.7, §8.9 | Roadmap: 2.5, 2.6, 2.9, 2.10, 2.11
 
@@ -18,7 +18,7 @@
 extern QueueHandle_t g_ble_tx_queue;
 extern EventGroupHandle_t g_radio_event_group;
 
-namespace mash {
+namespace airtak {
 
 // ── Duplicate-suppression cache (§8.7) ────────────────────────────────────────
 struct DupEntry {
@@ -198,7 +198,7 @@ static bool readPositionRequestTarget(const uint8_t* data_pb, uint16_t data_len,
     return readVarintField(inner, inner_len, 1, target_node_id);
 }
 
-static bool mashPlayerIsStateTransition(const uint8_t* data_pb, uint16_t data_len) {
+static bool airtakPlayerIsStateTransition(const uint8_t* data_pb, uint16_t data_len) {
     const uint8_t* inner = nullptr;
     uint16_t inner_len = 0;
     if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return false;
@@ -418,37 +418,37 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         MeshNode::onNodeInfoReceived(hdr.src_node_id);
     }
 
-    // ── MASH_POSITION_REQUEST dispatch (§2.12) ──────────────────────────────
+    // ── AIRTAK_POSITION_REQUEST dispatch (§2.12) ──────────────────────────────
     // When we receive a PositionRequestPacket addressed to us (or broadcast),
     // respond with a unicast POSITION_APP within 2 s, bypassing the beaconing timer.
-    if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::MASH_POSITION_REQUEST)) {
+    if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::AIRTAK_POSITION_REQUEST)) {
         uint32_t target_node_id = 0xFFFFFFFF; // broadcast = any node responds
         readPositionRequestTarget(decrypted, payload_len, target_node_id);
         if (target_node_id == MeshNode::nodeId() || target_node_id == 0xFFFFFFFF) {
             MeshNode::handlePositionRequest(hdr.src_node_id, tx_queue);
         }
-        // MASH_POSITION_REQUEST is BEST_EFFORT; still relay below if hop_limit > 0.
+        // AIRTAK_POSITION_REQUEST is BEST_EFFORT; still relay below if hop_limit > 0.
     }
 
-    // ── MASH_ACK receive: cancel pending retry queue entry (§8.9) ───────────
+    // ── AIRTAK_ACK receive: cancel pending retry queue entry (§8.9) ───────────
     // Correlation is via Data.request_id (field 6, tag 0x30) which the ACK sender
     // sets to the ack_request_id so the original sender can match it.
-    if (portnum_value == static_cast<uint32_t>(Portnum::MASH_ACK)) {
+    if (portnum_value == static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
         if (data_meta.request_id != 0) {
             handleAck(data_meta.request_id);
         }
-        // Still relay MASH_ACK so it can reach back to the original sender.
+        // Still relay AIRTAK_ACK so it can reach back to the original sender.
     }
 
-    // ── Generate MASH_ACK when sender requested acknowledgment (§8.9) ───────
-    // Never ACK a MASH_ACK itself (prevents infinite ACK loops).
-    if (hdr.wantAck() && data_valid && portnum_value != static_cast<uint32_t>(Portnum::MASH_ACK)) {
+    // ── Generate AIRTAK_ACK when sender requested acknowledgment (§8.9) ───────
+    // Never ACK a AIRTAK_ACK itself (prevents infinite ACK loops).
+    if (hdr.wantAck() && data_valid && portnum_value != static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
         uint32_t req_id = data_meta.request_id;
         if (req_id != 0) {
-            // Build Data proto bytes for MASH_ACK (portnum 261 = 0x85 0x02 as varint).
+            // Build Data proto bytes for AIRTAK_ACK (portnum 261 = 0x85 0x02 as varint).
             uint8_t ack_data[64]; uint8_t ap = 0;
             ack_data[ap++] = 0x08; ack_data[ap++] = 0x85; ack_data[ap++] = 0x02; // portnum=261
-            // Build inner MashAck sub-message.
+            // Build inner AirTAKAck sub-message.
             uint8_t inner[32]; uint8_t ip = 0;
             inner[ip++] = 0x08; ip += writeVarU32(inner + ip, req_id);            // ack_request_id (field 1)
             inner[ip++] = 0x10; ip += writeVarU32(inner + ip, MeshNode::nodeId()); // from_node_id (field 2)
@@ -491,7 +491,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
 
     if (hdr.hopLimit() > 0) {
         // Check portnum to block audio relay (already parsed above as portnum_value).
-        bool is_audio = (portnum_value == static_cast<uint32_t>(Portnum::MASH_AUDIO));
+        bool is_audio = (portnum_value == static_cast<uint32_t>(Portnum::AIRTAK_AUDIO));
 
         if (!is_audio) {
             // SNR-based relay delay: delay_ms = (SNR_max - SNR_received) × 50 + random(0, 50) (§8.7).
@@ -665,14 +665,14 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
         case Portnum::TEXT_MESSAGE_APP:
             want_ack = want_ack || (meta.dest != 0xFFFFFFFF);
             break;
-        case Portnum::MASH_GAME:
-        case Portnum::MASH_ZONE:
-        case Portnum::MASH_OBJECTIVE:
-        case Portnum::MASH_ADMIN:
+        case Portnum::AIRTAK_GAME:
+        case Portnum::AIRTAK_ZONE:
+        case Portnum::AIRTAK_OBJECTIVE:
+        case Portnum::AIRTAK_ADMIN:
             want_ack = true;
             break;
-        case Portnum::MASH_PLAYER:
-            want_ack = mashPlayerIsStateTransition(data_pb, data_len);
+        case Portnum::AIRTAK_PLAYER:
+            want_ack = airtakPlayerIsStateTransition(data_pb, data_len);
             break;
         default:
             break;
@@ -810,19 +810,19 @@ uint8_t Router::defaultHopLimit(Portnum portnum) {
         }
         case Portnum::NODEINFO_APP:        return defaults::HOP_LIMIT_NODEINFO;
         case Portnum::TELEMETRY_APP:       return defaults::HOP_LIMIT_TELEMETRY;
-        case Portnum::MASH_PLAYER:         return defaults::HOP_LIMIT_MASH_PLAYER;
-        case Portnum::MASH_GAME:           return defaults::HOP_LIMIT_MASH_GAME;
-        case Portnum::MASH_ZONE:           return defaults::HOP_LIMIT_MASH_ZONE;
-        case Portnum::MASH_OBJECTIVE:      return defaults::HOP_LIMIT_MASH_OBJECTIVE;
-        case Portnum::MASH_ADMIN:          return defaults::HOP_LIMIT_MASH_ADMIN;
-        case Portnum::MASH_ACK:            return defaults::HOP_LIMIT_MASH_ACK;
-        case Portnum::MASH_POSITION_REQUEST: return defaults::HOP_LIMIT_POSITION_REQUEST;
-        case Portnum::MASH_AUDIO:          return defaults::HOP_LIMIT_MASH_AUDIO;
+        case Portnum::AIRTAK_PLAYER:         return defaults::HOP_LIMIT_AIRTAK_PLAYER;
+        case Portnum::AIRTAK_GAME:           return defaults::HOP_LIMIT_AIRTAK_GAME;
+        case Portnum::AIRTAK_ZONE:           return defaults::HOP_LIMIT_AIRTAK_ZONE;
+        case Portnum::AIRTAK_OBJECTIVE:      return defaults::HOP_LIMIT_AIRTAK_OBJECTIVE;
+        case Portnum::AIRTAK_ADMIN:          return defaults::HOP_LIMIT_AIRTAK_ADMIN;
+        case Portnum::AIRTAK_ACK:            return defaults::HOP_LIMIT_AIRTAK_ACK;
+        case Portnum::AIRTAK_POSITION_REQUEST: return defaults::HOP_LIMIT_POSITION_REQUEST;
+        case Portnum::AIRTAK_AUDIO:          return defaults::HOP_LIMIT_AIRTAK_AUDIO;
         default:                           return 3;
     }
 }
 
-#ifdef MASH_NATIVE_TEST
+#ifdef AIRTAK_NATIVE_TEST
 size_t Router::testPendingRelayCount() {
     size_t count = 0;
     for (const auto& entry : s_relay_queue) {
@@ -877,4 +877,4 @@ bool Router::testFirstRetry(uint32_t& msg_id, uint8_t& attempts,
 }
 #endif
 
-} // namespace mash
+} // namespace airtak

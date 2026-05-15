@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/main.cpp — Entry point; FreeRTOS scheduler initialization
 // Planning: §9.2, §9.3 | Roadmap: 1.7
 //
@@ -30,7 +30,7 @@
 #include "hal/Battery.h"
 #include "hal/Button.h"
 #include "ble/BLEServer.h"
-#include "ble/MashService.h"
+#include "ble/AirTAKService.h"
 #include "mesh/MeshNode.h"
 #include "mesh/Router.h"
 #include "mesh/ChannelManager.h"
@@ -52,7 +52,7 @@ QueueHandle_t       g_config_change_queue = nullptr; // pending config group cha
 EventGroupHandle_t  g_radio_event_group  = nullptr;  // DIO1 IRQ + restart signals
 EventGroupHandle_t  g_system_event_group = nullptr;  // GPS fix, BLE connect, etc.
 
-#ifdef MASH_PHASE7_AUDIO
+#ifdef AIRTAK_PHASE7_AUDIO
 QueueHandle_t       g_audio_rx_queue     = nullptr;  // decoded audio frames from BLE
 QueueHandle_t       g_audio_tx_queue     = nullptr;  // audio frames to encode and TX
 #endif
@@ -64,7 +64,7 @@ void task_ble_server(void* params);
 void task_config_apply(void* params);
 void task_display_refresh(void* params);
 void task_battery_monitor(void* params);
-#ifdef MASH_PHASE7_AUDIO
+#ifdef AIRTAK_PHASE7_AUDIO
 void task_audio_codec(void* params);
 #endif
 
@@ -72,21 +72,21 @@ void task_audio_codec(void* params);
 void setup() {
     Serial.begin(115200);
 
-    if (mash::RecoveryMode::requestedAtBoot()) {
-        mash::RecoveryMode::run();
+    if (airtak::RecoveryMode::requestedAtBoot()) {
+        airtak::RecoveryMode::run();
     }
 
-    mash::platform::initBoard();
+    airtak::platform::initBoard();
 
     // Initialize LittleFS config store and load all config groups from flash.
     // On first boot (no config files), defaults from Defaults.h are used.
-    mash::PacketPool::init();
-    mash::config::FlashStore::init();
-    mash::config::ConfigManager::init();
-    mash::ChannelManager::init();
-    mash::GameState::init();
-    mash::PlayerState::init();
-    mash::Button::init();
+    airtak::PacketPool::init();
+    airtak::config::FlashStore::init();
+    airtak::config::ConfigManager::init();
+    airtak::ChannelManager::init();
+    airtak::GameState::init();
+    airtak::PlayerState::init();
+    airtak::Button::init();
 
     // Create inter-task communication primitives.
     g_radio_tx_queue      = xQueueCreate(8,  sizeof(void*));
@@ -96,7 +96,7 @@ void setup() {
     g_radio_event_group   = xEventGroupCreate();
     g_system_event_group  = xEventGroupCreate();
 
-#ifdef MASH_PHASE7_AUDIO
+#ifdef AIRTAK_PHASE7_AUDIO
     g_audio_rx_queue = xQueueCreate(4, sizeof(void*));
     g_audio_tx_queue = xQueueCreate(4, sizeof(void*));
 #endif
@@ -116,7 +116,7 @@ void setup() {
     configASSERT(xTaskCreate(task_display_refresh, "display",  2048, nullptr, 1, nullptr) == pdPASS);
     configASSERT(xTaskCreate(task_battery_monitor, "battery",  1024, nullptr, 0, nullptr) == pdPASS);
 
-#ifdef MASH_PHASE7_AUDIO
+#ifdef AIRTAK_PHASE7_AUDIO
     configASSERT(xTaskCreate(task_audio_codec, "audio", 3072, nullptr, 2, nullptr) == pdPASS);
 #endif
 
@@ -133,45 +133,45 @@ void loop() {
 void task_radio_rxtx(void* params) {
     // Phase 1.2: SX1262 bring-up | Phase 2.5: flood router
     // Triggered by SX1262 DIO1 interrupt via g_radio_event_group.
-    mash::Radio::init();
-    mash::MeshNode::init();
-    mash::Router::init();
-    mash::MeshNode::broadcastNodeInfo(g_radio_tx_queue);
+    airtak::Radio::init();
+    airtak::MeshNode::init();
+    airtak::Router::init();
+    airtak::MeshNode::broadcastNodeInfo(g_radio_tx_queue);
     for (;;) {
-        mash::Radio::process(g_radio_rx_queue, g_radio_tx_queue, g_radio_event_group);
+        airtak::Radio::process(g_radio_rx_queue, g_radio_tx_queue, g_radio_event_group);
 
         // Drain the RX queue and pass packets through the flood router (§8.7).
-        mash::PooledPacket* pkt = nullptr;
+        airtak::PooledPacket* pkt = nullptr;
         while (xQueueReceive(g_radio_rx_queue, &pkt, 0) == pdTRUE && pkt) {
-            mash::Router::processIncoming(pkt->data, (uint8_t)pkt->length,
+            airtak::Router::processIncoming(pkt->data, (uint8_t)pkt->length,
                                           pkt->rssi, pkt->snr,
                                           g_radio_tx_queue);
-            mash::PacketPool::free(pkt);
+            airtak::PacketPool::free(pkt);
         }
 
         // Tick relay and retry queues.
-        mash::Router::tickRelayQueue(g_radio_tx_queue);
-        mash::Router::tickRetryQueue(g_radio_tx_queue);
+        airtak::Router::tickRelayQueue(g_radio_tx_queue);
+        airtak::Router::tickRetryQueue(g_radio_tx_queue);
 
         // Smart beaconing and NODEINFO schedule.
-        mash::MeshNode::tick(g_radio_tx_queue);
+        airtak::MeshNode::tick(g_radio_tx_queue);
     }
 }
 
 void task_gps_parser(void* params) {
     // Phase 1.3: L76K GPS bring-up | Phase 2.4: POSITION_APP TX
-    mash::GPS::init();
+    airtak::GPS::init();
     for (;;) {
-        mash::GPS::process(g_system_event_group);
+        airtak::GPS::process(g_system_event_group);
     }
 }
 
 void task_ble_server(void* params) {
     // Phase 1.5: BLE GATT server skeleton
-    mash::ble::MashService::setRadioTxQueue(g_radio_tx_queue);
-    mash::ble::BLEServer::init(g_radio_rx_queue);
+    airtak::ble::AirTAKService::setRadioTxQueue(g_radio_tx_queue);
+    airtak::ble::BLEServer::init(g_radio_rx_queue);
     for (;;) {
-        mash::ble::BLEServer::process(g_ble_tx_queue, g_config_change_queue);
+        airtak::ble::BLEServer::process(g_ble_tx_queue, g_config_change_queue);
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
@@ -188,8 +188,8 @@ void task_config_apply(void* params) {
         void* sentinel = nullptr;
         // Block indefinitely until a restart request arrives.
         if (xQueueReceive(g_config_change_queue, &sentinel, portMAX_DELAY) == pdTRUE) {
-            if (mash::config::ConfigManager::isRadioRestartPending()) {
-                mash::config::ConfigManager::radioRestartProcedure();
+            if (airtak::config::ConfigManager::isRadioRestartPending()) {
+                airtak::config::ConfigManager::radioRestartProcedure();
             }
         }
     }
@@ -197,23 +197,23 @@ void task_config_apply(void* params) {
 
 void task_display_refresh(void* params) {
     // Phase 1.4: E-Ink display bring-up | Phase 9.6: refresh management
-    mash::Display::init();
+    airtak::Display::init();
     uint32_t last_refresh_check_ms = 0;
     for (;;) {
-        mash::ButtonGesture gesture = mash::Button::poll();
-        if (gesture == mash::ButtonGesture::SHORT_PRESS) {
-            if (mash::PlayerState::isCancellable()) {
-                mash::PlayerState::cancelHit(g_radio_tx_queue);
+        airtak::ButtonGesture gesture = airtak::Button::poll();
+        if (gesture == airtak::ButtonGesture::SHORT_PRESS) {
+            if (airtak::PlayerState::isCancellable()) {
+                airtak::PlayerState::cancelHit(g_radio_tx_queue);
             } else {
-                mash::Display::nextScreen();
+                airtak::Display::nextScreen();
             }
-        } else if (gesture == mash::ButtonGesture::LONG_PRESS) {
-            mash::PlayerState::reportHit(g_radio_tx_queue);
+        } else if (gesture == airtak::ButtonGesture::LONG_PRESS) {
+            airtak::PlayerState::reportHit(g_radio_tx_queue);
         }
 
         uint32_t now = millis();
         if ((now - last_refresh_check_ms) >= 5000) {
-            mash::Display::refresh(g_system_event_group);
+            airtak::Display::refresh(g_system_event_group);
             last_refresh_check_ms = now;
         }
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -222,14 +222,14 @@ void task_display_refresh(void* params) {
 
 void task_battery_monitor(void* params) {
     // Phase 1.7: battery ADC task
-    mash::Battery::init();
+    airtak::Battery::init();
     for (;;) {
-        mash::Battery::sample(g_system_event_group);
+        airtak::Battery::sample(g_system_event_group);
         vTaskDelay(pdMS_TO_TICKS(60000)); // sample every 60 s
     }
 }
 
-#ifdef MASH_PHASE7_AUDIO
+#ifdef AIRTAK_PHASE7_AUDIO
 void task_audio_codec(void* params) {
     // Phase 7.3: firmware audio pipeline (Codec2 encode/decode)
     for (;;) {

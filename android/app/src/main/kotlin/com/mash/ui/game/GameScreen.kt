@@ -1,4 +1,4 @@
-// MASH Android — ui/game/GameScreen.kt
+// AirTAK Android — ui/game/GameScreen.kt
 // Planning: §11.8, §12.1–12.6 | Roadmap: 5.1–5.6
 //
 // Displays:
@@ -7,7 +7,7 @@
 //   - Game phase indicator (LOBBY / ACTIVE / PAUSED / ENDED)
 //   - Admin panel: start/pause/end game, set game mode, manage zones (Phase 5.6)
 
-package com.mash.ui.game
+package com.airtak.ui.game
 
 import androidx.compose.runtime.Composable
 import androidx.hilt.navigation.compose.hiltViewModel

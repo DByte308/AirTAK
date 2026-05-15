@@ -1,9 +1,9 @@
-// MASH Android — domain/model/MashNode.kt
+// AirTAK Android — domain/model/AirTAKNode.kt
 // Planning: §13.2, §11 | Roadmap: 2.2, 3.3
 
-package com.mash.domain.model
+package com.airtak.domain.model
 
-data class MashNode(
+data class AirTAKNode(
     val nodeId: Long,
     val callsign: String,
     val teamIndex: Int,

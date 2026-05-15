@@ -1,7 +1,7 @@
-// MASH Android — domain/model/GameState.kt
+// AirTAK Android — domain/model/GameState.kt
 // Planning: §12.1–12.5 | Roadmap: 5.1–5.6
 
-package com.mash.domain.model
+package com.airtak.domain.model
 
 enum class GamePhase { IDLE, LOBBY, ACTIVE, PAUSED, ENDED }
 enum class GameMode  { DEATHMATCH, DOMINATION, CAPTURE_FLAG, ELIMINATION, CUSTOM }

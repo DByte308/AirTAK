@@ -1,14 +1,14 @@
-// MASH Android — ui/messages/MessagesViewModel.kt
+// AirTAK Android — ui/messages/MessagesViewModel.kt
 // Planning: §11.6 | Roadmap: 3.2
 
-package com.mash.ui.messages
+package com.airtak.ui.messages
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mash.data.db.MessageDao
-import com.mash.data.db.MessageEntity
-import com.mash.data.ble.BleRepository
-import com.mash.data.ble.ConnectionState
+import com.airtak.data.db.MessageDao
+import com.airtak.data.db.MessageEntity
+import com.airtak.data.ble.BleRepository
+import com.airtak.data.ble.ConnectionState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch

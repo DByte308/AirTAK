@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# MASH — Mesh Airsoft Situational Hub
+# AirTAK — Airsoft Team Awareness Kit
 # tools/tile_fetch.py — Download offline map tiles to MBTiles
 # Planning: §11.5 | Roadmap: T.6
 #
@@ -78,13 +78,13 @@ def set_metadata(conn: sqlite3.Connection, name: str, **kwargs: str) -> None:
 def fetch_tile(url_template: str, z: int, x: int, y: int) -> bytes:
     """Download a single tile. Raises urllib.error.URLError on failure."""
     url = url_template.replace("{z}", str(z)).replace("{x}", str(x)).replace("{y}", str(y))
-    req = urllib.request.Request(url, headers={"User-Agent": "MASH-tile-fetch/1.0 (+https://github.com/your-repo/mash)"})
+    req = urllib.request.Request(url, headers={"User-Agent": "AirTAK-tile-fetch/1.0 (+https://github.com/your-repo/airtak)"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         return resp.read()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Download map tiles to MBTiles for MASH offline use")
+    parser = argparse.ArgumentParser(description="Download map tiles to MBTiles for AirTAK offline use")
     parser.add_argument("--bbox",   required=True, help="Bounding box: min_lat,min_lon,max_lat,max_lon")
     parser.add_argument("--zoom",   required=True, help="Zoom range: 10 or 10-16")
     parser.add_argument("--output", required=True, help="Output .mbtiles file path")

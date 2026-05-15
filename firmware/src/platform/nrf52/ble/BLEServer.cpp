@@ -1,9 +1,9 @@
-// MASH - Mesh Airsoft Situational Hub
+// AirTAK - Airsoft Team Awareness Kit
 // firmware/src/platform/nrf52/ble/BLEServer.cpp - Bluefruit GATT server lifecycle
 // Planning: section 9.7, section 10.6 | Roadmap: 1.5
 
 #include "ble/BLEServer.h"
-#include "ble/MashService.h"
+#include "ble/AirTAKService.h"
 #include "ble/DFUService.h"
 #include "ble/Framing.h"
 #include "hal/Display.h"
@@ -15,14 +15,14 @@
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "config.h"
-#include "mash/ble.pb.h"
+#include "airtak/ble.pb.h"
 #include <pb_encode.h>
 #include <bluefruit.h>
 #include <Arduino.h>
 #include <cstdio>
 #include <cstring>
 
-namespace mash {
+namespace airtak {
 namespace ble {
 
 static uint16_t s_conn_hdl        = 0xFFFF;
@@ -32,7 +32,7 @@ static bool     s_has_passkey     = false;
 static uint32_t s_last_status_ms  = 0;
 
 static uint16_t buildDeviceStatus(uint8_t* buf, uint16_t buf_len) {
-    mash_DeviceStatus status = mash_DeviceStatus_init_zero;
+    airtak_DeviceStatus status = airtak_DeviceStatus_init_zero;
     status.node_id = MeshNode::nodeId();
     strncpy(status.node_name, config::ConfigManager::deviceLongName(), sizeof(status.node_name) - 1);
     status.battery_level = Battery::level();
@@ -59,10 +59,10 @@ static uint16_t buildDeviceStatus(uint8_t* buf, uint16_t buf_len) {
 
     status.mesh_node_count = MeshNode::knownNodeCount();
     status.uptime_seconds = millis() / 1000;
-    strncpy(status.firmware_version, MASH_FIRMWARE_VERSION_STR, sizeof(status.firmware_version) - 1);
+    strncpy(status.firmware_version, AIRTAK_FIRMWARE_VERSION_STR, sizeof(status.firmware_version) - 1);
 
     pb_ostream_t stream = pb_ostream_from_buffer(buf, buf_len);
-    if (!pb_encode(&stream, mash_DeviceStatus_fields, &status)) return 0;
+    if (!pb_encode(&stream, airtak_DeviceStatus_fields, &status)) return 0;
     return static_cast<uint16_t>(stream.bytes_written);
 }
 
@@ -73,7 +73,7 @@ static void onConnect(uint16_t conn_hdl) {
 
     uint8_t buf[256];
     uint16_t len = buildDeviceStatus(buf, sizeof(buf));
-    if (len > 0) MashService::notifyDeviceStatus(buf, len);
+    if (len > 0) AirTAKService::notifyDeviceStatus(buf, len);
 }
 
 static void onDisconnect(uint16_t conn_hdl, uint8_t reason) {
@@ -109,12 +109,12 @@ void BLEServer::init(QueueHandle_t mesh_rx_queue) {
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
 
-    MashService::init(mesh_rx_queue);
+    AirTAKService::init(mesh_rx_queue);
     DFUService::init();
 
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
     Bluefruit.Advertising.addTxPower();
-    Bluefruit.Advertising.addUuid(BLEUuid(MASH_SERVICE_UUID));
+    Bluefruit.Advertising.addUuid(BLEUuid(AIRTAK_SERVICE_UUID));
     Bluefruit.ScanResponse.addName();
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(160, 160);
@@ -130,9 +130,9 @@ void BLEServer::process(QueueHandle_t ble_tx_queue, QueueHandle_t /*config_queue
             const uint8_t* payload = pkt->data + 1;
             uint16_t payload_len   = pkt->length - 1;
             if (type == 0x01) {
-                MashService::notifyMeshRx(payload, payload_len);
+                AirTAKService::notifyMeshRx(payload, payload_len);
             } else if (type == 0x02) {
-                MashService::notifyDeviceStatus(payload, payload_len);
+                AirTAKService::notifyDeviceStatus(payload, payload_len);
             }
         }
         PacketPool::free(pkt);
@@ -148,7 +148,7 @@ void BLEServer::tick() {
 
     uint8_t buf[256];
     uint16_t len = buildDeviceStatus(buf, sizeof(buf));
-    if (len > 0) MashService::notifyDeviceStatus(buf, len);
+    if (len > 0) AirTAKService::notifyDeviceStatus(buf, len);
 }
 
 bool     BLEServer::isConnected()       { return s_connected;       }
@@ -161,4 +161,4 @@ void BLEServer::disconnect() {
 }
 
 } // namespace ble
-} // namespace mash
+} // namespace airtak

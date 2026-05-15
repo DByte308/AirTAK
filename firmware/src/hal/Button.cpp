@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/hal/Button.cpp — Debounced user button driver implementation
 // Planning: §12.6, §7.1 | Roadmap: 1.7
 
@@ -6,7 +6,7 @@
 #include "config.h"
 #include <Arduino.h>
 
-namespace mash {
+namespace airtak {
 
 // Debounce: ignore transitions faster than 50 ms
 constexpr uint32_t DEBOUNCE_MS      = 50;
@@ -19,11 +19,11 @@ static uint32_t s_last_release_ms = 0;
 static uint8_t  s_press_count    = 0;
 
 void Button::init() {
-    pinMode(MASH_PIN_USER_BUTTON, INPUT_PULLUP); // active low
+    pinMode(AIRTAK_PIN_USER_BUTTON, INPUT_PULLUP); // active low
 }
 
 ButtonGesture Button::poll() {
-    bool pressed = (digitalRead(MASH_PIN_USER_BUTTON) == LOW);
+    bool pressed = (digitalRead(AIRTAK_PIN_USER_BUTTON) == LOW);
     uint32_t now = millis();
 
     if (pressed && !s_last_state) {
@@ -67,4 +67,4 @@ uint32_t Button::heldMs() {
     return millis() - s_press_start_ms;
 }
 
-} // namespace mash
+} // namespace airtak

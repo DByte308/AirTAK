@@ -15,7 +15,7 @@
         "~/.platformio/packages/framework-arduinoadafruitnrf52/**"
       ],
       "defines": [
-        "MASH_NATIVE_TEST"
+        "AIRTAK_NATIVE_TEST"
       ],
       "intelliSenseMode": "windows-gcc-arm"
     }

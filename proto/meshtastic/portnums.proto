@@ -1,30 +1,30 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // proto/meshtastic/portnums.proto — Vendored Meshtastic port number definitions
 // Planning: §8.4, §13.3 | Roadmap: T.1
 //
 // DO NOT MODIFY — vendored from Meshtastic upstream at pinned commit (see VERSION).
-// Standard Meshtastic portnums plus MASH private-range portnums are listed here
-// for cross-reference. MASH-specific portnums are defined in proto/mash/game.proto.
+// Standard Meshtastic portnums plus AirTAK private-range portnums are listed here
+// for cross-reference. AirTAK-specific portnums are defined in proto/airtak/game.proto.
 
 syntax = "proto3";
 package meshtastic;
 
 // Standard Meshtastic application port numbers used on channel 0.
-// MASH private portnums (256–511) are defined in mash/game.proto.
+// AirTAK private portnums (256–511) are defined in airtak/game.proto.
 enum PortNum {
   // Unused/unknown
   UNKNOWN_APP = 0;
 
   // A simple UTF-8 text message (portnum 1).
-  // MASH fully supports bidirectional text exchange with Meshtastic devices.
+  // AirTAK fully supports bidirectional text exchange with Meshtastic devices.
   TEXT_MESSAGE_APP = 1;
 
   // A GPS position packet (portnum 3).
-  // MASH transmits POSITION_APP with smart beaconing (§8.7).
+  // AirTAK transmits POSITION_APP with smart beaconing (§8.7).
   POSITION_APP = 3;
 
   // Node identity information (portnum 4).
-  // MASH broadcasts NODEINFO at startup and every 3 hours (§13.2).
+  // AirTAK broadcasts NODEINFO at startup and every 3 hours (§13.2).
   NODEINFO_APP = 4;
 
   // Device telemetry: battery, environment (portnum 67).
@@ -36,7 +36,7 @@ enum PortNum {
   // Neighbor SNR table (portnum 73).
   NEIGHBORINFO_APP = 73;
 
-  // MASH private range begins at 256. Defined in mash/game.proto.
+  // AirTAK private range begins at 256. Defined in airtak/game.proto.
   // Values 256-511 are relayed by Meshtastic nodes but not decoded.
   PRIVATE_APP = 256;
 }

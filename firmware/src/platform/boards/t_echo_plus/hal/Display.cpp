@@ -1,4 +1,4 @@
-// MASH - Mesh Airsoft Situational Hub
+// AirTAK - Airsoft Team Awareness Kit
 // firmware/src/platform/boards/t_echo_plus/hal/Display.cpp - SSD1681 E-Ink display
 // Planning: section 9.6, section 7.1 | Roadmap: 1.4
 
@@ -20,14 +20,14 @@
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSansBold9pt7b.h>
 
-namespace mash {
+namespace airtak {
 
 using namespace ui;
 
 static GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT>
-    s_display(GxEPD2_154_D67(MASH_PIN_EINK_CS, MASH_PIN_EINK_DC, MASH_PIN_EINK_RST, MASH_PIN_EINK_BUSY));
+    s_display(GxEPD2_154_D67(AIRTAK_PIN_EINK_CS, AIRTAK_PIN_EINK_DC, AIRTAK_PIN_EINK_RST, AIRTAK_PIN_EINK_BUSY));
 
-static SPIClass s_eink_spi(MASH_EINK_SPI_INSTANCE, MASH_PIN_EINK_BUSY, MASH_PIN_EINK_SCK, MASH_PIN_EINK_MOSI);
+static SPIClass s_eink_spi(AIRTAK_EINK_SPI_INSTANCE, AIRTAK_PIN_EINK_BUSY, AIRTAK_PIN_EINK_SCK, AIRTAK_PIN_EINK_MOSI);
 
 static ScreenId  s_current_screen  = ScreenId::MAIN;
 static uint16_t  s_dirty_mask      = DISPLAY_DIRTY_ALL;
@@ -62,11 +62,11 @@ static void drawFooter() {
     s_display.print(bat);
 
     s_display.setCursor(2, ROW_FOOTER_START + 9);
-    s_display.print(mash::ble::BLEServer::isConnected() ? "BLE" : "   ");
+    s_display.print(airtak::ble::BLEServer::isConnected() ? "BLE" : "   ");
 }
 
 static void renderMainScreen() {
-    drawHeader("MASH");
+    drawHeader("AirTAK");
     s_display.setFont(&FreeSans9pt7b);
     s_display.setTextColor(GxEPD_BLACK);
 
@@ -155,8 +155,8 @@ static void renderRadioScreen() {
 }
 
 void Display::init() {
-    pinMode(MASH_PIN_EINK_EN, OUTPUT);
-    digitalWrite(MASH_PIN_EINK_EN, HIGH);
+    pinMode(AIRTAK_PIN_EINK_EN, OUTPUT);
+    digitalWrite(AIRTAK_PIN_EINK_EN, HIGH);
 
     s_eink_spi.begin();
     s_display.init(115200, true, 2, false, s_eink_spi, SPISettings(4000000, MSBFIRST, SPI_MODE0));
@@ -232,7 +232,7 @@ void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
         s_display.setCursor(4, 104);
         s_display.print("BLE DFU advertising");
         s_display.setCursor(4, 122);
-        s_display.print("Name: MASH Recovery");
+        s_display.print("Name: AirTAK Recovery");
         s_display.setCursor(4, 144);
         s_display.print("Tap: USB UF2");
         s_display.setCursor(4, 160);
@@ -258,4 +258,4 @@ void Display::markDirty(uint16_t mask)     { s_dirty_mask |= mask; }
 void Display::clearDirty()                 { s_dirty_mask = 0; }
 void Display::forceRefresh()               { s_dirty_mask = DISPLAY_DIRTY_ALL; s_last_refresh_ms = 0; }
 
-} // namespace mash
+} // namespace airtak

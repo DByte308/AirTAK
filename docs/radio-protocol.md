@@ -1,4 +1,4 @@
-# MASH Radio Protocol
+# AirTAK Radio Protocol
 
 **Planning:** §8.2, §8.3, §8.4, §8.6 | **Roadmap:** T.7
 
@@ -6,14 +6,14 @@
 > See §8.2 amendment A. All relay nodes must preserve `hop_start` unchanged.
 >
 > **v1.5 NOTE:** Default hop limits are unified to 7 for every packet type except
-> `MASH_AUDIO`, which remains local-only with hop limit 1. `MASH_ACK` uses the
+> `AIRTAK_AUDIO`, which remains local-only with hop limit 1. `AIRTAK_ACK` uses the
 > original packet's `hop_start`.
 
 ---
 
 ## 1. OTA Wire Format (§8.2)
 
-Every MASH/Meshtastic over-the-air packet uses the following 12-byte header, followed by an encrypted payload:
+Every AirTAK/Meshtastic over-the-air packet uses the following 12-byte header, followed by an encrypted payload:
 
 ```
 Offset  Size  Field            Description
@@ -23,7 +23,7 @@ Offset  Size  Field            Description
   8      1    packet_id_low    Low 8 bits of the transport packet ID
   9      1    flags            [7:5] hop_limit (3 bits)
                                [4]   want_ack  (1 bit)
-                               [3]   via_mqtt  (1 bit, always 0 for MASH)
+                               [3]   via_mqtt  (1 bit, always 0 for AirTAK)
                                [2:0] hop_start (3 bits) ← v1.4 amendment A (was "reserved")
  10      1    channel_hash     Channel disambiguation byte (§8.6)
  11      1    next_hop_low     Next-hop node ID low byte (0x00 for broadcast)
@@ -62,9 +62,9 @@ The payload is the nanopb-encoded `meshtastic.Data` message, encrypted in-place 
 | Nonce      | `packet_id_low` zero-extended to 32-bit LE ‖ `from_node_id` 32-bit LE ‖ `0x00…` (128 bits) |
 | PSK pad    | Raw PSK zero-padded to 32 bytes before SHA256      |
 
-The AES key is derived once per PSK change via `Crypto::deriveKey()`. MASH uses the OTA-visible packet ID byte for nonce construction because receivers can only reconstruct the low 8 bits from the compact wire header.
+The AES key is derived once per PSK change via `Crypto::deriveKey()`. AirTAK uses the OTA-visible packet ID byte for nonce construction because receivers can only reconstruct the low 8 bits from the compact wire header.
 
-### `meshtastic.Data` fields used by MASH
+### `meshtastic.Data` fields used by AirTAK
 
 ```
 Field             Type      Description
@@ -91,16 +91,16 @@ reply_id          uint32    request_id of the message being replied to
 | `TELEMETRY_APP`          |  67 | 7 | BEST_EFFORT   | Battery/sensor telemetry           |
 | `TRACEROUTE_APP`         |  71 | 7 | BEST_EFFORT   | Path discovery                     |
 | `NEIGHBORINFO_APP`       |  73 | 7 | BEST_EFFORT   | Neighbor table exchange            |
-| `MASH_PLAYER`            | 256 | 7 | ACKNOWLEDGED* | `PlayerStatePacket`                |
-| `MASH_GAME`              | 257 | 7 | ACKNOWLEDGED  | `GameStatePacket`                  |
-| `MASH_ZONE`              | 258 | 7 | ACKNOWLEDGED  | `ZonePacket`                       |
-| `MASH_OBJECTIVE`         | 259 | 7 | ACKNOWLEDGED  | `ObjectivePacket`                  |
-| `MASH_ADMIN`             | 260 | 7 | ACKNOWLEDGED  | `AdminPacket`                      |
-| `MASH_ACK`               | 261 | = hop_start | — | `MashAck` (application-layer ACK)  |
-| `MASH_POSITION_REQUEST`  | 262 | 7 | BEST_EFFORT   | `PositionRequestPacket`            |
-| `MASH_AUDIO`             | 263 | 1 | BEST_EFFORT   | `AudioPacket` (Phase 7, local-only) |
+| `AIRTAK_PLAYER`            | 256 | 7 | ACKNOWLEDGED* | `PlayerStatePacket`                |
+| `AIRTAK_GAME`              | 257 | 7 | ACKNOWLEDGED  | `GameStatePacket`                  |
+| `AIRTAK_ZONE`              | 258 | 7 | ACKNOWLEDGED  | `ZonePacket`                       |
+| `AIRTAK_OBJECTIVE`         | 259 | 7 | ACKNOWLEDGED  | `ObjectivePacket`                  |
+| `AIRTAK_ADMIN`             | 260 | 7 | ACKNOWLEDGED  | `AdminPacket`                      |
+| `AIRTAK_ACK`               | 261 | = hop_start | — | `AirTAKAck` (application-layer ACK)  |
+| `AIRTAK_POSITION_REQUEST`  | 262 | 7 | BEST_EFFORT   | `PositionRequestPacket`            |
+| `AIRTAK_AUDIO`             | 263 | 1 | BEST_EFFORT   | `AudioPacket` (Phase 7, local-only) |
 
-*`MASH_PLAYER` uses ACKNOWLEDGED only when `PlayerStatePacket.is_state_transition = true`.
+*`AIRTAK_PLAYER` uses ACKNOWLEDGED only when `PlayerStatePacket.is_state_transition = true`.
 
 ---
 
@@ -136,10 +136,10 @@ Where `SNR_max` is the best observed SNR for this packet from any source, and `S
 For ACKNOWLEDGED portnums, the sender:
 1. Sets `want_ack = 1` in the OTA header.
 2. Records `Data.request_id` in the retry queue.
-3. Waits `timeout_ms = max(500, 2 × hop_start × 400)` ms for a `MASH_ACK` packet.
+3. Waits `timeout_ms = max(500, 2 × hop_start × 400)` ms for a `AIRTAK_ACK` packet.
 4. If no ACK received, retransmits with a **new `MeshPacket.id`** but the **same `Data.request_id`**.
 5. After `ACK_MAX_RETRIES` attempts, reports delivery failure to BLE layer.
 
-The receiver sends `MASH_ACK` with `MashAck.ack_request_id = Data.request_id` of the received packet.
+The receiver sends `AIRTAK_ACK` with `AirTAKAck.ack_request_id = Data.request_id` of the received packet.
 
 > **CRITICAL:** `ack_request_id` references the **`Data.request_id`** field (logical message ID), NOT the `MeshPacket.id` (transport packet ID, which changes on every retry). See §8.9 amendment G.

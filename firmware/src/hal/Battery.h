@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/hal/Battery.h — ADC battery voltage monitor
 // Planning: §7.1, §7.2 | Roadmap: 1.7
 //
@@ -11,7 +11,7 @@
 #include <FreeRTOS.h>
 #include <event_groups.h>
 
-namespace mash {
+namespace airtak {
 
 class Battery {
 public:
@@ -35,4 +35,4 @@ public:
 // Event bit for battery update notification
 constexpr EventBits_t BATTERY_EVENT_UPDATED = (1 << 12);
 
-} // namespace mash
+} // namespace airtak

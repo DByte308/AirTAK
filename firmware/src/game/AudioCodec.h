@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/game/AudioCodec.h — Codec2 encode/decode wrapper (Phase 7)
 // Planning: §12.7, §8.11 | Roadmap: 7.1
 //
@@ -6,20 +6,20 @@
 // Audio packet: 8 frames per packet = 160 ms audio, ~92 bytes with FEC.
 // FEC: fec_prev_audio_data piggybacks previous packet's payload.
 // SESSION BOUNDARY: fec_prev_audio_data MUST be empty on the first packet of each PTT session.
-// hop_limit = 1 ALWAYS for MASH_AUDIO (single hop, local mesh only).
+// hop_limit = 1 ALWAYS for AIRTAK_AUDIO (single hop, local mesh only).
 //
-// Enabled only when MASH_PHASE7_AUDIO is defined (§17 build flag).
+// Enabled only when AIRTAK_PHASE7_AUDIO is defined (§17 build flag).
 
 #pragma once
 
-#ifdef MASH_PHASE7_AUDIO
+#ifdef AIRTAK_PHASE7_AUDIO
 
 #include <cstdint>
 #include <cstddef>
 #include <FreeRTOS.h>
 #include <queue.h>
 
-namespace mash {
+namespace airtak {
 
 constexpr uint8_t  CODEC2_FRAMES_PER_PACKET = 8;
 constexpr uint16_t CODEC2_BITS_PER_FRAME    = 26;
@@ -53,6 +53,6 @@ public:
     static void deinit();
 };
 
-} // namespace mash
+} // namespace airtak
 
-#endif // MASH_PHASE7_AUDIO
+#endif // AIRTAK_PHASE7_AUDIO

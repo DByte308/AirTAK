@@ -1,4 +1,4 @@
-# MASH firmware development environment setup.
+# AirTAK firmware development environment setup.
 # Creates firmware/.venv and installs the pinned PlatformIO toolchain wrapper.
 
 Set-StrictMode -Version Latest

@@ -1,4 +1,4 @@
-// MASH Android — data/db/MeshRepository.kt
+// AirTAK Android — data/db/MeshRepository.kt
 // Planning: §11, §13.2 | Roadmap: 3.2, 3.3
 //
 // Parses incoming MESH_RX BLE notifications and persists their content to Room.
@@ -7,18 +7,18 @@
 //   NODEINFO_APP (8)   → parse meshtastic.User proto → upsert NodeEntity
 //   POSITION_APP (3)   → parse meshtastic.Position proto → upsert NodeEntity lat/lon
 //   TEXT_MESSAGE_APP (1) → parse string payload → insert MessageEntity
-//   MASH_PLAYER (261)  → forward to GameRepository
-//   MASH_GAME (262)    → forward to GameRepository
+//   AIRTAK_PLAYER (261)  → forward to GameRepository
+//   AIRTAK_GAME (262)    → forward to GameRepository
 //
 // NOTE: AES-128-CTR decryption is NOT performed on the Android side in Phase 3.
 // The firmware delivers decrypted packet content via BLE MESH_RX, already in
 // cleartext (the BLE link itself is LESC-encrypted at the transport layer, §10.6).
 // The OTA header is forwarded for informational fields (src_node_id, rssi, snr).
 
-package com.mash.data.db
+package com.airtak.data.db
 
-import com.mash.data.ble.BleRepository
-import com.mash.data.game.GameRepository
+import com.airtak.data.ble.BleRepository
+import com.airtak.data.game.GameRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,13 +30,13 @@ import java.nio.ByteOrder
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Meshtastic portnum values (subset used by MASH). */
+/** Meshtastic portnum values (subset used by AirTAK). */
 private object Portnum {
     const val TEXT_MESSAGE_APP = 1
     const val POSITION_APP     = 3
     const val NODEINFO_APP     = 8
-    const val MASH_PLAYER      = 256
-    const val MASH_GAME        = 257
+    const val AIRTAK_PLAYER      = 256
+    const val AIRTAK_GAME        = 257
 }
 
 @Singleton
@@ -80,8 +80,8 @@ class MeshRepository @Inject constructor(
             Portnum.NODEINFO_APP     -> onNodeInfo(srcNodeId, data)
             Portnum.POSITION_APP     -> onPosition(srcNodeId, data)
             Portnum.TEXT_MESSAGE_APP -> onTextMessage(srcNodeId, data)
-            Portnum.MASH_PLAYER      -> gameRepository.onPlayerPacket(data)
-            Portnum.MASH_GAME        -> gameRepository.onGameStatePacket(data)
+            Portnum.AIRTAK_PLAYER      -> gameRepository.onPlayerPacket(data)
+            Portnum.AIRTAK_GAME        -> gameRepository.onGameStatePacket(data)
         }
 
         // Evict nodes not heard in 24 hours.

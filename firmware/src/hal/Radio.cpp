@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/hal/Radio.cpp — SX1262 radio HAL implementation
 // Planning: §8.1, §9.2 | Roadmap: 1.2
 //
@@ -21,11 +21,11 @@
 #define IRAM_ATTR
 #endif
 
-namespace mash {
+namespace airtak {
 
 // ── Static state ──────────────────────────────────────────────────────────────
-static SX1262 s_radio = new Module(MASH_PIN_SX1262_NSS, MASH_PIN_SX1262_DIO1,
-                                   MASH_PIN_SX1262_RESET, MASH_PIN_SX1262_BUSY);
+static SX1262 s_radio = new Module(AIRTAK_PIN_SX1262_NSS, AIRTAK_PIN_SX1262_DIO1,
+                                   AIRTAK_PIN_SX1262_RESET, AIRTAK_PIN_SX1262_BUSY);
 static volatile float    s_last_rssi    = 0.0f;
 static volatile float    s_last_snr     = 0.0f;
 static volatile uint32_t s_packets_rx   = 0;
@@ -114,7 +114,7 @@ void Radio::init() {
         LORA_SYNC_WORD,
         config::ConfigManager::loraTxPowerDbm(),
         LORA_PREAMBLE_LENGTH,
-        MASH_SX1262_TCXO_VOLTAGE
+        AIRTAK_SX1262_TCXO_VOLTAGE
     );
 
     if (result != RADIOLIB_ERR_NONE) {
@@ -149,9 +149,9 @@ void Radio::reinit() {
     // Target: ≤ 300 ms. Does not restart MCU. Does not disconnect BLE.
 
     // Reset SX1262 hardware via RESET pin.
-    digitalWrite(MASH_PIN_SX1262_RESET, LOW);
+    digitalWrite(AIRTAK_PIN_SX1262_RESET, LOW);
     delay(2);
-    digitalWrite(MASH_PIN_SX1262_RESET, HIGH);
+    digitalWrite(AIRTAK_PIN_SX1262_RESET, HIGH);
     delay(10);
 
     // Read live parameters from ConfigManager (committed config buffers).
@@ -179,7 +179,7 @@ void Radio::reinit() {
         LORA_SYNC_WORD,
         tx_power,
         LORA_PREAMBLE_LENGTH,
-        MASH_SX1262_TCXO_VOLTAGE
+        AIRTAK_SX1262_TCXO_VOLTAGE
     );
 
     if (result != RADIOLIB_ERR_NONE) return;
@@ -307,4 +307,4 @@ float    Radio::lastRssi()   { return s_last_rssi;  }
 uint32_t Radio::packetsRx()  { return s_packets_rx; }
 uint32_t Radio::packetsTx()  { return s_packets_tx; }
 
-} // namespace mash
+} // namespace airtak

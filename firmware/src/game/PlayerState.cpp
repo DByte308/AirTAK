@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/game/PlayerState.cpp — Own player state machine implementation
 // Planning: §12.1, §12.6 | Roadmap: 5.3, 5.4
 
@@ -9,7 +9,7 @@
 #include "hal/Display.h"
 #include <Arduino.h>
 
-namespace mash {
+namespace airtak {
 
 static PlayerStatus s_status            = PlayerStatus::ACTIVE;
 static uint32_t     s_respawn_seconds   = 0;
@@ -81,4 +81,4 @@ bool PlayerState::isCancellable() {
            (millis() - s_hit_timestamp_ms) < HIT_CANCEL_WINDOW_MS;
 }
 
-} // namespace mash
+} // namespace airtak

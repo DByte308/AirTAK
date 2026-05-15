@@ -1,9 +1,9 @@
-// MASH Android — src/androidTest/kotlin/com/mash/NavigationTest.kt
+// AirTAK Android — src/androidTest/kotlin/com/airtak/NavigationTest.kt
 // Planning: §11, §19.1 | Roadmap: Phase 3 exit criteria
 //
 // Instrumented navigation tests verifying the top-level nav graph flows correctly.
 
-package com.mash
+package com.airtak
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4

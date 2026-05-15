@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/ui/MessageScreen.cpp — Message screen state hook
 // Planning: §9.6 | Roadmap: 1.4
 //
@@ -7,7 +7,7 @@
 #include "ui/Screens.h"
 #include <Arduino.h>
 
-namespace mash {
+namespace airtak {
 namespace ui {
 
 // Message ring buffer — stores last 8 messages, shows newest 3.
@@ -43,4 +43,4 @@ void renderMessageScreen() {
 }
 
 } // namespace ui
-} // namespace mash
+} // namespace airtak

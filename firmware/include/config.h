@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/include/config.h — global compile-time constants
 // Planning: §7.1, §8.1, §8.2, §9.1 | Roadmap: 1.1
 //
@@ -11,10 +11,10 @@
 #include "platform/BoardConfig.h"
 
 // ── Firmware identity ─────────────────────────────────────────────────────────
-#define MASH_FIRMWARE_VERSION_MAJOR  1
-#define MASH_FIRMWARE_VERSION_MINOR  0
-#define MASH_FIRMWARE_VERSION_PATCH  0
-#define MASH_FIRMWARE_VERSION_STR    "1.0.0"
+#define AIRTAK_FIRMWARE_VERSION_MAJOR  1
+#define AIRTAK_FIRMWARE_VERSION_MINOR  0
+#define AIRTAK_FIRMWARE_VERSION_PATCH  0
+#define AIRTAK_FIRMWARE_VERSION_STR    "1.0.0"
 
 // ── LoRa global parameters (§8.1) ─────────────────────────────────────────────
 // These are hardware-level constants that apply to all channel slots.
@@ -28,9 +28,9 @@
 
 // ── BLE GATT service UUID ──────────────────────────────────────────────────────
 // Service UUID: 4d415348-0000-1000-8000-00805f9b34fb
-// Mnemonic: 0x4d415348 = ASCII "MASH"
+// Mnemonic: 0x4d415348 = ASCII "AirTAK"
 // Characteristic UUID suffix values (see §10.1):
-#define BLE_UUID_MASH_SERVICE     "4d415348-0000-1000-8000-00805f9b34fb"
+#define BLE_UUID_AIRTAK_SERVICE     "4d415348-0000-1000-8000-00805f9b34fb"
 #define BLE_UUID_CONFIG_RW        "4d415348-0001-1000-8000-00805f9b34fb"
 #define BLE_UUID_MESH_TX          "4d415348-0002-1000-8000-00805f9b34fb"
 #define BLE_UUID_MESH_RX          "4d415348-0003-1000-8000-00805f9b34fb"

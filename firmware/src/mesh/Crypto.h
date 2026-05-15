@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/Crypto.h — AES-128-CTR channel encryption
 // Planning: §15.1, §8.3 | Roadmap: 2.1
 //
@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace mash {
+namespace airtak {
 
 // Maximum PSK length: 32 bytes (256-bit). Shorter PSKs are zero-padded before hashing.
 constexpr size_t PSK_MAX_BYTES = 32;
@@ -56,4 +56,4 @@ public:
     static uint8_t channelHash(const uint8_t* psk, size_t psk_len, uint8_t slot_index);
 };
 
-} // namespace mash
+} // namespace airtak

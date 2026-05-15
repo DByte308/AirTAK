@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/hal/Radio.h — SX1262 radio HAL (thin wrapper over RadioLib)
 // Planning: §8.1, §9.2 | Roadmap: 1.2
 //
@@ -17,7 +17,7 @@
 #include <queue.h>
 #include <event_groups.h>
 
-namespace mash {
+namespace airtak {
 
 // Event bits used in g_radio_event_group
 constexpr EventBits_t RADIO_EVENT_DIO1      = (1 << 0); // SX1262 DIO1 interrupt
@@ -71,4 +71,4 @@ public:
     static uint32_t packetsTx();
 };
 
-} // namespace mash
+} // namespace airtak

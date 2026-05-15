@@ -1,9 +1,9 @@
-// MASH Android — domain/usecase/ObserveDeviceStatusUseCase.kt
+// AirTAK Android — domain/usecase/ObserveDeviceStatusUseCase.kt
 // Planning: §10.4 | Roadmap: 3.5
 
-package com.mash.domain.usecase
+package com.airtak.domain.usecase
 
-import com.mash.data.ble.BleRepository
+import com.airtak.data.ble.BleRepository
 import javax.inject.Inject
 
 class ObserveDeviceStatusUseCase @Inject constructor(

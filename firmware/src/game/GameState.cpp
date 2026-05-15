@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/game/GameState.cpp — Game state mirror implementation
 // Planning: §12.1–12.5 | Roadmap: 5.1–5.6
 
@@ -7,7 +7,7 @@
 #include <cstring>
 #include <Arduino.h>
 
-namespace mash {
+namespace airtak {
 
 static GamePhase   s_phase      = GamePhase::IDLE;
 static GameMode    s_mode       = GameMode::DEATHMATCH;
@@ -64,4 +64,4 @@ const TeamScore* GameState::teamScore(uint8_t idx) {
     return &s_teams[idx];
 }
 
-} // namespace mash
+} // namespace airtak

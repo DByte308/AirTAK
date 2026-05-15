@@ -1,0 +1,16 @@
+// AirTAK — Airsoft Team Awareness Kit
+// proto/airtak/mesh.proto — Reserved for future AirTAK over-the-air packet extensions
+// Planning: §14.1 | Roadmap: T.1
+//
+// This file is reserved for future AirTAK-specific OTA packet extensions that are not
+// covered by the standard Meshtastic wire format (proto/meshtastic/mesh.proto).
+// Currently empty — schema to be defined when needed.
+//
+// DO NOT add ad-hoc extensions here without a planning document amendment.
+
+syntax = "proto3";
+package airtak;
+
+// Reserved for future AirTAK OTA extensions.
+// All current AirTAK packets use the standard Meshtastic wire format (§8.2)
+// with AirTAK-specific Data.payload content defined in airtak/game.proto.

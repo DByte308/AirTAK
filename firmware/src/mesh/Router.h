@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/Router.h — Flood router with duplicate suppression
 // Planning: §8.7, §8.9 | Roadmap: 2.5, 2.6, 2.9, 2.10, 2.11
 //
@@ -20,7 +20,7 @@
 #include "mesh/Portnums.h"
 #include "mesh/PacketPool.h"
 
-namespace mash {
+namespace airtak {
 
 // Parsed representation of the OTA wire header (§8.2).
 struct OtaHeader {
@@ -80,7 +80,7 @@ public:
     // Phase 2.6: Tick the pending-relay queue; emit packets whose delay has elapsed.
     static void tickRelayQueue(QueueHandle_t tx_queue);
 
-    // Phase 2.11: Called when a MASH_ACK is received. Removes matching entry from
+    // Phase 2.11: Called when a AIRTAK_ACK is received. Removes matching entry from
     // retry queue using ack_request_id (NOT packet ID — see §8.9).
     static void handleAck(uint32_t ack_request_id);
 
@@ -95,18 +95,18 @@ public:
     static bool isAcknowledgedPortnum(Portnum portnum) {
         switch (portnum) {
             case Portnum::TEXT_MESSAGE_APP:
-            case Portnum::MASH_GAME:
-            case Portnum::MASH_PLAYER:
-            case Portnum::MASH_ZONE:
-            case Portnum::MASH_OBJECTIVE:
-            case Portnum::MASH_ADMIN:
+            case Portnum::AIRTAK_GAME:
+            case Portnum::AIRTAK_PLAYER:
+            case Portnum::AIRTAK_ZONE:
+            case Portnum::AIRTAK_OBJECTIVE:
+            case Portnum::AIRTAK_ADMIN:
                 return true;
             default:
                 return false;
         }
     }
 
-#ifdef MASH_NATIVE_TEST
+#ifdef AIRTAK_NATIVE_TEST
     static size_t testPendingRelayCount();
     static size_t testRetryEntryCount();
     static size_t testAppDedupCount();
@@ -118,4 +118,4 @@ public:
 #endif
 };
 
-} // namespace mash
+} // namespace airtak

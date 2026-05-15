@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/Crypto.cpp — AES-128-CTR channel encryption implementation
 // Planning: §15.1, §8.3, §8.6 | Roadmap: 2.1
 //
@@ -15,7 +15,7 @@
 #include <mbedtls/aes.h>
 #include <mbedtls/sha256.h>
 
-namespace mash {
+namespace airtak {
 
 // ── Crypto::deriveKey() ───────────────────────────────────────────────────────
 void Crypto::deriveKey(const uint8_t* psk, size_t psk_len, uint8_t key_out[AES_KEY_BYTES]) {
@@ -96,4 +96,4 @@ uint8_t Crypto::channelHash(const uint8_t* psk, size_t psk_len, uint8_t slot_ind
     }
 }
 
-} // namespace mash
+} // namespace airtak

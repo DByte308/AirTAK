@@ -1,15 +1,15 @@
-// MASH — Mesh Airsoft Situational Hub
-// proto/mash/game.proto — Game state, player state, zones, objectives, audio
+// AirTAK — Airsoft Team Awareness Kit
+// proto/airtak/game.proto — Game state, player state, zones, objectives, audio
 // Planning: §14.3, §8.4, §8.9, §12.1–12.5, §12.7 | Roadmap: T.2
 //
-// Generated outputs: firmware/src/proto/ (nanopb), android/.../com/mash/proto/ (Kotlin)
+// Generated outputs: firmware/src/proto/ (nanopb), android/.../com/airtak/proto/ (Kotlin)
 // Regenerate with: tools/proto_gen.ps1
 //
-// Port numbers (256–263) are in the MASH private range; Meshtastic nodes relay
+// Port numbers (256–263) are in the AirTAK private range; Meshtastic nodes relay
 // but cannot decrypt them (different PSK on the game channel slot).
 
 syntax = "proto3";
-package mash;
+package airtak;
 
 // ── Player (portnum 256) ──────────────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ enum PlayerStatus {
 // is_state_transition distinguishes the two cases — critical for §8.9 ACK rule:
 //   is_state_transition=true  → want_response=true  (ACKNOWLEDGED delivery)
 //   is_state_transition=false → want_response=false (BEST_EFFORT heartbeat)
-// See §8.9 for the MASH_PLAYER ACK vs BEST_EFFORT rule.
+// See §8.9 for the AIRTAK_PLAYER ACK vs BEST_EFFORT rule.
 message PlayerStatePacket {
   uint32       node_id             = 1;
   string       callsign            = 2;
@@ -108,7 +108,7 @@ message ZonePacket {
 // ── Objectives (portnum 259) ──────────────────────────────────────────────────
 
 // Roadmap: 5.6 | Admin broadcasts objective state updates.
-// Admin device aggregates MASH_PLAYER position data to compute capture_percent.
+// Admin device aggregates AIRTAK_PLAYER position data to compute capture_percent.
 // ACKNOWLEDGED delivery; hop_limit=7. See §8.7.
 message ObjectivePacket {
   uint32 objective_id        = 1;
@@ -152,7 +152,7 @@ message AdminPacket {
 //
 // See §8.9 for the full ACKNOWLEDGED delivery flow including timeout formula and
 // retry backoff.
-message MashAck {
+message AirTAKAck {
   uint32 ack_request_id     = 1;   // Data.request_id of the ACKed packet
   uint32 from_node_id       = 2;   // node ID of the ACK sender
   uint32 original_hop_start = 3;   // hop_start of the ACKed packet; used for sender validation

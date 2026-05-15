@@ -1,5 +1,5 @@
 {
-  "_comment": "MASH — Mesh Airsoft Situational Hub | firmware/boards/t_echo_plus.json | Planning: §7.1 | Roadmap: 1.1",
+  "_comment": "AirTAK — Airsoft Team Awareness Kit | firmware/boards/t_echo_plus.json | Planning: §7.1 | Roadmap: 1.1",
   "_pin_reference": "Pin mapping aligned with meshtastic/firmware variants/nrf52840/t-echo-plus/variant.h on 2026-05-15.",
 
   "build": {

@@ -1,11 +1,11 @@
-// MASH Android — MainActivity.kt
+// AirTAK Android — MainActivity.kt
 // Planning: §11 | Roadmap: Phase 3
 //
 // Single-activity host for Compose navigation graph.
 // Requests runtime permissions on first launch (BLUETOOTH_SCAN, BLUETOOTH_CONNECT,
 // ACCESS_FINE_LOCATION, POST_NOTIFICATIONS per §11.2).
 
-package com.mash
+package com.airtak
 
 import android.Manifest
 import android.os.Build
@@ -14,7 +14,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
-import com.mash.data.db.MeshRepository
+import com.airtak.data.db.MeshRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                MashNavGraph()
+                AirTAKNavGraph()
             }
         }
     }

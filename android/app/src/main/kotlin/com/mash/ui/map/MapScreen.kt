@@ -1,10 +1,10 @@
-// MASH Android — ui/map/MapScreen.kt
+// AirTAK Android — ui/map/MapScreen.kt
 // Planning: §11.4, §11.5 | Roadmap: 3.1, 3.4, 3.5
 //
 // MapLibre GL 11 map showing node positions.
 // Node pins rendered via a GeoJSON source + SymbolLayer (core SDK, no annotation plugin needed).
 
-package com.mash.ui.map
+package com.airtak.ui.map
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.mash.data.db.NodeEntity
+import com.airtak.data.db.NodeEntity
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
@@ -30,8 +30,8 @@ import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 
 private const val MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
-private const val NODES_SOURCE_ID = "mash-nodes"
-private const val NODES_LAYER_ID  = "mash-nodes-layer"
+private const val NODES_SOURCE_ID = "airtak-nodes"
+private const val NODES_LAYER_ID  = "airtak-nodes-layer"
 
 @Composable
 fun MapScreen(viewModel: MapViewModel = hiltViewModel()) {

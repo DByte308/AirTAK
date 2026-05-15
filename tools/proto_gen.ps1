@@ -1,10 +1,10 @@
-# MASH — Mesh Airsoft Situational Hub
+# AirTAK — Airsoft Team Awareness Kit
 # tools/proto_gen.ps1 — Generate protobuf bindings from proto/ sources
 # Planning: §18.3 | Roadmap: T.4
 #
 # Generates:
 #   1. nanopb C/C++ bindings → firmware/src/proto/
-#      Sources: proto/mash/*.proto (NOT proto/meshtastic/ — those are vendored, do not regenerate)
+#      Sources: proto/airtak/*.proto (NOT proto/meshtastic/ — those are vendored, do not regenerate)
 #   2. Kotlin lite bindings → android/app/src/main/proto/ (copied for Gradle protobuf plugin)
 #
 # Requirements:
@@ -23,9 +23,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot   = Split-Path -Parent $PSScriptRoot
-$ProtoMash     = Join-Path $ProjectRoot "proto\mash"
-$FirmwareProto = Join-Path $ProjectRoot "firmware\src\proto\mash"
-$AndroidProto  = Join-Path $ProjectRoot "android\app\src\main\proto\com\mash\proto"
+$ProtoAirTAK     = Join-Path $ProjectRoot "proto\airtak"
+$FirmwareProto = Join-Path $ProjectRoot "firmware\src\proto\airtak"
+$AndroidProto  = Join-Path $ProjectRoot "android\app\src\main\proto\com\airtak\proto"
 
 # Verify protoc is available
 if (-not (Get-Command protoc -ErrorAction SilentlyContinue)) {
@@ -33,10 +33,10 @@ if (-not (Get-Command protoc -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$ProtoFiles = Get-ChildItem -Path $ProtoMash -Filter "*.proto" | Select-Object -ExpandProperty FullName
+$ProtoFiles = Get-ChildItem -Path $ProtoAirTAK -Filter "*.proto" | Select-Object -ExpandProperty FullName
 
 if ($ProtoFiles.Count -eq 0) {
-    Write-Warning "No .proto files found in $ProtoMash"
+    Write-Warning "No .proto files found in $ProtoAirTAK"
     exit 0
 }
 
@@ -65,7 +65,7 @@ if (-not $AndroidOnly) {
     foreach ($proto in $ProtoFiles) {
         Write-Host "  Generating nanopb for: $(Split-Path -Leaf $proto)"
         & python $nanopbGen `
-            --proto-path $ProtoMash `
+            --proto-path $ProtoAirTAK `
             --proto-path (Join-Path $ProjectRoot "proto") `
             --output-dir $FirmwareProto `
             $proto
@@ -81,7 +81,7 @@ if (-not $FirmwareOnly) {
     Write-Host "`n[proto_gen.ps1] Copying proto sources for Android Gradle protobuf plugin → $AndroidProto" -ForegroundColor Cyan
 
     # The Android Gradle protobuf plugin (protobuf-gradle-plugin) generates Kotlin from
-    # proto sources placed under src/main/proto/. We copy the MASH protos there.
+    # proto sources placed under src/main/proto/. We copy the AirTAK protos there.
     # The plugin handles compilation; we do NOT run protoc manually for Android.
     New-Item -ItemType Directory -Force -Path $AndroidProto | Out-Null
 

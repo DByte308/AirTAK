@@ -1,11 +1,11 @@
-// MASH - Mesh Airsoft Situational Hub
+// AirTAK - Airsoft Team Awareness Kit
 // firmware/src/platform/nrf52/ble/DFUService.cpp - Nordic/Bluefruit DFU service
 // Planning: section 9.7 | Roadmap: 1.5, 6.1
 
 #include "ble/DFUService.h"
 #include <bluefruit.h>
 
-namespace mash {
+namespace airtak {
 namespace ble {
 
 static BLEDfu s_dfu;
@@ -19,4 +19,4 @@ void DFUService::enterDfu() {
 }
 
 } // namespace ble
-} // namespace mash
+} // namespace airtak

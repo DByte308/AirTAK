@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/game/GameState.h — Game state mirror
 // Planning: §12.1–12.5 | Roadmap: 5.1–5.6
 //
@@ -8,7 +8,7 @@
 //   - Objective states
 //   - Team scores
 //
-// Updated by incoming MASH_GAME, MASH_ZONE, and MASH_OBJECTIVE packets.
+// Updated by incoming AIRTAK_GAME, AIRTAK_ZONE, and AIRTAK_OBJECTIVE packets.
 // Read by the display task and BLE DEVICE_STATUS notifications.
 
 #pragma once
@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace mash {
+namespace airtak {
 
 constexpr uint8_t MAX_ZONES      = 16;
 constexpr uint8_t MAX_OBJECTIVES = 8;
@@ -40,7 +40,7 @@ enum class GameMode : uint8_t {
 
 struct ZoneMirror {
     uint8_t  zone_id;
-    uint8_t  zone_type;         // ZoneType from proto/mash/game.proto
+    uint8_t  zone_type;         // ZoneType from proto/airtak/game.proto
     int32_t  lat_e7;            // latitude × 10^7
     int32_t  lon_e7;            // longitude × 10^7
     uint32_t radius_m;
@@ -61,13 +61,13 @@ public:
     // Phase 5.1: Initialize empty game state (IDLE phase).
     static void init();
 
-    // Phase 5.1: Handle incoming GameStatePacket (deserialized from MASH_GAME portnum).
+    // Phase 5.1: Handle incoming GameStatePacket (deserialized from AIRTAK_GAME portnum).
     static void onGameStatePacket(const uint8_t* pb_data, size_t pb_len);
 
-    // Phase 5.2: Handle incoming ZonePacket (MASH_ZONE portnum).
+    // Phase 5.2: Handle incoming ZonePacket (AIRTAK_ZONE portnum).
     static void onZonePacket(const uint8_t* pb_data, size_t pb_len);
 
-    // Phase 5.3: Handle incoming ObjectivePacket (MASH_OBJECTIVE portnum).
+    // Phase 5.3: Handle incoming ObjectivePacket (AIRTAK_OBJECTIVE portnum).
     static void onObjectivePacket(const uint8_t* pb_data, size_t pb_len);
 
     // Accessors
@@ -80,4 +80,4 @@ public:
     static uint8_t           teamCount();
 };
 
-} // namespace mash
+} // namespace airtak

@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/MeshNode.h — Node identity, NODEINFO broadcast, smart beaconing
 // Planning: §8.8, §13.2, §8.7 | Roadmap: 2.2, 2.4
 //
@@ -13,7 +13,7 @@
 #include <queue.h>
 #include <event_groups.h>
 
-namespace mash {
+namespace airtak {
 
 class MeshNode {
 public:
@@ -36,7 +36,7 @@ public:
     // HIT/RESPAWNING/ELIMINATED players use 5-minute heartbeat (§8.7).
     static void maybeTransmitPosition(QueueHandle_t tx_queue, EventGroupHandle_t events);
 
-    // Phase 2.12: Handle a received MASH_POSITION_REQUEST targeting this node.
+    // Phase 2.12: Handle a received AIRTAK_POSITION_REQUEST targeting this node.
     // Responds with POSITION_APP within 2 seconds, bypassing the beaconing timer.
     static void handlePositionRequest(uint32_t requester_id, QueueHandle_t tx_queue);
 
@@ -49,4 +49,4 @@ public:
     static void onNodeInfoReceived(uint32_t src_node_id);
 };
 
-} // namespace mash
+} // namespace airtak

@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/PacketPool.cpp — Fixed-size preallocated packet buffer pool implementation
 // Planning: §9.2 | Roadmap: 1.7, 2.5
 
@@ -7,7 +7,7 @@
 #include <semphr.h>
 #include <cstring>
 
-namespace mash {
+namespace airtak {
 
 static PooledPacket   s_pool[PACKET_POOL_SIZE];
 static SemaphoreHandle_t s_mutex = nullptr;
@@ -48,4 +48,4 @@ void PacketPool::free(PooledPacket* pkt) {
 
 size_t PacketPool::usedCount() { return s_used; }
 
-} // namespace mash
+} // namespace airtak

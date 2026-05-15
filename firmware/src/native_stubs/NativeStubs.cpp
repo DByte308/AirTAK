@@ -24,11 +24,11 @@ uint32_t millis() { return s_now_ms; }
 void delay(uint32_t ms) { s_now_ms += ms; }
 long random(long min_value, long max_value) { return min_value < max_value ? min_value : 0; }
 
-namespace mash {
+namespace airtak {
 
 static ChannelSlot s_primary_slot = {
     0,
-    "MASH",
+    "AirTAK",
     {0},
     0,
     ChannelRole::PRIMARY,
@@ -89,8 +89,8 @@ void ConfigManager::resetGroup(ConfigGroup) {}
 void ConfigManager::registerCallback(ConfigChangedCallback) {}
 void ConfigManager::radioRestartProcedure() {}
 bool ConfigManager::isRadioRestartPending() { return false; }
-const char* ConfigManager::deviceLongName() { return "MASH Node"; }
-const char* ConfigManager::deviceShortName() { return "MASH"; }
+const char* ConfigManager::deviceLongName() { return "AirTAK Node"; }
+const char* ConfigManager::deviceShortName() { return "AirTAK"; }
 uint32_t ConfigManager::positionBroadcastIntervalSecs() { return defaults::POSITION_BROADCAST_INTERVAL_SECS; }
 uint32_t ConfigManager::positionMinTxIntervalSecs() { return defaults::POSITION_MIN_TX_INTERVAL_SECS; }
 uint32_t ConfigManager::positionMovementThresholdM() { return defaults::POSITION_MOVEMENT_THRESHOLD_M; }
@@ -115,4 +115,4 @@ uint32_t positionRequestCount() { return s_position_request_count; }
 uint32_t nodeInfoReceivedCount() { return s_nodeinfo_received_count; }
 
 } // namespace test
-} // namespace mash
+} // namespace airtak

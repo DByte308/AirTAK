@@ -1,7 +1,7 @@
-// MASH Android — ui/players/PlayersScreen.kt
+// AirTAK Android — ui/players/PlayersScreen.kt
 // Planning: §11.7 | Roadmap: 3.3
 
-package com.mash.ui.players
+package com.airtak.ui.players
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,7 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.mash.data.db.NodeEntity
+import com.airtak.data.db.NodeEntity
 
 @Composable
 fun PlayersScreen(viewModel: PlayersViewModel = hiltViewModel()) {

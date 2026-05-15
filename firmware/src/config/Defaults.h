@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/config/Defaults.h — Factory default values for all config groups
 // Planning: §9.4.1, §8.1, §8.7, §14.2 | Roadmap: 1.6, 2.9
 //
@@ -10,12 +10,12 @@
 
 #include <cstdint>
 
-namespace mash {
+namespace airtak {
 namespace defaults {
 
 // ── DeviceConfig ──────────────────────────────────────────────────────────────
-constexpr const char* DEVICE_LONG_NAME  = "MASH Node";
-constexpr const char* DEVICE_SHORT_NAME = "MASH";
+constexpr const char* DEVICE_LONG_NAME  = "AirTAK Node";
+constexpr const char* DEVICE_SHORT_NAME = "nod1";
 
 // ── LoraConfig ────────────────────────────────────────────────────────────────
 // Region: 0=EU_868, 1=US_915. Set at first-time setup via Settings > LoRa.
@@ -59,9 +59,9 @@ struct ChannelSlotDefault {
 };
 
 constexpr ChannelSlotDefault CHANNEL_SLOTS[8] = {
-    // Slot 0: PRIMARY — Meshtastic-compatible + MASH game traffic
-    { 0, "MASH",  1, true,  true,  32, 0 },
-    // Slot 1: SECONDARY — MASH game-only traffic (separate PSK)
+    // Slot 0: PRIMARY — Meshtastic-compatible + AirTAK game traffic
+    { 0, "AirTAK",  1, true,  true,  32, 0 },
+    // Slot 1: SECONDARY — AirTAK game-only traffic (separate PSK)
     { 1, "Game",  2, true,  true,  32, 0 },
     // Slot 2: DISABLED — pre-configured for Phase 7 PTT audio (Profile 1: Short/Speed)
     { 2, "Audio", 0, true,  true,  32, 1 },
@@ -82,7 +82,7 @@ constexpr uint32_t POSITION_MIN_TX_INTERVAL_SECS     = 15;    // min gap between
 constexpr uint32_t POSITION_HIT_HEARTBEAT_SECS       = 300;   // 5 min when HIT/RESPAWNING/ELIMINATED
 
 // ── Per-packet-type default hop limits (§8.7, updated v1.5) ────────────────────
-// All types use hop_limit=7 (maximum) except MASH_AUDIO=1 and MASH_ACK (dynamic).
+// All types use hop_limit=7 (maximum) except AIRTAK_AUDIO=1 and AIRTAK_ACK (dynamic).
 // Rationale: hop_limit does not create extra relay traffic — relay count is bounded
 // by mesh topology. Restricting hop_limit only prevents delivery to far-edge nodes.
 // Airtime is controlled by smart beaconing TX interval, not hop_limit fields.
@@ -91,14 +91,14 @@ constexpr uint8_t HOP_LIMIT_TEXT_MESSAGE     = 7;
 constexpr uint8_t HOP_LIMIT_POSITION         = 7;
 constexpr uint8_t HOP_LIMIT_NODEINFO         = 7;
 constexpr uint8_t HOP_LIMIT_TELEMETRY        = 7;
-constexpr uint8_t HOP_LIMIT_MASH_PLAYER      = 7;
-constexpr uint8_t HOP_LIMIT_MASH_GAME        = 7;
-constexpr uint8_t HOP_LIMIT_MASH_ZONE        = 7;
-constexpr uint8_t HOP_LIMIT_MASH_OBJECTIVE   = 7;
-constexpr uint8_t HOP_LIMIT_MASH_ADMIN       = 7;
-constexpr uint8_t HOP_LIMIT_MASH_ACK         = 0;  // Set by receiver to original packet's hop_start (§8.9)
+constexpr uint8_t HOP_LIMIT_AIRTAK_PLAYER      = 7;
+constexpr uint8_t HOP_LIMIT_AIRTAK_GAME        = 7;
+constexpr uint8_t HOP_LIMIT_AIRTAK_ZONE        = 7;
+constexpr uint8_t HOP_LIMIT_AIRTAK_OBJECTIVE   = 7;
+constexpr uint8_t HOP_LIMIT_AIRTAK_ADMIN       = 7;
+constexpr uint8_t HOP_LIMIT_AIRTAK_ACK         = 0;  // Set by receiver to original packet's hop_start (§8.9)
 constexpr uint8_t HOP_LIMIT_POSITION_REQUEST = 7;
-constexpr uint8_t HOP_LIMIT_MASH_AUDIO       = 1;  // MUST never relay audio — sole exception (§12.7)
+constexpr uint8_t HOP_LIMIT_AIRTAK_AUDIO       = 1;  // MUST never relay audio — sole exception (§12.7)
 
 // ── PowerConfig ───────────────────────────────────────────────────────────────
 constexpr bool     POWER_GPS_DUTY_CYCLE    = false;  // disabled until Phase 6
@@ -141,4 +141,4 @@ constexpr uint32_t NODEINFO_BROADCAST_INTERVAL_SECS = 10800; // 3 hours (§13.2)
 constexpr uint32_t DISPLAY_MIN_REFRESH_MS = 60000; // 60 s min between full refreshes (§9.6)
 
 } // namespace defaults
-} // namespace mash
+} // namespace airtak

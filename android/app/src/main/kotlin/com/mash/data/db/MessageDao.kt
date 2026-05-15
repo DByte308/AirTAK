@@ -1,10 +1,10 @@
-// MASH Android — data/db/MessageDao.kt
+// AirTAK Android — data/db/MessageDao.kt
 // Planning: §11.6 | Roadmap: 3.2
 //
 // Rolling 1000-message window per channel (§11.6).
 // Oldest messages are deleted when the per-channel count exceeds 1000.
 
-package com.mash.data.db
+package com.airtak.data.db
 
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow

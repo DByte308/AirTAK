@@ -1,14 +1,14 @@
-// MASH — Mesh Airsoft Situational Hub
-// proto/mash/ble.proto — BLE transport message schema (CONFIG_RW, DEVICE_STATUS, ADMIN)
+// AirTAK — Airsoft Team Awareness Kit
+// proto/airtak/ble.proto — BLE transport message schema (CONFIG_RW, DEVICE_STATUS, ADMIN)
 // Planning: §10.3, §10.4, §10.5, §14.4 | Roadmap: T.3
 //
-// Generated outputs: firmware/src/proto/ (nanopb), android/.../com/mash/proto/ (Kotlin)
+// Generated outputs: firmware/src/proto/ (nanopb), android/.../com/airtak/proto/ (Kotlin)
 // Regenerate with: tools/proto_gen.ps1
 
 syntax = "proto3";
-package mash;
+package airtak;
 
-import "mash/config.proto";
+import "airtak/config.proto";
 
 // ── Config protocol (§10.3) ───────────────────────────────────────────────────
 

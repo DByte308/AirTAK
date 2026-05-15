@@ -1,11 +1,11 @@
-// MASH Android — src/test/kotlin/com/mash/BleFramingTest.kt
+// AirTAK Android — src/test/kotlin/com/airtak/BleFramingTest.kt
 // Planning: §10.2, §19.1 | Roadmap: Phase 1 exit criteria
 //
 // Tests chunk encode/decode and reassembly at various payload sizes and MTU boundaries.
 
-package com.mash
+package com.airtak
 
-import com.mash.data.ble.BleFraming
+import com.airtak.data.ble.BleFraming
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 

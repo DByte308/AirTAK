@@ -1,4 +1,4 @@
-# MASH — Mesh Airsoft Situational Hub
+# AirTAK — Airsoft Team Awareness Kit
 # tools/flash.ps1 — Flash firmware to T-Echo Plus via PlatformIO
 # Planning: §18.1 | Roadmap: T.5
 #

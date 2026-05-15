@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/config/ConfigGroups.h — Config group enumeration and metadata
 // Planning: §9.4.1, §14.2 | Roadmap: 2.8
 //
@@ -9,7 +9,7 @@
 
 #include <cstdint>
 
-namespace mash {
+namespace airtak {
 
 enum class ConfigGroup : uint8_t {
     DEVICE   = 0,   // DeviceConfig         → /config/device.pb
@@ -52,11 +52,11 @@ inline bool groupRequiresRadioRestart(ConfigGroup g) {
 }
 
 namespace config {
-using ::mash::CONFIG_GROUP_COUNT;
-using ::mash::ConfigGroup;
-using ::mash::configGroupFilename;
-using ::mash::configGroupPath;
-using ::mash::groupRequiresRadioRestart;
+using ::airtak::CONFIG_GROUP_COUNT;
+using ::airtak::ConfigGroup;
+using ::airtak::configGroupFilename;
+using ::airtak::configGroupPath;
+using ::airtak::groupRequiresRadioRestart;
 } // namespace config
 
-} // namespace mash
+} // namespace airtak

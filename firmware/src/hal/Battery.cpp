@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/hal/Battery.cpp — ADC battery voltage monitor implementation
 // Planning: §7.1, §7.2 | Roadmap: 1.7
 
@@ -7,7 +7,7 @@
 #include "config.h"
 #include <Arduino.h>
 
-namespace mash {
+namespace airtak {
 
 static float    s_level        = 0.0f;
 static bool     s_is_charging  = false;
@@ -21,14 +21,14 @@ constexpr uint32_t VBAT_DIVIDER_DEN = 1;
 void Battery::init() {
     // Configure ADC input for VBAT_SENSE (P0.04 / AIN2)
     analogReadResolution(12);
-    pinMode(MASH_PIN_VBAT_SENSE, INPUT);
-#if MASH_PIN_CHG_STAT >= 0
-    pinMode(MASH_PIN_CHG_STAT,   INPUT_PULLUP);
+    pinMode(AIRTAK_PIN_VBAT_SENSE, INPUT);
+#if AIRTAK_PIN_CHG_STAT >= 0
+    pinMode(AIRTAK_PIN_CHG_STAT,   INPUT_PULLUP);
 #endif
 }
 
 void Battery::sample(EventGroupHandle_t system_event_group) {
-    uint32_t raw_adc = analogRead(MASH_PIN_VBAT_SENSE);
+    uint32_t raw_adc = analogRead(AIRTAK_PIN_VBAT_SENSE);
     s_voltage_mv = (raw_adc * ADC_REFERENCE_MV * VBAT_DIVIDER_NUM)
                  / (ADC_MAX_COUNTS * VBAT_DIVIDER_DEN);
 
@@ -38,8 +38,8 @@ void Battery::sample(EventGroupHandle_t system_event_group) {
     else s_level = (float)(s_voltage_mv - 3200) / (4200 - 3200);
 
     // CHG_STAT: active low = charging (typical TP4054 behavior)
-#if MASH_PIN_CHG_STAT >= 0
-    s_is_charging = (digitalRead(MASH_PIN_CHG_STAT) == LOW);
+#if AIRTAK_PIN_CHG_STAT >= 0
+    s_is_charging = (digitalRead(AIRTAK_PIN_CHG_STAT) == LOW);
 #else
     s_is_charging = false;
 #endif
@@ -55,4 +55,4 @@ float    Battery::level()             { return s_level;       }
 bool     Battery::isCharging()        { return s_is_charging; }
 uint32_t Battery::voltageMillivolts() { return s_voltage_mv;  }
 
-} // namespace mash
+} // namespace airtak

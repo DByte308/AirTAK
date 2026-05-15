@@ -1,7 +1,7 @@
-// MASH Android — ui/settings/SettingsScreen.kt
+// AirTAK Android — ui/settings/SettingsScreen.kt
 // Planning: §11.9, §14.2 | Roadmap: 3.6
 
-package com.mash.ui.settings
+package com.airtak.ui.settings
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -59,7 +59,7 @@ private fun ConnectionStatusCard(connected: Boolean) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text  = if (connected) "Connected to MASH device" else "Not connected",
+                text  = if (connected) "Connected to AirTAK device" else "Not connected",
                 color = if (connected)
                     MaterialTheme.colorScheme.onPrimaryContainer
                 else

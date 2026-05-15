@@ -1,4 +1,4 @@
-// MASH Android — data/tiles/TileRepository.kt
+// AirTAK Android — data/tiles/TileRepository.kt
 // Planning: §11.5 | Roadmap: T.6, 3.1
 //
 // Manages offline MBTiles SQLite databases for MapLibre.
@@ -6,7 +6,7 @@
 // Supports multiple MBTiles files (e.g., one per operation area).
 // Configurable tile server URL (set via DeviceConfig or Settings UI).
 
-package com.mash.data.tiles
+package com.airtak.data.tiles
 
 import javax.inject.Inject
 import javax.inject.Singleton

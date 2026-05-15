@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/ChannelManager.cpp — Channel slot table implementation
 // Planning: §8.5, §8.6 | Roadmap: 2.7
 
@@ -9,7 +9,7 @@
 #include "config/Defaults.h"
 #include <cstring>
 
-namespace mash {
+namespace airtak {
 
 static ChannelSlot s_slots[MAX_CHANNEL_SLOTS];
 
@@ -187,4 +187,4 @@ bool ChannelManager::requiresMultiPhy() {
     return false;
 }
 
-} // namespace mash
+} // namespace airtak

@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/test/test_audio/test_audio.cpp — Codec2 round-trip SNR test (Phase 7)
 // Planning: §12.7, §19.1 | Roadmap: 7.1
 //
@@ -8,16 +8,16 @@
 //   3. AudioPacket FEC: fec_prev_audio_data is EMPTY on first packet of each PTT session.
 //   4. Session ID field is set correctly in AudioPacket proto.
 //
-// Only compiled when MASH_PHASE7_AUDIO is defined.
+// Only compiled when AIRTAK_PHASE7_AUDIO is defined.
 
-#ifdef MASH_PHASE7_AUDIO
+#ifdef AIRTAK_PHASE7_AUDIO
 
 #include <unity.h>
 #include "game/AudioCodec.h"
 #include <cmath>
 #include <cstring>
 
-using namespace mash;
+using namespace airtak;
 
 static int16_t s_sine_frame[CODEC2_SAMPLES_PER_FRAME];
 
@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
 #include <unity.h>
 int main() {
     UNITY_BEGIN();
-    // No tests: MASH_PHASE7_AUDIO not defined
+    // No tests: AIRTAK_PHASE7_AUDIO not defined
     return UNITY_END();
 }
-#endif // MASH_PHASE7_AUDIO
+#endif // AIRTAK_PHASE7_AUDIO

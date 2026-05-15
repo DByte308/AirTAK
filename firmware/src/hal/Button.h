@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/hal/Button.h — Debounced user button driver
 // Planning: §12.6, §7.1 | Roadmap: 1.7
 //
@@ -11,7 +11,7 @@
 #include <FreeRTOS.h>
 #include <event_groups.h>
 
-namespace mash {
+namespace airtak {
 
 enum class ButtonGesture : uint8_t {
     NONE         = 0,
@@ -36,4 +36,4 @@ public:
 // Event bit for button gesture available
 constexpr EventBits_t BUTTON_EVENT_GESTURE = (1 << 13);
 
-} // namespace mash
+} // namespace airtak

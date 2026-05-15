@@ -1,4 +1,4 @@
-# MASH Game Protocol
+# AirTAK Game Protocol
 
 **Planning:** §12 | **Roadmap:** T.9
 
@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-The game protocol runs entirely over the mesh radio layer using MASH private port numbers (256–263). The Android companion app observes game state via the BLE MESH_RX characteristic and issues game-master commands via the ADMIN characteristic.
+The game protocol runs entirely over the mesh radio layer using AirTAK private port numbers (256–263). The Android companion app observes game state via the BLE MESH_RX characteristic and issues game-master commands via the ADMIN characteristic.
 
 ---
 
@@ -32,18 +32,18 @@ The game protocol runs entirely over the mesh radio layer using MASH private por
 | PAUSED   | 3     | Scoring paused. Players maintain state.             |
 | ENDED    | 4     | Game over. Win condition evaluated and announced.   |
 
-Phase transitions are broadcast via `MASH_GAME` (`GameStatePacket`). All transitions use ACKNOWLEDGED delivery.
+Phase transitions are broadcast via `AIRTAK_GAME` (`GameStatePacket`). All transitions use ACKNOWLEDGED delivery.
 
 ---
 
-## 3. MASH_GAME Packet Flow (§12.1)
+## 3. AIRTAK_GAME Packet Flow (§12.1)
 
 ```
 Game Master (Android)          Firmware (game master device)      Other Devices
        │                               │                               │
        │── AdminRequest(START_GAME) ──>│                               │
-       │                               │── MASH_GAME (phase=ACTIVE) ──>│
-       │                               │<── MASH_ACK ─────────────────│
+       │                               │── AIRTAK_GAME (phase=ACTIVE) ──>│
+       │                               │<── AIRTAK_ACK ─────────────────│
        │<── AdminResponse(ok) ─────────│                               │
 ```
 
@@ -57,7 +57,7 @@ Game Master (Android)          Firmware (game master device)      Other Devices
 
 ---
 
-## 4. MASH_PLAYER Packet Flow (§12.6)
+## 4. AIRTAK_PLAYER Packet Flow (§12.6)
 
 Player state changes (status transitions) are broadcast with `want_ack=true` and `is_state_transition=true`.
 Non-transition heartbeat updates use `want_ack=false`.
@@ -65,9 +65,9 @@ Non-transition heartbeat updates use `want_ack=false`.
 ```
 Player Device                             All Devices
      │                                        │
-     │── MASH_PLAYER(status=HIT,              │
+     │── AIRTAK_PLAYER(status=HIT,              │
      │              is_state_transition=true) ─>│
-     │<── MASH_ACK ───────────────────────────│
+     │<── AIRTAK_ACK ───────────────────────────│
 ```
 
 `PlayerStatePacket` fields:
@@ -81,15 +81,15 @@ Player Device                             All Devices
 
 ---
 
-## 5. MASH_ZONE Packet Flow (§12.2)
+## 5. AIRTAK_ZONE Packet Flow (§12.2)
 
 Zone definitions are broadcast by the game master and relayed to all nodes.
 
 ```
 Game Master                    Mesh Network
      │                              │
-     │── MASH_ZONE (zone_id=1) ────>│  (hop_limit=7, ACKNOWLEDGED)
-     │<── MASH_ACK ────────────────│
+     │── AIRTAK_ZONE (zone_id=1) ────>│  (hop_limit=7, ACKNOWLEDGED)
+     │<── AIRTAK_ACK ────────────────│
 ```
 
 `ZonePacket` fields:
@@ -101,20 +101,20 @@ Game Master                    Mesh Network
 
 ---
 
-## 6. MASH_ACK Packet (§8.9)
+## 6. AIRTAK_ACK Packet (§8.9)
 
-`MashAck` is the application-layer acknowledgement for ACKNOWLEDGED packets.
+`AirTAKAck` is the application-layer acknowledgement for ACKNOWLEDGED packets.
 
 ```
 Receiver                              Sender
     │                                     │
-    │<── MASH_GAME (request_id=0xABCD) ──│
-    │── MASH_ACK (ack_request_id=0xABCD) >│
+    │<── AIRTAK_GAME (request_id=0xABCD) ──│
+    │── AIRTAK_ACK (ack_request_id=0xABCD) >│
 ```
 
-**CRITICAL:** `MashAck.ack_request_id` references `Data.request_id` (the logical message ID), **not** the `MeshPacket.id` (transport ID, which changes on each retry). This allows the sender to match the ACK across retransmissions. See §8.9 amendment G.
+**CRITICAL:** `AirTAKAck.ack_request_id` references `Data.request_id` (the logical message ID), **not** the `MeshPacket.id` (transport ID, which changes on each retry). This allows the sender to match the ACK across retransmissions. See §8.9 amendment G.
 
-`MashAck` fields:
+`AirTAKAck` fields:
 - `ack_request_id` — mirrors `Data.request_id` of the acknowledged packet
 - `from_node_id` — node ID of the acknowledging device
 
@@ -122,7 +122,7 @@ The ACK hop_limit is set to the same `hop_start` value as the original packet, s
 
 ---
 
-## 7. MASH_OBJECTIVE Packet Flow (§12.3)
+## 7. AIRTAK_OBJECTIVE Packet Flow (§12.3)
 
 Used to update the state of named objectives (flags, control points).
 
@@ -134,17 +134,17 @@ Used to update the state of named objectives (flags, control points).
 
 ---
 
-## 8. MASH_ADMIN Packet Flow (§12.5)
+## 8. AIRTAK_ADMIN Packet Flow (§12.5)
 
-Game-master administrative actions are broadcast via `MASH_ADMIN`.
+Game-master administrative actions are broadcast via `AIRTAK_ADMIN`.
 All `AdminPacket` messages are signed with the admin PSK to prevent spoofing.
 
 ```
 Game Master                    Target Node                  All Nodes
      │                              │                           │
-     │── MASH_ADMIN (ELIMINATE) ──>│─────────────────────────>│
+     │── AIRTAK_ADMIN (ELIMINATE) ──>│─────────────────────────>│
      │                              │ PlayerState → ELIMINATED  │
-     │                              │── MASH_PLAYER (ELIMINATED)>│
+     │                              │── AIRTAK_PLAYER (ELIMINATED)>│
 ```
 
 `AdminPacket` fields:
@@ -160,17 +160,17 @@ Game Master                    Target Node                  All Nodes
 ```
 PTT Sender                        Mesh (hop_limit=1)         PTT Receivers
      │                                   │                        │
-     │── MASH_AUDIO (session_id=42,      │                        │
+     │── AIRTAK_AUDIO (session_id=42,      │                        │
      │   audio_data=[8 frames],          │                        │
      │   fec_prev_audio_data=[])   ──────>│───────────────────────>│
      │                                   │                        │ (decode, play)
-     │── MASH_AUDIO (session_id=42,      │                        │
+     │── AIRTAK_AUDIO (session_id=42,      │                        │
      │   audio_data=[8 frames],          │                        │
      │   fec_prev_audio_data=[prev]) ────>│───────────────────────>│
 ```
 
 Key audio rules:
-- `hop_limit = 1` **always** for `MASH_AUDIO` (local mesh, no multi-hop relay).
+- `hop_limit = 1` **always** for `AIRTAK_AUDIO` (local mesh, no multi-hop relay).
 - `fec_prev_audio_data` **MUST be empty** on the first packet of each PTT session (session boundary).
 - `session_id` is a monotonically increasing counter per PTT press; used by receivers to reset jitter buffers.
 - Audio codec: Codec2 1300 bps — 8 frames per packet = 160 ms of audio.

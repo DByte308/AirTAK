@@ -1,4 +1,4 @@
-// MASH Android — app/build.gradle.kts
+// AirTAK Android — app/build.gradle.kts
 // Planning: §11.1, §11.2 | Roadmap: Phase 3
 //
 // minSdk 31 (Android 12) — required for BLUETOOTH_SCAN / BLUETOOTH_CONNECT split permissions.
@@ -14,11 +14,11 @@ plugins {
 }
 
 android {
-    namespace = "com.mash"
+    namespace = "com.airtak"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mash"
+        applicationId = "com.airtak"
         minSdk        = 31
         targetSdk     = 35
         versionCode   = 1

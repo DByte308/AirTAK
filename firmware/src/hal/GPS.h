@@ -1,4 +1,4 @@
-// MASH — Mesh Airsoft Situational Hub
+// AirTAK — Airsoft Team Awareness Kit
 // firmware/src/hal/GPS.h — L76K GPS UART driver
 // Planning: §9.5, §7.1 | Roadmap: 1.3
 //
@@ -13,7 +13,7 @@
 #include <FreeRTOS.h>
 #include <event_groups.h>
 
-namespace mash {
+namespace airtak {
 
 // Event bits in g_system_event_group related to GPS
 constexpr EventBits_t GPS_EVENT_FIX_ACQUIRED = (1 << 8);
@@ -58,4 +58,4 @@ public:
     static void markPositionTransmitted();
 };
 
-} // namespace mash
+} // namespace airtak
