@@ -17,6 +17,8 @@ QueueHandle_t g_radio_tx_queue = nullptr;
 EventGroupHandle_t g_radio_event_group = nullptr;
 
 static uint32_t s_now_ms = 1000;
+static uint32_t s_position_request_count = 0;
+static uint32_t s_nodeinfo_received_count = 0;
 
 uint32_t millis() { return s_now_ms; }
 void delay(uint32_t ms) { s_now_ms += ms; }
@@ -53,9 +55,9 @@ void MeshNode::broadcastNodeInfo(QueueHandle_t) {}
 void MeshNode::tick(QueueHandle_t) {}
 uint32_t MeshNode::nodeId() { return 0x12345678; }
 void MeshNode::maybeTransmitPosition(QueueHandle_t, EventGroupHandle_t) {}
-void MeshNode::handlePositionRequest(uint32_t, QueueHandle_t) {}
+void MeshNode::handlePositionRequest(uint32_t, QueueHandle_t) { s_position_request_count++; }
 uint32_t MeshNode::knownNodeCount() { return 0; }
-void MeshNode::onNodeInfoReceived(uint32_t) {}
+void MeshNode::onNodeInfoReceived(uint32_t) { s_nodeinfo_received_count++; }
 
 void ChannelManager::init() {}
 void ChannelManager::rekey() {}
@@ -100,4 +102,17 @@ uint8_t ConfigManager::primarySlotPhyProfileIndex() { return 0; }
 bool ConfigManager::loraPhyProfile(uint8_t, uint8_t&, uint32_t&, uint8_t&) { return false; }
 
 } // namespace config
+
+namespace test {
+
+void resetNativeStubs() {
+    s_now_ms = 1000;
+    s_position_request_count = 0;
+    s_nodeinfo_received_count = 0;
+}
+
+uint32_t positionRequestCount() { return s_position_request_count; }
+uint32_t nodeInfoReceivedCount() { return s_nodeinfo_received_count; }
+
+} // namespace test
 } // namespace mash

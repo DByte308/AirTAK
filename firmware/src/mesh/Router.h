@@ -14,6 +14,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <FreeRTOS.h>
 #include <queue.h>
 #include "mesh/Portnums.h"
@@ -104,6 +105,17 @@ public:
                 return false;
         }
     }
+
+#ifdef MASH_NATIVE_TEST
+    static size_t testPendingRelayCount();
+    static size_t testRetryEntryCount();
+    static size_t testAppDedupCount();
+    static bool testFirstRelay(uint8_t* out, uint8_t& out_len,
+                               uint32_t& send_after_ms, float& rx_snr);
+    static bool testFirstRetry(uint32_t& msg_id, uint8_t& attempts,
+                               uint32_t& timeout_ms, uint8_t& hop_start,
+                               uint16_t& payload_len);
+#endif
 };
 
 } // namespace mash

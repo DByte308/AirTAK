@@ -16,7 +16,9 @@ Last local verification:
 
 | Date | Command | Result |
 |------|---------|--------|
-| 2026-05-15 | `.\tools\phase2_verify.ps1` | 34 native tests passed; `t_echo_plus` build succeeded |
+| 2026-05-15 | `.\tools\phase2_verify.ps1` | 46 native tests passed; `t_echo_plus` build succeeded |
+
+Native coverage includes config/protobuf round-trips, BLE framing, Meshtastic-compatible crypto/channel hashes, hop-limit defaults, SNR relay delay, duplicate suppression, heard-by relay suppression, `MASH_AUDIO` non-relay, NODEINFO dispatch, `MASH_POSITION_REQUEST` target dispatch, ACK retry/timeout/clearing, app-layer dedup by `Data.request_id`, unicast text ACK selection, and the `MASH_PLAYER.is_state_transition` ACK rule.
 
 ## Hardware Signoff Remaining
 

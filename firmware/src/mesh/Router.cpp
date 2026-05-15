@@ -136,6 +136,76 @@ static bool skipField(const uint8_t* buf, uint16_t len, uint16_t& pos, uint8_t w
     }
 }
 
+static bool findLengthDelimitedField(const uint8_t* buf, uint16_t len,
+                                     uint32_t wanted_field,
+                                     const uint8_t*& out_data,
+                                     uint16_t& out_len) {
+    uint16_t pos = 0;
+    while (pos < len) {
+        uint32_t tag;
+        if (!readVarint(buf, len, pos, tag)) return false;
+        uint8_t wire = tag & 0x07;
+        uint32_t field = tag >> 3;
+        if (wire == 2) {
+            uint32_t field_len;
+            if (!readVarint(buf, len, pos, field_len)) return false;
+            if (field_len > UINT16_MAX || pos + field_len > len) return false;
+            if (field == wanted_field) {
+                out_data = buf + pos;
+                out_len = static_cast<uint16_t>(field_len);
+                return true;
+            }
+            pos += static_cast<uint16_t>(field_len);
+        } else {
+            if (!skipField(buf, len, pos, wire)) return false;
+        }
+    }
+    return false;
+}
+
+static bool readVarintField(const uint8_t* buf, uint16_t len,
+                            uint32_t wanted_field, uint32_t& out_value) {
+    uint16_t pos = 0;
+    while (pos < len) {
+        uint32_t tag;
+        if (!readVarint(buf, len, pos, tag)) return false;
+        uint8_t wire = tag & 0x07;
+        uint32_t field = tag >> 3;
+        if (wire == 0) {
+            uint32_t value;
+            if (!readVarint(buf, len, pos, value)) return false;
+            if (field == wanted_field) {
+                out_value = value;
+                return true;
+            }
+        } else {
+            if (!skipField(buf, len, pos, wire)) return false;
+        }
+    }
+    return false;
+}
+
+static bool extractDataPayload(const uint8_t* data_pb, uint16_t data_len,
+                               const uint8_t*& payload, uint16_t& payload_len) {
+    return findLengthDelimitedField(data_pb, data_len, 2, payload, payload_len);
+}
+
+static bool readPositionRequestTarget(const uint8_t* data_pb, uint16_t data_len,
+                                      uint32_t& target_node_id) {
+    const uint8_t* inner = nullptr;
+    uint16_t inner_len = 0;
+    if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return false;
+    return readVarintField(inner, inner_len, 1, target_node_id);
+}
+
+static bool mashPlayerIsStateTransition(const uint8_t* data_pb, uint16_t data_len) {
+    const uint8_t* inner = nullptr;
+    uint16_t inner_len = 0;
+    if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return false;
+    uint32_t value = 0;
+    return readVarintField(inner, inner_len, 7, value) && value != 0;
+}
+
 static bool parseDataMetadata(const uint8_t* data, uint16_t data_len, DataMetadata& out) {
     uint16_t pos = 0;
     bool saw_portnum = false;
@@ -352,30 +422,8 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     // When we receive a PositionRequestPacket addressed to us (or broadcast),
     // respond with a unicast POSITION_APP within 2 s, bypassing the beaconing timer.
     if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::MASH_POSITION_REQUEST)) {
-        // Parse the inner PositionRequestPacket from the Data.payload field.
-        // Data proto: field 1 = portnum (already parsed), field 2 = payload bytes.
-        // Look for tag 0x12 (field 2, wire 2) in decrypted[].
         uint32_t target_node_id = 0xFFFFFFFF; // broadcast = any node responds
-        for (uint16_t i = 1; i + 1 < payload_len; i++) {
-            if (decrypted[i] == 0x12) { // Data.payload tag
-                uint8_t inner_len = decrypted[i + 1];
-                if (i + 2 + inner_len <= payload_len && inner_len >= 2) {
-                    // Parse PositionRequestPacket.target_node_id (field 1, uint32, tag 0x08).
-                    const uint8_t* inner = decrypted + i + 2;
-                    if (inner[0] == 0x08) {
-                        uint32_t tid = 0; uint8_t shift = 0; uint8_t j = 1;
-                        while (j < inner_len) {
-                            uint8_t b = inner[j++];
-                            tid |= (uint32_t)(b & 0x7F) << shift;
-                            if (!(b & 0x80)) break;
-                            shift += 7;
-                        }
-                        target_node_id = tid;
-                    }
-                }
-                break;
-            }
-        }
+        readPositionRequestTarget(decrypted, payload_len, target_node_id);
         if (target_node_id == MeshNode::nodeId() || target_node_id == 0xFFFFFFFF) {
             MeshNode::handlePositionRequest(hdr.src_node_id, tx_queue);
         }
@@ -624,7 +672,7 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
             want_ack = true;
             break;
         case Portnum::MASH_PLAYER:
-            want_ack = meta.want_response;
+            want_ack = mashPlayerIsStateTransition(data_pb, data_len);
             break;
         default:
             break;
@@ -773,5 +821,60 @@ uint8_t Router::defaultHopLimit(Portnum portnum) {
         default:                           return 3;
     }
 }
+
+#ifdef MASH_NATIVE_TEST
+size_t Router::testPendingRelayCount() {
+    size_t count = 0;
+    for (const auto& entry : s_relay_queue) {
+        if (entry.in_use) count++;
+    }
+    return count;
+}
+
+size_t Router::testRetryEntryCount() {
+    size_t count = 0;
+    for (const auto& entry : s_retry_queue) {
+        if (entry.in_use) count++;
+    }
+    return count;
+}
+
+size_t Router::testAppDedupCount() {
+    uint32_t now_ms = millis();
+    size_t count = 0;
+    for (const auto& entry : s_app_dedup) {
+        if (entry.in_use && entry.expires_ms >= now_ms) count++;
+    }
+    return count;
+}
+
+bool Router::testFirstRelay(uint8_t* out, uint8_t& out_len,
+                            uint32_t& send_after_ms, float& rx_snr) {
+    for (const auto& entry : s_relay_queue) {
+        if (!entry.in_use) continue;
+        if (out) memcpy(out, entry.data, entry.length);
+        out_len = entry.length;
+        send_after_ms = entry.send_after_ms;
+        rx_snr = entry.rx_snr;
+        return true;
+    }
+    return false;
+}
+
+bool Router::testFirstRetry(uint32_t& msg_id, uint8_t& attempts,
+                            uint32_t& timeout_ms, uint8_t& hop_start,
+                            uint16_t& payload_len) {
+    for (const auto& entry : s_retry_queue) {
+        if (!entry.in_use) continue;
+        msg_id = entry.msg_id;
+        attempts = entry.attempts;
+        timeout_ms = entry.timeout_ms;
+        hop_start = entry.hop_start;
+        payload_len = entry.payload_len;
+        return true;
+    }
+    return false;
+}
+#endif
 
 } // namespace mash
