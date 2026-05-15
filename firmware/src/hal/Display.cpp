@@ -244,6 +244,37 @@ void Display::showPasscode(uint32_t passkey) {
     s_dirty_mask = DISPLAY_DIRTY_ALL;
 }
 
+void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
+    s_display.setFullWindow();
+    s_display.firstPage();
+    do {
+        s_display.fillScreen(GxEPD_WHITE);
+        s_display.setTextColor(GxEPD_BLACK);
+        s_display.setFont(&FreeSansBold9pt7b);
+        s_display.setCursor(4, 28);
+        s_display.print("SAFE MODE");
+
+        s_display.setFont(nullptr);
+        s_display.setCursor(4, 58);
+        s_display.print(config_erased ? "Config erased" : "Config kept");
+        s_display.setCursor(4, 76);
+        s_display.print(bonds_cleared ? "BLE bonds cleared" : "BLE bonds kept");
+        s_display.setCursor(4, 104);
+        s_display.print("BLE DFU advertising");
+        s_display.setCursor(4, 122);
+        s_display.print("Name: MASH Recovery");
+        s_display.setCursor(4, 148);
+        s_display.print("Release, then hold");
+        s_display.setCursor(4, 164);
+        s_display.print("10s to erase config.");
+        s_display.setCursor(4, 188);
+        s_display.print("Power cycle to exit.");
+    } while (s_display.nextPage());
+
+    s_dirty_mask = 0;
+    s_last_refresh_ms = millis();
+}
+
 // ── Display control ───────────────────────────────────────────────────────────
 void Display::nextScreen() {
     uint8_t next = (static_cast<uint8_t>(s_current_screen) + 1) % SCREEN_COUNT;

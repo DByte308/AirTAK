@@ -41,6 +41,18 @@ The firmware toolchain is pinned in git and installed into a local, ignored venv
 
 `setup_firmware_env.ps1` installs PlatformIO plus Zig-based native compiler wrappers so Windows machines can run the native firmware tests without a separate system C/C++ compiler. The target firmware build still uses PlatformIO's nRF52 ARM toolchain.
 
+## Firmware recovery
+
+Hold the T-Echo Plus user button while powering on or resetting the device. Keep it held for 5 seconds to enter safe mode.
+
+Safe mode runs before the shared peripheral power rail, normal radio, GPS, config apply, and FreeRTOS tasks. It keeps persisted config and BLE bonds intact by default, shows `SAFE MODE` on the e-ink display, and advertises over BLE as `MASH Recovery` with Nordic DFU available. Use this when faulty app firmware prevents normal access. Power-cycle without holding the button to boot normally after recovery.
+
+To erase persisted MASH config from safe mode, release the button after the `SAFE MODE` screen appears, then hold it again for 10 seconds. Config erase is intentionally a separate confirmation gesture.
+
+If USB/BLE DFU cannot be reached, recover with SWD/J-Link using the existing PlatformIO `nrfjprog` upload path.
+
+Safe mode is an application-level recovery path for the T-Echo Plus pin map. If this firmware is flashed to hardware with a different user-button pin, the safe-mode gesture may not be reachable; if it has different peripheral pins, normal boot may drive the wrong GPIOs after the recovery check. The reliable recovery path for a wrong-board flash is the bootloader or SWD/J-Link. Do not flash this firmware onto non-T-Echo Plus hardware without a matching board definition and reviewed pin map.
+
 ## Repository layout
 
 ```

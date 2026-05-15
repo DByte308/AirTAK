@@ -37,6 +37,7 @@
 #include "mesh/PacketPool.h"
 #include "game/GameState.h"
 #include "game/PlayerState.h"
+#include "system/RecoveryMode.h"
 #include "config.h"
 
 // ── Inter-task communication handles ─────────────────────────────────────────
@@ -69,6 +70,10 @@ void task_audio_codec(void* params);
 // ── setup() ──────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
+
+    if (mash::RecoveryMode::requestedAtBoot()) {
+        mash::RecoveryMode::run();
+    }
 
     pinMode(MASH_PIN_POWER_EN, OUTPUT);
     digitalWrite(MASH_PIN_POWER_EN, HIGH);

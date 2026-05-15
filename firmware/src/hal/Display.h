@@ -45,6 +45,9 @@ public:
     // Phase 1.5: Immediately render the BLE Numeric Comparison passkey (§10.6).
     // Bypasses the 60-second refresh interval because passkey timeout is ≈ 30 s.
     static void showPasscode(uint32_t passkey);
+
+    // Boot recovery mode screen. Bypasses the normal refresh interval.
+    static void showRecoveryMode(bool config_erased, bool bonds_cleared);
 };
 
 } // namespace mash
