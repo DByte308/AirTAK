@@ -4,7 +4,7 @@ LoRa mesh radio firmware for the **LilyGo T-Echo Plus** and a native **Android**
 
 MASH is Meshtastic wire-format compatible on the shared channel and introduces a dedicated game-mode protocol on top.
 
-> **Status:** Phase 1 firmware scaffolding is buildable and covered by native tests. Hardware signoff still requires validation on actual T-Echo Plus devices.
+> **Status:** Phase 1 firmware foundation is buildable and covered by native tests. Hardware signoff steps are tracked in [docs/phase1-acceptance.md](docs/phase1-acceptance.md).
 
 ---
 
@@ -34,6 +34,7 @@ The firmware toolchain is pinned in git and installed into a local, ignored venv
 
 ```powershell
 .\tools\setup_firmware_env.ps1
+.\tools\phase1_verify.ps1
 .\tools\pio_firmware.ps1 test -e native
 .\tools\pio_firmware.ps1 run -e t_echo_plus
 ```
@@ -52,12 +53,14 @@ android/            Kotlin + Jetpack Compose app (min API 31, target 35)
 
 tools/
 ├── flash.ps1       Flash firmware to connected device
+├── phase1_verify.ps1       Run Phase 1 automated acceptance checks
 ├── pio_firmware.ps1        Run the pinned firmware PlatformIO environment
 ├── proto_gen.ps1   Regenerate nanopb + Kotlin sources from .proto files
 ├── setup_firmware_env.ps1  Create the local firmware Python environment
 └── tile_fetch.py   Download MBTiles for a bounding box
 
 docs/
+├── phase1-acceptance.md  Phase 1 automated and hardware acceptance record
 ├── radio-protocol.md   Wire format with annotated byte diagrams
 ├── ble-service.md      GATT UUID table and characteristic flows
 └── game-protocol.md    Game packet flow diagrams

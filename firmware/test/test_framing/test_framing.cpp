@@ -111,6 +111,21 @@ void test_decode_rejects_invalid_chunk_index() {
     TEST_ASSERT_FALSE(Framing::decodeChunk(frame, sizeof(frame), &hdr, &payload, &plen));
 }
 
+void test_framed_full_lora_packet_fits_single_att_value() {
+    uint8_t frame[BLE_FRAME_MAX_LEN];
+    size_t n = Framing::encodeChunk(s_payload, 255, 0, frame, sizeof(frame));
+
+    TEST_ASSERT_EQUAL(FRAME_HEADER_SIZE + 255, n);
+    TEST_ASSERT_LESS_OR_EQUAL(BLE_FRAME_MAX_LEN, n);
+}
+
+void test_maximum_chunk_uses_declared_frame_capacity() {
+    uint8_t frame[BLE_FRAME_MAX_LEN];
+    size_t n = Framing::encodeChunk(s_payload, FRAME_CHUNK_SIZE, 0, frame, sizeof(frame));
+
+    TEST_ASSERT_EQUAL(BLE_FRAME_MAX_LEN, n);
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_single_chunk_small_payload);
@@ -118,5 +133,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_multi_chunk_reassemble);
     RUN_TEST(test_out_of_order_reassemble);
     RUN_TEST(test_decode_rejects_invalid_chunk_index);
+    RUN_TEST(test_framed_full_lora_packet_fits_single_att_value);
+    RUN_TEST(test_maximum_chunk_uses_declared_frame_capacity);
     return UNITY_END();
 }

@@ -14,13 +14,13 @@ All MASH-specific UUIDs follow the pattern `4d415348-{char_id:04x}-1000-8000-008
 
 ## 2. Characteristics
 
-| Characteristic  | UUID suffix | Properties                   | Security          | Max size |
+| Characteristic  | UUID suffix | Properties                   | Security          | Max ATT value |
 |-----------------|-------------|------------------------------|-------------------|----------|
-| CONFIG_RW       | `0001`      | Read, Write, Indicate        | Mode 1, Level 3   | 512 B    |
-| MESH_TX         | `0002`      | Write Without Response       | Mode 1, Level 3   | MTU−3    |
-| MESH_RX         | `0003`      | Notify                       | Mode 1, Level 3   | MTU−3    |
-| DEVICE_STATUS   | `0004`      | Read, Notify                 | Open (no auth)    | 64 B     |
-| ADMIN           | `0005`      | Write, Indicate              | Mode 1, Level 3   | 128 B    |
+| CONFIG_RW       | `0001`      | Read, Write, Indicate        | Mode 1, Level 3   | 514 B    |
+| MESH_TX         | `0002`      | Write Without Response       | Mode 1, Level 3   | 514 B    |
+| MESH_RX         | `0003`      | Notify                       | Mode 1, Level 3   | 514 B    |
+| DEVICE_STATUS   | `0004`      | Read, Notify                 | Open (no auth)    | 514 B    |
+| ADMIN           | `0005`      | Write, Indicate              | Mode 1, Level 3   | 514 B    |
 
 - **Mode 1, Level 3:** Encrypted + MITM-authenticated (LE Secure Connections + Numeric Comparison).
 - **Open:** No authentication required; readable by any connected central.
@@ -31,7 +31,7 @@ All MASH-specific UUIDs follow the pattern `4d415348-{char_id:04x}-1000-8000-008
 
 - **Pairing mode:** LE Secure Connections (LESC) with Numeric Comparison.
 - **Passkey display:** 6-digit confirmation code shown on E-Ink display.
-- **Bonding:** Up to 5 bonded Android devices stored in SoftDevice bond store.
+- **Bonding:** Configurable up to 4 bonded Android devices; factory default is 1.
 - Write characteristics (CONFIG_RW, MESH_TX, ADMIN) reject writes from unauthenticated/unencrypted connections with `ATT_ERROR_INSUFFICIENT_AUTHENTICATION`.
 - DEVICE_STATUS is open to allow battery/GPS status monitoring before pairing.
 
@@ -39,7 +39,7 @@ All MASH-specific UUIDs follow the pattern `4d415348-{char_id:04x}-1000-8000-008
 
 ## 4. Framing Protocol (§10.2)
 
-CONFIG_RW read/write uses a 6-byte chunked framing header to support payloads larger than the ATT MTU (517 bytes).
+All MASH characteristics use a 6-byte chunked framing header to support payloads larger than a single ATT value.
 
 ### Frame header (6 bytes, little-endian)
 
@@ -51,7 +51,7 @@ Offset  Size  Field           Description
   4      2    chunk_count     Total number of chunks in this message (UInt16 LE)
 ```
 
-**Chunk payload size:** `MTU (517) − ATT overhead (3) − frame header (6) = 508 bytes`
+**Chunk payload size:** `MTU (517) − ATT overhead (3) − frame header (6) = 508 bytes`. The maximum framed ATT value length is `508 + 6 = 514 bytes`.
 
 For payloads ≤ 508 bytes: `chunk_count = 1`, `chunk_index = 0`.
 

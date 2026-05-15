@@ -6,7 +6,8 @@
 #   -Port  : (optional) Serial port. If omitted, PlatformIO auto-detects.
 #   -Clean : (optional) Run clean before build.
 #
-# Requires: PlatformIO Core (pio) in PATH.
+# Requires: the firmware PlatformIO venv from setup_firmware_env.ps1, or a global
+# PlatformIO Core (pio) installation in PATH as a fallback.
 
 param(
     [string]$Port  = "",
@@ -18,17 +19,25 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $FirmwareDir = Join-Path $ProjectRoot "firmware"
+$VenvScripts = Join-Path $FirmwareDir ".venv\Scripts"
+$VenvPlatformio = Join-Path $VenvScripts "platformio.exe"
+
+if (Test-Path $VenvPlatformio) {
+    $Platformio = $VenvPlatformio
+    $env:PATH = "$VenvScripts;$env:PATH"
+} else {
+    $PioCommand = Get-Command pio -ErrorAction SilentlyContinue
+    if (-not $PioCommand) {
+        Write-Error "PlatformIO not found. Run .\tools\setup_firmware_env.ps1 first, or install PlatformIO Core in PATH."
+        exit 1
+    }
+    $Platformio = $PioCommand.Source
+}
 
 Push-Location $FirmwareDir
 try {
-    # Verify pio is available
-    if (-not (Get-Command pio -ErrorAction SilentlyContinue)) {
-        Write-Error "PlatformIO CLI (pio) not found in PATH. Install from https://docs.platformio.org/en/latest/core/installation/index.html"
-        exit 1
-    }
-
     # Check that a T-Echo Plus is connected
-    $devices = & pio device list 2>&1
+    $devices = & $Platformio device list 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "Could not list connected devices. Proceeding anyway."
     } else {
@@ -37,7 +46,7 @@ try {
 
     if ($Clean) {
         Write-Host "`n[flash.ps1] Cleaning previous build..." -ForegroundColor Cyan
-        & pio run -e t_echo_plus -t clean
+        & $Platformio run -e t_echo_plus -t clean
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
 
@@ -49,7 +58,7 @@ try {
         $uploadArgs += $Port
     }
 
-    & pio @uploadArgs
+    & $Platformio @uploadArgs
     if ($LASTEXITCODE -ne 0) {
         Write-Error "[flash.ps1] Upload failed (exit code $LASTEXITCODE). Check USB connection and device bootloader mode."
         exit $LASTEXITCODE

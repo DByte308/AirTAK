@@ -45,7 +45,7 @@ static uint64_t s_admin_recv_mask = 0;
 
 static void sendFramed(BLECharacteristic& chr, const uint8_t* payload, uint16_t len, bool indicate) {
     uint16_t chunks = Framing::chunkCount(len);
-    uint8_t frame[BLE_MTU];
+    uint8_t frame[BLE_FRAME_MAX_LEN];
     for (uint16_t i = 0; i < chunks; i++) {
         size_t frame_len = Framing::encodeChunk(payload, len, i, frame, sizeof(frame));
         if (frame_len == 0) return;
@@ -206,33 +206,33 @@ void MashService::init(QueueHandle_t mesh_rx_queue) {
     // CONFIG_RW: Read + Write + Indicate (authenticated).
     s_config_rw.setProperties(CHR_PROPS_READ | CHR_PROPS_WRITE | CHR_PROPS_INDICATE);
     s_config_rw.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
-    s_config_rw.setMaxLen(520);
+    s_config_rw.setMaxLen(BLE_FRAME_MAX_LEN);
     s_config_rw.setWriteCallback(onConfigWrite);
     s_config_rw.begin();
 
     // MESH_TX: Write without response (authenticated).
     s_mesh_tx.setProperties(CHR_PROPS_WRITE_WO_RESP);
     s_mesh_tx.setPermission(SECMODE_NO_ACCESS, SECMODE_ENC_WITH_MITM);
-    s_mesh_tx.setMaxLen(LORA_MAX_PAYLOAD_BYTES);
+    s_mesh_tx.setMaxLen(BLE_FRAME_MAX_LEN);
     s_mesh_tx.setWriteCallback(onMeshTx);
     s_mesh_tx.begin();
 
     // MESH_RX: Notify (authenticated).
     s_mesh_rx.setProperties(CHR_PROPS_NOTIFY);
     s_mesh_rx.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_NO_ACCESS);
-    s_mesh_rx.setMaxLen(520);
+    s_mesh_rx.setMaxLen(BLE_FRAME_MAX_LEN);
     s_mesh_rx.begin();
 
     // DEVICE_STATUS: Read + Notify (open — no auth required per §10.4).
     s_status.setProperties(CHR_PROPS_READ | CHR_PROPS_NOTIFY);
     s_status.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
-    s_status.setMaxLen(256);
+    s_status.setMaxLen(BLE_FRAME_MAX_LEN);
     s_status.begin();
 
     // ADMIN: Write + Indicate (authenticated).
     s_admin.setProperties(CHR_PROPS_WRITE | CHR_PROPS_INDICATE);
     s_admin.setPermission(SECMODE_NO_ACCESS, SECMODE_ENC_WITH_MITM);
-    s_admin.setMaxLen(128);
+    s_admin.setMaxLen(BLE_FRAME_MAX_LEN);
     s_admin.setWriteCallback(onAdminWrite);
     s_admin.begin();
 }

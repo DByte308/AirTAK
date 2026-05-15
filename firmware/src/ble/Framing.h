@@ -25,6 +25,7 @@ constexpr size_t   FRAME_HEADER_SIZE = 6;
 constexpr uint16_t BLE_MTU           = 517;
 constexpr size_t   BLE_ATT_OVERHEAD  = 3;   // ATT notification PDU header (opcode + handle)
 constexpr size_t   FRAME_CHUNK_SIZE  = BLE_MTU - BLE_ATT_OVERHEAD - FRAME_HEADER_SIZE; // 508 bytes
+constexpr size_t   BLE_FRAME_MAX_LEN = FRAME_HEADER_SIZE + FRAME_CHUNK_SIZE; // 514-byte ATT value
 
 struct FrameHeader {
     uint16_t total_length;
