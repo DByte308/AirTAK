@@ -1,93 +1,8 @@
-// MASH — Mesh Airsoft Situational Hub
-// firmware/src/config/FlashStore.cpp — LittleFS persistent config storage implementation
-// Planning: §9.4.4 | Roadmap: 1.6
+// MASH - Mesh Airsoft Situational Hub
+// firmware/src/platform/nrf52/config/FlashStore.cpp - Adafruit LittleFS QSPI storage
 
 #include "config/FlashStore.h"
 #include "config.h"
-
-#ifdef MASH_NATIVE_TEST
-
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
-namespace mash {
-namespace config {
-
-static bool s_initialized = false;
-
-static const char* tempDir() {
-    const char* tmp = getenv("TEMP");
-    if (!tmp || tmp[0] == '\0') tmp = getenv("TMP");
-    if (!tmp || tmp[0] == '\0') tmp = ".";
-    return tmp;
-}
-
-static void nativePath(ConfigGroup group, char* out, size_t out_len) {
-    snprintf(out, out_len, "%s\\mash_flashstore_%u.pb", tempDir(), static_cast<unsigned>(group));
-}
-
-bool FlashStore::init() {
-    s_initialized = true;
-    return true;
-}
-
-size_t FlashStore::read(ConfigGroup group, uint8_t* buf, size_t buf_len) {
-    if (!s_initialized) return 0;
-    char path[260];
-    nativePath(group, path, sizeof(path));
-    FILE* file = fopen(path, "rb");
-    if (!file) return 0;
-    size_t n = fread(buf, 1, buf_len, file);
-    fclose(file);
-    return n;
-}
-
-bool FlashStore::write(ConfigGroup group, const uint8_t* data, size_t len) {
-    if (!s_initialized) return false;
-    char path[260];
-    nativePath(group, path, sizeof(path));
-    FILE* file = fopen(path, "wb");
-    if (!file) return false;
-    size_t written = fwrite(data, 1, len, file);
-    fclose(file);
-    return written == len;
-}
-
-bool FlashStore::erase(ConfigGroup group) {
-    if (!s_initialized) return false;
-    char path[260];
-    nativePath(group, path, sizeof(path));
-    return remove(path) == 0 || !exists(group);
-}
-
-bool FlashStore::eraseAll() {
-    if (!s_initialized) return false;
-    bool ok = true;
-    for (uint8_t i = 0; i < CONFIG_GROUP_COUNT; i++) {
-        ok &= erase(static_cast<ConfigGroup>(i));
-    }
-    return ok;
-}
-
-bool FlashStore::exists(ConfigGroup group) {
-    if (!s_initialized) return false;
-    char path[260];
-    nativePath(group, path, sizeof(path));
-    FILE* file = fopen(path, "rb");
-    if (!file) return false;
-    fclose(file);
-    return true;
-}
-
-size_t FlashStore::freeBytes() {
-    return 1024u * 1024u;
-}
-
-} // namespace config
-} // namespace mash
-
-#else
 
 #include <Arduino.h>
 #include <Adafruit_LittleFS.h>
@@ -185,7 +100,6 @@ bool FlashStore::init() {
         s_config_fs.format();
         if (!s_config_fs.begin(&s_lfs_cfg)) return false;
     }
-    // Ensure /config directory exists
     if (!s_config_fs.exists("/config")) {
         s_config_fs.mkdir("/config");
     }
@@ -210,7 +124,6 @@ bool FlashStore::write(ConfigGroup group, const uint8_t* data, size_t len) {
     const char* path = configGroupFilename(group);
     if (!path) return false;
 
-    // Atomic write: write to .tmp file, then rename to destination.
     char tmp_path[48];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
 
@@ -261,5 +174,3 @@ size_t FlashStore::freeBytes() {
 
 } // namespace config
 } // namespace mash
-
-#endif // MASH_NATIVE_TEST

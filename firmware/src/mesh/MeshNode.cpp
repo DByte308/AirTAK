@@ -10,16 +10,11 @@
 #include "game/PlayerState.h"
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
+#include "platform/Platform.h"
 #include "config.h"
 #include <Arduino.h>
 #include <cstring>
 #include <cstdio>
-
-// nRF52840 FICR register address for unique device ID
-#define NRF_FICR_BASE        0x10000000UL
-#define NRF_FICR_DEVICEID0   (*(volatile uint32_t*)(NRF_FICR_BASE + 0x060))
-#define NRF_FICR_DEVICEADDR0 (*(volatile uint32_t*)(NRF_FICR_BASE + 0x0A4))
-#define NRF_FICR_DEVICEADDR1 (*(volatile uint32_t*)(NRF_FICR_BASE + 0x0A8))
 
 namespace mash {
 
@@ -77,10 +72,7 @@ static uint16_t serializeUser(uint8_t* buf, uint16_t buf_len) {
     if (!short_name || short_name[0] == '\0') short_name = defaults::DEVICE_SHORT_NAME;
 
     uint8_t macaddr[6];
-    uint32_t addr0 = NRF_FICR_DEVICEADDR0;
-    uint32_t addr1 = NRF_FICR_DEVICEADDR1;
-    memcpy(macaddr + 0, &addr0, 4);
-    memcpy(macaddr + 4, &addr1, 2);
+    platform::macAddress(macaddr);
 
     uint16_t pos = 0;
     pos = encodeString(buf, pos, 1, id_str);     // field 1: id
@@ -124,8 +116,8 @@ static uint16_t serializePosition(uint8_t* buf, uint16_t buf_len) {
 
 // ── MeshNode::init() ─────────────────────────────────────────────────────────
 void MeshNode::init() {
-    // Derive node ID from lower 32 bits of FICR.DEVICEID[0] (§8.8).
-    s_node_id = NRF_FICR_DEVICEID0;
+    // Derive node ID from the selected platform's hardware identity source (§8.8).
+    s_node_id = platform::nodeId();
     s_last_nodeinfo_ms = millis();
 }
 

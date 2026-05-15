@@ -1,5 +1,5 @@
-// MASH — Mesh Airsoft Situational Hub
-// firmware/src/system/RecoveryMode.cpp — Boot-time safe mode and recovery
+// MASH - Mesh Airsoft Situational Hub
+// firmware/src/platform/nrf52/system/RecoveryMode.cpp - Bluefruit boot recovery
 
 #include "system/RecoveryMode.h"
 #include "ble/DFUService.h"

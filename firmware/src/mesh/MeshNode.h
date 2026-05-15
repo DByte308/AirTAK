@@ -2,7 +2,7 @@
 // firmware/src/mesh/MeshNode.h — Node identity, NODEINFO broadcast, smart beaconing
 // Planning: §8.8, §13.2, §8.7 | Roadmap: 2.2, 2.4
 //
-// Owns the local node ID (derived from FICR.DEVICEID[0], §8.8).
+// Owns the local node ID (derived from the selected platform identity source, §8.8).
 // Broadcasts NODEINFO_APP at startup and every 3 hours (§13.2).
 // Implements smart beaconing policy for POSITION_APP (§8.7).
 
@@ -17,7 +17,7 @@ namespace mash {
 
 class MeshNode {
 public:
-    // Phase 2.2: Initialize node — read FICR.DEVICEID[0] for node ID, load callsign
+    // Phase 2.2: Initialize node — read platform identity, load callsign
     // from GameConfig, broadcast initial NODEINFO_APP on channel 0.
     static void init();
 
@@ -27,7 +27,7 @@ public:
     // Phase 2.2: Called periodically to broadcast NODEINFO_APP (every 3 hours, §13.2).
     static void tick(QueueHandle_t tx_queue);
 
-    // Returns the local node ID (lower 32 bits of FICR.DEVICEID[0]).
+    // Returns the local node ID.
     static uint32_t nodeId();
 
     // Phase 2.4: Evaluate smart beaconing policy and send POSITION_APP if appropriate.

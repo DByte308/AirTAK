@@ -38,6 +38,7 @@
 #include "game/GameState.h"
 #include "game/PlayerState.h"
 #include "system/RecoveryMode.h"
+#include "platform/Platform.h"
 #include "config.h"
 
 // ── Inter-task communication handles ─────────────────────────────────────────
@@ -75,8 +76,7 @@ void setup() {
         mash::RecoveryMode::run();
     }
 
-    pinMode(MASH_PIN_POWER_EN, OUTPUT);
-    digitalWrite(MASH_PIN_POWER_EN, HIGH);
+    mash::platform::initBoard();
 
     // Initialize LittleFS config store and load all config groups from flash.
     // On first boot (no config files), defaults from Defaults.h are used.

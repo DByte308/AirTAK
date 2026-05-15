@@ -2,7 +2,7 @@
 // firmware/src/config/FlashStore.h — LittleFS persistent config storage
 // Planning: §9.4.4 | Roadmap: 1.6
 //
-// Wraps LittleFS on the external NOR flash exposed by the board QSPI pins.
+// Wraps the selected platform's persistent config storage.
 // Each ConfigGroup is serialized with nanopb and stored as a flat binary file.
 // Files are written atomically (write-to-tmp, rename) to prevent corruption on power loss.
 
@@ -17,7 +17,7 @@ namespace config {
 
 class FlashStore {
 public:
-    // Phase 1.6: Initialize LittleFS on external NOR flash.
+    // Phase 1.6: Initialize platform config storage.
     // Creates /config/ directory if not present.
     // Must be called before any read/write.
     static bool init();

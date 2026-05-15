@@ -17,8 +17,8 @@ static double      s_last_tx_lat = 0.0;
 static double      s_last_tx_lng = 0.0;
 static bool        s_baud_upgraded = false;
 
-// UART2 used for L76K on the T-Echo Plus
-static HardwareSerial& GPS_SERIAL = Serial1;
+// Board-selected UART used for the GNSS module.
+static HardwareSerial& GPS_SERIAL = MASH_GPS_SERIAL;
 
 // ── PMTK command helpers ──────────────────────────────────────────────────────
 static void send_pmtk(const char* cmd) {

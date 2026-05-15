@@ -14,7 +14,7 @@ namespace ble {
 
 class BLEServer {
 public:
-    // Phase 1.5: Initialize Bluefruit, register MASH and DFU services,
+    // Phase 1.5: Initialize the platform BLE stack, register MASH and DFU services,
     // configure LE Secure Connections pairing, begin advertising.
     static void init(QueueHandle_t mesh_rx_queue);
 

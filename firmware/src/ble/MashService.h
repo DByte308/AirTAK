@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <bluefruit.h>
 #include <FreeRTOS.h>
 #include <queue.h>
 
@@ -33,7 +32,7 @@ constexpr char CHAR_ADMIN_UUID[]           = "4d415348-0005-1000-8000-00805f9b34
 
 class MashService {
 public:
-    // Phase 1.5: Register MASH GATT service and all 5 characteristics with Bluefruit.
+    // Phase 1.5: Register MASH GATT service and all 5 characteristics.
     // Sets up write callbacks and security requirements.
     static void init(QueueHandle_t mesh_rx_queue);
 

@@ -1,6 +1,6 @@
-// MASH — Mesh Airsoft Situational Hub
-// firmware/src/ble/MashService.cpp — MASH GATT service implementation
-// Planning: §10.1, §10.3, §10.4, §10.5 | Roadmap: 1.5
+// MASH - Mesh Airsoft Situational Hub
+// firmware/src/platform/nrf52/ble/MashService.cpp - Bluefruit MASH GATT service
+// Planning: section 10.1, section 10.3, section 10.4, section 10.5 | Roadmap: 1.5
 
 #include "ble/MashService.h"
 #include "ble/DFUService.h"
@@ -15,8 +15,9 @@
 #include "mash/ble.pb.h"
 #include <pb_encode.h>
 #include <pb_decode.h>
-#include <cstring>
+#include <bluefruit.h>
 #include <Arduino.h>
+#include <cstring>
 
 extern EventGroupHandle_t g_radio_event_group;
 
@@ -31,12 +32,9 @@ static BLECharacteristic s_status    (CHAR_DEVICE_STATUS_UUID);
 static BLECharacteristic s_admin     (CHAR_ADMIN_UUID);
 
 static QueueHandle_t    s_mesh_rx_queue = nullptr;
-static QueueHandle_t    s_radio_tx_queue = nullptr; // set by MeshNode via setTxQueue()
+static QueueHandle_t    s_radio_tx_queue = nullptr;
 
-// ── Config reassembler state ─────────────────────────────────────────────────
-// Supports up to 8 concurrent fragment streams (one per connection, simplified here
-// to a single stream since MASH supports only one BLE connection).
-static uint8_t  s_config_assembly[640];      // 512-byte config payload plus ConfigPayload envelope
+static uint8_t  s_config_assembly[640];
 static uint64_t s_config_recv_mask  = 0;
 static uint8_t  s_mesh_tx_assembly[LORA_MAX_PAYLOAD_BYTES];
 static uint64_t s_mesh_tx_recv_mask = 0;
@@ -54,11 +52,10 @@ static void sendFramed(BLECharacteristic& chr, const uint8_t* payload, uint16_t 
     }
 }
 
-// ── CONFIG_RW write callback ──────────────────────────────────────────────────
-// Android writes chunked frames; we reassemble, then parse ConfigPayload proto.
 static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
                           uint8_t* data, uint16_t len) {
-    (void)conn_hdl; (void)chr;
+    (void)conn_hdl;
+    (void)chr;
 
     FrameHeader hdr;
     const uint8_t* chunk_payload;
@@ -66,7 +63,6 @@ static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
     if (!Framing::decodeChunk(data, len, &hdr, &chunk_payload, &chunk_len)) return;
     if (hdr.total_length > sizeof(s_config_assembly)) return;
 
-    // On first chunk, reset the assembly buffer.
     if (hdr.chunk_index == 0) {
         memset(s_config_assembly, 0, sizeof(s_config_assembly));
         s_config_recv_mask = 0;
@@ -100,12 +96,10 @@ static void onConfigWrite(uint16_t conn_hdl, BLECharacteristic* chr,
     }
 }
 
-// ── MESH_TX write callback ────────────────────────────────────────────────────
-// Android normally sends a decoded meshtastic.Data protobuf. For compatibility
-// with early tooling, already-encoded OTA frames are still accepted and queued.
 static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
                      uint8_t* data, uint16_t len) {
-    (void)conn_hdl; (void)chr;
+    (void)conn_hdl;
+    (void)chr;
     if (!s_radio_tx_queue) return;
 
     FrameHeader hdr;
@@ -132,7 +126,6 @@ static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
     memcpy(pkt->data, s_mesh_tx_assembly, hdr.total_length);
     pkt->length = hdr.total_length;
 
-    // Signal Radio task that a TX packet is ready.
     if (xQueueSendToBack(s_radio_tx_queue, &pkt, 0) != pdTRUE) {
         PacketPool::free(pkt);
     } else {
@@ -140,11 +133,10 @@ static void onMeshTx(uint16_t conn_hdl, BLECharacteristic* chr,
     }
 }
 
-// ── ADMIN write callback ──────────────────────────────────────────────────────
-// Receives AdminRequest proto: command(1, varint), confirm_token(2, string).
 static void onAdminWrite(uint16_t conn_hdl, BLECharacteristic* chr,
                          uint8_t* data, uint16_t len) {
-    (void)conn_hdl; (void)chr;
+    (void)conn_hdl;
+    (void)chr;
 
     FrameHeader hdr;
     const uint8_t* chunk_payload;
@@ -203,39 +195,33 @@ static void onAdminWrite(uint16_t conn_hdl, BLECharacteristic* chr,
     }
 }
 
-// ── MashService::init() ──────────────────────────────────────────────────────
 void MashService::init(QueueHandle_t mesh_rx_queue) {
     s_mesh_rx_queue = mesh_rx_queue;
 
     s_svc.begin();
 
-    // CONFIG_RW: Read + Write + Indicate (authenticated).
     s_config_rw.setProperties(CHR_PROPS_READ | CHR_PROPS_WRITE | CHR_PROPS_INDICATE);
     s_config_rw.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     s_config_rw.setMaxLen(BLE_FRAME_MAX_LEN);
     s_config_rw.setWriteCallback(onConfigWrite);
     s_config_rw.begin();
 
-    // MESH_TX: Write without response (authenticated).
     s_mesh_tx.setProperties(CHR_PROPS_WRITE_WO_RESP);
     s_mesh_tx.setPermission(SECMODE_NO_ACCESS, SECMODE_ENC_WITH_MITM);
     s_mesh_tx.setMaxLen(BLE_FRAME_MAX_LEN);
     s_mesh_tx.setWriteCallback(onMeshTx);
     s_mesh_tx.begin();
 
-    // MESH_RX: Notify (authenticated).
     s_mesh_rx.setProperties(CHR_PROPS_NOTIFY);
     s_mesh_rx.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_NO_ACCESS);
     s_mesh_rx.setMaxLen(BLE_FRAME_MAX_LEN);
     s_mesh_rx.begin();
 
-    // DEVICE_STATUS: Read + Notify (open — no auth required per §10.4).
     s_status.setProperties(CHR_PROPS_READ | CHR_PROPS_NOTIFY);
     s_status.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
     s_status.setMaxLen(BLE_FRAME_MAX_LEN);
     s_status.begin();
 
-    // ADMIN: Write + Indicate (authenticated).
     s_admin.setProperties(CHR_PROPS_WRITE | CHR_PROPS_INDICATE);
     s_admin.setPermission(SECMODE_NO_ACCESS, SECMODE_ENC_WITH_MITM);
     s_admin.setMaxLen(BLE_FRAME_MAX_LEN);

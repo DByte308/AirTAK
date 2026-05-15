@@ -13,8 +13,8 @@ namespace ble {
 
 class DFUService {
 public:
-    // Phase 1.5: Register the BLE DFU service (BLEDfu from Adafruit Bluefruit library).
-    // Must be called before Bluefruit.Advertising.start().
+    // Phase 1.5: Register the platform BLE DFU service.
+    // Must be called before BLE advertising starts.
     static void init();
 
     // Phase 1.5: Request entry into DFU bootloader mode via the Buttonless DFU control point.
