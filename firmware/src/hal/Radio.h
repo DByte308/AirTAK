@@ -55,6 +55,13 @@ public:
     // Returns true on success.
     static bool transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_idx);
 
+    // Phase 2.8: Radio restart support — called by ConfigManager::radioRestartProcedure().
+    // pause() signals the radio task to stop; isPaused() blocks until acknowledged.
+    // resume() allows the task to continue after reinit() completes.
+    static void pause();
+    static void resume();
+    static bool isPaused();
+
     // SNR of the most recently received packet (used by Router for relay delay, §8.7).
     static float lastSnr();
     static float lastRssi();

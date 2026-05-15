@@ -20,8 +20,10 @@ constexpr size_t PACKET_POOL_SIZE = 40;
 constexpr size_t PACKET_POOL_BUF_SIZE = 256;
 
 struct PooledPacket {
-    uint8_t data[PACKET_POOL_BUF_SIZE];
+    uint8_t  data[PACKET_POOL_BUF_SIZE];
     uint16_t length;
+    float    rssi;   // received signal strength (dBm), set by Radio task
+    float    snr;    // signal-to-noise ratio (dB),    set by Radio task
     bool     in_use;
 };
 

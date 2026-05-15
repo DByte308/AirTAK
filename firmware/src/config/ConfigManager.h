@@ -52,6 +52,10 @@ public:
 
     // Returns true if a radio restart is pending (groups committed but restart not yet run).
     static bool isRadioRestartPending();
+
+    // Returns the device's configured long name (from DEVICE config group, field 2).
+    // Falls back to the compile-time default if not configured.
+    static const char* deviceLongName();
 };
 
 } // namespace config

@@ -6,10 +6,17 @@
 #include "ble/MashService.h"
 #include "ble/DFUService.h"
 #include "hal/Display.h"
+#include "hal/Battery.h"
+#include "hal/GPS.h"
+#include "hal/Radio.h"
+#include "mesh/MeshNode.h"
+#include "mesh/ChannelManager.h"
 #include "config/Defaults.h"
 #include "firmware/include/config.h"
 #include <bluefruit.h>
 #include <Arduino.h>
+#include <cstdio>
+#include <cstring>
 
 namespace mash {
 namespace ble {
@@ -18,11 +25,94 @@ static uint16_t s_conn_hdl        = 0xFFFF;
 static bool     s_connected       = false;
 static uint32_t s_pending_passkey = 0;
 static bool     s_has_passkey     = false;
+static uint32_t s_last_status_ms  = 0;
 
+// ── DeviceStatus protobuf builder ────────────────────────────────────────────
+// Manually serializes a DeviceStatus message using the nanopb field layout defined
+// in ble.proto. This avoids a dependency on generated .pb.h until proto_gen runs.
+// Fields: node_id(1), node_name(2), battery_level(3), charging(4),
+//         gps sub-message(5), radio sub-message(6), mesh_node_count(7), uptime_seconds(8),
+//         firmware_version(9), bluetooth_address(10).
+//
+// For Phase 1 we encode a minimal set sufficient for the Android app to display status.
+// Full proto encoding is added when proto_gen output is available (Phase 2.8 / T.4).
+
+static uint16_t buildDeviceStatus(uint8_t* buf, uint16_t buf_len) {
+    // Minimal hand-rolled encoding: just tag+varint and tag+bytes for essential fields.
+    // This is intentionally simple — replaced by nanopb when protos are generated.
+    uint16_t pos = 0;
+
+    auto writeVarint = [&](uint32_t v) {
+        while (v >= 0x80) {
+            if (pos >= buf_len) return;
+            buf[pos++] = (uint8_t)(v | 0x80);
+            v >>= 7;
+        }
+        if (pos < buf_len) buf[pos++] = (uint8_t)v;
+    };
+    auto writeTag = [&](uint32_t field, uint8_t wire) {
+        writeVarint((field << 3) | wire);
+    };
+    auto writeBytes = [&](uint32_t field, const uint8_t* data, uint16_t len) {
+        writeTag(field, 2); // wire type 2 = length-delimited
+        writeVarint(len);
+        if (pos + len <= buf_len) {
+            memcpy(buf + pos, data, len);
+            pos += len;
+        }
+    };
+    auto writeString = [&](uint32_t field, const char* str) {
+        writeBytes(field, (const uint8_t*)str, (uint16_t)strlen(str));
+    };
+    auto writeFixed32 = [&](uint32_t field, uint32_t v) {
+        writeTag(field, 5); // wire type 5 = fixed 32-bit
+        if (pos + 4 <= buf_len) {
+            memcpy(buf + pos, &v, 4);
+            pos += 4;
+        }
+    };
+
+    // Field 1: node_id (varint)
+    writeTag(1, 0);
+    writeVarint(MeshNode::nodeId());
+
+    // Field 2: node_name (string)
+    writeString(2, defaults::DEVICE_LONG_NAME);
+
+    // Field 3: battery_level (fixed32 float)
+    float bat = Battery::level();
+    uint32_t bat_bits;
+    memcpy(&bat_bits, &bat, 4);
+    writeFixed32(3, bat_bits);
+
+    // Field 4: charging (bool varint)
+    writeTag(4, 0);
+    writeVarint(Battery::isCharging() ? 1 : 0);
+
+    // Field 7: mesh_node_count (varint)
+    writeTag(7, 0);
+    writeVarint(MeshNode::knownNodeCount());
+
+    // Field 8: uptime_seconds (varint)
+    writeTag(8, 0);
+    writeVarint(millis() / 1000);
+
+    // Field 9: firmware_version (string)
+    writeString(9, MASH_FIRMWARE_VERSION_STR);
+
+    (void)writeBytes; // used in GPS/radio sub-messages below when available
+    return pos;
+}
+
+// ── BLE callbacks ────────────────────────────────────────────────────────────
 static void onConnect(uint16_t conn_hdl) {
     s_conn_hdl  = conn_hdl;
     s_connected = true;
     Display::markDirty(DISPLAY_DIRTY_BLE);
+    // Send initial DEVICE_STATUS immediately on connection.
+    uint8_t buf[256];
+    uint16_t len = buildDeviceStatus(buf, sizeof(buf));
+    if (len > 0) MashService::notifyDeviceStatus(buf, len);
 }
 
 static void onDisconnect(uint16_t conn_hdl, uint8_t reason) {
@@ -31,7 +121,7 @@ static void onDisconnect(uint16_t conn_hdl, uint8_t reason) {
     s_connected   = false;
     s_has_passkey = false;
     Display::markDirty(DISPLAY_DIRTY_BLE);
-    // Restart advertising after disconnect
+    // Restart advertising after disconnect.
     Bluefruit.Advertising.start(0);
 }
 
@@ -39,19 +129,21 @@ static void onPasskeyDisplay(uint16_t conn_hdl, uint32_t passkey) {
     (void)conn_hdl;
     s_pending_passkey = passkey;
     s_has_passkey     = true;
-    Display::forceRefresh(); // show passkey on E-Ink immediately
+    Display::showPasscode(passkey);
 }
 
+// ── BLEServer::init() ────────────────────────────────────────────────────────
 void BLEServer::init(QueueHandle_t mesh_rx_queue) {
     Bluefruit.begin();
     Bluefruit.setName(BLE_DEVICE_NAME);
-    Bluefruit.setTxPower(4); // +4 dBm
+    Bluefruit.setTxPower(4); // +4 dBm BLE advertising TX power
 
     // Request MTU 517 (§10.1)
     Bluefruit.setMtu(BLE_MTU);
 
-    // LE Secure Connections + Numeric Comparison (§10.6)
-    Bluefruit.Security.setIOCaps(BLE_GAP_IO_CAPS_DISPLAY_ONLY); // display passkey
+    // LE Secure Connections + Numeric Comparison (§10.6).
+    // DISPLAY_ONLY: device shows a passkey on the E-Ink; the user confirms on the phone.
+    Bluefruit.Security.setIOCaps(BLE_GAP_IO_CAPS_DISPLAY_ONLY);
     Bluefruit.Security.setMITM(true);
     Bluefruit.Security.setLESC(true);
     Bluefruit.Security.setPasskeyCallback(onPasskeyDisplay);
@@ -59,23 +151,55 @@ void BLEServer::init(QueueHandle_t mesh_rx_queue) {
     Bluefruit.setConnectCallback(onConnect);
     Bluefruit.setDisconnectCallback(onDisconnect);
 
-    // Register services
+    // Register MASH service and Nordic DFU service (§10.1).
     MashService::init(mesh_rx_queue);
     DFUService::init();
 
-    // Configure advertising
+    // Configure advertising payload.
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
     Bluefruit.Advertising.addTxPower();
-    Bluefruit.Advertising.addService(/* MASH service UUID */ );
-    Bluefruit.Advertising.addName();
+    Bluefruit.Advertising.addService(BLEService(MASH_SERVICE_UUID));
+    Bluefruit.ScanResponse.addName();
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(160, 160); // 100 ms @ 0.625 ms units
+    Bluefruit.Advertising.setInterval(160, 160); // 100 ms @ 0.625 ms/unit
     Bluefruit.Advertising.setFastTimeout(30);
     Bluefruit.Advertising.start(0);
 }
 
+// ── BLEServer::process() ─────────────────────────────────────────────────────
+void BLEServer::process(QueueHandle_t ble_tx_queue, QueueHandle_t /*config_queue*/) {
+    // Deliver any queued BLE notifications (MESH_RX, DEVICE_STATUS) from the tx queue.
+    // The tx queue carries PooledPacket* pointers with a 1-byte type prefix.
+    PooledPacket* pkt = nullptr;
+    while (xQueueReceive(ble_tx_queue, &pkt, 0) == pdTRUE && pkt) {
+        if (pkt->length > 1 && s_connected) {
+            uint8_t type = pkt->data[0];
+            const uint8_t* payload = pkt->data + 1;
+            uint16_t payload_len   = pkt->length - 1;
+            if (type == 0x01) {
+                // MESH_RX notification
+                MashService::notifyMeshRx(payload, payload_len);
+            } else if (type == 0x02) {
+                // DEVICE_STATUS notification
+                MashService::notifyDeviceStatus(payload, payload_len);
+            }
+        }
+        PacketPool::free(pkt);
+    }
+    tick();
+}
+
+// ── BLEServer::tick() ────────────────────────────────────────────────────────
 void BLEServer::tick() {
-    // TODO Phase 1.5: Send keepalive DEVICE_STATUS notification every 5 seconds.
+    // Send a keepalive DEVICE_STATUS notification every 5 seconds (§10.4).
+    if (!s_connected) return;
+    uint32_t now = millis();
+    if ((now - s_last_status_ms) < 5000) return;
+    s_last_status_ms = now;
+
+    uint8_t buf[256];
+    uint16_t len = buildDeviceStatus(buf, sizeof(buf));
+    if (len > 0) MashService::notifyDeviceStatus(buf, len);
 }
 
 bool     BLEServer::isConnected()       { return s_connected;       }

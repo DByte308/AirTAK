@@ -49,12 +49,25 @@ void GPS::process(EventGroupHandle_t system_event_group) {
 
             // Upgrade baud rate on first valid sentence (§9.5)
             if (!s_baud_upgraded && s_gps.charsProcessed() > 10) {
-                // TODO Phase 1.3: Send PMTK command to change L76K baud to 115200,
-                // then re-init GPS_SERIAL at GPS_BAUD_FAST.
-                // send_pmtk("$PMTK251,115200*1F");
-                // GPS_SERIAL.begin(GPS_BAUD_FAST, ...);
-                // Configure GNGGA + GNRMC only via PMTK314
-                // send_pmtk("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28");
+                // Step 1: Tell L76K to switch its own baud rate to 115200.
+                // PMTK251 command with correct checksum for 115200.
+                send_pmtk("$PMTK251,115200*1F");
+                GPS_SERIAL.flush();
+                delay(20); // allow L76K to process the command
+
+                // Step 2: Re-init MCU UART at fast baud rate.
+                GPS_SERIAL.end();
+                GPS_SERIAL.begin(GPS_BAUD_FAST, SERIAL_8N1, PIN_GPS_RX_MCU, PIN_GPS_TX_MCU);
+                delay(10);
+
+                // Step 3: Configure L76K to emit GNGGA + GNRMC only (§9.5).
+                // PMTK314: disable all sentences except GGA (pos 3) and RMC (pos 1).
+                // Checksum: $PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28
+                send_pmtk("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28");
+
+                // Step 4: Set 1 Hz update rate (default; verify with PMTK220).
+                send_pmtk("$PMTK220,1000*1F");
+
                 s_baud_upgraded = true;
             }
 

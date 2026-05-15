@@ -6,21 +6,16 @@
 // Enforces minimum 60-second interval between full refreshes (§9.6).
 // Dirty-state tracking per screen element prevents unnecessary refreshes.
 // Screen rotation via short button press cycles through 4 layouts (§9.6).
+//
+// Dirty flag constants and ScreenId are defined in ui/Screens.h.
 
 #pragma once
 
 #include <cstdint>
 #include <event_groups.h>
+#include "ui/Screens.h"   // ScreenId, ROW_*, DISPLAY_DIRTY_*, EINK_WIDTH/HEIGHT
 
 namespace mash {
-
-// Screen IDs — cycled by short button press (§9.6, §12.6)
-enum class ScreenId : uint8_t {
-    MAIN      = 0,  // node name, GPS, battery, node count, last packet time
-    MESSAGES  = 1,  // last 3 received text messages
-    PLAYERS   = 2,  // team name, own status badge, active player count
-    RADIO     = 3,  // channel name, last RSSI/SNR, hop count
-};
 
 class Display {
 public:
@@ -35,10 +30,9 @@ public:
     static void nextScreen();
 
     // Get the current screen ID.
-    static ScreenId currentScreen();
+    static ui::ScreenId currentScreen();
 
     // Mark a screen element as dirty to trigger a future refresh.
-    // Elements: GPS, battery, node count, messages, player status, radio stats.
     static void markDirty(uint16_t element_mask);
 
     // Clear the dirty mask (called after a successful refresh).
@@ -46,15 +40,10 @@ public:
 
     // Force a full refresh regardless of dirty state or timing (used at boot).
     static void forceRefresh();
-};
 
-// Dirty-state element bit flags
-constexpr uint16_t DISPLAY_DIRTY_GPS        = (1 << 0);
-constexpr uint16_t DISPLAY_DIRTY_BATTERY    = (1 << 1);
-constexpr uint16_t DISPLAY_DIRTY_NODE_COUNT = (1 << 2);
-constexpr uint16_t DISPLAY_DIRTY_MESSAGES   = (1 << 3);
-constexpr uint16_t DISPLAY_DIRTY_PLAYER     = (1 << 4);
-constexpr uint16_t DISPLAY_DIRTY_RADIO      = (1 << 5);
-constexpr uint16_t DISPLAY_DIRTY_ALL        = 0xFFFF;
+    // Phase 1.5: Immediately render the BLE Numeric Comparison passkey (§10.6).
+    // Bypasses the 60-second refresh interval because passkey timeout is ≈ 30 s.
+    static void showPasscode(uint32_t passkey);
+};
 
 } // namespace mash

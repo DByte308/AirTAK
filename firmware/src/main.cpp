@@ -33,6 +33,7 @@
 #include "mesh/MeshNode.h"
 #include "mesh/Router.h"
 #include "mesh/ChannelManager.h"
+#include "mesh/PacketPool.h"
 #include "game/GameState.h"
 #include "game/PlayerState.h"
 
@@ -69,8 +70,8 @@ void setup() {
 
     // Initialize LittleFS config store and load all config groups from flash.
     // On first boot (no config files), defaults from Defaults.h are used.
-    mash::FlashStore::init();
-    mash::ConfigManager::init();
+    mash::config::FlashStore::init();
+    mash::config::ConfigManager::init();
 
     // Create inter-task communication primitives.
     g_radio_tx_queue      = xQueueCreate(8,  sizeof(void*));
@@ -118,8 +119,27 @@ void task_radio_rxtx(void* params) {
     // Phase 1.2: SX1262 bring-up | Phase 2.5: flood router
     // Triggered by SX1262 DIO1 interrupt via g_radio_event_group.
     mash::Radio::init();
+    mash::Router::init();
+    mash::MeshNode::init();
+    mash::MeshNode::broadcastNodeInfo(g_radio_tx_queue);
     for (;;) {
         mash::Radio::process(g_radio_rx_queue, g_radio_tx_queue, g_radio_event_group);
+
+        // Drain the RX queue and pass packets through the flood router (§8.7).
+        mash::PooledPacket* pkt = nullptr;
+        while (xQueueReceive(g_radio_rx_queue, &pkt, 0) == pdTRUE && pkt) {
+            mash::Router::processIncoming(pkt->data, (uint8_t)pkt->length,
+                                          pkt->rssi, pkt->snr,
+                                          g_radio_tx_queue);
+            mash::PacketPool::free(pkt);
+        }
+
+        // Tick relay and retry queues.
+        mash::Router::tickRelayQueue(g_radio_tx_queue);
+        mash::Router::tickRetryQueue(g_radio_tx_queue);
+
+        // Smart beaconing and NODEINFO schedule.
+        mash::MeshNode::tick(g_radio_tx_queue);
     }
 }
 
@@ -133,16 +153,19 @@ void task_gps_parser(void* params) {
 
 void task_ble_server(void* params) {
     // Phase 1.5: BLE GATT server skeleton
-    mash::BLEServer::init();
+    mash::ble::BLEServer::init(g_radio_rx_queue);
     for (;;) {
-        mash::BLEServer::process(g_ble_tx_queue, g_config_change_queue);
+        mash::ble::BLEServer::process(g_ble_tx_queue, g_config_change_queue);
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
 void task_config_apply(void* params) {
-    // Phase 2.8: hot-reload config
+    // Phase 2.8: hot-reload config — driven by config_change_queue posted by MashService.
     for (;;) {
-        mash::ConfigManager::applyPending(g_config_change_queue, g_radio_event_group);
+        // Config apply is handled inline in MashService::onConfigWrite().
+        // This task is reserved for future batch/async config validation logic.
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 

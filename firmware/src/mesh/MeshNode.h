@@ -21,6 +21,9 @@ public:
     // from GameConfig, broadcast initial NODEINFO_APP on channel 0.
     static void init();
 
+    // Phase 2.2: Broadcast a NODEINFO_APP meshtastic.User packet to all nodes.
+    static void broadcastNodeInfo(QueueHandle_t tx_queue);
+
     // Phase 2.2: Called periodically to broadcast NODEINFO_APP (every 3 hours, §13.2).
     static void tick(QueueHandle_t tx_queue);
 

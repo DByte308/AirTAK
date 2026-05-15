@@ -4,14 +4,23 @@
 package com.mash.ui.map
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.mash.data.db.NodeDao
+import com.mash.data.db.NodeEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.*
 import javax.inject.Inject
+
+data class MapUiState(
+    val nodes: List<NodeEntity> = emptyList(),
+)
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
-    // TODO Phase 3.1: Inject ObservePlayersUseCase, GameRepository, TileRepository
+    private val nodeDao: NodeDao,
 ) : ViewModel() {
-    // TODO Phase 3.1: StateFlow<List<MashNode>> for node pins
-    // TODO Phase 3.4: StateFlow<List<ZoneMirror>> for zone overlays
-    // TODO Phase 3.5: StateFlow<LatLng?> for own position
+
+    val uiState: StateFlow<MapUiState> = nodeDao.observeAll()
+        .map { MapUiState(nodes = it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapUiState())
 }

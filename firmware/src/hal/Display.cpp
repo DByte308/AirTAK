@@ -3,30 +3,181 @@
 // Planning: §9.6, §7.1 | Roadmap: 1.4
 
 #include "hal/Display.h"
+#include "ui/Screens.h"
+#include "hal/Battery.h"
+#include "hal/GPS.h"
+#include "hal/Radio.h"
+#include "ble/BLEServer.h"
+#include "mesh/MeshNode.h"
+#include "mesh/ChannelManager.h"
 #include "config/Defaults.h"
 #include "firmware/include/config.h"
 #include <Arduino.h>
+#include <SPI.h>
+
+// GxEPD2 — SSD1681 200×200 1-bit controller (ZinggJM/GxEPD2 ≥ 1.5.4)
+#include <GxEPD2_BW.h>
+#include <GxEPD2_154_D67.h>          // SSD1681 200×200 display variant
+
+// Adafruit GFX for text/graphics primitives (dependency of GxEPD2)
+#include <Fonts/FreeSans9pt7b.h>
+#include <Fonts/FreeSansBold9pt7b.h>
 
 namespace mash {
 
-// ── Static state ──────────────────────────────────────────────────────────────
-static ScreenId  s_current_screen = ScreenId::MAIN;
-static uint16_t  s_dirty_mask     = DISPLAY_DIRTY_ALL;
+using namespace ui;
+
+// ── Display hardware instance ─────────────────────────────────────────────────
+// GxEPD2_BW<DisplayClass, PageHeight> — page height ≤ display height.
+// SSD1681 with 200×200 resolution, 200-line single-page buffer (full update).
+static GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT>
+    s_display(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RST, PIN_EINK_BUSY);
+
+// Custom SPI instance for the dedicated e-ink SPI bus (separate from radio SPI).
+// SSD1681 is write-only — MISO is not connected. PIN_EINK_BUSY is used as a placeholder.
+static SPIClass s_eink_spi(NRF_SPIM2, PIN_EINK_BUSY /*miso unused*/, PIN_EINK_SCK, PIN_EINK_MOSI);
+
+static ScreenId  s_current_screen  = ScreenId::MAIN;
+static uint16_t  s_dirty_mask      = DISPLAY_DIRTY_ALL;
 static uint32_t  s_last_refresh_ms = 0;
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+static void drawHeader(const char* title) {
+    s_display.setFont(&FreeSansBold9pt7b);
+    s_display.setTextColor(GxEPD_BLACK);
+    s_display.setCursor(4, 14);
+    s_display.print(title);
+    // Separator line below header
+    s_display.drawLine(0, ROW_HEADER_END, EINK_WIDTH, ROW_HEADER_END, GxEPD_BLACK);
+    // Screen indicator dots (right side of header)
+    for (uint8_t i = 0; i < SCREEN_COUNT; i++) {
+        uint16_t x = EINK_WIDTH - 4 - (SCREEN_COUNT - 1 - i) * 7;
+        uint16_t y = 8;
+        if (i == static_cast<uint8_t>(s_current_screen)) {
+            s_display.fillCircle(x, y, 3, GxEPD_BLACK);
+        } else {
+            s_display.drawCircle(x, y, 3, GxEPD_BLACK);
+        }
+    }
+}
+
+static void drawFooter() {
+    s_display.drawLine(0, ROW_FOOTER_START, EINK_WIDTH, ROW_FOOTER_START, GxEPD_BLACK);
+    s_display.setFont(nullptr); // small built-in font
+    s_display.setTextColor(GxEPD_BLACK);
+
+    // Battery indicator (right side of footer)
+    uint8_t pct = (uint8_t)(Battery::level() * 100.0f);
+    char bat[12];
+    snprintf(bat, sizeof(bat), "%d%%%s", pct, Battery::isCharging() ? "+" : "");
+    s_display.setCursor(EINK_WIDTH - 32, ROW_FOOTER_START + 9);
+    s_display.print(bat);
+
+    // BLE indicator (left side of footer)
+    s_display.setCursor(2, ROW_FOOTER_START + 9);
+    s_display.print(mash::ble::BLEServer::isConnected() ? "BLE" : "   ");
+}
+
+static void renderMainScreen() {
+    drawHeader("MASH");
+    s_display.setFont(&FreeSans9pt7b);
+    s_display.setTextColor(GxEPD_BLACK);
+
+    uint16_t y = ROW_CONTENT_START + 14;
+
+    // GPS row
+    if (GPS::hasFix()) {
+        const GpsFix& fix = GPS::currentFix();
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.4f, %.4f", fix.latitude, fix.longitude);
+        s_display.setCursor(4, y); s_display.print(buf);
+        y += 18;
+        snprintf(buf, sizeof(buf), "%.0fm  SAT:%u  HDOP:%.1f",
+                 fix.altitude_m, fix.satellites, fix.hdop);
+        s_display.setCursor(4, y); s_display.print(buf);
+    } else {
+        s_display.setCursor(4, y); s_display.print("GPS: NO FIX");
+    }
+    y += 22;
+
+    // Radio row
+    const ChannelSlot* primary = ChannelManager::primarySlot();
+    if (primary) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "CH: %s  %.0fdBm", primary->name, Radio::lastRssi());
+        s_display.setCursor(4, y); s_display.print(buf);
+    }
+    y += 18;
+
+    // Mesh row
+    char mbuf[24];
+    snprintf(mbuf, sizeof(mbuf), "MESH: %u node%s",
+             MeshNode::knownNodeCount(), MeshNode::knownNodeCount() == 1 ? "" : "s");
+    s_display.setCursor(4, y); s_display.print(mbuf);
+    y += 18;
+
+    // Node ID (short, last 4 hex digits)
+    char idbuf[16];
+    snprintf(idbuf, sizeof(idbuf), "ID: %08X", MeshNode::nodeId());
+    s_display.setCursor(4, y); s_display.print(idbuf);
+
+    drawFooter();
+}
+
+static void renderMessagesScreen() {
+    drawHeader("MESSAGES");
+    s_display.setFont(&FreeSans9pt7b);
+    s_display.setTextColor(GxEPD_BLACK);
+    s_display.setCursor(4, ROW_CONTENT_START + 14);
+    // Phase 3.5: messages delivered from BLE MESH_RX are rendered here.
+    s_display.print("(no messages)");
+    drawFooter();
+}
+
+static void renderPlayersScreen() {
+    drawHeader("PLAYERS");
+    s_display.setFont(&FreeSans9pt7b);
+    s_display.setTextColor(GxEPD_BLACK);
+    s_display.setCursor(4, ROW_CONTENT_START + 14);
+    // Phase 4.2: player list rendered here after MASH_PLAYER RX implemented.
+    s_display.print("(no players)");
+    drawFooter();
+}
+
+static void renderRadioScreen() {
+    drawHeader("RADIO");
+    s_display.setFont(&FreeSans9pt7b);
+    s_display.setTextColor(GxEPD_BLACK);
+
+    uint16_t y = ROW_CONTENT_START + 14;
+    const ChannelSlot* primary = ChannelManager::primarySlot();
+    if (primary) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Chan: %s", primary->name);
+        s_display.setCursor(4, y); s_display.print(buf); y += 18;
+        snprintf(buf, sizeof(buf), "PHY:  %u", primary->phy_profile_index);
+        s_display.setCursor(4, y); s_display.print(buf); y += 18;
+    }
+
+    char rbuf[32];
+    snprintf(rbuf, sizeof(rbuf), "RSSI: %.0f dBm", Radio::lastRssi());
+    s_display.setCursor(4, y); s_display.print(rbuf); y += 18;
+    snprintf(rbuf, sizeof(rbuf), "SNR:  %.1f dB", Radio::lastSnr());
+    s_display.setCursor(4, y); s_display.print(rbuf); y += 18;
+    snprintf(rbuf, sizeof(rbuf), "RX:%u TX:%u", Radio::packetsRx(), Radio::packetsTx());
+    s_display.setCursor(4, y); s_display.print(rbuf);
+
+    drawFooter();
+}
 
 // ── Display::init() ──────────────────────────────────────────────────────────
 void Display::init() {
-    // TODO Phase 1.4: Initialize SSD1681 over dedicated SPI bus using pins from config.h.
-    // Render the static Main screen layout with placeholder values.
-    // Reference: Meshtastic T-Echo E-Ink driver (§9.1 adopted components).
-    //
-    // SPI pins:
-    //   SCK  = PIN_EINK_SCK  (P0.14)
-    //   MOSI = PIN_EINK_MOSI (P0.13)
-    //   CS   = PIN_EINK_CS   (P0.30)
-    //   DC   = PIN_EINK_DC   (P0.28)
-    //   RST  = PIN_EINK_RST  (P0.02)
-    //   BUSY = PIN_EINK_BUSY (P0.03)
+    // Initialize the dedicated SPI bus for the e-ink display.
+    s_eink_spi.begin();
+
+    // Initialize GxEPD2 with the dedicated SPI instance.
+    s_display.init(115200, true, 2, false, s_eink_spi, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+
     s_last_refresh_ms = 0;
     s_dirty_mask      = DISPLAY_DIRTY_ALL;
 }
@@ -35,26 +186,66 @@ void Display::init() {
 void Display::refresh(EventGroupHandle_t system_event_group) {
     (void)system_event_group;
 
-    if (s_dirty_mask == 0) return; // nothing changed
+    if (s_dirty_mask == 0) return;
 
     uint32_t now = millis();
-    if ((now - s_last_refresh_ms) < EINK_MIN_REFRESH_MS) return; // too soon
+    if (s_last_refresh_ms != 0 && (now - s_last_refresh_ms) < EINK_MIN_REFRESH_MS) return;
 
-    // TODO Phase 1.4: Render the current screen layout to the SSD1681.
-    // Switch on s_current_screen to select Main/Messages/Players/Radio.
+    // Full-screen update: clear + render current screen content.
+    s_display.setFullWindow();
+    s_display.firstPage();
+    do {
+        s_display.fillScreen(GxEPD_WHITE);
+        switch (s_current_screen) {
+            case ScreenId::MAIN:     renderMainScreen();     break;
+            case ScreenId::MESSAGES: renderMessagesScreen(); break;
+            case ScreenId::PLAYERS:  renderPlayersScreen();  break;
+            case ScreenId::RADIO:    renderRadioScreen();    break;
+        }
+    } while (s_display.nextPage());
 
     s_last_refresh_ms = now;
     s_dirty_mask      = 0;
 }
 
-// ── Display::nextScreen() ────────────────────────────────────────────────────
+// ── Display::showPasscode() ───────────────────────────────────────────────────
+// Immediately render the BLE Numeric Comparison passkey (§10.6).
+// Bypasses the normal refresh interval because passkey timeout is short.
+void Display::showPasscode(uint32_t passkey) {
+    s_display.setFullWindow();
+    s_display.firstPage();
+    do {
+        s_display.fillScreen(GxEPD_WHITE);
+        s_display.setFont(&FreeSansBold9pt7b);
+        s_display.setTextColor(GxEPD_BLACK);
+        s_display.setCursor(4, 30);
+        s_display.print("Pair code:");
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%06lu", (unsigned long)passkey);
+        // Large font for the passkey digits
+        s_display.setFont(&FreeSansBold9pt7b);
+        s_display.setCursor(30, 80);
+        s_display.setTextSize(3);
+        s_display.print(buf);
+        s_display.setTextSize(1);
+        s_display.setFont(nullptr);
+        s_display.setCursor(4, 130);
+        s_display.print("Confirm on your phone");
+        s_display.setCursor(4, 145);
+        s_display.print("to complete pairing.");
+    } while (s_display.nextPage());
+    // Mark dirty so next full refresh restores the normal screen.
+    s_dirty_mask = DISPLAY_DIRTY_ALL;
+}
+
+// ── Display control ───────────────────────────────────────────────────────────
 void Display::nextScreen() {
-    uint8_t next = (static_cast<uint8_t>(s_current_screen) + 1) % 4;
+    uint8_t next = (static_cast<uint8_t>(s_current_screen) + 1) % SCREEN_COUNT;
     s_current_screen = static_cast<ScreenId>(next);
     markDirty(DISPLAY_DIRTY_ALL);
 }
 
-ScreenId Display::currentScreen()          { return s_current_screen; }
+ui::ScreenId Display::currentScreen()     { return s_current_screen; }
 void Display::markDirty(uint16_t mask)     { s_dirty_mask |= mask; }
 void Display::clearDirty()                 { s_dirty_mask = 0; }
 void Display::forceRefresh()               { s_dirty_mask = DISPLAY_DIRTY_ALL; s_last_refresh_ms = 0; }

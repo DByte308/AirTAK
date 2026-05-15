@@ -70,6 +70,9 @@ public:
     // Retransmits entries whose timeout has elapsed; removes after MAX_RETRIES.
     static void tickRetryQueue(QueueHandle_t tx_queue);
 
+    // Phase 2.6: Tick the pending-relay queue; emit packets whose delay has elapsed.
+    static void tickRelayQueue(QueueHandle_t tx_queue);
+
     // Phase 2.11: Called when a MASH_ACK is received. Removes matching entry from
     // retry queue using ack_request_id (NOT packet ID — see §8.9).
     static void handleAck(uint32_t ack_request_id);
@@ -80,6 +83,21 @@ public:
 
     // Returns the default hop_limit for a given portnum (§8.7 table, Defaults.h).
     static uint8_t defaultHopLimit(Portnum portnum);
+
+    // Returns true if this portnum is eligible for application-layer ACK (§8.9).
+    static bool isAcknowledgedPortnum(Portnum portnum) {
+        switch (portnum) {
+            case Portnum::TEXT_MESSAGE_APP:
+            case Portnum::MASH_GAME:
+            case Portnum::MASH_PLAYER:
+            case Portnum::MASH_ZONE:
+            case Portnum::MASH_OBJECTIVE:
+            case Portnum::MASH_ADMIN:
+                return true;
+            default:
+                return false;
+        }
+    }
 };
 
 } // namespace mash
