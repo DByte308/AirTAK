@@ -1,22 +1,21 @@
 """
 Pre-build extra_script: patches TFT_eSPI_ESP32_S3.h to fix the SPI_PORT crash.
 
-Root cause: On ESP32-S3, TFT_eSPI defaults `SPI_PORT = FSPI = 1`, but
-`REG_SPI_BASE(1) = 0` because the macro requires i >= 2.  Arduino-ESP32's
-`SPIClass(FSPI=1)` uses `_spi_bus_array[1].dev = DR_REG_SPI3_BASE = 0x60025000`,
-so `REG_SPI_BASE(3) = 0x60025000` is the correct value → `SPI_PORT = 3`.
-
-Without this patch `SET_BUS_WRITE_MODE` writes to address 0x10, causing a
+Root cause: On ESP32-S3, TFT_eSPI defaults `SPI_PORT = FSPI = 0`, but
+`REG_SPI_BASE(0) = 0` (the macro requires i >= 2 for valid SPI peripheral
+addresses). This makes SET_BUS_WRITE_MODE write to address 0x10, causing a
 StoreProhibited guru meditation on every boot.
+
+Fix: SPIClass(FSPI=0) uses GPSPI2 at DR_REG_SPI2_BASE = 0x60024000.
+REG_SPI_BASE(2) = 0x60024000, so SPI_PORT must be 2.
 """
 
 import os
-import re
 
 Import("env")  # noqa: F821  (PlatformIO injects this)
 
 BAD_LINE  = "    #define SPI_PORT FSPI"
-GOOD_LINE = "    #define SPI_PORT 2  // patched: FSPI=0 on ESP32-S3; REG_SPI_BASE(0)=0 crashes; GPSPI2=REG_SPI_BASE(2)=0x60024000I_BASE(2)=0x60024000"
+GOOD_LINE = "    #define SPI_PORT 2  // patched: FSPI=0→REG_SPI_BASE(0)=0 crash; GPSPI2=REG_SPI_BASE(2)=0x60024000"
 
 
 def patch_tft_espi(source, target, env):

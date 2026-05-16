@@ -71,8 +71,6 @@ void task_audio_codec(void* params);
 // ── setup() ──────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
-    delay(1500); // allow monitor to connect before first print
-    Serial.println("\n\n=== AirTAK boot ===");
 
     if (airtak::RecoveryMode::requestedAtBoot()) {
         airtak::RecoveryMode::run();

@@ -108,9 +108,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         s_conn_hdl   = desc->conn_handle;
         s_connected  = true;
         Display::markDirty(DISPLAY_DIRTY_BLE);
-        // Request MTU 517 as specified in §10.2
         pServer->updateConnParams(desc->conn_handle, 6, 24, 0, 300);
-        NimBLEDevice::setMTU(517);
 
         uint8_t buf[256];
         uint16_t len = buildDeviceStatus(buf, sizeof(buf));
@@ -142,10 +140,16 @@ class SecurityCallbacks : public NimBLESecurityCallbacks {
     bool onSecurityRequest() override { return true; }
 
     void onAuthenticationComplete(ble_gap_conn_desc* desc) override {
-        if (!desc->sec_state.authenticated) {
-            // Pairing failed — disconnect so Android side can retry
+        if (!desc->sec_state.encrypted) {
+            // Encryption failed entirely (key mismatch on bonded reconnect, or
+            // pairing rejected). Delete the stale bond on our side so the next
+            // connection attempt from the peer triggers a fresh pairing dialog
+            // instead of looping on LE Encrypt failures forever.
+            NimBLEDevice::deleteBond(NimBLEAddress(desc->peer_id_addr));
             if (s_server) s_server->disconnect(desc->conn_handle);
         }
+        // If encrypted but not MITM-authenticated, leave the connection up.
+        // Sensitive characteristics enforce WRITE_AUTHEN at the ATT layer.
         s_has_pk = false;
     }
 
@@ -162,6 +166,7 @@ class SecurityCallbacks : public NimBLESecurityCallbacks {
 
 void BLEServer::init(QueueHandle_t mesh_rx_queue) {
     NimBLEDevice::init(defaults::DEVICE_LONG_NAME);
+    NimBLEDevice::setMTU(517);                 // negotiate 517-byte MTU on all connections (§10.2)
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);   // +9 dBm (closest allowed to +4 for BLE)
 
     // LE Secure Connections + MITM (Numeric Comparison, §10.6)
