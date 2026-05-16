@@ -60,6 +60,10 @@ public:
     // Falls back to the compile-time default if not configured.
     static const char* deviceShortName();
 
+    // Returns the player's configured callsign (from GAME config group, field 1).
+    // Falls back to the compile-time default ("Player") if not configured.
+    static const char* gameCallsign();
+
     // ── Position parameter accessors (read from POSITION config buffer) ─────
     static uint32_t positionBroadcastIntervalSecs();
     static uint32_t positionMinTxIntervalSecs();

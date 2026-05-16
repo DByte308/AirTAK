@@ -31,7 +31,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Visibility
@@ -190,7 +192,7 @@ private fun ApplyRow(onRead: () -> Unit, onApply: () -> Unit, busy: Boolean) {
 private fun DeviceSection(vm: SettingsViewModel) {
     val state by vm.device.collectAsState()
     LaunchedEffect(Unit) { vm.readDevice() }
-    Column(Modifier.padding(vertical = 8.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         SectionLabel("Identification")
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
@@ -219,7 +221,7 @@ private fun DeviceSection(vm: SettingsViewModel) {
 private fun LoraSection(vm: SettingsViewModel) {
     val state by vm.lora.collectAsState()
     LaunchedEffect(Unit) { vm.readLora() }
-    Column(Modifier.padding(vertical = 8.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         RadioRestartBanner()
         Spacer(Modifier.height(16.dp))
         SectionLabel("Region")
@@ -282,11 +284,13 @@ private fun ProfileEditor(
                 )
                 TacticalText(profilePreset(index), color = MaterialTheme.colorScheme.primary)
             }
-            TacticalText(
-                "SF${profile.spreadingFactor} / ${profile.bandwidthHz / 1000}k / 4/${profile.codingRate}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
+        // Plain-English summary of what this profile delivers in the field
+        Text(
+            phyDescription(profile.spreadingFactor, profile.bandwidthHz, profile.codingRate),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         OutlinedTextField(
             value = profile.name,
             onValueChange = onName,
@@ -294,13 +298,53 @@ private fun ProfileEditor(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            NumberDropdown("SF", profile.spreadingFactor, (7..12).toList(), onSf, Modifier.weight(1f))
-            NumberDropdown("BW", profile.bandwidthHz, listOf(125000, 250000, 500000), onBandwidth, Modifier.weight(1f)) { value ->
-                "${value / 1000}k"
+        // Range/speed tradeoff (Spreading Factor)
+        NumberDropdown(
+            label = "Range",
+            value = profile.spreadingFactor,
+            options = (7..12).toList(),
+            onValue = onSf,
+            modifier = Modifier.fillMaxWidth(),
+        ) { sf ->
+            when (sf) {
+                7  -> "Fastest, short range (SF7)"
+                8  -> "Fast, short-medium (SF8)"
+                9  -> "Balanced (SF9)"
+                10 -> "Slower, long range (SF10)"
+                11 -> "Slow, very long range (SF11)"
+                12 -> "Slowest, maximum range (SF12)"
+                else -> "SF$sf"
             }
-            NumberDropdown("CR", profile.codingRate, (5..8).toList(), onCodingRate, Modifier.weight(1f)) { value ->
-                "4/$value"
+        }
+        // Channel width (Bandwidth)
+        NumberDropdown(
+            label = "Channel width",
+            value = profile.bandwidthHz,
+            options = listOf(125000, 250000, 500000),
+            onValue = onBandwidth,
+            modifier = Modifier.fillMaxWidth(),
+        ) { bw ->
+            when (bw) {
+                125000 -> "125 kHz — narrow (extra range, less interference)"
+                250000 -> "250 kHz — standard"
+                500000 -> "500 kHz — wide (faster, more interference)"
+                else   -> "${bw / 1000} kHz"
+            }
+        }
+        // Error correction (Coding Rate)
+        NumberDropdown(
+            label = "Error correction",
+            value = profile.codingRate,
+            options = (5..8).toList(),
+            onValue = onCodingRate,
+            modifier = Modifier.fillMaxWidth(),
+        ) { cr ->
+            when (cr) {
+                5 -> "Light — faster (4/5)"
+                6 -> "Moderate (4/6)"
+                7 -> "Heavy (4/7)"
+                8 -> "Maximum — slowest, most reliable (4/8)"
+                else -> "4/$cr"
             }
         }
     }
@@ -314,7 +358,7 @@ private fun ChannelsSection(vm: SettingsViewModel) {
     val lora by vm.lora.collectAsState()
     LaunchedEffect(Unit) { vm.readChannels() }
     LaunchedEffect(Unit) { vm.readLora() }
-    Column(Modifier.padding(vertical = 8.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         RadioRestartBanner()
         Spacer(Modifier.height(16.dp))
         val mixedActiveProfiles = state.slots
@@ -371,6 +415,7 @@ private fun ChannelSlotEditor(
     onRevealPsk: (Boolean) -> Unit,
 ) {
     val slot = editor.slot
+    val isOpen = slot.psk.size() == 0
     HudCard(Modifier.fillMaxWidth().padding(bottom = 10.dp), accent = slot.role.roleColor()) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -381,23 +426,29 @@ private fun ChannelSlotEditor(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     TacticalText(
-                        "PSK ${slot.psk.size()} B / precision ${slot.positionPrecision} bit",
+                        "${if (isOpen) "Open" else "Encrypted"} · ${slot.role.roleLabel()}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                TacticalText(slot.role.name, color = slot.role.roleColor())
+                TacticalText(slot.role.roleLabel(), color = slot.role.roleColor())
             }
+            // Role description shown inline so users understand what they're choosing
+            Text(
+                slot.role.roleDescription(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedTextField(
                 value = slot.name,
                 onValueChange = onName,
-                label = { Text("Slot name") },
+                label = { Text("Channel name") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 RoleDropdown(slot.role, onRole, Modifier.weight(1f))
                 NumberDropdown(
-                    label = "PHY",
+                    label = "Radio profile",
                     value = slot.phyProfileIndex,
                     options = profileNames.indices.toList().ifEmpty { (0..4).toList() },
                     onValue = onProfile,
@@ -407,7 +458,7 @@ private fun ChannelSlotEditor(
             OutlinedTextField(
                 value = editor.pskText,
                 onValueChange = onPsk,
-                label = { Text("PSK") },
+                label = { Text("Password (blank = open channel)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 isError = editor.pskError != null,
@@ -416,15 +467,36 @@ private fun ChannelSlotEditor(
                     IconButton(onClick = { onRevealPsk(!editor.pskRevealed) }) {
                         Icon(
                             imageVector = if (editor.pskRevealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                            contentDescription = if (editor.pskRevealed) "Hide PSK" else "Reveal PSK",
+                            contentDescription = if (editor.pskRevealed) "Hide password" else "Reveal password",
                         )
                     }
                 },
             )
-            editor.pskError?.let { error ->
-                Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            if (editor.pskError != null) {
+                Text(editor.pskError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            } else {
+                Text(
+                    if (editor.pskText.isBlank())
+                        "Open channel — anyone on the same frequency can send and receive."
+                    else
+                        "Encrypted — only devices sharing this password can communicate here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            SectionLabel("Position precision: ${slot.positionPrecision} bit")
+            SectionLabel("Location detail shared")
+            Text(
+                when {
+                    slot.positionPrecision == 0  -> "Hidden — your position is not shared on this channel"
+                    slot.positionPrecision <= 11 -> "City level (~100 km) · ${slot.positionPrecision} bits"
+                    slot.positionPrecision <= 16 -> "Neighbourhood (~5 km) · ${slot.positionPrecision} bits"
+                    slot.positionPrecision <= 21 -> "Street level (~500 m) · ${slot.positionPrecision} bits"
+                    slot.positionPrecision <= 28 -> "Building level (~50 m) · ${slot.positionPrecision} bits"
+                    else                         -> "Full precision (~1 m) · ${slot.positionPrecision} bits"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Slider(
                 value = slot.positionPrecision.toFloat(),
                 onValueChange = { onPrecision(it.toInt().coerceIn(0, 32)) },
@@ -432,10 +504,10 @@ private fun ChannelSlotEditor(
                 steps = 31,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Uplink", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
+                Text("Send on this channel", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
                 Switch(checked = slot.uplinkEnabled, onCheckedChange = onUplink)
                 Spacer(Modifier.size(16.dp))
-                Text("Downlink", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
+                Text("Receive on this channel", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
                 Switch(checked = slot.downlinkEnabled, onCheckedChange = onDownlink)
             }
         }
@@ -475,12 +547,21 @@ private fun RoleDropdown(value: ChannelRole, onValue: (ChannelRole) -> Unit, mod
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
         OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(value.name)
+            Text(value.roleLabel())
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             ChannelRole.values().filter { it != ChannelRole.UNRECOGNIZED }.forEach { role ->
                 DropdownMenuItem(
-                    text = { Text(role.name) },
+                    text = {
+                        Column {
+                            Text(role.roleLabel(), style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                role.roleDescription(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
                     onClick = {
                         expanded = false
                         onValue(role)
@@ -492,19 +573,54 @@ private fun RoleDropdown(value: ChannelRole, onValue: (ChannelRole) -> Unit, mod
 }
 
 private fun profilePreset(index: Int): String = when (index) {
-    0 -> "Meshtastic LONG_FAST"
-    1 -> "Meshtastic SHORT_FAST"
-    2 -> "Meshtastic LONG_SLOW"
-    3 -> "Meshtastic SHORT_SLOW"
+    0 -> "Long range / moderate speed"
+    1 -> "Short range / fast"
+    2 -> "Very long range / slow"
+    3 -> "Medium range / moderate"
     4 -> "User Defined"
     else -> "Custom"
 }
 
+/** Returns a plain-English summary of a LoRa PHY profile's real-world tradeoffs. */
+private fun phyDescription(sf: Int, bwHz: Int, cr: Int): String {
+    if (sf == 0 || bwHz == 0 || cr == 0) return "Not configured — set values below"
+    // Approximate on-air data rate (bps) = SF × BW / 2^SF × 4/CR
+    val bitrateKbps = sf.toDouble() * bwHz / (1L shl sf) * (4.0 / cr) / 1000.0
+    val rangeStr = when {
+        sf <= 7  -> "short range (~1–2 km)"
+        sf == 8  -> "medium range (~2–4 km)"
+        sf == 9  -> "medium range (~3–5 km)"
+        sf == 10 -> "long range (~3–8 km)"
+        sf == 11 -> "long range (~5–10 km)"
+        else     -> "very long range (~8–15 km)"
+    }
+    val speedStr = when {
+        bitrateKbps >= 5.0 -> "fast (~%.0f kbps)".format(bitrateKbps)
+        bitrateKbps >= 1.0 -> "moderate (~%.1f kbps)".format(bitrateKbps)
+        else               -> "slow (~%.2f kbps)".format(bitrateKbps)
+    }
+    return "$rangeStr · $speedStr"
+}
+
+private fun ChannelRole.roleLabel(): String = when (this) {
+    ChannelRole.PRIMARY   -> "Primary"
+    ChannelRole.SECONDARY -> "Secondary"
+    ChannelRole.DISABLED  -> "Disabled"
+    else -> name
+}
+
+private fun ChannelRole.roleDescription(): String = when (this) {
+    ChannelRole.PRIMARY   -> "Main team channel — all mesh traffic flows here."
+    ChannelRole.SECONDARY -> "Extra channel (command net, cross-team link, etc)."
+    ChannelRole.DISABLED  -> "Slot unused — no traffic sent or received."
+    else -> ""
+}
+
 @Composable
 private fun ChannelRole.roleColor(): Color = when (this) {
-    ChannelRole.PRIMARY -> MaterialTheme.colorScheme.primary
+    ChannelRole.PRIMARY   -> MaterialTheme.colorScheme.primary
     ChannelRole.SECONDARY -> AccentAmber
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+    else                  -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 // ── POSITION ──────────────────────────────────────────────────────────────────
@@ -513,7 +629,7 @@ private fun ChannelRole.roleColor(): Color = when (this) {
 private fun PositionSection(vm: SettingsViewModel) {
     val state by vm.position.collectAsState()
     LaunchedEffect(Unit) { vm.readPosition() }
-    Column(Modifier.padding(vertical = 8.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         OutlinedTextField(
             value = state.broadcastIntervalSecs.toString(),
             onValueChange = { v ->
@@ -550,7 +666,7 @@ private fun PositionSection(vm: SettingsViewModel) {
 private fun PowerSection(vm: SettingsViewModel) {
     val state by vm.power.collectAsState()
     LaunchedEffect(Unit) { vm.readPower() }
-    Column(Modifier.padding(vertical = 8.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("GPS duty cycle (Phase 6+)", style = MaterialTheme.typography.bodyMedium,
                  modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onBackground)
@@ -577,7 +693,7 @@ private fun PowerSection(vm: SettingsViewModel) {
 private fun GameSection(vm: SettingsViewModel) {
     val state by vm.game.collectAsState()
     LaunchedEffect(Unit) { vm.readGame() }
-    Column(Modifier.padding(vertical = 8.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         OutlinedTextField(
             value = state.callsign,
             onValueChange = { vm.updateGame { copy(callsign = it.take(16)) } },
@@ -612,7 +728,7 @@ private fun GameSection(vm: SettingsViewModel) {
 private fun SecuritySection(vm: SettingsViewModel) {
     val state by vm.security.collectAsState()
     LaunchedEffect(Unit) { vm.readSecurity() }
-    Column(Modifier.padding(vertical = 8.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         SectionLabel("Bonded devices: ${state.maxBonds}")
         Slider(
             value = state.maxBonds.toFloat(),
@@ -632,7 +748,7 @@ private fun AppSection(vm: SettingsViewModel) {
     val mode by vm.themeMode.collectAsState()
     val tileUrl by vm.tileUrl.collectAsState()
 
-    Column(Modifier.padding(vertical = 8.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         SectionLabel("Theme")
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -672,7 +788,7 @@ private fun AppSection(vm: SettingsViewModel) {
 private fun AboutSection(vm: SettingsViewModel) {
     val status by vm.deviceStatus.collectAsState()
     val context = LocalContext.current
-    Column(Modifier.padding(vertical = 8.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         HudCard(Modifier.fillMaxWidth()) {
             Column {
                 LabelValue("Firmware", status?.firmwareVersion ?: "—")

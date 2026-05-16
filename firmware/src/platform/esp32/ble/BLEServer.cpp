@@ -95,6 +95,8 @@ static uint16_t buildDeviceStatus(uint8_t* buf, uint16_t buf_len) {
     status.uptime_seconds   = millis() / 1000;
     strncpy(status.firmware_version, AIRTAK_FIRMWARE_VERSION_STR,
             sizeof(status.firmware_version) - 1);
+    std::string bt_addr = NimBLEDevice::getAddress().toString();
+    strncpy(status.bluetooth_address, bt_addr.c_str(), sizeof(status.bluetooth_address) - 1);
 
     pb_ostream_t stream = pb_ostream_from_buffer(buf, buf_len);
     if (!pb_encode(&stream, airtak_DeviceStatus_fields, &status)) return 0;

@@ -430,6 +430,37 @@ const char* ConfigManager::deviceShortName() {
                                  s_device_short_name, sizeof(s_device_short_name));
 }
 
+static char s_game_callsign[17];
+
+const char* ConfigManager::gameCallsign() {
+    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::GAME);
+    const uint8_t* buf = s_buffers[gidx];
+    size_t n = s_sizes[gidx];
+    if (n == 0) return defaults::GAME_CALLSIGN;
+    size_t pos = 0;
+    while (pos < n) {
+        uint32_t tag;
+        if (!readProtoVarint(buf, n, pos, tag)) break;
+        uint8_t wire = tag & 7;
+        uint32_t field = tag >> 3;
+        if (wire == 2) {
+            uint32_t slen;
+            if (!readProtoVarint(buf, n, pos, slen)) break;
+            if (pos + slen > n) break;
+            if (field == 1) { // callsign is field 1 in GameConfig
+                size_t clen = (slen < sizeof(s_game_callsign) - 1) ? slen : sizeof(s_game_callsign) - 1;
+                memcpy(s_game_callsign, buf + pos, clen);
+                s_game_callsign[clen] = '\0';
+                return s_game_callsign;
+            }
+            pos += slen;
+        } else {
+            if (!skipProtoField(buf, n, pos, wire)) break;
+        }
+    }
+    return defaults::GAME_CALLSIGN;
+}
+
 static uint32_t readPositionVarintField(uint32_t wanted_field, uint32_t fallback) {
     uint8_t gidx = static_cast<uint8_t>(ConfigGroup::POSITION);
     const uint8_t* buf = s_buffers[gidx];

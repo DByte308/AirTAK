@@ -85,6 +85,9 @@ void setup() {
         Serial.println("AirTAK: FlashStore init failed; using volatile defaults");
     }
     airtak::config::ConfigManager::init();
+    airtak::config::ConfigManager::registerCallback([](airtak::ConfigGroup) {
+        airtak::Display::markDirty(airtak::ui::DISPLAY_DIRTY_ALL);
+    });
     airtak::ChannelManager::init();
     airtak::GameState::init();
     airtak::PlayerState::init();

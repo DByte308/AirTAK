@@ -239,7 +239,7 @@ class BleRepository @Inject constructor(
             // Enable notifications on every notify-capable characteristic.
             scope.launch {
                 BleConstants.NOTIFY_CHARS.forEach { uuid ->
-                    service.getCharacteristic(uuid)?.let { enableNotifications(g, it) }
+                    service.getCharacteristic(uuid)?.let { enableSubscription(g, it) }
                     delay(40)
                 }
                 _linkState.value = LinkState.Connected(g.device.address, currentMtu)
@@ -269,14 +269,23 @@ class BleRepository @Inject constructor(
         ) { /* notifications enable serially via delay() in onServicesDiscovered */ }
     }
 
-    private fun enableNotifications(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
+    private fun enableSubscription(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
         g.setCharacteristicNotification(ch, true)
         val cccd = ch.getDescriptor(BleConstants.CCC_DESCRIPTOR) ?: return
+        // CONFIG_RW and ADMIN are INDICATE-only on the firmware (NimBLE NIMBLE_PROPERTY::INDICATE).
+        // NimBLE checks the CCCD indication bit (0x0002) before sending an indication; if only the
+        // notification bit (0x0001) is set the indication is silently dropped and no read-response
+        // or ConfigAck ever reaches the Android side.  Use ENABLE_INDICATION_VALUE for any
+        // characteristic that advertises the INDICATE property, ENABLE_NOTIFICATION_VALUE otherwise.
+        val cccValue = if (ch.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0)
+            BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+        else
+            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         @Suppress("DEPRECATION")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            g.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+            g.writeDescriptor(cccd, cccValue)
         } else {
-            cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            cccd.value = cccValue
             g.writeDescriptor(cccd)
         }
     }

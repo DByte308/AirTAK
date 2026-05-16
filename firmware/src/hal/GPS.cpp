@@ -61,6 +61,13 @@ void GPS::process(EventGroupHandle_t system_event_group) {
         if (s_gps.encode(c)) {
             // A complete NMEA sentence was decoded.
 
+            // Always update satellite count for diagnostic purposes — this is
+            // non-zero as soon as the module starts receiving satellite signals,
+            // even before a full position fix is available.
+            if (s_gps.satellites.isValid()) {
+                s_current_fix.satellites = s_gps.satellites.value();
+            }
+
             // Upgrade baud rate on first valid sentence (§9.5)
             if (!s_baud_upgraded && s_gps.charsProcessed() > 10) {
                 // Step 1: Tell L76K to switch its own baud rate to 115200.

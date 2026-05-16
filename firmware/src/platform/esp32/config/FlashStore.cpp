@@ -74,8 +74,10 @@ bool FlashStore::write(ConfigGroup group, const uint8_t* data, size_t len) {
         return false;
     }
 
-    // Atomic rename: remove old target if present, then rename tmp → target
-    if (LittleFS.exists(path)) LittleFS.remove(path);
+    // Atomic rename: rename tmp → target.  LittleFS rename() atomically
+    // replaces the target if it already exists (littlefs v2 journal guarantees
+    // this), so no explicit remove() is needed and there is no window where
+    // both files are absent simultaneously.
     if (!LittleFS.rename(tmp, path)) {
         LittleFS.remove(tmp);
         return false;

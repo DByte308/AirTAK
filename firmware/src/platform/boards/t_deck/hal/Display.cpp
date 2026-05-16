@@ -21,6 +21,7 @@
 #include "ble/BLEServer.h"
 #include "mesh/MeshNode.h"
 #include "mesh/ChannelManager.h"
+#include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "config.h"
 #include <Arduino.h>
@@ -99,49 +100,90 @@ static void renderMainScreen() {
     drawHeader("AirTAK");
 
     s_tft.setTextFont(2);
-    int16_t y = CONTENT_Y + 4;
-    const int16_t LINE_H = 20;
+    int16_t y = CONTENT_Y + 2;
+    constexpr int16_t LINE_H = 18;
 
-    // GPS line
-    if (GPS::hasFix()) {
-        const GpsFix& fix = GPS::currentFix();
-        s_tft.setTextColor(COL_OK, COL_BG);
-        char buf[40];
-        snprintf(buf, sizeof(buf), "GPS %.4f, %.4f", fix.latitude, fix.longitude);
-        s_tft.setCursor(4, y); s_tft.print(buf); y += LINE_H;
-        snprintf(buf, sizeof(buf), "    %.0fm  SAT:%u  HDOP:%.1f",
-                 fix.altitude_m, fix.satellites, fix.hdop);
+    // ── Device identity ───────────────────────────────────────────────────────
+    {
+        char namebuf[48];
+        const char* longn  = config::ConfigManager::deviceLongName();
+        const char* shortn = config::ConfigManager::deviceShortName();
+        snprintf(namebuf, sizeof(namebuf), "%.20s (%.6s)", longn, shortn);
+        s_tft.setTextColor(COL_ACCENT, COL_BG);
+        s_tft.setCursor(4, y); s_tft.print(namebuf);
+        y += LINE_H;
+    }
+
+    // ── Callsign ──────────────────────────────────────────────────────────────
+    {
+        char csbuf[32];
+        snprintf(csbuf, sizeof(csbuf), "CS: %.16s", config::ConfigManager::gameCallsign());
         s_tft.setTextColor(COL_TEXT, COL_BG);
-        s_tft.setCursor(4, y); s_tft.print(buf);
-    } else {
-        s_tft.setTextColor(COL_ERR, COL_BG);
-        s_tft.setCursor(4, y); s_tft.print("GPS: NO FIX");
+        s_tft.setCursor(4, y); s_tft.print(csbuf);
+        y += LINE_H + 2;
     }
-    y += LINE_H + 4;
 
-    // Radio / channel
+    // ── GPS ───────────────────────────────────────────────────────────────────
+    {
+        const GpsFix& fix = GPS::currentFix();
+        char buf[48];
+
+        if (GPS::hasFix()) {
+            // Valid fix — show coordinates on one line, detail on next
+            s_tft.setTextColor(COL_OK, COL_BG);
+            snprintf(buf, sizeof(buf), "GPS %.5f %.5f", fix.latitude, fix.longitude);
+            s_tft.setCursor(4, y); s_tft.print(buf); y += LINE_H;
+            s_tft.setTextColor(COL_TEXT, COL_BG);
+            snprintf(buf, sizeof(buf), "    %.0fm  SAT:%u  HDOP:%.1f",
+                     fix.altitude_m, fix.satellites, fix.hdop);
+            s_tft.setCursor(4, y); s_tft.print(buf);
+        } else {
+            // No fix yet — show search status and whatever satellite count we have
+            uint8_t sats = fix.satellites; // updated unconditionally in GPS::process()
+            if (sats > 0) {
+                s_tft.setTextColor(COL_WARN, COL_BG);
+                snprintf(buf, sizeof(buf), "GPS SEARCHING  SAT:%u  HDOP:%.1f",
+                         sats, fix.hdop > 0 ? fix.hdop : 0.0f);
+            } else {
+                s_tft.setTextColor(COL_ERR, COL_BG);
+                snprintf(buf, sizeof(buf), "GPS NO SIGNAL");
+            }
+            s_tft.setCursor(4, y); s_tft.print(buf);
+        }
+        y += LINE_H + 2;
+    }
+
+    // ── Radio / channel ───────────────────────────────────────────────────────
     s_tft.setTextColor(COL_TEXT, COL_BG);
-    const ChannelSlot* primary = ChannelManager::primarySlot();
-    if (primary) {
-        char buf[40];
-        snprintf(buf, sizeof(buf), "CH: %-10s  RSSI:%.0fdBm", primary->name, Radio::lastRssi());
-        s_tft.setCursor(4, y); s_tft.print(buf);
+    {
+        const ChannelSlot* primary = ChannelManager::primarySlot();
+        if (primary) {
+            char buf[40];
+            snprintf(buf, sizeof(buf), "CH: %-10s  RSSI:%.0fdBm",
+                     primary->name, Radio::lastRssi());
+            s_tft.setCursor(4, y); s_tft.print(buf);
+        }
+        y += LINE_H;
     }
-    y += LINE_H;
 
-    // Mesh node count
-    char mbuf[32];
-    uint32_t n = MeshNode::knownNodeCount();
-    snprintf(mbuf, sizeof(mbuf), "MESH: %lu node%s",
-             static_cast<unsigned long>(n), n == 1 ? "" : "s");
-    s_tft.setCursor(4, y); s_tft.print(mbuf);
-    y += LINE_H;
+    // ── Mesh ──────────────────────────────────────────────────────────────────
+    {
+        uint32_t n = MeshNode::knownNodeCount();
+        char mbuf[32];
+        snprintf(mbuf, sizeof(mbuf), "MESH: %lu node%s",
+                 static_cast<unsigned long>(n), n == 1 ? "" : "s");
+        s_tft.setCursor(4, y); s_tft.print(mbuf);
+        y += LINE_H;
+    }
 
-    // Node ID
-    char idbuf[24];
-    snprintf(idbuf, sizeof(idbuf), "ID: %08lX", static_cast<unsigned long>(MeshNode::nodeId()));
-    s_tft.setTextColor(COL_DIM, COL_BG);
-    s_tft.setCursor(4, y); s_tft.print(idbuf);
+    // ── Node ID ───────────────────────────────────────────────────────────────
+    {
+        char idbuf[24];
+        snprintf(idbuf, sizeof(idbuf), "ID: %08lX",
+                 static_cast<unsigned long>(MeshNode::nodeId()));
+        s_tft.setTextColor(COL_DIM, COL_BG);
+        s_tft.setCursor(4, y); s_tft.print(idbuf);
+    }
 
     drawFooter();
 }
