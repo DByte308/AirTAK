@@ -12,6 +12,10 @@
 
 package com.airtak.ui.settings
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +34,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -54,29 +60,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.airtak.data.config.ConfigRepository
-import com.airtak.data.prefs.AppPreferences
 import com.airtak.proto.AdminCommand
-import com.airtak.proto.ChannelConfig
+import com.airtak.proto.ChannelRole
 import com.airtak.proto.ChannelSlot
-import com.airtak.proto.ConfigGroup
-import com.airtak.proto.DeviceConfig
-import com.airtak.proto.GameConfig
-import com.airtak.proto.LoraConfig
 import com.airtak.proto.LoraRegion
-import com.airtak.proto.PositionConfig
-import com.airtak.proto.PowerConfig
-import com.airtak.proto.SecurityConfig
+import com.airtak.proto.PhyProfile
 import com.airtak.ui.components.HudCard
 import com.airtak.ui.components.SectionLabel
 import com.airtak.ui.components.TacticalText
 import com.airtak.ui.theme.AccentAmber
 import com.airtak.ui.theme.ThemeMode
-import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 
 private enum class Section(val title: String, val subtitle: String) {
     Device("Device",     "Callsign, long/short name"),
@@ -250,15 +249,60 @@ private fun LoraSection(vm: SettingsViewModel) {
         SectionLabel("PHY profiles (${state.profiles.size})")
         state.profiles.forEachIndexed { i, p ->
             HudCard(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                Column {
-                    Text("$i  ${p.name}", style = MaterialTheme.typography.titleSmall,
-                         color = MaterialTheme.colorScheme.onSurface)
-                    TacticalText("SF${p.spreadingFactor}  BW${p.bandwidthHz / 1000}k  CR4/${p.codingRate}",
-                                 color = MaterialTheme.colorScheme.primary)
-                }
+                ProfileEditor(
+                    index = i,
+                    profile = p,
+                    onName = { name -> vm.updateProfile(i) { setName(name.take(16)) } },
+                    onSf = { sf -> vm.updateProfile(i) { setSpreadingFactor(sf) } },
+                    onBandwidth = { bw -> vm.updateProfile(i) { setBandwidthHz(bw) } },
+                    onCodingRate = { cr -> vm.updateProfile(i) { setCodingRate(cr) } },
+                )
             }
         }
         ApplyRow(onRead = vm::readLora, onApply = vm::applyLora, busy = vm.busy.collectAsState().value)
+    }
+}
+
+@Composable
+private fun ProfileEditor(
+    index: Int,
+    profile: PhyProfile,
+    onName: (String) -> Unit,
+    onSf: (Int) -> Unit,
+    onBandwidth: (Int) -> Unit,
+    onCodingRate: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Profile $index",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                TacticalText(profilePreset(index), color = MaterialTheme.colorScheme.primary)
+            }
+            TacticalText(
+                "SF${profile.spreadingFactor} / ${profile.bandwidthHz / 1000}k / 4/${profile.codingRate}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        OutlinedTextField(
+            value = profile.name,
+            onValueChange = onName,
+            label = { Text("Profile name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            NumberDropdown("SF", profile.spreadingFactor, (7..12).toList(), onSf, Modifier.weight(1f))
+            NumberDropdown("BW", profile.bandwidthHz, listOf(125000, 250000, 500000), onBandwidth, Modifier.weight(1f)) { value ->
+                "${value / 1000}k"
+            }
+            NumberDropdown("CR", profile.codingRate, (5..8).toList(), onCodingRate, Modifier.weight(1f)) { value ->
+                "4/$value"
+            }
+        }
     }
 }
 
@@ -267,33 +311,200 @@ private fun LoraSection(vm: SettingsViewModel) {
 @Composable
 private fun ChannelsSection(vm: SettingsViewModel) {
     val state by vm.channels.collectAsState()
+    val lora by vm.lora.collectAsState()
     LaunchedEffect(Unit) { vm.readChannels() }
+    LaunchedEffect(Unit) { vm.readLora() }
     Column(Modifier.padding(vertical = 8.dp)) {
         RadioRestartBanner()
         Spacer(Modifier.height(16.dp))
-        state.slots.forEach { slot ->
-            HudCard(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Slot ${slot.index}  ${slot.name}",
-                             style = MaterialTheme.typography.titleSmall,
-                             color = MaterialTheme.colorScheme.onSurface)
-                        Spacer(Modifier.weight(1f))
-                        TacticalText(slot.role.name, color = MaterialTheme.colorScheme.primary)
-                    }
-                    TacticalText("PSK ${slot.psk.size()} B  ·  PHY ${slot.phyProfileIndex}  ·  precision ${slot.positionPrecision} bit",
-                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val mixedActiveProfiles = state.slots
+            .map { it.slot }
+            .filter { it.role != ChannelRole.DISABLED }
+            .map { it.phyProfileIndex }
+            .distinct()
+            .size > 1
+        if (mixedActiveProfiles) {
+            Text(
+                "Active slots use multiple PHY profiles. Keep teammates on the same profile unless intentionally isolating traffic.",
+                style = MaterialTheme.typography.bodySmall,
+                color = AccentAmber,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+        state.validationError?.let { error ->
+            Text(
+                error,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+        state.slots.forEachIndexed { index, editor ->
+            ChannelSlotEditor(
+                editor = editor,
+                profileNames = lora.profiles.mapIndexed { i, profile -> "${i}: ${profile.name.ifBlank { profilePreset(i) }}" },
+                onName = { name -> vm.updateChannelSlot(index) { setName(name.take(16)) } },
+                onRole = { role -> vm.updateChannelSlot(index) { setRole(role) } },
+                onUplink = { enabled -> vm.updateChannelSlot(index) { setUplinkEnabled(enabled) } },
+                onDownlink = { enabled -> vm.updateChannelSlot(index) { setDownlinkEnabled(enabled) } },
+                onPrecision = { bits -> vm.updateChannelSlot(index) { setPositionPrecision(bits) } },
+                onProfile = { profileIndex -> vm.updateChannelSlot(index) { setPhyProfileIndex(profileIndex) } },
+                onPsk = { text -> vm.updateChannelPsk(index, text) },
+                onRevealPsk = { revealed -> vm.setChannelPskRevealed(index, revealed) },
+            )
+        }
+        ApplyRow(onRead = vm::readChannels, onApply = vm::applyChannels, busy = vm.busy.collectAsState().value)
+    }
+}
+
+@Composable
+private fun ChannelSlotEditor(
+    editor: SettingsViewModel.ChannelSlotEditor,
+    profileNames: List<String>,
+    onName: (String) -> Unit,
+    onRole: (ChannelRole) -> Unit,
+    onUplink: (Boolean) -> Unit,
+    onDownlink: (Boolean) -> Unit,
+    onPrecision: (Int) -> Unit,
+    onProfile: (Int) -> Unit,
+    onPsk: (String) -> Unit,
+    onRevealPsk: (Boolean) -> Unit,
+) {
+    val slot = editor.slot
+    HudCard(Modifier.fillMaxWidth().padding(bottom = 10.dp), accent = slot.role.roleColor()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Slot ${slot.index}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    TacticalText(
+                        "PSK ${slot.psk.size()} B / precision ${slot.positionPrecision} bit",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
+                TacticalText(slot.role.name, color = slot.role.roleColor())
+            }
+            OutlinedTextField(
+                value = slot.name,
+                onValueChange = onName,
+                label = { Text("Slot name") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                RoleDropdown(slot.role, onRole, Modifier.weight(1f))
+                NumberDropdown(
+                    label = "PHY",
+                    value = slot.phyProfileIndex,
+                    options = profileNames.indices.toList().ifEmpty { (0..4).toList() },
+                    onValue = onProfile,
+                    modifier = Modifier.weight(1f),
+                ) { value -> profileNames.getOrNull(value) ?: "Profile $value" }
+            }
+            OutlinedTextField(
+                value = editor.pskText,
+                onValueChange = onPsk,
+                label = { Text("PSK") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                isError = editor.pskError != null,
+                visualTransformation = if (editor.pskRevealed) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { onRevealPsk(!editor.pskRevealed) }) {
+                        Icon(
+                            imageVector = if (editor.pskRevealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                            contentDescription = if (editor.pskRevealed) "Hide PSK" else "Reveal PSK",
+                        )
+                    }
+                },
+            )
+            editor.pskError?.let { error ->
+                Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            SectionLabel("Position precision: ${slot.positionPrecision} bit")
+            Slider(
+                value = slot.positionPrecision.toFloat(),
+                onValueChange = { onPrecision(it.toInt().coerceIn(0, 32)) },
+                valueRange = 0f..32f,
+                steps = 31,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Uplink", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
+                Switch(checked = slot.uplinkEnabled, onCheckedChange = onUplink)
+                Spacer(Modifier.size(16.dp))
+                Text("Downlink", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
+                Switch(checked = slot.downlinkEnabled, onCheckedChange = onDownlink)
             }
         }
-        Text(
-            "Slot editing is read-only in Phase 3. PSK regeneration and slot-role changes ship in Phase 4.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        ApplyRow(onRead = vm::readChannels, onApply = { /* no-op until Phase 4 */ }, busy = false)
     }
+}
+
+@Composable
+private fun NumberDropdown(
+    label: String,
+    value: Int,
+    options: List<Int>,
+    onValue: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    render: (Int) -> String = { it.toString() },
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier) {
+        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("$label ${render(value)}")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(render(option)) },
+                    onClick = {
+                        expanded = false
+                        onValue(option)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoleDropdown(value: ChannelRole, onValue: (ChannelRole) -> Unit, modifier: Modifier = Modifier) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier) {
+        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+            Text(value.name)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ChannelRole.values().filter { it != ChannelRole.UNRECOGNIZED }.forEach { role ->
+                DropdownMenuItem(
+                    text = { Text(role.name) },
+                    onClick = {
+                        expanded = false
+                        onValue(role)
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun profilePreset(index: Int): String = when (index) {
+    0 -> "Meshtastic LONG_FAST"
+    1 -> "Meshtastic SHORT_FAST"
+    2 -> "Meshtastic LONG_SLOW"
+    3 -> "Meshtastic SHORT_SLOW"
+    4 -> "User Defined"
+    else -> "Custom"
+}
+
+@Composable
+private fun ChannelRole.roleColor(): Color = when (this) {
+    ChannelRole.PRIMARY -> MaterialTheme.colorScheme.primary
+    ChannelRole.SECONDARY -> AccentAmber
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 // ── POSITION ──────────────────────────────────────────────────────────────────
@@ -460,6 +671,7 @@ private fun AppSection(vm: SettingsViewModel) {
 @Composable
 private fun AboutSection(vm: SettingsViewModel) {
     val status by vm.deviceStatus.collectAsState()
+    val context = LocalContext.current
     Column(Modifier.padding(vertical = 8.dp)) {
         HudCard(Modifier.fillMaxWidth()) {
             Column {
@@ -482,12 +694,29 @@ private fun AboutSection(vm: SettingsViewModel) {
             onClick = { vm.sendAdmin(AdminCommand.REBOOT) },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Reboot Device") }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { openBatteryOptimizationSettings(context) },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Battery Optimization") }
         Spacer(Modifier.height(24.dp))
         Text(
             "Factory reset requires a HMAC confirm-token and ships in Phase 6.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+private fun openBatteryOptimizationSettings(context: Context) {
+    val intents = listOf(
+        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+        },
+    )
+    intents.firstOrNull { it.resolveActivity(context.packageManager) != null }?.let { intent ->
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
 

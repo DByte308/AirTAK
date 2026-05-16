@@ -49,12 +49,30 @@ data class MeshRxPacket(
     val payload: ByteArray?,
     /** Authoritative portnum decoded from Data.portnum (field 1); may differ from hint on overflow. */
     val portnum: Int,
+    val wantResponse: Boolean,
+    val dataDestNodeId: Long?,
+    val dataSourceNodeId: Long?,
     /** Data.request_id (field 6), if present. */
     val requestId: Long?,
 ) {
-    override fun equals(other: Any?): Boolean = other is MeshRxPacket && other.packetId == packetId
-    override fun hashCode(): Int = packetId.hashCode()
+    override fun equals(other: Any?): Boolean = other is MeshRxPacket &&
+        other.srcNodeId == srcNodeId && other.packetId == packetId
+    override fun hashCode(): Int = 31 * srcNodeId.hashCode() + packetId.hashCode()
 }
+
+data class MeshtasticPosition(
+    val latitude: Double,
+    val longitude: Double,
+    val altitudeM: Int?,
+    val timeUnix: Long?,
+    val precisionBits: Int?,
+)
+
+data class MeshtasticUser(
+    val id: String?,
+    val longName: String?,
+    val shortName: String?,
+)
 
 object MeshWire {
 
@@ -77,21 +95,128 @@ object MeshWire {
             flags = flags, channelHash = ch,
             payload = data?.payload,
             portnum = data?.portnum ?: portnumHint,
+            wantResponse = data?.wantResponse ?: false,
+            dataDestNodeId = data?.destNodeId,
+            dataSourceNodeId = data?.sourceNodeId,
             requestId = data?.requestId,
         )
     }
 
     /** Build a minimal Meshtastic Data protobuf for MESH_TX. */
-    fun encodeData(portnum: Int, payload: ByteArray, wantResponse: Boolean = false): ByteArray {
+    fun encodeData(
+        portnum: Int,
+        payload: ByteArray,
+        wantResponse: Boolean = false,
+        destNodeId: Long? = null,
+        sourceNodeId: Long? = null,
+        requestId: Long? = null,
+    ): ByteArray {
         val out = ArrayList<Byte>(payload.size + 16)
         // field 1 (portnum) — varint
         writeTag(out, 1, WIRETYPE_VARINT); writeVarint(out, portnum.toLong())
         // field 2 (payload) — length-delimited
         writeTag(out, 2, WIRETYPE_LEN); writeVarint(out, payload.size.toLong()); out.addAll(payload.toList())
         if (wantResponse) {
-            writeTag(out, 5, WIRETYPE_VARINT); writeVarint(out, 1)
+            // Meshtastic Data.want_response is field 3.
+            writeTag(out, 3, WIRETYPE_VARINT); writeVarint(out, 1)
+        }
+        destNodeId?.let {
+            writeTag(out, 4, WIRETYPE_VARINT); writeVarint(out, it and 0xFFFF_FFFFL)
+        }
+        sourceNodeId?.let {
+            writeTag(out, 5, WIRETYPE_VARINT); writeVarint(out, it and 0xFFFF_FFFFL)
+        }
+        requestId?.let {
+            writeTag(out, 6, WIRETYPE_VARINT); writeVarint(out, it and 0xFFFF_FFFFL)
         }
         return out.toByteArray()
+    }
+
+    fun decodePosition(payload: ByteArray): MeshtasticPosition? {
+        var latitudeE7: Int? = null
+        var longitudeE7: Int? = null
+        var altitudeM: Int? = null
+        var timeUnix: Long? = null
+        var precisionBits: Int? = null
+        var i = 0
+        while (i < payload.size) {
+            val (tag, ni) = readVarint(payload, i) ?: return null
+            i = ni
+            val field = (tag shr 3).toInt()
+            val wire = (tag and 0x07L).toInt()
+            when (wire) {
+                WIRETYPE_VARINT -> {
+                    val (v, n2) = readVarint(payload, i) ?: return null
+                    i = n2
+                    when (field) {
+                        3 -> altitudeM = v.toInt()
+                        14 -> precisionBits = v.toInt()
+                    }
+                }
+                WIRETYPE_FIXED32 -> {
+                    if (i + 4 > payload.size) return null
+                    val value = ByteBuffer.wrap(payload, i, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                    i += 4
+                    when (field) {
+                        1 -> latitudeE7 = value
+                        2 -> longitudeE7 = value
+                        4 -> timeUnix = value.toLong() and 0xFFFF_FFFFL
+                    }
+                }
+                WIRETYPE_LEN -> {
+                    val (len, n2) = readVarint(payload, i) ?: return null
+                    i = n2 + len.toInt()
+                    if (i > payload.size) return null
+                }
+                WIRETYPE_FIXED64 -> i += 8
+                else -> return null
+            }
+        }
+        val lat = latitudeE7 ?: return null
+        val lon = longitudeE7 ?: return null
+        return MeshtasticPosition(
+            latitude = lat / 10_000_000.0,
+            longitude = lon / 10_000_000.0,
+            altitudeM = altitudeM,
+            timeUnix = timeUnix,
+            precisionBits = precisionBits,
+        )
+    }
+
+    fun decodeNodeInfo(payload: ByteArray): MeshtasticUser? {
+        var id: String? = null
+        var longName: String? = null
+        var shortName: String? = null
+        var i = 0
+        while (i < payload.size) {
+            val (tag, ni) = readVarint(payload, i) ?: return null
+            i = ni
+            val field = (tag shr 3).toInt()
+            val wire = (tag and 0x07L).toInt()
+            when (wire) {
+                WIRETYPE_LEN -> {
+                    val (len, n2) = readVarint(payload, i) ?: return null
+                    i = n2
+                    val end = i + len.toInt()
+                    if (end > payload.size) return null
+                    val text = payload.copyOfRange(i, end).toString(Charsets.UTF_8)
+                    when (field) {
+                        1 -> id = text
+                        2 -> longName = text
+                        3 -> shortName = text
+                    }
+                    i = end
+                }
+                WIRETYPE_VARINT -> {
+                    val (_, n2) = readVarint(payload, i) ?: return null
+                    i = n2
+                }
+                WIRETYPE_FIXED32 -> i += 4
+                WIRETYPE_FIXED64 -> i += 8
+                else -> return null
+            }
+        }
+        return if (id == null && longName == null && shortName == null) null else MeshtasticUser(id, longName, shortName)
     }
 
     // ── Minimal Data decoder ──────────────────────────────────────────────────
@@ -100,6 +225,8 @@ object MeshWire {
         val portnum: Int,
         val payload: ByteArray,
         val wantResponse: Boolean,
+        val destNodeId: Long?,
+        val sourceNodeId: Long?,
         val requestId: Long?,
     )
 
@@ -107,6 +234,8 @@ object MeshWire {
         var portnum = 0
         var payload: ByteArray = ByteArray(0)
         var wantResponse = false
+        var destNodeId: Long? = null
+        var sourceNodeId: Long? = null
         var requestId: Long? = null
         var i = 0
         while (i < buf.size) {
@@ -120,7 +249,9 @@ object MeshWire {
                     i = n2
                     when (field) {
                         1 -> portnum = v.toInt()
-                        5 -> wantResponse = v != 0L
+                        3 -> wantResponse = v != 0L
+                        4 -> destNodeId = if (v == 0L) 0xFFFF_FFFFL else v
+                        5 -> sourceNodeId = v
                         6 -> requestId = v
                         else -> { /* skip */ }
                     }
@@ -138,7 +269,7 @@ object MeshWire {
                 else -> return null
             }
         }
-        return DecodedData(portnum, payload, wantResponse, requestId)
+        return DecodedData(portnum, payload, wantResponse, destNodeId, sourceNodeId, requestId)
     }
 
     // ── Protobuf wire primitives ──────────────────────────────────────────────

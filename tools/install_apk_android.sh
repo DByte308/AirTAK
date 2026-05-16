@@ -56,7 +56,7 @@ echo "Installing APK ($(du -h "$APK" | cut -f1))..."
 
 if [ "$MODE" = "run" ]; then
     echo "Launching AirTAK..."
-    "$ADB" -e shell am start -n com.airtak/.MainActivity
+    "$ADB" -e shell am start -n com.airtak/.ui.MainActivity
 fi
 
 echo -e "${GREEN}Done.${NC}"

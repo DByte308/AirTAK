@@ -24,6 +24,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +68,7 @@ fun MessagesScreen(viewModel: MessagesViewModel = hiltViewModel()) {
     val draft by viewModel.draft.collectAsState()
     val error by viewModel.error.collectAsState()
     val byteCount = draft.toByteArray(Charsets.UTF_8).size
+    val channel = CHANNELS[tab]
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         TabRow(
@@ -73,12 +76,22 @@ fun MessagesScreen(viewModel: MessagesViewModel = hiltViewModel()) {
             containerColor = MaterialTheme.colorScheme.background,
             contentColor = MaterialTheme.colorScheme.primary,
         ) {
-            CHANNELS.forEachIndexed { i, name ->
-                Tab(selected = tab == i, onClick = { tab = i }, text = {
-                    Text(name.uppercase(), style = MaterialTheme.typography.labelLarge)
-                })
+            CHANNELS.forEachIndexed { i, channel ->
+                Tab(
+                    selected = tab == i,
+                    onClick = { tab = i },
+                    icon = { Icon(channel.icon, contentDescription = null) },
+                    text = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(channel.title.uppercase(), style = MaterialTheme.typography.labelLarge)
+                            Text(channel.shortHint, style = MaterialTheme.typography.labelSmall)
+                        }
+                    },
+                )
             }
         }
+        Spacer(Modifier.height(12.dp))
+        ChannelHint(channel)
         Spacer(Modifier.height(12.dp))
 
         val listState = rememberLazyListState()
@@ -115,22 +128,23 @@ fun MessagesScreen(viewModel: MessagesViewModel = hiltViewModel()) {
                 OutlinedTextField(
                     value = draft,
                     onValueChange = viewModel::setDraft,
-                    placeholder = { Text("Mesh message…", style = MaterialTheme.typography.bodyMedium) },
+                    placeholder = { Text(channel.placeholder, style = MaterialTheme.typography.bodyMedium) },
                     modifier = Modifier.weight(1f),
+                    enabled = channel.canSend,
                     singleLine = false,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { viewModel.send() }),
+                    keyboardActions = KeyboardActions(onSend = { if (channel.canSend) viewModel.send() }),
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                         focusedIndicatorColor = MaterialTheme.colorScheme.primary,
                     ),
                 )
-                IconButton(onClick = { viewModel.send() }) {
+                IconButton(onClick = { viewModel.send() }, enabled = channel.canSend) {
                     Icon(
                         Icons.AutoMirrored.Outlined.Send,
                         contentDescription = "Send",
-                        tint = if (draft.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (!channel.canSend || draft.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
                                else MaterialTheme.colorScheme.primary,
                     )
                 }
@@ -146,6 +160,20 @@ fun MessagesScreen(viewModel: MessagesViewModel = hiltViewModel()) {
                     Spacer(Modifier.size(12.dp))
                     Text(error!!, style = MaterialTheme.typography.bodySmall, color = StatusHit)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelHint(channel: MessageChannel) {
+    HudCard(Modifier.fillMaxWidth(), accent = channel.accent) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(channel.icon, contentDescription = null, tint = channel.accent)
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(channel.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                TacticalText(channel.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -179,4 +207,33 @@ private fun MessageRow(m: MessageEntity) {
     }
 }
 
-private val CHANNELS = listOf("Mesh", "Game")
+private data class MessageChannel(
+    val title: String,
+    val shortHint: String,
+    val description: String,
+    val placeholder: String,
+    val canSend: Boolean,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val accent: androidx.compose.ui.graphics.Color,
+)
+
+private val CHANNELS = listOf(
+    MessageChannel(
+        title = "Mesh",
+        shortHint = "field chat",
+        description = "General team-to-team text on the primary mesh channel.",
+        placeholder = "Message everyone on the mesh…",
+        canSend = true,
+        icon = Icons.Outlined.Groups,
+        accent = AccentCyan,
+    ),
+    MessageChannel(
+        title = "Game",
+        shortHint = "event ops",
+        description = "Private game-slot traffic for admins, objectives, and match flow. Text sending uses Mesh for now.",
+        placeholder = "Game traffic is receive-only in this build.",
+        canSend = false,
+        icon = Icons.Outlined.SportsEsports,
+        accent = StatusActive,
+    ),
+)

@@ -27,7 +27,7 @@
     <!-- Service notification -->
     <string name="service_channel_name">AirTAK Link</string>
     <string name="service_channel_desc">Persistent BLE connection to your AirTAK device.</string>
-    <string name="service_title">AirTAK — Linked to %1$s</string>
+    <string name="service_title">AirTAK — Connected to %1$s</string>
     <string name="service_title_searching">AirTAK — Searching for device</string>
     <string name="service_action_disconnect">Disconnect</string>
 

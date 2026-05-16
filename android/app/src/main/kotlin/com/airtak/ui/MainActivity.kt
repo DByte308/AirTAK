@@ -18,6 +18,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.airtak.data.ble.service.LinkService
 import com.airtak.data.prefs.AppPreferences
@@ -43,7 +48,11 @@ class MainActivity : ComponentActivity() {
         if (prefs.bondedAddress() != null) LinkService.start(this)
 
         setContent {
-            AirTakTheme(mode = prefs.themeMode()) {
+            var themeMode by remember { mutableStateOf(prefs.themeMode()) }
+            LaunchedEffect(Unit) {
+                prefs.observe().collect { themeMode = prefs.themeMode() }
+            }
+            AirTakTheme(mode = themeMode) {
                 AppShell()
             }
         }

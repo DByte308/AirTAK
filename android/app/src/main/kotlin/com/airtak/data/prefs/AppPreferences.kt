@@ -18,7 +18,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -49,7 +48,7 @@ class AppPreferences @Inject constructor(
         prefs.registerOnSharedPreferenceChangeListener(listener)
         trySend(Unit)
         awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
-    }.distinctUntilChanged()
+    }
 
     private companion object {
         const val KEY_THEME = "theme_mode"

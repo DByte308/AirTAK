@@ -6,6 +6,8 @@ import android.content.Context
 import androidx.room.Room
 import com.airtak.data.db.AppDatabase
 import com.airtak.data.db.MessageDao
+import com.airtak.data.db.RemoteNodeDao
+import com.airtak.data.db.WaypointDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,4 +30,10 @@ object AppModule {
 
     @Provides
     fun provideMessageDao(db: AppDatabase): MessageDao = db.messageDao()
+
+    @Provides
+    fun provideRemoteNodeDao(db: AppDatabase): RemoteNodeDao = db.remoteNodeDao()
+
+    @Provides
+    fun provideWaypointDao(db: AppDatabase): WaypointDao = db.waypointDao()
 }

@@ -24,6 +24,7 @@ import androidx.core.app.NotificationCompat
 import com.airtak.R
 import com.airtak.data.ble.BleRepository
 import com.airtak.data.ble.LinkState
+import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.ui.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -38,6 +40,7 @@ import javax.inject.Inject
 class LinkService : Service() {
 
     @Inject lateinit var bleRepository: BleRepository
+    @Inject lateinit var statusRepository: DeviceStatusRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observerJob: Job? = null
@@ -47,7 +50,9 @@ class LinkService : Service() {
         ensureChannel()
         startForegroundCompat(buildNotification(getString(R.string.service_title_searching)))
         observerJob = scope.launch {
-            bleRepository.linkState.collect { state -> updateNotification(renderTitle(state)) }
+            combine(bleRepository.linkState, statusRepository.status) { state, status ->
+                renderTitle(state, status?.nodeName)
+            }.collect { title -> updateNotification(title) }
         }
     }
 
@@ -69,12 +74,14 @@ class LinkService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun renderTitle(state: LinkState): String = when (state) {
-        is LinkState.Connected     -> getString(R.string.service_title, state.address)
-        is LinkState.Connecting    -> getString(R.string.service_title, state.address)
-        is LinkState.Reconnecting  -> getString(R.string.service_title, state.address)
+    private fun renderTitle(state: LinkState, nodeName: String?): String = when (state) {
+        is LinkState.Connected     -> getString(R.string.service_title, nodeName.ifDisplayName(state.address))
+        is LinkState.Connecting    -> getString(R.string.service_title, nodeName.ifDisplayName(state.address))
+        is LinkState.Reconnecting  -> getString(R.string.service_title, nodeName.ifDisplayName(state.address))
         else                       -> getString(R.string.service_title_searching)
     }
+
+    private fun String?.ifDisplayName(fallback: String): String = this?.takeIf { it.isNotBlank() } ?: fallback
 
     private fun ensureChannel() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

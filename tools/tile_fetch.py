@@ -33,6 +33,9 @@ def lat_lon_to_tile(lat: float, lon: float, zoom: int) -> Tuple[int, int]:
     x = int((lon + 180.0) / 360.0 * n)
     lat_rad = math.radians(lat)
     y = int((1.0 - math.log(math.tan(lat_rad) + 1.0 / math.cos(lat_rad)) / math.pi) / 2.0 * n)
+    # Clamp to valid tile range
+    x = max(0, min(n - 1, x))
+    y = max(0, min(n - 1, y))
     return x, y
 
 

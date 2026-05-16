@@ -15,6 +15,9 @@ import com.airtak.data.ble.BleRepository
 import com.airtak.data.ble.InboundChannel
 import com.airtak.data.db.MessageDao
 import com.airtak.data.db.MessageEntity
+import com.airtak.proto.AdminPacket
+import com.airtak.proto.PlayerStatePacket
+import com.airtak.proto.PositionRequestPacket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -76,6 +79,36 @@ class MeshRepository @Inject constructor(
             )
             messageDao.pruneOldest(channel, MESSAGE_WINDOW)
         }
+        return SendResult.Ok
+    }
+
+    fun sendPlayerState(packet: PlayerStatePacket): SendResult {
+        val data = MeshWire.encodeData(
+            portnum = Portnum.AIRTAK_PLAYER,
+            payload = packet.toByteArray(),
+            wantResponse = packet.isStateTransition,
+        )
+        ble.send(BleRepository.OutboundChannel.MeshTx, data)
+        return SendResult.Ok
+    }
+
+    fun sendAdminPacket(packet: AdminPacket): SendResult {
+        val data = MeshWire.encodeData(
+            portnum = Portnum.AIRTAK_ADMIN,
+            payload = packet.toByteArray(),
+            wantResponse = true,
+        )
+        ble.send(BleRepository.OutboundChannel.MeshTx, data)
+        return SendResult.Ok
+    }
+
+    fun requestPosition(targetNodeId: Long, requesterNodeId: Long): SendResult {
+        val request = PositionRequestPacket.newBuilder()
+            .setTargetNodeId((targetNodeId and 0xFFFF_FFFFL).toInt())
+            .setRequesterNodeId((requesterNodeId and 0xFFFF_FFFFL).toInt())
+            .build()
+        val data = MeshWire.encodeData(Portnum.AIRTAK_POSREQ, request.toByteArray())
+        ble.send(BleRepository.OutboundChannel.MeshTx, data)
         return SendResult.Ok
     }
 

@@ -15,6 +15,7 @@ import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.proto.AdminCommand
 import com.airtak.proto.AdminRequest
 import com.airtak.proto.ChannelConfig
+import com.airtak.proto.ChannelRole
 import com.airtak.proto.ChannelSlot
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.DeviceConfig
@@ -27,6 +28,7 @@ import com.airtak.proto.PositionConfig
 import com.airtak.proto.PowerConfig
 import com.airtak.proto.SecurityConfig
 import com.airtak.ui.theme.ThemeMode
+import com.google.protobuf.ByteString
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +53,16 @@ class SettingsViewModel @Inject constructor(
         val profiles: List<PhyProfile> = emptyList(),
     )
     data class ChannelsState(val slots: List<ChannelSlot> = emptyList())
+    data class ChannelSlotEditor(
+        val slot: ChannelSlot = ChannelSlot.getDefaultInstance(),
+        val pskText: String = "",
+        val pskRevealed: Boolean = false,
+        val pskError: String? = null,
+    )
+    data class EditableChannelsState(
+        val slots: List<ChannelSlotEditor> = emptyList(),
+        val validationError: String? = null,
+    )
     data class PositionState(
         val broadcastIntervalSecs: Int = 90,
         val minTxIntervalSecs: Int = 15,
@@ -62,7 +74,7 @@ class SettingsViewModel @Inject constructor(
 
     private val _device   = MutableStateFlow(DeviceState());   val device:   StateFlow<DeviceState>   = _device.asStateFlow()
     private val _lora     = MutableStateFlow(LoraState());     val lora:     StateFlow<LoraState>     = _lora.asStateFlow()
-    private val _channels = MutableStateFlow(ChannelsState()); val channels: StateFlow<ChannelsState> = _channels.asStateFlow()
+    private val _channels = MutableStateFlow(EditableChannelsState()); val channels: StateFlow<EditableChannelsState> = _channels.asStateFlow()
     private val _position = MutableStateFlow(PositionState()); val position: StateFlow<PositionState> = _position.asStateFlow()
     private val _power    = MutableStateFlow(PowerState());    val power:    StateFlow<PowerState>    = _power.asStateFlow()
     private val _game     = MutableStateFlow(GameState());     val game:     StateFlow<GameState>     = _game.asStateFlow()
@@ -78,7 +90,11 @@ class SettingsViewModel @Inject constructor(
                     _lora.value = LoraState(it.region, it.txPowerDbm, it.profilesList.toList())
                 }
                 map[ConfigGroup.CHANNELS]?.let { b -> tryDecode { ChannelConfig.parseFrom(b) } }?.let {
-                    _channels.value = ChannelsState(it.slotsList.toList())
+                    _channels.value = EditableChannelsState(
+                        slots = it.slotsList.map { slot ->
+                            ChannelSlotEditor(slot = slot, pskText = slot.psk.toPskText())
+                        },
+                    )
                 }
                 map[ConfigGroup.POSITION]?.let { b -> tryDecode { PositionConfig.parseFrom(b) } }?.let {
                     _position.value = PositionState(it.broadcastIntervalSecs, it.minTxIntervalSecs, it.smartBroadcast)
@@ -98,6 +114,53 @@ class SettingsViewModel @Inject constructor(
 
     fun updateDevice(block: DeviceState.() -> DeviceState)     { _device.value   = _device.value.block() }
     fun updateLora(block: LoraState.() -> LoraState)           { _lora.value     = _lora.value.block() }
+    fun updateProfile(index: Int, block: PhyProfile.Builder.() -> Unit) {
+        _lora.value = _lora.value.let { state ->
+            state.copy(
+                profiles = state.profiles.mapIndexed { i, profile ->
+                    if (i == index) profile.toBuilder().apply(block).build() else profile
+                },
+            )
+        }
+    }
+    fun updateChannelSlot(index: Int, block: ChannelSlot.Builder.() -> Unit) {
+        _channels.value = _channels.value.let { state ->
+            state.copy(
+                slots = state.slots.mapIndexed { i, editor ->
+                    if (i == index) editor.copy(slot = editor.slot.toBuilder().apply(block).build(), pskError = null)
+                    else editor
+                },
+                validationError = null,
+            )
+        }
+    }
+    fun updateChannelPsk(index: Int, text: String) {
+        val parsed = parsePsk(text)
+        _channels.value = _channels.value.let { state ->
+            state.copy(
+                slots = state.slots.mapIndexed { i, editor ->
+                    if (i != index) return@mapIndexed editor
+                    if (parsed.error == null) {
+                        editor.copy(
+                            slot = editor.slot.toBuilder().setPsk(ByteString.copyFrom(parsed.bytes)).build(),
+                            pskText = text,
+                            pskError = null,
+                        )
+                    } else {
+                        editor.copy(pskText = text, pskError = parsed.error)
+                    }
+                },
+                validationError = null,
+            )
+        }
+    }
+    fun setChannelPskRevealed(index: Int, revealed: Boolean) {
+        _channels.value = _channels.value.let { state ->
+            state.copy(slots = state.slots.mapIndexed { i, editor ->
+                if (i == index) editor.copy(pskRevealed = revealed) else editor
+            })
+        }
+    }
     fun updatePosition(block: PositionState.() -> PositionState){_position.value = _position.value.block() }
     fun updatePower(block: PowerState.() -> PowerState)        { _power.value    = _power.value.block() }
     fun updateGame(block: GameState.() -> GameState)           { _game.value     = _game.value.block() }
@@ -121,6 +184,24 @@ class SettingsViewModel @Inject constructor(
         val msg = LoraConfig.newBuilder()
             .setRegion(s.region).setTxPowerDbm(s.txPower).addAllProfiles(s.profiles).build()
         config.apply(ConfigGroup.LORA, msg.toByteArray())
+    }
+    fun applyChannels() {
+        val s = _channels.value
+        val firstError = s.slots.firstOrNull { it.pskError != null }?.pskError
+        if (firstError != null) {
+            _channels.value = s.copy(validationError = firstError)
+            return
+        }
+        val msg = ChannelConfig.newBuilder().addAllSlots(s.slots.map { editor ->
+            editor.slot.toBuilder()
+                .setIndex(editor.slot.index.coerceIn(0, 7))
+                .setName(editor.slot.name.take(16))
+                .setRole(editor.slot.role.takeUnless { it == ChannelRole.UNRECOGNIZED } ?: ChannelRole.DISABLED)
+                .setPositionPrecision(editor.slot.positionPrecision.coerceIn(0, 32))
+                .setPhyProfileIndex(editor.slot.phyProfileIndex.coerceIn(0, 4))
+                .build()
+        }).build()
+        config.apply(ConfigGroup.CHANNELS, msg.toByteArray())
     }
     fun applyPosition() {
         val s = _position.value
@@ -165,4 +246,28 @@ class SettingsViewModel @Inject constructor(
     }
 
     private inline fun <T> tryDecode(block: () -> T): T? = runCatching(block).getOrNull()
+
+    private fun ByteString.toPskText(): String {
+        if (isEmpty) return ""
+        return "0x" + toByteArray().joinToString("") { "%02X".format(it) }
+    }
+
+    private data class PskParseResult(val bytes: ByteArray, val error: String?)
+
+    private fun parsePsk(text: String): PskParseResult {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return PskParseResult(ByteArray(0), null)
+        val bytes = if (trimmed.startsWith("0x", ignoreCase = true)) {
+            val hex = trimmed.drop(2).filterNot { it.isWhitespace() || it == ':' || it == '-' }
+            if (hex.length % 2 != 0) return PskParseResult(ByteArray(0), "Hex PSK must have an even number of digits.")
+            if (!hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+                return PskParseResult(ByteArray(0), "Hex PSK contains a non-hex character.")
+            }
+            ByteArray(hex.length / 2) { i -> hex.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
+        } else {
+            trimmed.toByteArray(Charsets.UTF_8)
+        }
+        if (bytes.size > 32) return PskParseResult(bytes, "PSK must be 32 bytes or fewer.")
+        return PskParseResult(bytes, null)
+    }
 }
