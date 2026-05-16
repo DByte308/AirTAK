@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AirTAK</string>
+
+    <!-- Navigation -->
+    <string name="nav_map">Map</string>
+    <string name="nav_messages">Net</string>
+    <string name="nav_players">Roster</string>
+    <string name="nav_game">Mission</string>
+    <string name="nav_settings">Config</string>
+
+    <!-- Link / Status -->
+    <string name="link_disconnected">No link</string>
+    <string name="link_scanning">Scanning</string>
+    <string name="link_pairing">Pair device</string>
+    <string name="link_connecting">Establishing link</string>
+    <string name="link_connected">Linked</string>
+    <string name="link_reconnecting">Reacquiring</string>
+
+    <!-- Pairing wizard -->
+    <string name="pair_title">Pair AirTAK Device</string>
+    <string name="pair_subtitle">Power on your T-Echo Plus and confirm the 6-digit code shown on the device e-ink display matches the one on this phone.</string>
+    <string name="pair_scan">Scan for devices</string>
+    <string name="pair_no_permissions">Bluetooth and location permissions are required to pair.</string>
+    <string name="pair_grant">Grant permissions</string>
+
+    <!-- Service notification -->
+    <string name="service_channel_name">AirTAK Link</string>
+    <string name="service_channel_desc">Persistent BLE connection to your AirTAK device.</string>
+    <string name="service_title">AirTAK — Linked to %1$s</string>
+    <string name="service_title_searching">AirTAK — Searching for device</string>
+    <string name="service_action_disconnect">Disconnect</string>
+
+    <!-- Messages screen -->
+    <string name="msg_compose_hint">Mesh message…</string>
+    <string name="msg_send">Send</string>
+    <string name="msg_remaining">%1$d bytes</string>
+    <string name="msg_too_long">Message exceeds 237-byte LoRa limit</string>
+    <string name="msg_empty_history">No traffic yet. Messages from your mesh will appear here.</string>
+
+    <!-- Common -->
+    <string name="action_apply">Apply</string>
+    <string name="action_revert">Revert</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_confirm">Confirm</string>
+    <string name="apply_pending">Pending changes</string>
+    <string name="apply_radio_warning">Applying this change will briefly pause radio reception (~300 ms).</string>
+
+    <!-- Settings sections -->
+    <string name="settings_device">Device</string>
+    <string name="settings_lora">LoRa Radio</string>
+    <string name="settings_channels">Channels</string>
+    <string name="settings_position">Position</string>
+    <string name="settings_power">Power</string>
+    <string name="settings_game">Player</string>
+    <string name="settings_security">Security</string>
+    <string name="settings_app">App</string>
+    <string name="settings_about">About</string>
+</resources>

@@ -79,9 +79,11 @@ for i in $(seq 1 120); do
         # Install and launch the app if an APK exists
         if [ -f "$APK" ]; then
             echo "Installing AirTAK..."
-            "$ADB" -e install -r "$APK"
+            # -g grants all runtime permissions (BLE/location/notifications)
+            # so the app launches into the main shell without manual taps.
+            "$ADB" -e install -r -g "$APK"
             echo "Launching AirTAK..."
-            "$ADB" -e shell am start -n com.airtak/.MainActivity
+            "$ADB" -e shell am start -n com.airtak/.ui.MainActivity
             echo -e "${GREEN}AirTAK launched.${NC}"
         else
             echo "No APK found — build first with: ./tools/install_apk_android.sh"
