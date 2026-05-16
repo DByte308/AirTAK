@@ -23,7 +23,6 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <cstdint>
-#include <stdint.h>
 #include <cstring>
 
 using namespace airtak;
