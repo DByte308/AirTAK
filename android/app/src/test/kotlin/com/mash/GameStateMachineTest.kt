@@ -33,7 +33,7 @@ class GameStateMachineTest {
         // Verify domain model supports required states
         val statuses = listOf(
             PlayerStatus.ACTIVE, PlayerStatus.HIT,
-            PlayerStatus.RESPAWNING, PlayerStatus.ELIMINATED, PlayerStatus.SPECTATING
+            PlayerStatus.RESPAWNING, PlayerStatus.ELIMINATED, PlayerStatus.SPECTATOR
         )
         assertTrue(statuses.contains(PlayerStatus.HIT))
         assertTrue(statuses.contains(PlayerStatus.RESPAWNING))

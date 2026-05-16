@@ -32,14 +32,35 @@ AirTAK is Meshtastic wire-format compatible on the shared channel and introduces
 
 The firmware toolchain is pinned in git and installed into a local, ignored venv under `firmware/.venv`.
 
+**Linux:**
+```bash
+./tools/setup_firmware_env.sh
+./tools/pio_firmware.sh test -e native
+./tools/pio_firmware.sh run -e t_echo_plus
+```
+
+**Windows:**
 ```powershell
 .\tools\setup_firmware_env.ps1
-.\tools\phase2_verify.ps1
 .\tools\pio_firmware.ps1 test -e native
 .\tools\pio_firmware.ps1 run -e t_echo_plus
 ```
 
-`setup_firmware_env.ps1` installs PlatformIO plus Zig-based native compiler wrappers so Windows machines can run the native firmware tests without a separate system C/C++ compiler. The target firmware build still uses PlatformIO's nRF52 ARM toolchain.
+`setup_firmware_env.sh` / `.ps1` installs PlatformIO plus Zig-based native compiler wrappers so native firmware tests can run without a system C/C++ compiler. The target firmware build still uses PlatformIO's nRF52 ARM toolchain.
+
+## Android quick start
+
+**Prerequisites:** Linux with `apt` and `curl`. The setup script installs JDK 17, the Android SDK, and the Gradle wrapper.
+
+```bash
+./tools/setup_android_env.sh          # install JDK, SDK, Gradle wrapper; optionally emulator
+./tools/gradle_android.sh assembleDebug   # build debug APK
+./tools/gradle_android.sh test            # run unit tests
+./tools/emulator_android.sh               # launch API 35 emulator (requires GPU + KVM)
+./tools/install_apk_android.sh run        # build, install, and launch on emulator
+```
+
+The Gradle wrapper (`android/gradlew`) is committed so a clean clone can build without a global Gradle installation. `android/.android-env` stores machine-specific paths and is gitignored.
 
 ## Firmware recovery
 
@@ -70,13 +91,17 @@ firmware/           PlatformIO project — nRF52840 / T-Echo Plus
 android/            Kotlin + Jetpack Compose app (min API 31, target 35)
 
 tools/
-├── flash.ps1       Flash firmware to connected device
-├── phase1_verify.ps1       Run Phase 1 automated acceptance checks
-├── phase2_verify.ps1       Run Phase 2 automated mesh-stack checks
-├── pio_firmware.ps1        Run the pinned firmware PlatformIO environment
-├── proto_gen.ps1   Regenerate nanopb + Kotlin sources from .proto files
-├── setup_firmware_env.ps1  Create the local firmware Python environment
-└── tile_fetch.py   Download MBTiles for a bounding box
+├── setup_firmware_env.sh / .ps1   Create the firmware Python venv + PlatformIO
+├── setup_android_env.sh           Install JDK 17, Android SDK, Gradle wrapper
+├── pio_firmware.sh / .ps1         Run pinned PlatformIO (build, test, upload)
+├── gradle_android.sh              Run Gradle wrapper with Android SDK env
+├── phase1_verify.sh / .ps1        Phase 1 automated acceptance checks
+├── phase2_verify.ps1              Phase 2 automated mesh-stack checks
+├── proto_gen.sh / .ps1            Regenerate nanopb + Kotlin sources from .proto
+├── flash.ps1                      Flash firmware to connected device
+├── emulator_android.sh            Launch API 35 x86_64 Android emulator
+├── install_apk_android.sh         Build + install APK on running emulator
+└── tile_fetch.py                  Download MBTiles for a bounding box
 
 docs/
 ├── phase1-acceptance.md  Phase 1 automated and hardware acceptance record

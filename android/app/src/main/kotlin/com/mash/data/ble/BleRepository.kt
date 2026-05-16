@@ -307,7 +307,7 @@ class BleRepository @Inject constructor(
                 gatt.writeCharacteristic(char)
             }
             if (submitted == true) {
-                result = resultChannel.receiveCatching().getOrDefault(false)
+                result = resultChannel.receiveCatching().getOrNull() ?: false
             }
         } finally {
             pendingWriteResult = null

@@ -1,0 +1,5 @@
+.gradle/
+.gradle-home/
+.kotlin/
+app/build/
+.android-env

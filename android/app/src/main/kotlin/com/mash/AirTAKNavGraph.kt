@@ -8,8 +8,8 @@ package com.airtak
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,7 +28,7 @@ private enum class Screen(
     val label: String,
     val icon: ImageVector,
 ) {
-    Map("map", "Map", Icons.Filled.Map),
+    Map("map", "Map", Icons.Filled.Place),
     Messages("messages", "Messages", Icons.Filled.List),
     Players("players", "Players", Icons.Filled.Person),
     Settings("settings", "Settings", Icons.Filled.Settings),
