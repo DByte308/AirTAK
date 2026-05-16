@@ -22,7 +22,7 @@
     },
     {
       "name": "PlatformIO (target)",
-      "compilerPath": "",
+      "compilerPath": "${env:HOME}/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-g++",
       "compileCommands": "${workspaceFolder}/firmware/compile_commands.json",
       "includePath": [
         "${workspaceFolder}/firmware/.pio/libdeps/t_echo_plus/Adafruit GFX Library",
