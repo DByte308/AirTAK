@@ -1,23 +1,31 @@
 {
   "configurations": [
     {
-      "name": "PlatformIO",
-      "compilerPath": "~/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-g++.exe",
-      "compileCommands": "${workspaceFolder}/firmware/compile_commands.json",
+      "name": "PlatformIO (native)",
+      "compilerPath": "",
+      "compileCommands": "${workspaceFolder}/firmware/compile_commands_native.json",
       "includePath": [
         "${workspaceFolder}/firmware/include",
         "${workspaceFolder}/firmware/src",
         "${workspaceFolder}/firmware/src/proto",
-        "${workspaceFolder}/firmware/test",
-        "${workspaceFolder}/firmware/.pio/libdeps/native/**",
-        "${workspaceFolder}/firmware/.pio/libdeps/t_echo_plus/**",
-        "${workspaceFolder}/firmware/variants/t_echo_plus",
-        "~/.platformio/packages/framework-arduinoadafruitnrf52/**"
+        "${workspaceFolder}/firmware/src/native_stubs",
+        "${workspaceFolder}/firmware/test"
       ],
       "defines": [
         "AIRTAK_NATIVE_TEST"
       ],
-      "intelliSenseMode": "windows-gcc-arm"
+      "intelliSenseMode": "gcc-x64"
+    },
+    {
+      "name": "PlatformIO (target)",
+      "compilerPath": "",
+      "compileCommands": "${workspaceFolder}/firmware/compile_commands_target.json",
+      "includePath": [],
+      "defines": [
+        "AIRTAK_FIRMWARE",
+        "AIRTAK_BOARD_T_ECHO_PLUS"
+      ],
+      "intelliSenseMode": "gcc-arm"
     }
   ],
   "version": 4

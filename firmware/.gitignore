@@ -5,3 +5,4 @@
 .vscode/launch.json
 .vscode/ipch
 compile_commands.json
+compile_commands_*.json
