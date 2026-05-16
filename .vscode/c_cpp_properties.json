@@ -1,7 +1,25 @@
 {
   "configurations": [
     {
-      "name": "PlatformIO (native)",
+      "name": "AirTAK (default)",
+      "compilerPath": "${env:HOME}/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-g++",
+      "compileCommands": "${workspaceFolder}/firmware/compile_commands_target.json",
+      "includePath": [
+        "${workspaceFolder}/firmware/include",
+        "${workspaceFolder}/firmware/src",
+        "${workspaceFolder}/firmware/src/proto",
+        "${workspaceFolder}/firmware/src/native_stubs",
+        "${workspaceFolder}/firmware/test",
+        "${workspaceFolder}/firmware/.pio/libdeps/native/Unity/src",
+        "${workspaceFolder}/firmware/.pio/libdeps/native/Nanopb"
+      ],
+      "defines": [
+        "AIRTAK_BOARD_T_ECHO_PLUS"
+      ],
+      "intelliSenseMode": "gcc-arm"
+    },
+    {
+      "name": "AirTAK (native tests)",
       "compilerPath": "/usr/bin/g++",
       "compileCommands": "${workspaceFolder}/firmware/compile_commands.json",
       "includePath": [
@@ -10,7 +28,6 @@
         "${workspaceFolder}/firmware/src/proto",
         "${workspaceFolder}/firmware/src/native_stubs",
         "${workspaceFolder}/firmware/test",
-        "${workspaceFolder}/firmware/test/test_router",
         "${workspaceFolder}/firmware/.pio/libdeps/native/Unity/src",
         "${workspaceFolder}/firmware/.pio/libdeps/native/Nanopb",
         "${workspaceFolder}/firmware/.pio/libdeps/native/mbedtls/include"
@@ -19,20 +36,6 @@
         "AIRTAK_NATIVE_TEST"
       ],
       "intelliSenseMode": "gcc-x64"
-    },
-    {
-      "name": "PlatformIO (target)",
-      "compilerPath": "${env:HOME}/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-g++",
-      "compileCommands": "${workspaceFolder}/firmware/compile_commands.json",
-      "includePath": [
-        "${workspaceFolder}/firmware/.pio/libdeps/t_echo_plus/Adafruit GFX Library",
-        "${workspaceFolder}/firmware/.pio/libdeps/t_echo_plus/GxEPD2/src"
-      ],
-      "defines": [
-        "AIRTAK_FIRMWARE",
-        "AIRTAK_BOARD_T_ECHO_PLUS"
-      ],
-      "intelliSenseMode": "gcc-arm"
     }
   ],
   "version": 4
