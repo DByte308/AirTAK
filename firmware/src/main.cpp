@@ -71,6 +71,8 @@ void task_audio_codec(void* params);
 // ── setup() ──────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
+    delay(1500); // allow monitor to connect before first print
+    Serial.println("\n\n=== AirTAK boot ===");
 
     if (airtak::RecoveryMode::requestedAtBoot()) {
         airtak::RecoveryMode::run();
@@ -116,7 +118,7 @@ void setup() {
     configASSERT(xTaskCreate(task_ble_server,      "ble",      4096, nullptr, 3, nullptr) == pdPASS);
     configASSERT(xTaskCreate(task_config_apply,    "config",   2048, nullptr, 2, nullptr) == pdPASS);
     configASSERT(xTaskCreate(task_display_refresh, "display",  2048, nullptr, 1, nullptr) == pdPASS);
-    configASSERT(xTaskCreate(task_battery_monitor, "battery",  1024, nullptr, 0, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_battery_monitor, "battery",  2048, nullptr, 0, nullptr) == pdPASS);
 
 #ifdef AIRTAK_PHASE7_AUDIO
     configASSERT(xTaskCreate(task_audio_codec, "audio", 3072, nullptr, 2, nullptr) == pdPASS);
@@ -206,7 +208,9 @@ void task_config_apply(void* params) {
 void task_display_refresh(void* params) {
     // Phase 1.4: E-Ink display bring-up | Phase 9.6: refresh management
     airtak::Display::init();
-    uint32_t last_refresh_check_ms = 0;
+    // Render immediately after init so the screen is never blank.
+    airtak::Display::refresh(g_system_event_group);
+    uint32_t last_refresh_check_ms = millis();
     uint32_t last_player_tick_ms   = 0;
     for (;;) {
         airtak::ButtonGesture gesture = airtak::Button::poll();

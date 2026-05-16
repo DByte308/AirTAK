@@ -28,17 +28,29 @@ static void send_pmtk(const char* cmd) {
 
 // ── GPS::init() ───────────────────────────────────────────────────────────────
 void GPS::init() {
-    // Enable L76K via GPIO
+    // Enable GPS power via dedicated GPIO (T-Echo Plus only; -1 = no pin).
+#if defined(AIRTAK_PIN_GPS_ENABLE) && AIRTAK_PIN_GPS_ENABLE >= 0
     pinMode(AIRTAK_PIN_GPS_ENABLE, OUTPUT);
     digitalWrite(AIRTAK_PIN_GPS_ENABLE, HIGH);
+#endif
+#if defined(AIRTAK_PIN_GPS_RESET) && AIRTAK_PIN_GPS_RESET >= 0
     pinMode(AIRTAK_PIN_GPS_RESET, OUTPUT);
     digitalWrite(AIRTAK_PIN_GPS_RESET, HIGH);
-
+#endif
     // PPS pin — configure as input but do not use in logic (reserved, §9.5)
+#if defined(AIRTAK_PIN_GPS_PPS) && AIRTAK_PIN_GPS_PPS >= 0
     pinMode(AIRTAK_PIN_GPS_PPS, INPUT);
+#endif
 
-    // Start UART at initial baud rate (§9.5)
+    // Start UART at initial baud rate (§9.5).
+    // On ESP32 the HardwareSerial.begin() overload accepts RX/TX pin arguments;
+    // on nRF52 the BSP has pre-assigned pins so the 2-argument form is used.
+#if defined(AIRTAK_GPS_SERIAL_RX_PIN) && AIRTAK_GPS_SERIAL_RX_PIN >= 0
+    GPS_SERIAL.begin(GPS_BAUD_INITIAL, SERIAL_8N1,
+                     AIRTAK_GPS_SERIAL_RX_PIN, AIRTAK_GPS_SERIAL_TX_PIN);
+#else
     GPS_SERIAL.begin(GPS_BAUD_INITIAL, SERIAL_8N1);
+#endif
 }
 
 // ── GPS::process() ───────────────────────────────────────────────────────────
@@ -59,7 +71,12 @@ void GPS::process(EventGroupHandle_t system_event_group) {
 
                 // Step 2: Re-init MCU UART at fast baud rate.
                 GPS_SERIAL.end();
+#if defined(AIRTAK_GPS_SERIAL_RX_PIN) && AIRTAK_GPS_SERIAL_RX_PIN >= 0
+                GPS_SERIAL.begin(GPS_BAUD_FAST, SERIAL_8N1,
+                                 AIRTAK_GPS_SERIAL_RX_PIN, AIRTAK_GPS_SERIAL_TX_PIN);
+#else
                 GPS_SERIAL.begin(GPS_BAUD_FAST, SERIAL_8N1);
+#endif
                 delay(10);
 
                 // Step 3: Configure L76K to emit GNGGA + GNRMC only (§9.5).
@@ -99,7 +116,11 @@ bool GPS::hasFix() { return s_current_fix.valid; }
 // ── GPS::setPower() ──────────────────────────────────────────────────────────
 void GPS::setPower(bool on) {
     // Phase 6.2: GPS duty cycling via ENABLE pin (§9.5)
+#if defined(AIRTAK_PIN_GPS_ENABLE) && AIRTAK_PIN_GPS_ENABLE >= 0
     digitalWrite(AIRTAK_PIN_GPS_ENABLE, on ? HIGH : LOW);
+#else
+    (void)on;
+#endif
 }
 
 // ── Displacement and smart beaconing support ─────────────────────────────────

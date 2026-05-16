@@ -4,6 +4,16 @@
 
 #include "mesh/Router.h"
 #include "mesh/Crypto.h"
+// NOTE: <Arduino.h> MUST be included before ChannelManager.h on ESP32.
+// esp32-hal-gpio.h defines the macro DISABLED=0x00; ChannelManager.h
+// issues #undef DISABLED before the ChannelRole enum class so the member
+// name is not substituted. If Arduino.h is included after ChannelManager.h
+// the macro is re-defined and all subsequent ChannelRole::DISABLED
+// expressions break at preprocessing.
+#if !defined(AIRTAK_NATIVE_TEST)
+#include <Arduino.h>
+#include <FreeRTOS.h>
+#endif
 #include "mesh/ChannelManager.h"
 #include "mesh/MeshNode.h"
 #include "mesh/PacketPool.h"
@@ -14,8 +24,6 @@
 #include "config.h"
 #include <cstring>
 #include <cstdio>
-#include <Arduino.h>
-#include <FreeRTOS.h>
 
 extern QueueHandle_t g_ble_tx_queue;
 extern EventGroupHandle_t g_radio_event_group;
