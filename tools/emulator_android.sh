@@ -32,6 +32,7 @@ export PATH="$JAVA_HOME/bin:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platfor
 
 EMULATOR="$ANDROID_SDK_ROOT/emulator/emulator"
 ADB="$ANDROID_SDK_ROOT/platform-tools/adb"
+APK="$PROJECT_ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
 
 MODE="${1:-gui}"
 
@@ -74,6 +75,18 @@ for i in $(seq 1 120); do
     if "$ADB" -e shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; then
         echo ""
         echo -e "${GREEN}Emulator ready.${NC}"
+
+        # Install and launch the app if an APK exists
+        if [ -f "$APK" ]; then
+            echo "Installing AirTAK..."
+            "$ADB" -e install -r "$APK"
+            echo "Launching AirTAK..."
+            "$ADB" -e shell am start -n com.airtak/.MainActivity
+            echo -e "${GREEN}AirTAK launched.${NC}"
+        else
+            echo "No APK found — build first with: ./tools/install_apk_android.sh"
+        fi
+
         exit 0
     fi
     echo -n "."
