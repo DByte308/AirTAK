@@ -361,6 +361,44 @@ private fun ChannelsSection(vm: SettingsViewModel) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         RadioRestartBanner()
         Spacer(Modifier.height(16.dp))
+
+        // ── Group messaging hierarchy guide ───────────────────────────────────
+        HudCard(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "Setting up group channels",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Each slot can serve as a dedicated radio channel for a different unit level — squad, platoon, or company. " +
+                    "Give the slot a recognisable name (e.g. \"Squad 1\", \"Platoon A\", \"Company Red\") and set a shared password. " +
+                    "Every device in that unit must use the same slot index, name, and password.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Suggested layout:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Slot 0 — Mesh (primary, open) — all players\n" +
+                    "Slot 1 — Game (admin events, match flow)\n" +
+                    "Slot 2 — Squad  (e.g. \"Squad 1\", squad PSK)\n" +
+                    "Slot 3 — Platoon (e.g. \"Platoon A\", platoon PSK)\n" +
+                    "Slot 4 — Team   (e.g. \"Team Red\", team PSK)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Slots appear as tabs in the Messages screen once enabled.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+
         val mixedActiveProfiles = state.slots
             .map { it.slot }
             .filter { it.role != ChannelRole.DISABLED }

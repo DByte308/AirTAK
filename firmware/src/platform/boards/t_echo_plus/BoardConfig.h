@@ -41,6 +41,8 @@
 #define AIRTAK_PIN_GPS_RESET               37   // P1.05
 #define AIRTAK_PIN_GPS_ENABLE              AIRTAK_PIN_GPS_STANDBY
 #define AIRTAK_GPS_SERIAL                  Serial1
+#define AIRTAK_GPS_SERIAL_RX_PIN           AIRTAK_PIN_GPS_RX_MCU
+#define AIRTAK_GPS_SERIAL_TX_PIN           AIRTAK_PIN_GPS_TX_MCU
 
 // Battery and charging
 #define AIRTAK_PIN_VBAT_SENSE               4   // P0.04 AIN2

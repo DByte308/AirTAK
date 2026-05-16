@@ -115,7 +115,7 @@ void setup() {
 
     // Create all FreeRTOS tasks. Tasks are stubs in Phase 1; filled in subsequent phases.
     configASSERT(xTaskCreate(task_radio_rxtx,      "radio",    4096, nullptr, 4, nullptr) == pdPASS);
-    configASSERT(xTaskCreate(task_gps_parser,      "gps",      2048, nullptr, 3, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_gps_parser,      "gps",      4096, nullptr, 3, nullptr) == pdPASS);
     configASSERT(xTaskCreate(task_ble_server,      "ble",      4096, nullptr, 3, nullptr) == pdPASS);
     configASSERT(xTaskCreate(task_config_apply,    "config",   2048, nullptr, 2, nullptr) == pdPASS);
     configASSERT(xTaskCreate(task_display_refresh, "display",  2048, nullptr, 1, nullptr) == pdPASS);

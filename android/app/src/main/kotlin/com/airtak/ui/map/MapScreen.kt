@@ -92,7 +92,11 @@ import org.maplibre.geojson.Point
 import org.maplibre.geojson.Polygon
 
 @Composable
-fun MapScreen(viewModel: MapViewModel = hiltViewModel()) {
+fun MapScreen(
+    viewModel: MapViewModel = hiltViewModel(),
+    focusNodeId: Long? = null,
+    onFocusConsumed: () -> Unit = {},
+) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val ui by viewModel.uiState.collectAsState()
@@ -204,6 +208,22 @@ fun MapScreen(viewModel: MapViewModel = hiltViewModel()) {
         if (!centeredOnce && pos != null) {
             centeredOnce = true
             map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 14.0))
+        }
+    }
+
+    // Cross-screen locate deep-link: fly to a specific node when requested.
+    val focusTarget by viewModel.focusTarget.collectAsState()
+    LaunchedEffect(focusNodeId) {
+        if (focusNodeId != null) {
+            viewModel.focusNode(focusNodeId)
+            onFocusConsumed()
+        }
+    }
+    LaunchedEffect(map, focusTarget) {
+        val target = focusTarget ?: return@LaunchedEffect
+        if (map != null) {
+            map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(target.latitude, target.longitude), 16.0))
+            viewModel.clearFocus()
         }
     }
 

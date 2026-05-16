@@ -43,8 +43,13 @@
 #define BLE_UUID_ADMIN            "4d415348-0005-1000-8000-00805f9b34fb"
 
 // ── GPS UART ──────────────────────────────────────────────────────────────────
+#ifndef GPS_BAUD_INITIAL
 #define GPS_BAUD_INITIAL    9600     // initial baud rate
+#endif
+
+#ifndef GPS_BAUD_FAST
 #define GPS_BAUD_FAST       115200   // upgraded baud rate after first valid NMEA sentence
+#endif
 
 // ── LoRa packet size limits ────────────────────────────────────────────────────
 #define LORA_MAX_PAYLOAD_BYTES  255  // SX1262 hardware maximum

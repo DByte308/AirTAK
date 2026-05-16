@@ -124,6 +124,9 @@ class BleRepository @Inject constructor(
     fun startScan() {
         if (!hasRequiredPermissions() || adapter?.isEnabled != true) return
         if (_linkState.value is LinkState.Scanning) return
+        // Do not clobber an active connection — scanning while GATT is open can disrupt
+        // the link on some chipsets, and the UI state machine would lose its Connected state.
+        if (_linkState.value is LinkState.Connected) return
         _linkState.value = LinkState.Scanning
         _discovered.value = emptyList()
         val scanner = adapter.bluetoothLeScanner ?: return
@@ -173,6 +176,12 @@ class BleRepository @Inject constructor(
         gatt?.close()
         gatt = null
         _linkState.value = LinkState.Disconnected
+    }
+
+    /** Forget the bonded device: disconnect + clear the stored address. */
+    fun forget() {
+        prefs.setBondedAddress(null)
+        disconnect()
     }
 
     /** Send a payload on a writable characteristic. Returns immediately; transfer is async. */

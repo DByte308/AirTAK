@@ -65,6 +65,7 @@
 // Explicit RX/TX pins for ESP32 HardwareSerial.begin()
 #define AIRTAK_GPS_SERIAL_RX_PIN           AIRTAK_PIN_GPS_RX_MCU
 #define AIRTAK_GPS_SERIAL_TX_PIN           AIRTAK_PIN_GPS_TX_MCU
+#define GPS_BAUD_INITIAL                   38400
 
 // Battery ADC
 #define AIRTAK_PIN_VBAT_SENSE               4   // voltage divider output, 12-bit ADC

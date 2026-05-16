@@ -68,6 +68,8 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
     val status by viewModel.deviceStatus.collectAsState()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    val pendingDmNodeId by viewModel.pendingDmNodeId.collectAsState()
+    val pendingLocateNodeId by viewModel.pendingLocateNodeId.collectAsState()
 
     Scaffold(
         topBar = {
@@ -89,7 +91,21 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            AppNavHost(navController)
+            AppNavHost(
+                navController = navController,
+                pendingDmNodeId = pendingDmNodeId,
+                onDmOpened = viewModel::clearDmTarget,
+                pendingLocateNodeId = pendingLocateNodeId,
+                onLocateConsumed = viewModel::clearLocateTarget,
+                onMessagePlayer = { nodeId ->
+                    viewModel.setDmTarget(nodeId)
+                    navController.navigateTopLevel(Destination.Messages.route)
+                },
+                onLocatePlayer = { nodeId ->
+                    viewModel.setLocateTarget(nodeId)
+                    navController.navigateTopLevel(Destination.Map.route)
+                },
+            )
         }
     }
 }
@@ -172,11 +188,29 @@ private fun BottomNav(currentRoute: String?, onSelect: (Destination) -> Unit) {
 }
 
 @Composable
-private fun AppNavHost(navController: androidx.navigation.NavHostController) {
+private fun AppNavHost(
+    navController: androidx.navigation.NavHostController,
+    pendingDmNodeId: Long?,
+    onDmOpened: () -> Unit,
+    pendingLocateNodeId: Long?,
+    onLocateConsumed: () -> Unit,
+    onMessagePlayer: (Long) -> Unit,
+    onLocatePlayer: (Long) -> Unit,
+) {
     NavHost(navController = navController, startDestination = Destination.Map.route) {
-        composable(Destination.Map.route)      { MapScreen() }
-        composable(Destination.Messages.route) { MessagesScreen() }
-        composable(Destination.Players.route)  { PlayersScreen() }
+        composable(Destination.Map.route)      {
+            MapScreen(
+                focusNodeId = pendingLocateNodeId,
+                onFocusConsumed = onLocateConsumed,
+            )
+        }
+        composable(Destination.Messages.route) {
+            MessagesScreen(
+                pendingDmNodeId = pendingDmNodeId,
+                onDmOpened = onDmOpened,
+            )
+        }
+        composable(Destination.Players.route)  { PlayersScreen(onMessagePlayer = onMessagePlayer, onLocatePlayer = onLocatePlayer) }
         composable(Destination.Game.route)     { GameScreen() }
         composable(Destination.Settings.route) { SettingsScreen() }
         composable("pair")                     { PairingScreen(onDone = { navController.popBackStack() }) }

@@ -57,6 +57,7 @@ data class PlayersUiState(
     val groups: List<TeamGroup> = emptyList(),
     val onlineCount: Int = 0,
     val totalCount: Int = 0,
+    val query: String = "",
 )
 
 @HiltViewModel
@@ -69,6 +70,7 @@ class PlayersViewModel @Inject constructor(
 ) : ViewModel() {
     private val showOnlineOnly = MutableStateFlow(false)
     private val ownStatus = MutableStateFlow(PlayerStatus.PLAYER_STATUS_ACTIVE)
+    private val _query = MutableStateFlow("")
     private val status = statusRepo.status
     private val clock: Flow<Long> = flow {
         while (true) {
@@ -97,50 +99,67 @@ class PlayersViewModel @Inject constructor(
         Source(nodes, deviceStatus, cfg, game)
     }
 
-    val uiState: StateFlow<PlayersUiState> = combine(source, showOnlineOnly, ownStatus, clock) { source, onlineOnly, own, now ->
-        val ownNodeId = source.deviceStatus?.nodeId?.toLong()?.and(0xFFFF_FFFFL)
-        val deviceStatus = source.deviceStatus
-        val remoteRows = source.nodes
-            .filter { it.nodeId != ownNodeId }
-            .map { it.toPlayerRow(now, false, source.game.teams) }
-        val ownRow = if (deviceStatus != null) {
-            val selfNodeId = deviceStatus.nodeId.toLong() and 0xFFFF_FFFFL
-            PlayerRow(
-                nodeId = selfNodeId,
-                callsign = source.gameConfig.callsign.ifBlank { deviceStatus.nodeName.ifBlank { "You" } },
-                teamId = source.gameConfig.teamId,
-                teamName = teamName(source.gameConfig.teamId, source.game.teams),
-                colorRgb = teamColor(source.gameConfig.teamId, source.game.teams),
-                status = own,
-                lastSeenMs = now,
-                lastPlayerMs = now,
-                batteryPercent = (deviceStatus.batteryLevel * 100).toInt().coerceIn(0, 100),
-                isSelf = true,
-                online = true,
+    val uiState: StateFlow<PlayersUiState> = combine(
+        combine(source, showOnlineOnly, ownStatus, clock) { source, onlineOnly, own, now ->
+            val ownNodeId = source.deviceStatus?.nodeId?.toLong()?.and(0xFFFF_FFFFL)
+            val deviceStatus = source.deviceStatus
+            val remoteRows = source.nodes
+                .filter { it.nodeId != ownNodeId }
+                .map { it.toPlayerRow(now, false, source.game.teams) }
+            val ownRow = if (deviceStatus != null) {
+                val selfNodeId = deviceStatus.nodeId.toLong() and 0xFFFF_FFFFL
+                PlayerRow(
+                    nodeId = selfNodeId,
+                    callsign = source.gameConfig.callsign.ifBlank { deviceStatus.nodeName.ifBlank { "You" } },
+                    teamId = source.gameConfig.teamId,
+                    teamName = teamName(source.gameConfig.teamId, source.game.teams),
+                    colorRgb = teamColor(source.gameConfig.teamId, source.game.teams),
+                    status = own,
+                    lastSeenMs = now,
+                    lastPlayerMs = now,
+                    batteryPercent = (deviceStatus.batteryLevel * 100).toInt().coerceIn(0, 100),
+                    isSelf = true,
+                    online = true,
+                )
+            } else null
+            val rows = (listOfNotNull(ownRow) + remoteRows)
+                .filter { !onlineOnly || it.online }
+                .sortedWith(compareBy<PlayerRow> { it.teamId }.thenBy { it.callsign.lowercase() })
+            val groups = rows.groupBy { it.teamId }.map { (teamId, players) ->
+                TeamGroup(
+                    teamId = teamId,
+                    name = teamName(teamId, source.game.teams),
+                    colorRgb = teamColor(teamId, source.game.teams),
+                    players = players,
+                )
+            }
+            PlayersUiState(
+                showOnlineOnly = onlineOnly,
+                isAdmin = source.gameConfig.isAdmin,
+                ownStatus = own,
+                groups = groups,
+                onlineCount = (listOfNotNull(ownRow) + remoteRows).count { it.online },
+                totalCount = (listOfNotNull(ownRow) + remoteRows).size,
             )
-        } else null
-        val rows = (listOfNotNull(ownRow) + remoteRows)
-            .filter { !onlineOnly || it.online }
-            .sortedWith(compareBy<PlayerRow> { it.teamId }.thenBy { it.callsign.lowercase() })
-        val groups = rows.groupBy { it.teamId }.map { (teamId, players) ->
-            TeamGroup(
-                teamId = teamId,
-                name = teamName(teamId, source.game.teams),
-                colorRgb = teamColor(teamId, source.game.teams),
-                players = players,
-            )
-        }
-        PlayersUiState(
-            showOnlineOnly = onlineOnly,
-            isAdmin = source.gameConfig.isAdmin,
-            ownStatus = own,
-            groups = groups,
-            onlineCount = (listOfNotNull(ownRow) + remoteRows).count { it.online },
-            totalCount = (listOfNotNull(ownRow) + remoteRows).size,
+        },
+        _query,
+    ) { state, q ->
+        if (q.isBlank()) state.copy(query = q)
+        else state.copy(
+            query = q,
+            groups = state.groups.mapNotNull { grp ->
+                val filtered = grp.players.filter {
+                    it.callsign.contains(q, ignoreCase = true) ||
+                        it.teamName.contains(q, ignoreCase = true)
+                }
+                if (filtered.isEmpty()) null else grp.copy(players = filtered)
+            },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlayersUiState())
 
     fun setShowOnlineOnly(value: Boolean) { showOnlineOnly.value = value }
+
+    fun setQuery(q: String) { _query.value = q }
 
     fun setOwnStatus(status: PlayerStatus) {
         val transition = ownStatus.value != status

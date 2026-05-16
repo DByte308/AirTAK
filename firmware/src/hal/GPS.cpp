@@ -7,6 +7,7 @@
 #include "config.h"
 #include <Arduino.h>
 #include <TinyGPS++.h>  // TinyGPS++ ≥ 1.0.3 (platformio.ini dependency)
+#include <cstring>
 
 namespace airtak {
 
@@ -16,9 +17,101 @@ static GpsFix      s_current_fix = {};
 static double      s_last_tx_lat = 0.0;
 static double      s_last_tx_lng = 0.0;
 static bool        s_baud_upgraded = false;
+static uint32_t    s_current_baud = GPS_BAUD_INITIAL;
+static uint32_t    s_last_valid_sentence_ms = 0;
+static uint32_t    s_last_baud_probe_ms = 0;
+
+static constexpr uint32_t GPS_BAUD_CANDIDATES[] = {
+    GPS_BAUD_INITIAL,
+    38400,
+    57600,
+    GPS_BAUD_FAST,
+};
+static uint8_t s_baud_probe_index = 0;
+
+#ifdef AIRTAK_GPS_DEBUG
+static uint32_t    s_debug_raw_bytes    = 0;  // total bytes read from GPS UART
+static uint32_t    s_debug_last_print_ms = 0; // last time we printed diagnostics
+static char        s_debug_sentence[128] = {};
+static uint8_t     s_debug_sentence_len = 0;
+static uint8_t     s_debug_sentence_prints = 0;
+#endif
 
 // Board-selected UART used for the GNSS module.
 static HardwareSerial& GPS_SERIAL = AIRTAK_GPS_SERIAL;
+
+static void begin_gps_serial(uint32_t baud) {
+#if defined(AIRTAK_GPS_SERIAL_RX_PIN) && AIRTAK_GPS_SERIAL_RX_PIN >= 0
+    GPS_SERIAL.begin(baud, SERIAL_8N1,
+                     AIRTAK_GPS_SERIAL_RX_PIN, AIRTAK_GPS_SERIAL_TX_PIN);
+#else
+    GPS_SERIAL.begin(baud, SERIAL_8N1);
+#endif
+    s_current_baud = baud;
+
+#ifdef AIRTAK_GPS_DEBUG
+    s_debug_sentence_len = 0;
+    s_debug_sentence_prints = 0;
+#endif
+}
+
+#ifdef AIRTAK_GPS_DEBUG
+static int hex_value(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    return -1;
+}
+
+static void print_debug_sentence() {
+    if (s_debug_sentence_prints >= 6 || s_debug_sentence_len == 0) return;
+
+    s_debug_sentence[s_debug_sentence_len] = '\0';
+    char* checksum_marker = strchr(s_debug_sentence, '*');
+    if (checksum_marker && checksum_marker[1] && checksum_marker[2]) {
+        uint8_t calculated = 0;
+        for (char* p = s_debug_sentence + 1; p < checksum_marker; ++p) {
+            calculated ^= static_cast<uint8_t>(*p);
+        }
+        int high = hex_value(checksum_marker[1]);
+        int low = hex_value(checksum_marker[2]);
+        int provided = (high >= 0 && low >= 0) ? ((high << 4) | low) : -1;
+        Serial.printf("[GPS RAW baud=%lu] %s | calc=%02X got=%02X %s\n",
+                      (unsigned long)s_current_baud,
+                      s_debug_sentence,
+                      calculated,
+                      provided >= 0 ? provided : 0,
+                      provided == calculated ? "OK" : "BAD");
+    } else {
+        Serial.printf("[GPS RAW baud=%lu] %s | no checksum marker\n",
+                      (unsigned long)s_current_baud,
+                      s_debug_sentence);
+    }
+    s_debug_sentence_prints++;
+}
+
+static void capture_debug_char(char c) {
+    if (c == '$') {
+        s_debug_sentence_len = 0;
+    }
+
+    if (s_debug_sentence_len >= sizeof(s_debug_sentence) - 1) {
+        print_debug_sentence();
+        s_debug_sentence_len = 0;
+        return;
+    }
+
+    if (s_debug_sentence_len > 0 || c == '$') {
+        if (c == '\r' || c == '\n') {
+            print_debug_sentence();
+            s_debug_sentence_len = 0;
+        } else {
+            s_debug_sentence[s_debug_sentence_len++] =
+                (c >= 32 && c <= 126) ? c : '.';
+        }
+    }
+}
+#endif
 
 // ── PMTK command helpers ──────────────────────────────────────────────────────
 static void send_pmtk(const char* cmd) {
@@ -42,15 +135,9 @@ void GPS::init() {
     pinMode(AIRTAK_PIN_GPS_PPS, INPUT);
 #endif
 
-    // Start UART at initial baud rate (§9.5).
-    // On ESP32 the HardwareSerial.begin() overload accepts RX/TX pin arguments;
-    // on nRF52 the BSP has pre-assigned pins so the 2-argument form is used.
-#if defined(AIRTAK_GPS_SERIAL_RX_PIN) && AIRTAK_GPS_SERIAL_RX_PIN >= 0
-    GPS_SERIAL.begin(GPS_BAUD_INITIAL, SERIAL_8N1,
-                     AIRTAK_GPS_SERIAL_RX_PIN, AIRTAK_GPS_SERIAL_TX_PIN);
-#else
-    GPS_SERIAL.begin(GPS_BAUD_INITIAL, SERIAL_8N1);
-#endif
+    // Start UART at initial baud rate (§9.5). If a previous firmware left the
+    // module at GPS_BAUD_FAST, process() will auto-probe and recover.
+    begin_gps_serial(GPS_BAUD_INITIAL);
 }
 
 // ── GPS::process() ───────────────────────────────────────────────────────────
@@ -58,8 +145,13 @@ void GPS::process(EventGroupHandle_t system_event_group) {
     // Feed all available UART bytes to TinyGPS++
     while (GPS_SERIAL.available()) {
         char c = GPS_SERIAL.read();
+#ifdef AIRTAK_GPS_DEBUG
+        s_debug_raw_bytes++;
+    capture_debug_char(c);
+#endif
         if (s_gps.encode(c)) {
             // A complete NMEA sentence was decoded.
+            s_last_valid_sentence_ms = millis();
 
             // Always update satellite count for diagnostic purposes — this is
             // non-zero as soon as the module starts receiving satellite signals,
@@ -68,30 +160,20 @@ void GPS::process(EventGroupHandle_t system_event_group) {
                 s_current_fix.satellites = s_gps.satellites.value();
             }
 
-            // Upgrade baud rate on first valid sentence (§9.5)
+            // Configure the GPS module once after the first complete sentence is
+            // decoded, confirming the module is alive and its UART is working.
+            // We intentionally stay at GPS_BAUD_INITIAL (9600) for the entire
+            // session: the PMTK251 baud-upgrade command requires the module to
+            // internally switch baud rates before the host can follow, and the
+            // minimum safe gap is ~100 ms — longer than the 20 ms delay that was
+            // here previously.  At 9600 baud, two NMEA sentences (GGA + RMC) at
+            // 1 Hz occupy ~150 ms out of every 1000 ms, well within capacity.
             if (!s_baud_upgraded && s_gps.charsProcessed() > 10) {
-                // Step 1: Tell L76K to switch its own baud rate to 115200.
-                // PMTK251 command with correct checksum for 115200.
-                send_pmtk("$PMTK251,115200*1F");
-                GPS_SERIAL.flush();
-                delay(20); // allow L76K to process the command
-
-                // Step 2: Re-init MCU UART at fast baud rate.
-                GPS_SERIAL.end();
-#if defined(AIRTAK_GPS_SERIAL_RX_PIN) && AIRTAK_GPS_SERIAL_RX_PIN >= 0
-                GPS_SERIAL.begin(GPS_BAUD_FAST, SERIAL_8N1,
-                                 AIRTAK_GPS_SERIAL_RX_PIN, AIRTAK_GPS_SERIAL_TX_PIN);
-#else
-                GPS_SERIAL.begin(GPS_BAUD_FAST, SERIAL_8N1);
-#endif
-                delay(10);
-
-                // Step 3: Configure L76K to emit GNGGA + GNRMC only (§9.5).
-                // PMTK314: disable all sentences except GGA (pos 3) and RMC (pos 1).
-                // Checksum: $PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28
+                // Restrict output to GNGGA + GNRMC only (saves ~80 % of UART traffic).
+                // PMTK314 field order: GLL, RMC, VTG, GGA, GSA, GSV, ... (17 more) = 19 fields.
                 send_pmtk("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28");
 
-                // Step 4: Set 1 Hz update rate (default; verify with PMTK220).
+                // Confirm 1 Hz update rate.
                 send_pmtk("$PMTK220,1000*1F");
 
                 s_baud_upgraded = true;
@@ -114,6 +196,47 @@ void GPS::process(EventGroupHandle_t system_event_group) {
             }
         }
     }
+
+    // If the module was previously switched to another baud by older firmware,
+    // bytes can arrive while every NMEA checksum fails. Probe common GNSS baud
+    // rates until the first clean sentence is decoded, then keep that baud for
+    // the rest of the session.
+    uint32_t now = millis();
+    if (!s_baud_upgraded && now - s_last_valid_sentence_ms >= 8000u &&
+        now - s_last_baud_probe_ms >= 8000u) {
+        s_last_baud_probe_ms = now;
+        s_baud_probe_index = (s_baud_probe_index + 1) %
+                             (sizeof(GPS_BAUD_CANDIDATES) / sizeof(GPS_BAUD_CANDIDATES[0]));
+        uint32_t next_baud = GPS_BAUD_CANDIDATES[s_baud_probe_index];
+#ifdef AIRTAK_GPS_DEBUG
+        Serial.printf("[GPS] no valid NMEA yet; probing baud %lu\n",
+                      (unsigned long)next_baud);
+#endif
+        GPS_SERIAL.end();
+        delay(10);
+        begin_gps_serial(next_baud);
+    }
+
+#ifdef AIRTAK_GPS_DEBUG
+    // Print diagnostics once every 10 seconds regardless of fix status.
+    if (now - s_debug_last_print_ms >= 10000u) {
+        s_debug_last_print_ms = now;
+        Serial.printf("[GPS] uptime=%lus baud=%lu raw_bytes=%lu chars_parsed=%lu passed=%lu bad_checksums=%lu\n",
+                      (unsigned long)(now / 1000u),
+                      (unsigned long)s_current_baud,
+                      (unsigned long)s_debug_raw_bytes,
+                      (unsigned long)s_gps.charsProcessed(),
+                      (unsigned long)s_gps.passedChecksum(),
+                      (unsigned long)s_gps.failedChecksum());
+        Serial.printf("[GPS] sats=%u hdop=%.1f lat=%.6f lng=%.6f fix=%s configured=%s\n",
+                      s_current_fix.satellites,
+                      s_current_fix.hdop,
+                      s_current_fix.latitude,
+                      s_current_fix.longitude,
+                      s_current_fix.valid ? "YES" : "no",
+                      s_baud_upgraded    ? "yes" : "NO");
+    }
+#endif
 }
 
 // ── GPS::currentFix() ────────────────────────────────────────────────────────

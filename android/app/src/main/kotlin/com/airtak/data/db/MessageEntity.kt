@@ -29,4 +29,9 @@ data class MessageEntity(
     val outgoing: Boolean,
     /** True after the firmware confirmed transmission (best-effort; reserved for future ACK wiring). */
     val delivered: Boolean = false,
+    /**
+     * For unicast (DM) messages: the destination node ID for outgoing, source node ID for
+     * incoming. 0 means broadcast (channel message). Used to group DM conversations.
+     */
+    val peerNodeId: Long = 0,
 )

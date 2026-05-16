@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Message
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.MyLocation
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -31,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -58,7 +61,11 @@ import com.airtak.ui.theme.StatusOffline
 import com.airtak.ui.theme.StatusRespawning
 
 @Composable
-fun PlayersScreen(viewModel: PlayersViewModel = hiltViewModel()) {
+fun PlayersScreen(
+    viewModel: PlayersViewModel = hiltViewModel(),
+    onMessagePlayer: (Long) -> Unit = {},
+    onLocatePlayer: (Long) -> Unit = {},
+) {
     val ui by viewModel.uiState.collectAsState()
 
     LazyColumn(
@@ -71,6 +78,16 @@ fun PlayersScreen(viewModel: PlayersViewModel = hiltViewModel()) {
                 MetricTile("ONLINE", "${ui.onlineCount}/${ui.totalCount}", Modifier.weight(1f))
                 MetricTile("FILTER", if (ui.showOnlineOnly) "ONLINE" else "ALL", Modifier.weight(1f))
             }
+        }
+        item {
+            OutlinedTextField(
+                value = ui.query,
+                onValueChange = viewModel::setQuery,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search callsign or team…", style = MaterialTheme.typography.bodyMedium) },
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                singleLine = true,
+            )
         }
         item {
             OwnStatusPanel(
@@ -90,6 +107,8 @@ fun PlayersScreen(viewModel: PlayersViewModel = hiltViewModel()) {
                     onRequestPosition = { viewModel.requestPosition(player.nodeId) },
                     onForceStatus = { status -> viewModel.forceStatus(player.nodeId, status) },
                     onReassignTeam = { teamId -> viewModel.reassignTeam(player.nodeId, teamId) },
+                    onMessage = { onMessagePlayer(player.nodeId) },
+                    onLocate = { onLocatePlayer(player.nodeId) },
                 )
             }
         }
@@ -211,6 +230,8 @@ private fun PlayerCard(
     onRequestPosition: () -> Unit,
     onForceStatus: (PlayerStatus) -> Unit,
     onReassignTeam: (Int) -> Unit,
+    onMessage: () -> Unit,
+    onLocate: () -> Unit,
 ) {
     var menuOpen by remember(player.nodeId) { mutableStateOf(false) }
     val status = if (player.online) player.status else PlayerStatus.UNRECOGNIZED
@@ -253,15 +274,25 @@ private fun PlayerCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (isAdmin && !player.isSelf) {
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(onClick = onRequestPosition, modifier = Modifier.weight(1f)) {
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = onMessage, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.AutoMirrored.Outlined.Message, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Message")
+                    }
+                    OutlinedButton(onClick = onLocate, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Outlined.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Locate")
+                    }
+                    if (!player.isSelf) {
+                        if (isAdmin) OutlinedButton(onClick = onRequestPosition, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Outlined.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Ping")
                         }
-                        Box {
+                        if (isAdmin) Box {
                             IconButton(onClick = { menuOpen = true }) {
                                 Icon(Icons.Outlined.MoreVert, contentDescription = "Admin")
                             }

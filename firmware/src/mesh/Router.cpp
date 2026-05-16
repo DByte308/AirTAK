@@ -810,12 +810,39 @@ void Router::sendPacket(Portnum portnum, uint32_t dest,
 // ── Router::sendDataPacket() ────────────────────────────────────────────────
 bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
                             QueueHandle_t tx_queue) {
-    if (!data_pb || data_len == 0 || data_len > MESH_MAX_PAYLOAD_BYTES) return false;
+    // Accept up to MESH_MAX_PAYLOAD_BYTES + 1 here because a slot-override
+    // prefix byte (stripped below) may be present. The size is re-checked
+    // against MESH_MAX_PAYLOAD_BYTES after any prefix is removed.
+    if (!data_pb || data_len == 0 || data_len > MESH_MAX_PAYLOAD_BYTES + 1) return false;
+
+    // Slot-override prefix (app → firmware protocol extension, §10.3):
+    // If byte[0] is in the range [0, MAX_CHANNEL_SLOTS), the app is requesting
+    // a specific channel slot for this packet; the actual Data proto starts at
+    // byte[1]. This is safe because valid proto3 field tags always have field
+    // number ≥ 1, so the minimum valid first byte of a Data proto is 0x08
+    // (field 1, wire type 0). Bytes 0x00–0x07 are therefore unambiguous slot
+    // indices and the protocol is backward-compatible with older firmware.
+    const ChannelSlot* override_slot = nullptr;
+    if (data_pb[0] < MAX_CHANNEL_SLOTS) {
+        uint8_t slot_idx = data_pb[0];
+        data_pb  += 1;
+        data_len -= 1;
+        if (data_len == 0) return false;
+        const ChannelSlot* candidate = ChannelManager::slotByIndex(slot_idx);
+        if (candidate && candidate->role != ChannelRole::DISABLED) {
+            override_slot = candidate;
+        }
+        // If the requested slot is disabled or absent, fall through to normal
+        // auto-selection so the packet is not silently dropped.
+    }
+
+    // Enforce the per-Data-proto size limit now that any prefix has been stripped.
+    if (data_len > MESH_MAX_PAYLOAD_BYTES) return false;
 
     DataMetadata meta;
     if (!parseDataMetadata(data_pb, data_len, meta)) return false;
 
-    const ChannelSlot* slot = selectTxSlot(meta.portnum, true);
+    const ChannelSlot* slot = override_slot ? override_slot : selectTxSlot(meta.portnum, true);
     if (!slot) return false;
 
     // Determine whether this packet requires ACKNOWLEDGED delivery.

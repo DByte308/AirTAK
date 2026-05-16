@@ -151,6 +151,26 @@ class MapViewModel @Inject constructor(
         mesh.requestPosition(nodeId, ownNodeId)
     }
 
+    /**
+     * Emits the lat/lng to fly to. Callers set this via [focusNode]; cleared after the map
+     * consumes it via [clearFocus].
+     */
+    private val _focusTarget = MutableStateFlow<OwnPosition?>(null)
+    val focusTarget: StateFlow<OwnPosition?> = _focusTarget
+
+    fun focusNode(nodeId: Long) {
+        val node = uiState.value.nodes.firstOrNull { it.nodeId == nodeId }
+        if (node != null) {
+            _focusTarget.value = OwnPosition(node.latitude, node.longitude)
+            return
+        }
+        // Self — use own GPS position
+        val own = uiState.value.ownPosition
+        if (own != null) _focusTarget.value = own
+    }
+
+    fun clearFocus() { _focusTarget.value = null }
+
     fun downloadVisible(bounds: TileBounds, minZoom: Int = 6, maxZoom: Int = 17) {
         tileRepository.download(bounds, minZoom, maxZoom)
     }
