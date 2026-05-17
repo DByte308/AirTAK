@@ -1,6 +1,6 @@
 # AirTAK — Airsoft Team Awareness Kit
 
-LoRa mesh radio firmware for the **LilyGo T-Echo Plus** and a native **Android** companion app, purpose-built for airsoft situational awareness.
+LoRa mesh radio firmware for **Some devices...** and a native **Android** companion app, purpose-built for airsoft situational awareness.
 
 AirTAK is Meshtastic wire-format compatible on the shared channel and introduces a dedicated tactical coordination protocol on top for unit hierarchy, scoped messaging, and shared tactical markers.
 
@@ -18,17 +18,6 @@ AirTAK is Meshtastic wire-format compatible on the shared channel and introduces
 - Interoperate with stock Meshtastic devices on the shared channel
 - PTT voice over LoRa via Codec2 (Phase 7)
 
-## Hardware
-
-| Part | Detail |
-|------|--------|
-| Board | LilyGo T-Echo Plus |
-| MCU | Nordic nRF52840 |
-| Radio | Semtech SX1262 |
-| GNSS | Quectel L76K |
-| Display | 1.54″ e-ink 200 × 200 |
-| Battery | 400 mAh LiPo |
-
 ## Firmware quick start
 
 The firmware toolchain is pinned in git and installed into a local, ignored venv under `firmware/.venv`.
@@ -38,6 +27,7 @@ The firmware toolchain is pinned in git and installed into a local, ignored venv
 ./tools/setup_firmware_env.sh
 ./tools/pio_firmware.sh test -e native
 ./tools/pio_firmware.sh run -e t_echo_plus
+./tools/pio_firmware.sh run -e t_echo_plus -t upload
 ```
 
 **Windows:**
@@ -45,6 +35,7 @@ The firmware toolchain is pinned in git and installed into a local, ignored venv
 .\tools\setup_firmware_env.ps1
 .\tools\pio_firmware.ps1 test -e native
 .\tools\pio_firmware.ps1 run -e t_echo_plus
+.\tools\pio_firmware.ps1 run -e t_echo_plus -t upload
 ```
 
 `setup_firmware_env.sh` / `.ps1` installs PlatformIO plus Zig-based native compiler wrappers so native firmware tests can run without a system C/C++ compiler. The target firmware build still uses PlatformIO's nRF52 ARM toolchain.
@@ -105,8 +96,6 @@ tools/
 └── tile_fetch.py                  Download MBTiles for a bounding box
 
 docs/
-├── phase1-acceptance.md  Phase 1 automated and hardware acceptance record
-├── phase2-acceptance.md  Phase 2 mesh-stack acceptance record
 ├── radio-protocol.md   Wire format with annotated byte diagrams
 ├── ble-service.md      GATT UUID table and characteristic flows
 └── tactical-protocol.md   Tactical coordination packet flow diagrams

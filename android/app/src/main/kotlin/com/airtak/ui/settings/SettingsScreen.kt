@@ -100,7 +100,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 TopRow(title = title, onBack = { current = null })
                 when (sec) {
-                    Section.Player         -> PlayerSection(viewModel)
+                    Section.Player         -> PlayerSection(viewModel, onNavigateToChannels = { current = Section.Channels })
                     Section.Lora           -> LoraSection(viewModel)
                     Section.Channels       -> ChannelsSection(viewModel)
                     Section.PositionPower  -> PositionPowerSection(viewModel)
@@ -185,11 +185,13 @@ private fun ApplyRow(onRead: () -> Unit, onApply: () -> Unit, busy: Boolean) {
 // ── PLAYER ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun PlayerSection(vm: SettingsViewModel) {
+private fun PlayerSection(vm: SettingsViewModel, onNavigateToChannels: () -> Unit = {}) {
     val device by vm.device.collectAsState()
     val game by vm.game.collectAsState()
+    val channels by vm.channels.collectAsState()
     LaunchedEffect(Unit) { vm.readDevice() }
     LaunchedEffect(Unit) { vm.readGame() }
+    LaunchedEffect(Unit) { vm.readChannels() }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         SectionLabel("Player identity")
         TacticalText(
@@ -228,41 +230,98 @@ private fun PlayerSection(vm: SettingsViewModel) {
         )
         Spacer(Modifier.height(16.dp))
         SectionLabel("Unit hierarchy (optional, self-organized)")
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = game.companyId,
-            onValueChange = { vm.updateGame { copy(companyId = it.take(32)) } },
-            label = { Text("Company (e.g. \"1st Company\")") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+        TacticalText(
+            "Assign yourself to a unit and link it to a channel slot below. Nodes sharing the same unit ID are grouped in the roster.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = game.platoonId,
-            onValueChange = { vm.updateGame { copy(platoonId = it.take(32)) } },
-            label = { Text("Platoon (e.g. \"Red Platoon\")") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
+
+        val channelOptions = channels.slots.map { editor ->
+            val slot = editor.slot
+            val label = when {
+                slot.index == 0 -> "Slot 0 — ${slot.name.ifBlank { "AirTAK" }} (global)"
+                slot.index == 1 -> "Slot 1 — ${slot.name.ifBlank { "Tactical" }} (global)"
+                slot.index == 2 -> "Slot 2 — ${slot.name.ifBlank { "Audio" }} (reserved)"
+                else -> "Slot ${slot.index} — ${slot.name.ifBlank { "Ch ${slot.index}" }}"
+            }
+            val enabled = slot.role != ChannelRole.DISABLED
+            val encrypted = slot.psk.size() > 0
+            Triple(slot.index.toInt(), label, Pair(enabled, encrypted))
+        }
+
+        // Company
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = game.companyId,
+                onValueChange = { vm.updateGame { copy(companyId = it.take(32)) } },
+                label = { Text("Company (e.g. \"1st Company\")") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+            )
+            UnitChannelDropdown(
+                selectedSlot = game.companyChannelSlot,
+                channelOptions = channelOptions,
+                onSelect = { slot -> vm.updateGame { copy(companyChannelSlot = slot) } },
+                onManageChannels = onNavigateToChannels,
+            )
+        }
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = game.squadId,
-            onValueChange = { vm.updateGame { copy(squadId = it.take(32)) } },
-            label = { Text("Squad (e.g. \"1st Squad\")") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
+
+        // Platoon
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = game.platoonId,
+                onValueChange = { vm.updateGame { copy(platoonId = it.take(32)) } },
+                label = { Text("Platoon (e.g. \"Red Platoon\")") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+            )
+            UnitChannelDropdown(
+                selectedSlot = game.platoonChannelSlot,
+                channelOptions = channelOptions,
+                onSelect = { slot -> vm.updateGame { copy(platoonChannelSlot = slot) } },
+                onManageChannels = onNavigateToChannels,
+            )
+        }
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = game.fireteamId,
-            onValueChange = { vm.updateGame { copy(fireteamId = it.take(32)) } },
-            label = { Text("Fireteam (e.g. \"Alpha\")") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
+
+        // Squad
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = game.squadId,
+                onValueChange = { vm.updateGame { copy(squadId = it.take(32)) } },
+                label = { Text("Squad (e.g. \"1st Squad\")") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+            )
+            UnitChannelDropdown(
+                selectedSlot = game.squadChannelSlot,
+                channelOptions = channelOptions,
+                onSelect = { slot -> vm.updateGame { copy(squadChannelSlot = slot) } },
+                onManageChannels = onNavigateToChannels,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+
+        // Fireteam
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = game.fireteamId,
+                onValueChange = { vm.updateGame { copy(fireteamId = it.take(32)) } },
+                label = { Text("Fireteam (e.g. \"Alpha\")") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+            )
+            UnitChannelDropdown(
+                selectedSlot = game.fireteamChannelSlot,
+                channelOptions = channelOptions,
+                onSelect = { slot -> vm.updateGame { copy(fireteamChannelSlot = slot) } },
+                onManageChannels = onNavigateToChannels,
+            )
+        }
         Spacer(Modifier.height(8.dp))
         TacticalText(
-            "All fields are optional and self-assigned. Nodes sharing the same unit ID are grouped in the roster.",
+            "All fields are optional and self-assigned. Each unit can be linked to a dedicated channel for scoped communications.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
@@ -936,5 +995,85 @@ private fun LabelValue(label: String, value: String) {
         Text(label, style = MaterialTheme.typography.labelLarge,
              color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
         TacticalText(value, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+private fun UnitChannelDropdown(
+    selectedSlot: Int,
+    channelOptions: List<Triple<Int, String, Pair<Boolean, Boolean>>>,
+    onSelect: (Int) -> Unit,
+    onManageChannels: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = if (selectedSlot < 0) {
+        "Channel: None"
+    } else {
+        channelOptions.firstOrNull { (index, _, _) -> index == selectedSlot }?.let { (_, label, _) ->
+            "Ch: $label"
+        } ?: "Channel: Slot $selectedSlot"
+    }
+
+    Box {
+        OutlinedButton(onClick = { expanded = true }) {
+            Text(selectedLabel, maxLines = 1)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        "None (use global channels)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (selectedSlot < 0) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onSelect(-1)
+                },
+            )
+            channelOptions.forEach { (index, label, state) ->
+                val (enabled, encrypted) = state
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (index == selectedSlot) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                when {
+                                    !enabled -> "Disabled"
+                                    encrypted -> "Encrypted"
+                                    else -> "Open"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(index)
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        "Manage channels...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onManageChannels()
+                },
+            )
+        }
     }
 }

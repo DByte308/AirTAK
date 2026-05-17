@@ -77,6 +77,10 @@ class SettingsViewModel @Inject constructor(
         val companyId: String = "",
         val playerColorRgb: Int = 0xFFFFFF,
         val hitButtonEnabled: Boolean = false,
+        val fireteamChannelSlot: Int = -1,
+        val squadChannelSlot: Int = -1,
+        val platoonChannelSlot: Int = -1,
+        val companyChannelSlot: Int = -1,
     )
     data class SecurityState(val maxBonds: Int = 1)
 
@@ -89,6 +93,12 @@ class SettingsViewModel @Inject constructor(
     private val _security = MutableStateFlow(SecurityState()); val security: StateFlow<SecurityState> = _security.asStateFlow()
 
     init {
+        _game.value = _game.value.copy(
+            fireteamChannelSlot = prefs.unitChannelSlot("fireteam"),
+            squadChannelSlot = prefs.unitChannelSlot("squad"),
+            platoonChannelSlot = prefs.unitChannelSlot("platoon"),
+            companyChannelSlot = prefs.unitChannelSlot("company"),
+        )
         viewModelScope.launch {
             config.groupBytes.collect { map ->
                 map[ConfigGroup.DEVICE]?.let { b -> tryDecode { DeviceConfig.parseFrom(b) } }?.let {
@@ -119,6 +129,10 @@ class SettingsViewModel @Inject constructor(
                         it.companyId,
                         it.playerColorRgb,
                         it.hitButtonEnabled,
+                        fireteamChannelSlot = prefs.unitChannelSlot("fireteam"),
+                        squadChannelSlot = prefs.unitChannelSlot("squad"),
+                        platoonChannelSlot = prefs.unitChannelSlot("platoon"),
+                        companyChannelSlot = prefs.unitChannelSlot("company"),
                     )
                 }
                 map[ConfigGroup.SECURITY]?.let { b -> tryDecode { SecurityConfig.parseFrom(b) } }?.let {
@@ -179,7 +193,14 @@ class SettingsViewModel @Inject constructor(
     }
     fun updatePosition(block: PositionState.() -> PositionState){_position.value = _position.value.block() }
     fun updatePower(block: PowerState.() -> PowerState)        { _power.value    = _power.value.block() }
-    fun updateGame(block: GameState.() -> GameState)           { _game.value     = _game.value.block() }
+    fun updateGame(block: GameState.() -> GameState) {
+        val newState = _game.value.block()
+        _game.value = newState
+        prefs.setUnitChannelSlot("fireteam", newState.fireteamChannelSlot)
+        prefs.setUnitChannelSlot("squad", newState.squadChannelSlot)
+        prefs.setUnitChannelSlot("platoon", newState.platoonChannelSlot)
+        prefs.setUnitChannelSlot("company", newState.companyChannelSlot)
+    }
     fun updateSecurity(block: SecurityState.() -> SecurityState){_security.value = _security.value.block() }
 
     fun readDevice()   = config.read(ConfigGroup.DEVICE)

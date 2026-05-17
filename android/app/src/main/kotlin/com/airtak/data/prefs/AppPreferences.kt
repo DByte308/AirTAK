@@ -43,6 +43,13 @@ class AppPreferences @Inject constructor(
     fun defaultMapZoom(): Double = prefs.getFloat(KEY_MAP_ZOOM, 13f).toDouble()
     fun setDefaultMapZoom(z: Double) { prefs.edit().putFloat(KEY_MAP_ZOOM, z.toFloat()).apply() }
 
+    fun unitChannelSlot(level: String): Int =
+        prefs.getInt("unit_channel_$level", -1)
+
+    fun setUnitChannelSlot(level: String, slot: Int) {
+        prefs.edit().putInt("unit_channel_$level", slot).apply()
+    }
+
     fun observe(): Flow<Unit> = callbackFlow {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> trySend(Unit) }
         prefs.registerOnSharedPreferenceChangeListener(listener)
