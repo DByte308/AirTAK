@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AddLocationAlt
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Image
@@ -451,6 +452,8 @@ fun MapScreen(
             showWaypoints = ui.showWaypoints,
             selectingTiles = tileSelectMode,
             gameActive = gameActive,
+            drawingActive = drawing is DrawingState.Active,
+            onPickMarkerTool = { tool -> viewModel.startDrawing(tool) },
             onToggleGameActive = { viewModel.setGameActive(!gameActive) },
             onTogglePlayers = { viewModel.setShowPlayers(!ui.showPlayers) },
             onToggleWaypoints = { viewModel.setShowWaypoints(!ui.showWaypoints) },
@@ -552,7 +555,6 @@ fun MapScreen(
 
         MarkerDrawingToolbar(
             drawing = drawing,
-            onPick = { tool -> viewModel.startDrawing(tool) },
             onCancel = { viewModel.cancelDrawing() },
             onUndo = { viewModel.removeLastDrawingPoint() },
             onCommit = {
@@ -800,6 +802,8 @@ private fun MapToolbar(
     showWaypoints: Boolean,
     selectingTiles: Boolean,
     gameActive: Boolean,
+    drawingActive: Boolean,
+    onPickMarkerTool: (MarkerTool) -> Unit,
     onToggleGameActive: () -> Unit,
     onTogglePlayers: () -> Unit,
     onToggleWaypoints: () -> Unit,
@@ -827,6 +831,30 @@ private fun MapToolbar(
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             ) { Icon(Icons.Outlined.Search, contentDescription = "Search location") }
+            var markerMenuExpanded by remember { mutableStateOf(false) }
+            Box {
+                IconButton(
+                    onClick = { markerMenuExpanded = true },
+                    enabled = !drawingActive,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = if (drawingActive) AccentAmber else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                ) { Icon(Icons.Outlined.AddLocationAlt, contentDescription = "Add marker") }
+                DropdownMenu(
+                    expanded = markerMenuExpanded,
+                    onDismissRequest = { markerMenuExpanded = false },
+                ) {
+                    MarkerTool.values().forEach { tool ->
+                        DropdownMenuItem(
+                            text = { Text(tool.displayLabel) },
+                            onClick = {
+                                markerMenuExpanded = false
+                                onPickMarkerTool(tool)
+                            },
+                        )
+                    }
+                }
+            }
             IconButton(
                 onClick = onToggleGameActive,
                 colors = IconButtonDefaults.iconButtonColors(
@@ -874,13 +902,13 @@ private fun MapToolbar(
 @Composable
 private fun MarkerDrawingToolbar(
     drawing: DrawingState,
-    onPick: (MarkerTool) -> Unit,
     onCancel: () -> Unit,
     onUndo: () -> Unit,
     onCommit: () -> Unit,
     canCommit: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    if (drawing !is DrawingState.Active) return
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
@@ -891,41 +919,29 @@ private fun MarkerDrawingToolbar(
             modifier = Modifier.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (drawing is DrawingState.Active) {
-                Text(
-                    "${drawing.tool.displayLabel}: ${drawing.points.size} point${if (drawing.points.size == 1) "" else "s"} placed",
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                val instructions = when (drawing.tool) {
-                    MarkerTool.POINT, MarkerTool.NOTE, MarkerTool.OBJECTIVE -> "Tap on the map to place."
-                    MarkerTool.ROUTE -> "Tap 2–${drawing.tool.maxPoints} points along the route, then Commit."
-                    MarkerTool.AREA  -> "Tap 3–${drawing.tool.maxPoints} corners, then Commit (closes polygon)."
+            Text(
+                "${drawing.tool.displayLabel}: ${drawing.points.size} point${if (drawing.points.size == 1) "" else "s"} placed",
+                style = MaterialTheme.typography.labelMedium,
+            )
+            val instructions = when (drawing.tool) {
+                MarkerTool.POINT, MarkerTool.NOTE, MarkerTool.OBJECTIVE -> "Tap on the map to place."
+                MarkerTool.ROUTE -> "Tap 2–${drawing.tool.maxPoints} points along the route, then Commit."
+                MarkerTool.AREA  -> "Tap 3–${drawing.tool.maxPoints} corners, then Commit (closes polygon)."
+            }
+            Text(
+                instructions,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onClick = onCancel) { Text("Cancel") }
+                if (drawing.tool == MarkerTool.ROUTE || drawing.tool == MarkerTool.AREA) {
+                    TextButton(
+                        onClick = onUndo,
+                        enabled = drawing.points.isNotEmpty(),
+                    ) { Text("Undo") }
                 }
-                Text(
-                    instructions,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TextButton(onClick = onCancel) { Text("Cancel") }
-                    if (drawing.tool == MarkerTool.ROUTE || drawing.tool == MarkerTool.AREA) {
-                        TextButton(
-                            onClick = onUndo,
-                            enabled = drawing.points.isNotEmpty(),
-                        ) { Text("Undo") }
-                    }
-                    Button(onClick = onCommit, enabled = canCommit) { Text("Commit") }
-                }
-            } else {
-                Text("Add marker", style = MaterialTheme.typography.labelMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    MarkerTool.values().forEach { tool ->
-                        OutlinedButton(
-                            onClick = { onPick(tool) },
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        ) { Text(tool.displayLabel, style = MaterialTheme.typography.labelSmall) }
-                    }
-                }
+                Button(onClick = onCommit, enabled = canCommit) { Text("Commit") }
             }
         }
     }
