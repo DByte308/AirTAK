@@ -24,11 +24,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Done
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Router
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,7 +63,13 @@ fun MarkersScreen(
     var pendingDelete by remember { mutableStateOf<TacticalMarkerEntity?>(null) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        SectionLabel("Markers")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel("Markers")
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { viewModel.syncNow() }) {
+                Icon(Icons.Outlined.Refresh, contentDescription = "Sync markers and messages")
+            }
+        }
         Text(
             "${markers.size} visible",
             style = MaterialTheme.typography.bodySmall,

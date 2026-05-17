@@ -24,6 +24,9 @@ PB_BIND(airtak_AirTAKAck, airtak_AirTAKAck, AUTO)
 PB_BIND(airtak_PositionRequestPacket, airtak_PositionRequestPacket, AUTO)
 
 
+PB_BIND(airtak_SyncRequest, airtak_SyncRequest, AUTO)
+
+
 PB_BIND(airtak_AudioPacket, airtak_AudioPacket, 2)
 
 

@@ -112,6 +112,7 @@ constexpr uint8_t HOP_LIMIT_AIRTAK_ACK         = 7;  // Fallback: ACK built dyna
                                                     // safety default if sendPacket is called directly. (§8.9)
 constexpr uint8_t HOP_LIMIT_POSITION_REQUEST = 7;
 constexpr uint8_t HOP_LIMIT_AIRTAK_AUDIO       = 1;  // MUST never relay audio — sole exception (§12.7)
+constexpr uint8_t HOP_LIMIT_AIRTAK_SYNC_REQUEST = 7;  // late-joiner sync request
 
 // ── PowerConfig ───────────────────────────────────────────────────────────────
 constexpr bool     POWER_GPS_DUTY_CYCLE    = false;  // disabled until Phase 6

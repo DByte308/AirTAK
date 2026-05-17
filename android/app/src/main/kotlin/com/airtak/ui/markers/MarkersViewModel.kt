@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.airtak.data.db.TacticalMarkerEntity
 import com.airtak.data.marker.TacticalMarkerRepository
+import com.airtak.data.mesh.MeshRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,7 @@ import javax.inject.Inject
 @HiltViewModel
 class MarkersViewModel @Inject constructor(
     private val repo: TacticalMarkerRepository,
+    private val mesh: MeshRepository,
 ) : ViewModel() {
     val markers: StateFlow<List<TacticalMarkerEntity>> =
         repo.visibleMarkers
@@ -28,5 +30,12 @@ class MarkersViewModel @Inject constructor(
 
     fun deleteMarker(markerId: Long) {
         viewModelScope.launch { repo.deleteMarker(markerId) }
+    }
+
+    fun syncNow() {
+        viewModelScope.launch {
+            mesh.triggerSync()
+            repo.rebroadcastOwned()
+        }
     }
 }

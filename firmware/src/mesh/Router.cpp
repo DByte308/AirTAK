@@ -1048,6 +1048,7 @@ uint8_t Router::defaultHopLimit(Portnum portnum) {
         case Portnum::AIRTAK_ACK:            return defaults::HOP_LIMIT_AIRTAK_ACK;
         case Portnum::AIRTAK_POSITION_REQUEST: return defaults::HOP_LIMIT_POSITION_REQUEST;
         case Portnum::AIRTAK_AUDIO:          return defaults::HOP_LIMIT_AIRTAK_AUDIO;
+        case Portnum::AIRTAK_SYNC_REQUEST:  return defaults::HOP_LIMIT_AIRTAK_SYNC_REQUEST;
         default:                           return 7;
     }
 }

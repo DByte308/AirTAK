@@ -38,6 +38,9 @@ interface MessageDao {
     @Query("UPDATE messages SET delivered = 1 WHERE id = :id")
     suspend fun markDelivered(id: Long)
 
+    @Query("SELECT * FROM messages WHERE outgoing = 1 AND peerNodeId = 0 ORDER BY timestampMs DESC LIMIT :limit")
+    suspend fun recentMessages(limit: Int): List<MessageEntity>
+
     /**
      * Observe DM conversation with a specific peer (outgoing peerNodeId = peer,
      * incoming sourceNodeId = peer). Newest first so LazyColumn reverseLayout works.

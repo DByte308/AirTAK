@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -99,6 +100,12 @@ fun MessagesScreen(
     val activeSlot = slots.getOrNull(tab)
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { viewModel.syncNow() }) {
+                Icon(Icons.Outlined.Refresh, contentDescription = "Sync messages and markers")
+            }
+        }
         ScrollableTabRow(
             selectedTabIndex = tab,
             containerColor = MaterialTheme.colorScheme.background,

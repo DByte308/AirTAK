@@ -33,6 +33,7 @@ object Portnum {
     const val AIRTAK_ACK         = 261
     const val AIRTAK_POSREQ      = 262
     const val AIRTAK_AUDIO       = 263
+    const val AIRTAK_SYNC_REQUEST = 264
 }
 
 /** Decoded MESH_RX envelope. */

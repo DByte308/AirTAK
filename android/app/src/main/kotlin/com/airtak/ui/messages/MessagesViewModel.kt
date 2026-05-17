@@ -90,6 +90,8 @@ class MessagesViewModel @Inject constructor(
         }
     }
 
+    fun syncNow() { repo.triggerSync() }
+
     companion object {
         /** Placeholder slots shown before the device config is received. */
         private fun fallbackSlots(): List<ChannelSlot> = listOf(

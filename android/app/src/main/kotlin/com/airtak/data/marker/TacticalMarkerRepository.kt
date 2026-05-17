@@ -24,6 +24,7 @@ import com.airtak.proto.GameConfig
 import com.airtak.proto.LatLng
 import com.airtak.proto.MarkerType
 import com.airtak.proto.Scope
+import com.airtak.proto.SyncRequest
 import com.airtak.proto.TacticalMarker
 import com.airtak.proto.TeamControl
 import kotlinx.coroutines.CoroutineScope
@@ -122,6 +123,12 @@ class TacticalMarkerRepository @Inject constructor(
                 .distinctUntilChanged()
                 .filter { it }
                 .collect { rebroadcastOwned() }
+        }
+        // Respond to sync requests from late-joiners by re-broadcasting markers.
+        scope.launch {
+            mesh.packets
+                .filter { it.portnum == Portnum.AIRTAK_SYNC_REQUEST }
+                .collect { handleSyncRequest(it) }
         }
         // Periodically purge tombstones older than 24 h.
         scope.launch {
@@ -304,13 +311,27 @@ class TacticalMarkerRepository @Inject constructor(
 
     // ── Rebroadcast on reconnect ─────────────────────────────────────────────
 
-    private suspend fun rebroadcastOwned() {
+    suspend fun rebroadcastOwned() {
         val owned = dao.getOwnedActive()
         for (entity in owned) {
             val proto = entityToProto(entity)
             val result = mesh.sendTacticalMarker(proto, channelSlotForScope(proto.scope))
             if (result is MeshRepository.SendResult.Ok) pendingMarkerAcks[result.requestId] = entity.markerId
             delay(REBROADCAST_SPACING_MS)
+        }
+    }
+
+    // ── Sync request handler ──────────────────────────────────────────────────
+
+    private suspend fun handleSyncRequest(packet: MeshRxPacket) {
+        val payload = packet.payload ?: return
+        val request = runCatching { SyncRequest.parseFrom(payload) }.getOrNull() ?: return
+        val requesterId = request.requesterNodeId.toLong() and 0xFFFF_FFFFL
+        val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: 0L
+        if (requesterId == ownId) return
+
+        if (request.requestedTypes and SYNC_TYPE_MARKERS != 0) {
+            rebroadcastOwned()
         }
     }
 
@@ -397,5 +418,6 @@ class TacticalMarkerRepository @Inject constructor(
         const val TOMBSTONE_TTL_SEC = 24L * 60L * 60L
         const val PURGE_INTERVAL_MS = 60L * 60L * 1_000L
         const val REBROADCAST_SPACING_MS = 500L
+        private const val SYNC_TYPE_MARKERS = 1
     }
 }

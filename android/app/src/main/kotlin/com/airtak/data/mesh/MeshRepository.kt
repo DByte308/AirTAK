@@ -13,9 +13,11 @@ package com.airtak.data.mesh
 
 import com.airtak.data.ble.BleRepository
 import com.airtak.data.ble.InboundChannel
+import com.airtak.data.ble.LinkState
 import com.airtak.data.config.ConfigRepository
 import com.airtak.data.db.MessageDao
 import com.airtak.data.db.MessageEntity
+import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.proto.ModerationPacket
 import com.airtak.proto.ChannelConfig
 import com.airtak.proto.ChannelRole
@@ -23,15 +25,19 @@ import com.airtak.proto.ChannelSlot
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.PlayerStatePacket
 import com.airtak.proto.PositionRequestPacket
+import com.airtak.proto.SyncRequest
 import com.airtak.proto.TacticalMarker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -43,6 +49,7 @@ class MeshRepository @Inject constructor(
     private val ble: BleRepository,
     private val messageDao: MessageDao,
     private val configRepo: ConfigRepository,
+    private val deviceStatus: DeviceStatusRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -110,6 +117,20 @@ class MeshRepository @Inject constructor(
                         messageDao.markDelivered(msgId)
                     }
                 }
+        }
+        // Send sync request on BLE connect so late-joiners receive the full state.
+        scope.launch {
+            ble.linkState
+                .map { it is LinkState.Connected }
+                .distinctUntilChanged()
+                .filter { it }
+                .collect { triggerSync() }
+        }
+        // Handle incoming sync requests: re-broadcast recent text messages.
+        scope.launch {
+            _packets
+                .filter { it.portnum == Portnum.AIRTAK_SYNC_REQUEST }
+                .collect { handleSyncRequest(it) }
         }
     }
 
@@ -281,6 +302,46 @@ class MeshRepository @Inject constructor(
         if (!isDm) messageDao.pruneOldest(channel, MESSAGE_WINDOW)
     }
 
+    private fun ownNodeId(): Long =
+        deviceStatus.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: 0L
+
+    fun triggerSync() {
+        val nodeId = ownNodeId()
+        if (nodeId == 0L) return
+        val request = SyncRequest.newBuilder()
+            .setRequesterNodeId(nodeId.toInt())
+            .setRequestedTypes(SYNC_TYPE_MARKERS or SYNC_TYPE_MESSAGES)
+            .build()
+        val data = MeshWire.encodeData(
+            portnum = Portnum.AIRTAK_SYNC_REQUEST,
+            payload = request.toByteArray(),
+        )
+        ble.send(BleRepository.OutboundChannel.MeshTx, data)
+    }
+
+    private suspend fun handleSyncRequest(packet: MeshRxPacket) {
+        val payload = packet.payload ?: return
+        val request = runCatching { SyncRequest.parseFrom(payload) }.getOrNull() ?: return
+        val requesterId = request.requesterNodeId.toLong() and 0xFFFF_FFFFL
+        if (requesterId == ownNodeId()) return
+
+        val types = request.requestedTypes
+        if (types and SYNC_TYPE_MESSAGES != 0) {
+            rebroadcastRecentMessages()
+        }
+    }
+
+    private suspend fun rebroadcastRecentMessages() {
+        val messages = messageDao.recentMessages(SYNC_MESSAGE_COUNT)
+        for (msg in messages) {
+            if (!msg.outgoing) continue
+            val text = msg.text
+            if (text.length > MAX_TEXT_BYTES) continue
+            sendText(channel = msg.channelIndex, text = text)
+            delay(SYNC_SPACING_MS)
+        }
+    }
+
     companion object {
         const val MAX_TEXT_BYTES = 237
         /** Conservative upper bound for a TacticalMarker proto body. The 237-byte
@@ -289,5 +350,9 @@ class MeshRepository @Inject constructor(
         const val MESSAGE_WINDOW = 1_000
         /** Synthetic channelIndex value used internally for DM rows; never shown as a tab index. */
         const val DM_CHANNEL_INDEX = -1
+        private const val SYNC_SPACING_MS = 500L
+        private const val SYNC_MESSAGE_COUNT = 50
+        private const val SYNC_TYPE_MARKERS = 1
+        private const val SYNC_TYPE_MESSAGES = 2
     }
 }

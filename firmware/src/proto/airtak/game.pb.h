@@ -122,6 +122,18 @@ typedef struct _airtak_PositionRequestPacket {
     uint32_t requester_node_id;
 } airtak_PositionRequestPacket;
 
+/* ── Sync Request (portnum 264) — Phase 5 ─────────────────────────────────
+ Roadmap: 5.9+ | Late-joiner state synchronization.
+ Sent by a device that just joined the mesh to request all active markers
+ and recent text messages from already-connected nodes.
+ Responders re-broadcast their markers and recent messages with jittered delay
+ (200–800 ms per item) to prevent mesh flood.
+ Hop_limit=7; BEST_EFFORT (no ACK — response is the implicit acknowledgment). */
+typedef struct _airtak_SyncRequest {
+    uint32_t requester_node_id;
+    uint32_t requested_types; /* bitmask: 1=MARKERS, 2=MESSAGES */
+} airtak_SyncRequest;
+
 typedef PB_BYTES_ARRAY_T(200) airtak_AudioPacket_audio_data_t;
 typedef PB_BYTES_ARRAY_T(200) airtak_AudioPacket_fec_prev_audio_data_t;
 /* Roadmap: 7.3, 7.4 | Codec2-encoded PTT audio frame.
@@ -180,6 +192,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define airtak_PlayerStatePacket_init_default    {0, "", _airtak_PlayerStatus_MIN, 0, 0, "", "", "", ""}
 #define airtak_LatLng_init_default               {0, 0}
@@ -187,6 +200,7 @@ extern "C" {
 #define airtak_ModerationPacket_init_default     {_airtak_ModerationAction_MIN, 0, _airtak_Scope_MIN, 0, 0}
 #define airtak_AirTAKAck_init_default            {0, 0, 0}
 #define airtak_PositionRequestPacket_init_default {0, 0}
+#define airtak_SyncRequest_init_default          {0, 0}
 #define airtak_AudioPacket_init_default          {0, 0, 0, {0, {0}}, 0, {0, {0}}, 0, 0}
 #define airtak_PlayerStatePacket_init_zero       {0, "", _airtak_PlayerStatus_MIN, 0, 0, "", "", "", ""}
 #define airtak_LatLng_init_zero                  {0, 0}
@@ -194,6 +208,7 @@ extern "C" {
 #define airtak_ModerationPacket_init_zero        {_airtak_ModerationAction_MIN, 0, _airtak_Scope_MIN, 0, 0}
 #define airtak_AirTAKAck_init_zero               {0, 0, 0}
 #define airtak_PositionRequestPacket_init_zero   {0, 0}
+#define airtak_SyncRequest_init_zero             {0, 0}
 #define airtak_AudioPacket_init_zero             {0, 0, 0, {0, {0}}, 0, {0, {0}}, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -231,6 +246,8 @@ extern "C" {
 #define airtak_AirTAKAck_original_hop_start_tag  3
 #define airtak_PositionRequestPacket_target_node_id_tag 1
 #define airtak_PositionRequestPacket_requester_node_id_tag 2
+#define airtak_SyncRequest_requester_node_id_tag 1
+#define airtak_SyncRequest_requested_types_tag   2
 #define airtak_AudioPacket_from_node_id_tag      1
 #define airtak_AudioPacket_sequence_num_tag      2
 #define airtak_AudioPacket_codec2_mode_bps_tag   3
@@ -300,6 +317,12 @@ X(a, STATIC,   SINGULAR, UINT32,   requester_node_id,   2)
 #define airtak_PositionRequestPacket_CALLBACK NULL
 #define airtak_PositionRequestPacket_DEFAULT NULL
 
+#define airtak_SyncRequest_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   requester_node_id,   1) \
+X(a, STATIC,   SINGULAR, UINT32,   requested_types,   2)
+#define airtak_SyncRequest_CALLBACK NULL
+#define airtak_SyncRequest_DEFAULT NULL
+
 #define airtak_AudioPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   from_node_id,      1) \
 X(a, STATIC,   SINGULAR, UINT32,   sequence_num,      2) \
@@ -318,6 +341,7 @@ extern const pb_msgdesc_t airtak_TacticalMarker_msg;
 extern const pb_msgdesc_t airtak_ModerationPacket_msg;
 extern const pb_msgdesc_t airtak_AirTAKAck_msg;
 extern const pb_msgdesc_t airtak_PositionRequestPacket_msg;
+extern const pb_msgdesc_t airtak_SyncRequest_msg;
 extern const pb_msgdesc_t airtak_AudioPacket_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -327,6 +351,7 @@ extern const pb_msgdesc_t airtak_AudioPacket_msg;
 #define airtak_ModerationPacket_fields &airtak_ModerationPacket_msg
 #define airtak_AirTAKAck_fields &airtak_AirTAKAck_msg
 #define airtak_PositionRequestPacket_fields &airtak_PositionRequestPacket_msg
+#define airtak_SyncRequest_fields &airtak_SyncRequest_msg
 #define airtak_AudioPacket_fields &airtak_AudioPacket_msg
 
 /* Maximum encoded size of messages (where known) */
@@ -337,6 +362,7 @@ extern const pb_msgdesc_t airtak_AudioPacket_msg;
 #define airtak_ModerationPacket_size             22
 #define airtak_PlayerStatePacket_size            170
 #define airtak_PositionRequestPacket_size        12
+#define airtak_SyncRequest_size                  12
 #define airtak_TacticalMarker_size               657
 
 #ifdef __cplusplus
