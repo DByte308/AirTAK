@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.security.SecureRandom
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -62,6 +63,9 @@ class TacticalMarkerRepository @Inject constructor(
     /** Maps Scope → channel slot the user has bound to that level (-1 = none). */
     private val _channelBindings = MutableStateFlow(ChannelBindings())
 
+    /** requestId (from sendTacticalMarker) → markerId; cleared on AIRTAK_ACK. */
+    private val pendingMarkerAcks = ConcurrentHashMap<Long, Long>()
+
     val markers: Flow<List<TacticalMarkerEntity>> = dao.observeActive()
 
     /** Receiver-side scope filter (§5.5). */
@@ -76,6 +80,16 @@ class TacticalMarkerRepository @Inject constructor(
             mesh.packets
                 .filter { it.portnum == Portnum.AIRTAK_TACTICAL }
                 .collect { handleIncoming(it) }
+        }
+        // Mark locally-sent markers as delivered when the firmware ACKs.
+        scope.launch {
+            mesh.packets
+                .filter { it.portnum == Portnum.AIRTAK_ACK }
+                .collect { pkt ->
+                    val reqId = pkt.requestId ?: return@collect
+                    val markerId = pendingMarkerAcks.remove(reqId) ?: return@collect
+                    dao.markDelivered(markerId)
+                }
         }
         // Track own GameConfig so we can scope-filter inbound markers.
         scope.launch {
@@ -171,7 +185,8 @@ class TacticalMarkerRepository @Inject constructor(
             .build()
         val entity = toEntity(marker, ownedLocally = true, lastSeenMs = System.currentTimeMillis())
         dao.upsert(entity)
-        mesh.sendTacticalMarker(marker, channelSlotForScope(scopeKind))
+        val result = mesh.sendTacticalMarker(marker, channelSlotForScope(scopeKind))
+        if (result is MeshRepository.SendResult.Ok) pendingMarkerAcks[result.requestId] = entity.markerId
         return entity
     }
 
@@ -215,7 +230,8 @@ class TacticalMarkerRepository @Inject constructor(
         val proto = builder.build()
         val entity = toEntity(proto, ownedLocally = true, lastSeenMs = System.currentTimeMillis())
         dao.upsert(entity)
-        mesh.sendTacticalMarker(proto, channelSlotForScope(scopeKind))
+        val result = mesh.sendTacticalMarker(proto, channelSlotForScope(scopeKind))
+        if (result is MeshRepository.SendResult.Ok) pendingMarkerAcks[result.requestId] = entity.markerId
         return entity
     }
 
@@ -292,7 +308,8 @@ class TacticalMarkerRepository @Inject constructor(
         val owned = dao.getOwnedActive()
         for (entity in owned) {
             val proto = entityToProto(entity)
-            mesh.sendTacticalMarker(proto, channelSlotForScope(proto.scope))
+            val result = mesh.sendTacticalMarker(proto, channelSlotForScope(proto.scope))
+            if (result is MeshRepository.SendResult.Ok) pendingMarkerAcks[result.requestId] = entity.markerId
             delay(REBROADCAST_SPACING_MS)
         }
     }

@@ -15,13 +15,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Done
+import androidx.compose.material.icons.outlined.Router
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,6 +49,7 @@ import com.airtak.data.db.TacticalMarkerEntity
 import com.airtak.proto.MarkerType
 import com.airtak.proto.Scope
 import com.airtak.ui.components.SectionLabel
+import com.airtak.ui.theme.StatusActive
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -151,17 +159,37 @@ private fun MarkerRow(
                     )
                 }
             }
-            if (marker.ownedLocally) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(6.dp),
-                ) {
-                    Text(
-                        "you",
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+            Column(horizontalAlignment = Alignment.End) {
+                if (marker.ownedLocally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (marker.delivered) Icons.Outlined.Done else Icons.Outlined.Schedule,
+                            contentDescription = if (marker.delivered) "Delivered" else "Pending mesh delivery",
+                            modifier = Modifier.size(13.dp),
+                            tint = if (marker.delivered) StatusActive else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            "You",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Outlined.Router,
+                            contentDescription = "Received via mesh",
+                            modifier = Modifier.size(13.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            "Node ${marker.creatorNodeId.toString(16).uppercase().take(8)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }

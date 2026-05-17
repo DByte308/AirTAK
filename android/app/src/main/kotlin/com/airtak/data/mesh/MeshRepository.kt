@@ -147,7 +147,7 @@ class MeshRepository @Inject constructor(
             )
             pendingAcks[requestId] = msgId
         }
-        return SendResult.Ok
+        return SendResult.Ok()
     }
 
     fun observeDm(peerNodeId: Long): Flow<List<MessageEntity>> = messageDao.observeDm(peerNodeId)
@@ -186,7 +186,7 @@ class MeshRepository @Inject constructor(
             pendingAcks[requestId] = msgId
             messageDao.pruneOldest(channel, MESSAGE_WINDOW)
         }
-        return SendResult.Ok
+        return SendResult.Ok()
     }
 
     fun sendPlayerState(packet: PlayerStatePacket): SendResult {
@@ -200,7 +200,7 @@ class MeshRepository @Inject constructor(
             requestId = requestId,
         )
         ble.send(BleRepository.OutboundChannel.MeshTx, data)
-        return SendResult.Ok
+        return SendResult.Ok()
     }
 
     fun sendModerationPacket(packet: ModerationPacket): SendResult {
@@ -212,7 +212,7 @@ class MeshRepository @Inject constructor(
             requestId = requestId,
         )
         ble.send(BleRepository.OutboundChannel.MeshTx, data)
-        return SendResult.Ok
+        return SendResult.Ok()
     }
 
     /**
@@ -238,7 +238,7 @@ class MeshRepository @Inject constructor(
             dataProto
         }
         ble.send(BleRepository.OutboundChannel.MeshTx, data)
-        return SendResult.Ok
+        return SendResult.Ok(requestId)
     }
 
     fun requestPosition(targetNodeId: Long, requesterNodeId: Long): SendResult {
@@ -248,13 +248,13 @@ class MeshRepository @Inject constructor(
             .build()
         val data = MeshWire.encodeData(Portnum.AIRTAK_POSREQ, request.toByteArray())
         ble.send(BleRepository.OutboundChannel.MeshTx, data)
-        return SendResult.Ok
+        return SendResult.Ok()
     }
 
     fun observeMessages(channel: Int): Flow<List<MessageEntity>> = messageDao.observe(channel)
 
     sealed interface SendResult {
-        data object Ok : SendResult
+        data class Ok(val requestId: Long = 0) : SendResult
         data class TooLong(val attemptedBytes: Int) : SendResult
     }
 

@@ -26,6 +26,9 @@ interface TacticalMarkerDao {
     @Query("DELETE FROM tactical_markers WHERE deleted = 1 AND updatedAtUnix < :olderThanUnix")
     suspend fun purgeTombstones(olderThanUnix: Long)
 
+    @Query("UPDATE tactical_markers SET delivered = 1 WHERE markerId = :markerId")
+    suspend fun markDelivered(markerId: Long)
+
     @Query("DELETE FROM tactical_markers")
     suspend fun clear()
 }

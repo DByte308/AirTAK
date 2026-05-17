@@ -43,6 +43,8 @@ data class TacticalMarkerEntity(
     val lastSeenMs: Long,
     /** True when the marker was created on this device (drives re-broadcast). */
     val ownedLocally: Boolean,
+    /** True after the firmware confirmed mesh transmission (set via AIRTAK_ACK). */
+    val delivered: Boolean = false,
 ) {
     fun points(): List<Pair<Double, Double>> = decodePoints(pointsEncoded)
 
