@@ -6,15 +6,10 @@ package com.airtak.proto;
 /**
  * <pre>
  * Roadmap: 7.3, 7.4 | Codec2-encoded PTT audio frame.
- * MUST be sent on the audio channel slot only (phy_profile_index → spreading_factor ≤ 8).
- * hop_limit MUST always be 1 — audio MUST NOT be relayed (§8.7, §12.7).
- * FEC SESSION BOUNDARY RULE (§12.7, PLANNING v1.4 amendment H):
- *   fec_prev_audio_data MUST be empty on the FIRST packet of each PTT session
- *   (after no previous session, or after a packet with end_of_transmission=true).
- *   Receivers MUST NOT attempt FEC across a session boundary; apply PLC instead.
- *   session_id enables session boundary detection even when end_of_transmission is lost.
- * Packet size with FEC (frame_count=8): ~92 bytes → ~84 ms ToA on Profile 1 (§12.7).
- * EU duty-cycle compliance requires frame_count ≥ 42 for sub-band g1 (10% limit).
+ * MUST be sent on audio channel slot only (phy with spreading_factor ≤ 8).
+ * hop_limit MUST always be 1 — audio MUST NOT be relayed.
+ * FEC: fec_prev_audio_data MUST be empty on first packet of each session.
+ *   session_id enables boundary detection even when end_of_transmission is lost.
  * </pre>
  *
  * Protobuf type {@code airtak.AudioPacket}
@@ -58,7 +53,7 @@ public  final class AudioPacket extends
   private int sequenceNum_;
   /**
    * <pre>
-   * monotonically increasing per session; resets to 0 at session start
+   * monotonically increasing per session; resets at session start
    * </pre>
    *
    * <code>uint32 sequence_num = 2;</code>
@@ -70,7 +65,7 @@ public  final class AudioPacket extends
   }
   /**
    * <pre>
-   * monotonically increasing per session; resets to 0 at session start
+   * monotonically increasing per session; resets at session start
    * </pre>
    *
    * <code>uint32 sequence_num = 2;</code>
@@ -82,7 +77,7 @@ public  final class AudioPacket extends
   }
   /**
    * <pre>
-   * monotonically increasing per session; resets to 0 at session start
+   * monotonically increasing per session; resets at session start
    * </pre>
    *
    * <code>uint32 sequence_num = 2;</code>
@@ -96,7 +91,7 @@ public  final class AudioPacket extends
   private int codec2ModeBps_;
   /**
    * <pre>
-   * must match AudioConfig.codec2_mode_bps (default 1300)
+   * must match AudioConfig.codec2_mode_bps
    * </pre>
    *
    * <code>uint32 codec2_mode_bps = 3;</code>
@@ -108,7 +103,7 @@ public  final class AudioPacket extends
   }
   /**
    * <pre>
-   * must match AudioConfig.codec2_mode_bps (default 1300)
+   * must match AudioConfig.codec2_mode_bps
    * </pre>
    *
    * <code>uint32 codec2_mode_bps = 3;</code>
@@ -120,7 +115,7 @@ public  final class AudioPacket extends
   }
   /**
    * <pre>
-   * must match AudioConfig.codec2_mode_bps (default 1300)
+   * must match AudioConfig.codec2_mode_bps
    * </pre>
    *
    * <code>uint32 codec2_mode_bps = 3;</code>
@@ -173,7 +168,7 @@ public  final class AudioPacket extends
   private boolean endOfTransmission_;
   /**
    * <pre>
-   * set on the final packet of each PTT press
+   * set on final packet of each PTT press
    * </pre>
    *
    * <code>bool end_of_transmission = 5;</code>
@@ -185,7 +180,7 @@ public  final class AudioPacket extends
   }
   /**
    * <pre>
-   * set on the final packet of each PTT press
+   * set on final packet of each PTT press
    * </pre>
    *
    * <code>bool end_of_transmission = 5;</code>
@@ -197,7 +192,7 @@ public  final class AudioPacket extends
   }
   /**
    * <pre>
-   * set on the final packet of each PTT press
+   * set on final packet of each PTT press
    * </pre>
    *
    * <code>bool end_of_transmission = 5;</code>
@@ -406,15 +401,10 @@ public  final class AudioPacket extends
   /**
    * <pre>
    * Roadmap: 7.3, 7.4 | Codec2-encoded PTT audio frame.
-   * MUST be sent on the audio channel slot only (phy_profile_index → spreading_factor ≤ 8).
-   * hop_limit MUST always be 1 — audio MUST NOT be relayed (§8.7, §12.7).
-   * FEC SESSION BOUNDARY RULE (§12.7, PLANNING v1.4 amendment H):
-   *   fec_prev_audio_data MUST be empty on the FIRST packet of each PTT session
-   *   (after no previous session, or after a packet with end_of_transmission=true).
-   *   Receivers MUST NOT attempt FEC across a session boundary; apply PLC instead.
-   *   session_id enables session boundary detection even when end_of_transmission is lost.
-   * Packet size with FEC (frame_count=8): ~92 bytes → ~84 ms ToA on Profile 1 (§12.7).
-   * EU duty-cycle compliance requires frame_count ≥ 42 for sub-band g1 (10% limit).
+   * MUST be sent on audio channel slot only (phy with spreading_factor ≤ 8).
+   * hop_limit MUST always be 1 — audio MUST NOT be relayed.
+   * FEC: fec_prev_audio_data MUST be empty on first packet of each session.
+   *   session_id enables boundary detection even when end_of_transmission is lost.
    * </pre>
    *
    * Protobuf type {@code airtak.AudioPacket}
@@ -460,7 +450,7 @@ public  final class AudioPacket extends
 
     /**
      * <pre>
-     * monotonically increasing per session; resets to 0 at session start
+     * monotonically increasing per session; resets at session start
      * </pre>
      *
      * <code>uint32 sequence_num = 2;</code>
@@ -472,7 +462,7 @@ public  final class AudioPacket extends
     }
     /**
      * <pre>
-     * monotonically increasing per session; resets to 0 at session start
+     * monotonically increasing per session; resets at session start
      * </pre>
      *
      * <code>uint32 sequence_num = 2;</code>
@@ -486,7 +476,7 @@ public  final class AudioPacket extends
     }
     /**
      * <pre>
-     * monotonically increasing per session; resets to 0 at session start
+     * monotonically increasing per session; resets at session start
      * </pre>
      *
      * <code>uint32 sequence_num = 2;</code>
@@ -500,7 +490,7 @@ public  final class AudioPacket extends
 
     /**
      * <pre>
-     * must match AudioConfig.codec2_mode_bps (default 1300)
+     * must match AudioConfig.codec2_mode_bps
      * </pre>
      *
      * <code>uint32 codec2_mode_bps = 3;</code>
@@ -512,7 +502,7 @@ public  final class AudioPacket extends
     }
     /**
      * <pre>
-     * must match AudioConfig.codec2_mode_bps (default 1300)
+     * must match AudioConfig.codec2_mode_bps
      * </pre>
      *
      * <code>uint32 codec2_mode_bps = 3;</code>
@@ -526,7 +516,7 @@ public  final class AudioPacket extends
     }
     /**
      * <pre>
-     * must match AudioConfig.codec2_mode_bps (default 1300)
+     * must match AudioConfig.codec2_mode_bps
      * </pre>
      *
      * <code>uint32 codec2_mode_bps = 3;</code>
@@ -580,7 +570,7 @@ public  final class AudioPacket extends
 
     /**
      * <pre>
-     * set on the final packet of each PTT press
+     * set on final packet of each PTT press
      * </pre>
      *
      * <code>bool end_of_transmission = 5;</code>
@@ -592,7 +582,7 @@ public  final class AudioPacket extends
     }
     /**
      * <pre>
-     * set on the final packet of each PTT press
+     * set on final packet of each PTT press
      * </pre>
      *
      * <code>bool end_of_transmission = 5;</code>
@@ -606,7 +596,7 @@ public  final class AudioPacket extends
     }
     /**
      * <pre>
-     * set on the final packet of each PTT press
+     * set on final packet of each PTT press
      * </pre>
      *
      * <code>bool end_of_transmission = 5;</code>

@@ -35,7 +35,6 @@
 #include "mesh/Router.h"
 #include "mesh/ChannelManager.h"
 #include "mesh/PacketPool.h"
-#include "game/GameState.h"
 #include "game/PlayerState.h"
 #include "system/RecoveryMode.h"
 #include "platform/Platform.h"
@@ -89,7 +88,6 @@ void setup() {
         airtak::Display::markDirty(airtak::ui::DISPLAY_DIRTY_ALL);
     });
     airtak::ChannelManager::init();
-    airtak::GameState::init();
     airtak::PlayerState::init();
     airtak::Button::init();
 
@@ -222,7 +220,7 @@ void task_display_refresh(void* params) {
                 airtak::Display::nextScreen();
             }
         } else if (gesture == airtak::ButtonGesture::LONG_PRESS) {
-            airtak::PlayerState::reportHit(g_radio_tx_queue);
+            airtak::PlayerState::toggleHit(g_radio_tx_queue);
         }
 
         uint32_t now = millis();
@@ -230,9 +228,9 @@ void task_display_refresh(void* params) {
             airtak::Display::refresh(g_system_event_group);
             last_refresh_check_ms = now;
         }
-        // PlayerState respawn countdown and HIT-cancel-window expiry rely on a
-        // 1-second tick. The display task loop runs at ~20 Hz (50 ms) which is
-        // more than enough granularity (§12.6, §5.4).
+        // PlayerState HIT-cancel-window expiry relies on a 1-second tick.
+        // The display task loop runs at ~20 Hz (50 ms) which is
+        // more than enough granularity (§12.6).
         if ((now - last_player_tick_ms) >= 1000) {
             airtak::PlayerState::tick(g_radio_tx_queue);
             last_player_tick_ms = now;

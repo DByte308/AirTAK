@@ -69,7 +69,15 @@ class SettingsViewModel @Inject constructor(
         val smartBroadcast: Boolean = true,
     )
     data class PowerState(val gpsDutyCycle: Boolean = false, val displayOffSecs: Int = 0)
-    data class GameState(val callsign: String = "", val teamId: Int = 0, val isAdmin: Boolean = false)
+    data class GameState(
+        val callsign: String = "",
+        val fireteamId: String = "",
+        val squadId: String = "",
+        val platoonId: String = "",
+        val companyId: String = "",
+        val playerColorRgb: Int = 0xFFFFFF,
+        val hitButtonEnabled: Boolean = false,
+    )
     data class SecurityState(val maxBonds: Int = 1)
 
     private val _device   = MutableStateFlow(DeviceState());   val device:   StateFlow<DeviceState>   = _device.asStateFlow()
@@ -103,7 +111,15 @@ class SettingsViewModel @Inject constructor(
                     _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs)
                 }
                 map[ConfigGroup.GAME]?.let { b -> tryDecode { GameConfig.parseFrom(b) } }?.let {
-                    _game.value = GameState(it.callsign, it.teamId, it.isAdmin)
+                    _game.value = GameState(
+                        it.callsign,
+                        it.fireteamId,
+                        it.squadId,
+                        it.platoonId,
+                        it.companyId,
+                        it.playerColorRgb,
+                        it.hitButtonEnabled,
+                    )
                 }
                 map[ConfigGroup.SECURITY]?.let { b -> tryDecode { SecurityConfig.parseFrom(b) } }?.let {
                     _security.value = SecurityState(it.maxBondedDevices)
@@ -220,7 +236,14 @@ class SettingsViewModel @Inject constructor(
     fun applyGame() {
         val s = _game.value
         val msg = GameConfig.newBuilder()
-            .setCallsign(s.callsign).setTeamId(s.teamId).setIsAdmin(s.isAdmin).build()
+            .setCallsign(s.callsign)
+            .setFireteamId(s.fireteamId)
+            .setSquadId(s.squadId)
+            .setPlatoonId(s.platoonId)
+            .setCompanyId(s.companyId)
+            .setPlayerColorRgb(s.playerColorRgb)
+            .setHitButtonEnabled(s.hitButtonEnabled)
+            .build()
         config.apply(ConfigGroup.GAME, msg.toByteArray())
     }
     fun applySecurity() {

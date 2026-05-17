@@ -49,27 +49,102 @@ public object GameConfigKt {
 
     /**
      * <pre>
-     * 0 = SPECTATOR; team 0 excluded from scoring
+     * e.g., "Alpha"; free-text, optional
      * </pre>
      *
-     * <code>uint32 team_id = 2;</code>
+     * <code>string fireteam_id = 2;</code>
      */
-    public var teamId: kotlin.Int
-      @JvmName("getTeamId")
-      get() = _builder.getTeamId()
-      @JvmName("setTeamId")
+    public var fireteamId: kotlin.String
+      @JvmName("getFireteamId")
+      get() = _builder.getFireteamId()
+      @JvmName("setFireteamId")
       set(value) {
-        _builder.setTeamId(value)
+        _builder.setFireteamId(value)
       }
     /**
      * <pre>
-     * 0 = SPECTATOR; team 0 excluded from scoring
+     * e.g., "Alpha"; free-text, optional
      * </pre>
      *
-     * <code>uint32 team_id = 2;</code>
+     * <code>string fireteam_id = 2;</code>
      */
-    public fun clearTeamId() {
-      _builder.clearTeamId()
+    public fun clearFireteamId() {
+      _builder.clearFireteamId()
+    }
+
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 3;</code>
+     */
+    public var squadId: kotlin.String
+      @JvmName("getSquadId")
+      get() = _builder.getSquadId()
+      @JvmName("setSquadId")
+      set(value) {
+        _builder.setSquadId(value)
+      }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 3;</code>
+     */
+    public fun clearSquadId() {
+      _builder.clearSquadId()
+    }
+
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 4;</code>
+     */
+    public var platoonId: kotlin.String
+      @JvmName("getPlatoonId")
+      get() = _builder.getPlatoonId()
+      @JvmName("setPlatoonId")
+      set(value) {
+        _builder.setPlatoonId(value)
+      }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 4;</code>
+     */
+    public fun clearPlatoonId() {
+      _builder.clearPlatoonId()
+    }
+
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 5;</code>
+     */
+    public var companyId: kotlin.String
+      @JvmName("getCompanyId")
+      get() = _builder.getCompanyId()
+      @JvmName("setCompanyId")
+      set(value) {
+        _builder.setCompanyId(value)
+      }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 5;</code>
+     */
+    public fun clearCompanyId() {
+      _builder.clearCompanyId()
     }
 
     /**
@@ -77,7 +152,7 @@ public object GameConfigKt {
      * 24-bit RGB; displayed on map pins
      * </pre>
      *
-     * <code>uint32 player_color_rgb = 3;</code>
+     * <code>uint32 player_color_rgb = 6;</code>
      */
     public var playerColorRgb: kotlin.Int
       @JvmName("getPlayerColorRgb")
@@ -91,7 +166,7 @@ public object GameConfigKt {
      * 24-bit RGB; displayed on map pins
      * </pre>
      *
-     * <code>uint32 player_color_rgb = 3;</code>
+     * <code>uint32 player_color_rgb = 6;</code>
      */
     public fun clearPlayerColorRgb() {
       _builder.clearPlayerColorRgb()
@@ -99,27 +174,27 @@ public object GameConfigKt {
 
     /**
      * <pre>
-     * enables admin controls in Android app
+     * enable long-press HIT toggle on device button; default false
      * </pre>
      *
-     * <code>bool is_admin = 4;</code>
+     * <code>bool hit_button_enabled = 7;</code>
      */
-    public var isAdmin: kotlin.Boolean
-      @JvmName("getIsAdmin")
-      get() = _builder.getIsAdmin()
-      @JvmName("setIsAdmin")
+    public var hitButtonEnabled: kotlin.Boolean
+      @JvmName("getHitButtonEnabled")
+      get() = _builder.getHitButtonEnabled()
+      @JvmName("setHitButtonEnabled")
       set(value) {
-        _builder.setIsAdmin(value)
+        _builder.setHitButtonEnabled(value)
       }
     /**
      * <pre>
-     * enables admin controls in Android app
+     * enable long-press HIT toggle on device button; default false
      * </pre>
      *
-     * <code>bool is_admin = 4;</code>
+     * <code>bool hit_button_enabled = 7;</code>
      */
-    public fun clearIsAdmin() {
-      _builder.clearIsAdmin()
+    public fun clearHitButtonEnabled() {
+      _builder.clearHitButtonEnabled()
     }
   }
 }

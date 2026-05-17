@@ -73,7 +73,10 @@ class RemoteNodeRepository @Inject constructor(
         update(nodeId) { existing, now ->
             existing.copy(
                 callsign = player.callsign.ifBlank { existing.callsign },
-                teamId = player.teamId,
+                fireteamId = player.fireteamId.takeIf { it.isNotBlank() } ?: existing.fireteamId,
+                squadId = player.squadId.takeIf { it.isNotBlank() } ?: existing.squadId,
+                platoonId = player.platoonId.takeIf { it.isNotBlank() } ?: existing.platoonId,
+                companyId = player.companyId.takeIf { it.isNotBlank() } ?: existing.companyId,
                 statusValue = player.statusValue,
                 colorRgb = player.colorRgb,
                 lastPlayerMs = now,

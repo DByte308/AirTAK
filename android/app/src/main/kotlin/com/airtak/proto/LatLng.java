@@ -5,7 +5,7 @@ package com.airtak.proto;
 
 /**
  * <pre>
- * WGS-84 coordinate pair for zone polygon vertices.
+ * WGS-84 coordinate pair.
  * </pre>
  *
  * Protobuf type {@code airtak.LatLng}
@@ -152,7 +152,7 @@ public  final class LatLng extends
 
   /**
    * <pre>
-   * WGS-84 coordinate pair for zone polygon vertices.
+   * WGS-84 coordinate pair.
    * </pre>
    *
    * Protobuf type {@code airtak.LatLng}

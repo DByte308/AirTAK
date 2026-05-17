@@ -85,7 +85,7 @@ private enum class Section(val title: String, val subtitle: String) {
     Channels("Channels", "8 channel slots with PSK"),
     Position("Position", "Broadcast interval, smart-beacon"),
     Power("Power",       "GPS duty cycle, display"),
-    Game("Game",         "Player callsign, team, admin"),
+    Game("Game",         "Callsign, unit hierarchy, hit button"),
     Security("Security", "BLE bond count"),
     App("Application",   "Theme, tile server, defaults"),
     About("About",       "Diagnostics, factory reset"),
@@ -732,6 +732,7 @@ private fun GameSection(vm: SettingsViewModel) {
     val state by vm.game.collectAsState()
     LaunchedEffect(Unit) { vm.readGame() }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+        SectionLabel("Callsign")
         OutlinedTextField(
             value = state.callsign,
             onValueChange = { vm.updateGame { copy(callsign = it.take(16)) } },
@@ -739,23 +740,67 @@ private fun GameSection(vm: SettingsViewModel) {
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
+        Spacer(Modifier.height(16.dp))
+        SectionLabel("Unit hierarchy (optional, self-organized)")
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            value = state.teamId.toString(),
-            onValueChange = { v ->
-                v.toIntOrNull()?.let { vm.updateGame { copy(teamId = it) } }
-            },
-            label = { Text("Team ID (0 = spectator)") },
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+            value = state.companyId,
+            onValueChange = { vm.updateGame { copy(companyId = it.take(32)) } },
+            label = { Text("Company (e.g. \"1st Company\")") },
             modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = state.platoonId,
+            onValueChange = { vm.updateGame { copy(platoonId = it.take(32)) } },
+            label = { Text("Platoon (e.g. \"Red Platoon\")") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = state.squadId,
+            onValueChange = { vm.updateGame { copy(squadId = it.take(32)) } },
+            label = { Text("Squad (e.g. \"1st Squad\")") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = state.fireteamId,
+            onValueChange = { vm.updateGame { copy(fireteamId = it.take(32)) } },
+            label = { Text("Fireteam (e.g. \"Alpha\")") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Spacer(Modifier.height(8.dp))
+        TacticalText(
+            "All fields are optional and self-assigned. Nodes sharing the same unit ID will be grouped in the roster.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+        SectionLabel("Appearance")
+        OutlinedTextField(
+            value = state.playerColorRgb.toString(16).uppercase().padStart(6, '0'),
+            onValueChange = { hex ->
+                hex.take(6).toIntOrNull(16)?.let { vm.updateGame { copy(playerColorRgb = it) } }
+            },
+            label = { Text("Player color (hex RRGGBB)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
         )
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Admin role", style = MaterialTheme.typography.bodyMedium,
+            Text("Device button = HIT toggle", style = MaterialTheme.typography.bodyMedium,
                  modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onBackground)
-            Switch(checked = state.isAdmin,
-                   onCheckedChange = { vm.updateGame { copy(isAdmin = it) } })
+            Switch(checked = state.hitButtonEnabled,
+                   onCheckedChange = { vm.updateGame { copy(hitButtonEnabled = it) } })
         }
+        TacticalText(
+            "When enabled, long-press the device button to toggle HIT status.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         ApplyRow(onRead = vm::readGame, onApply = vm::applyGame, busy = vm.busy.collectAsState().value)
     }
 }

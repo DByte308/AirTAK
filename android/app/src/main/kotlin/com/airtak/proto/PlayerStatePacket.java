@@ -5,11 +5,11 @@ package com.airtak.proto;
 
 /**
  * <pre>
- * Roadmap: 2.11, 4.2, 5.3 | Sent on state transition (ACKNOWLEDGED) or heartbeat (BEST_EFFORT).
+ * Roadmap: 2.11, 4.2, 5.2 | Sent on state transition (ACKNOWLEDGED) or heartbeat (BEST_EFFORT).
  * is_state_transition distinguishes the two cases — critical for §8.9 ACK rule:
  *   is_state_transition=true  → want_response=true  (ACKNOWLEDGED delivery)
  *   is_state_transition=false → want_response=false (BEST_EFFORT heartbeat)
- * See §8.9 for the AIRTAK_PLAYER ACK vs BEST_EFFORT rule.
+ * Unit hierarchy fields are free-text, self-assigned, all optional.
  * </pre>
  *
  * Protobuf type {@code airtak.PlayerStatePacket}
@@ -21,6 +21,10 @@ public  final class PlayerStatePacket extends
     PlayerStatePacketOrBuilder {
   private PlayerStatePacket() {
     callsign_ = "";
+    fireteamId_ = "";
+    squadId_ = "";
+    platoonId_ = "";
+    companyId_ = "";
   }
   public static final int NODE_ID_FIELD_NUMBER = 1;
   private int nodeId_;
@@ -95,36 +99,10 @@ public  final class PlayerStatePacket extends
     
   }
 
-  public static final int TEAM_ID_FIELD_NUMBER = 3;
-  private int teamId_;
-  /**
-   * <code>uint32 team_id = 3;</code>
-   * @return The teamId.
-   */
-  @java.lang.Override
-  public int getTeamId() {
-    return teamId_;
-  }
-  /**
-   * <code>uint32 team_id = 3;</code>
-   * @param value The teamId to set.
-   */
-  private void setTeamId(int value) {
-    
-    teamId_ = value;
-  }
-  /**
-   * <code>uint32 team_id = 3;</code>
-   */
-  private void clearTeamId() {
-    
-    teamId_ = 0;
-  }
-
-  public static final int STATUS_FIELD_NUMBER = 4;
+  public static final int STATUS_FIELD_NUMBER = 3;
   private int status_;
   /**
-   * <code>.airtak.PlayerStatus status = 4;</code>
+   * <code>.airtak.PlayerStatus status = 3;</code>
    * @return The enum numeric value on the wire for status.
    */
   @java.lang.Override
@@ -132,7 +110,7 @@ public  final class PlayerStatePacket extends
     return status_;
   }
   /**
-   * <code>.airtak.PlayerStatus status = 4;</code>
+   * <code>.airtak.PlayerStatus status = 3;</code>
    * @return The status.
    */
   @java.lang.Override
@@ -141,14 +119,14 @@ public  final class PlayerStatePacket extends
     return result == null ? com.airtak.proto.PlayerStatus.UNRECOGNIZED : result;
   }
   /**
-   * <code>.airtak.PlayerStatus status = 4;</code>
+   * <code>.airtak.PlayerStatus status = 3;</code>
    * @param value The enum numeric value on the wire for status to set.
    */
   private void setStatusValue(int value) {
       status_ = value;
   }
   /**
-   * <code>.airtak.PlayerStatus status = 4;</code>
+   * <code>.airtak.PlayerStatus status = 3;</code>
    * @param value The status to set.
    */
   private void setStatus(com.airtak.proto.PlayerStatus value) {
@@ -156,55 +134,17 @@ public  final class PlayerStatePacket extends
     
   }
   /**
-   * <code>.airtak.PlayerStatus status = 4;</code>
+   * <code>.airtak.PlayerStatus status = 3;</code>
    */
   private void clearStatus() {
     
     status_ = 0;
   }
 
-  public static final int RESPAWN_AT_UNIX_FIELD_NUMBER = 5;
-  private int respawnAtUnix_;
-  /**
-   * <pre>
-   * epoch seconds; non-zero when RESPAWNING
-   * </pre>
-   *
-   * <code>uint32 respawn_at_unix = 5;</code>
-   * @return The respawnAtUnix.
-   */
-  @java.lang.Override
-  public int getRespawnAtUnix() {
-    return respawnAtUnix_;
-  }
-  /**
-   * <pre>
-   * epoch seconds; non-zero when RESPAWNING
-   * </pre>
-   *
-   * <code>uint32 respawn_at_unix = 5;</code>
-   * @param value The respawnAtUnix to set.
-   */
-  private void setRespawnAtUnix(int value) {
-    
-    respawnAtUnix_ = value;
-  }
-  /**
-   * <pre>
-   * epoch seconds; non-zero when RESPAWNING
-   * </pre>
-   *
-   * <code>uint32 respawn_at_unix = 5;</code>
-   */
-  private void clearRespawnAtUnix() {
-    
-    respawnAtUnix_ = 0;
-  }
-
-  public static final int COLOR_RGB_FIELD_NUMBER = 6;
+  public static final int COLOR_RGB_FIELD_NUMBER = 4;
   private int colorRgb_;
   /**
-   * <code>uint32 color_rgb = 6;</code>
+   * <code>uint32 color_rgb = 4;</code>
    * @return The colorRgb.
    */
   @java.lang.Override
@@ -212,7 +152,7 @@ public  final class PlayerStatePacket extends
     return colorRgb_;
   }
   /**
-   * <code>uint32 color_rgb = 6;</code>
+   * <code>uint32 color_rgb = 4;</code>
    * @param value The colorRgb to set.
    */
   private void setColorRgb(int value) {
@@ -220,21 +160,21 @@ public  final class PlayerStatePacket extends
     colorRgb_ = value;
   }
   /**
-   * <code>uint32 color_rgb = 6;</code>
+   * <code>uint32 color_rgb = 4;</code>
    */
   private void clearColorRgb() {
     
     colorRgb_ = 0;
   }
 
-  public static final int IS_STATE_TRANSITION_FIELD_NUMBER = 7;
+  public static final int IS_STATE_TRANSITION_FIELD_NUMBER = 5;
   private boolean isStateTransition_;
   /**
    * <pre>
-   * true = status changed; false = position heartbeat
+   * true = status changed; false = heartbeat
    * </pre>
    *
-   * <code>bool is_state_transition = 7;</code>
+   * <code>bool is_state_transition = 5;</code>
    * @return The isStateTransition.
    */
   @java.lang.Override
@@ -243,10 +183,10 @@ public  final class PlayerStatePacket extends
   }
   /**
    * <pre>
-   * true = status changed; false = position heartbeat
+   * true = status changed; false = heartbeat
    * </pre>
    *
-   * <code>bool is_state_transition = 7;</code>
+   * <code>bool is_state_transition = 5;</code>
    * @param value The isStateTransition to set.
    */
   private void setIsStateTransition(boolean value) {
@@ -255,14 +195,282 @@ public  final class PlayerStatePacket extends
   }
   /**
    * <pre>
-   * true = status changed; false = position heartbeat
+   * true = status changed; false = heartbeat
    * </pre>
    *
-   * <code>bool is_state_transition = 7;</code>
+   * <code>bool is_state_transition = 5;</code>
    */
   private void clearIsStateTransition() {
     
     isStateTransition_ = false;
+  }
+
+  public static final int FIRETEAM_ID_FIELD_NUMBER = 6;
+  private java.lang.String fireteamId_;
+  /**
+   * <pre>
+   * e.g., "Alpha"; free-text, optional
+   * </pre>
+   *
+   * <code>string fireteam_id = 6;</code>
+   * @return The fireteamId.
+   */
+  @java.lang.Override
+  public java.lang.String getFireteamId() {
+    return fireteamId_;
+  }
+  /**
+   * <pre>
+   * e.g., "Alpha"; free-text, optional
+   * </pre>
+   *
+   * <code>string fireteam_id = 6;</code>
+   * @return The bytes for fireteamId.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getFireteamIdBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(fireteamId_);
+  }
+  /**
+   * <pre>
+   * e.g., "Alpha"; free-text, optional
+   * </pre>
+   *
+   * <code>string fireteam_id = 6;</code>
+   * @param value The fireteamId to set.
+   */
+  private void setFireteamId(
+      java.lang.String value) {
+    java.lang.Class<?> valueClass = value.getClass();
+  
+    fireteamId_ = value;
+  }
+  /**
+   * <pre>
+   * e.g., "Alpha"; free-text, optional
+   * </pre>
+   *
+   * <code>string fireteam_id = 6;</code>
+   */
+  private void clearFireteamId() {
+    
+    fireteamId_ = getDefaultInstance().getFireteamId();
+  }
+  /**
+   * <pre>
+   * e.g., "Alpha"; free-text, optional
+   * </pre>
+   *
+   * <code>string fireteam_id = 6;</code>
+   * @param value The bytes for fireteamId to set.
+   */
+  private void setFireteamIdBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    fireteamId_ = value.toStringUtf8();
+    
+  }
+
+  public static final int SQUAD_ID_FIELD_NUMBER = 7;
+  private java.lang.String squadId_;
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 7;</code>
+   * @return The squadId.
+   */
+  @java.lang.Override
+  public java.lang.String getSquadId() {
+    return squadId_;
+  }
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 7;</code>
+   * @return The bytes for squadId.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getSquadIdBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(squadId_);
+  }
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 7;</code>
+   * @param value The squadId to set.
+   */
+  private void setSquadId(
+      java.lang.String value) {
+    java.lang.Class<?> valueClass = value.getClass();
+  
+    squadId_ = value;
+  }
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 7;</code>
+   */
+  private void clearSquadId() {
+    
+    squadId_ = getDefaultInstance().getSquadId();
+  }
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 7;</code>
+   * @param value The bytes for squadId to set.
+   */
+  private void setSquadIdBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    squadId_ = value.toStringUtf8();
+    
+  }
+
+  public static final int PLATOON_ID_FIELD_NUMBER = 8;
+  private java.lang.String platoonId_;
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 8;</code>
+   * @return The platoonId.
+   */
+  @java.lang.Override
+  public java.lang.String getPlatoonId() {
+    return platoonId_;
+  }
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 8;</code>
+   * @return The bytes for platoonId.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getPlatoonIdBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(platoonId_);
+  }
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 8;</code>
+   * @param value The platoonId to set.
+   */
+  private void setPlatoonId(
+      java.lang.String value) {
+    java.lang.Class<?> valueClass = value.getClass();
+  
+    platoonId_ = value;
+  }
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 8;</code>
+   */
+  private void clearPlatoonId() {
+    
+    platoonId_ = getDefaultInstance().getPlatoonId();
+  }
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 8;</code>
+   * @param value The bytes for platoonId to set.
+   */
+  private void setPlatoonIdBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    platoonId_ = value.toStringUtf8();
+    
+  }
+
+  public static final int COMPANY_ID_FIELD_NUMBER = 9;
+  private java.lang.String companyId_;
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 9;</code>
+   * @return The companyId.
+   */
+  @java.lang.Override
+  public java.lang.String getCompanyId() {
+    return companyId_;
+  }
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 9;</code>
+   * @return The bytes for companyId.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getCompanyIdBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(companyId_);
+  }
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 9;</code>
+   * @param value The companyId to set.
+   */
+  private void setCompanyId(
+      java.lang.String value) {
+    java.lang.Class<?> valueClass = value.getClass();
+  
+    companyId_ = value;
+  }
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 9;</code>
+   */
+  private void clearCompanyId() {
+    
+    companyId_ = getDefaultInstance().getCompanyId();
+  }
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 9;</code>
+   * @param value The bytes for companyId to set.
+   */
+  private void setCompanyIdBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    companyId_ = value.toStringUtf8();
+    
   }
 
   public static com.airtak.proto.PlayerStatePacket parseFrom(
@@ -348,11 +556,11 @@ public  final class PlayerStatePacket extends
 
   /**
    * <pre>
-   * Roadmap: 2.11, 4.2, 5.3 | Sent on state transition (ACKNOWLEDGED) or heartbeat (BEST_EFFORT).
+   * Roadmap: 2.11, 4.2, 5.2 | Sent on state transition (ACKNOWLEDGED) or heartbeat (BEST_EFFORT).
    * is_state_transition distinguishes the two cases — critical for §8.9 ACK rule:
    *   is_state_transition=true  → want_response=true  (ACKNOWLEDGED delivery)
    *   is_state_transition=false → want_response=false (BEST_EFFORT heartbeat)
-   * See §8.9 for the AIRTAK_PLAYER ACK vs BEST_EFFORT rule.
+   * Unit hierarchy fields are free-text, self-assigned, all optional.
    * </pre>
    *
    * Protobuf type {@code airtak.PlayerStatePacket}
@@ -446,35 +654,7 @@ public  final class PlayerStatePacket extends
     }
 
     /**
-     * <code>uint32 team_id = 3;</code>
-     * @return The teamId.
-     */
-    @java.lang.Override
-    public int getTeamId() {
-      return instance.getTeamId();
-    }
-    /**
-     * <code>uint32 team_id = 3;</code>
-     * @param value The teamId to set.
-     * @return This builder for chaining.
-     */
-    public Builder setTeamId(int value) {
-      copyOnWrite();
-      instance.setTeamId(value);
-      return this;
-    }
-    /**
-     * <code>uint32 team_id = 3;</code>
-     * @return This builder for chaining.
-     */
-    public Builder clearTeamId() {
-      copyOnWrite();
-      instance.clearTeamId();
-      return this;
-    }
-
-    /**
-     * <code>.airtak.PlayerStatus status = 4;</code>
+     * <code>.airtak.PlayerStatus status = 3;</code>
      * @return The enum numeric value on the wire for status.
      */
     @java.lang.Override
@@ -482,7 +662,7 @@ public  final class PlayerStatePacket extends
       return instance.getStatusValue();
     }
     /**
-     * <code>.airtak.PlayerStatus status = 4;</code>
+     * <code>.airtak.PlayerStatus status = 3;</code>
      * @param value The status to set.
      * @return This builder for chaining.
      */
@@ -492,7 +672,7 @@ public  final class PlayerStatePacket extends
       return this;
     }
     /**
-     * <code>.airtak.PlayerStatus status = 4;</code>
+     * <code>.airtak.PlayerStatus status = 3;</code>
      * @return The status.
      */
     @java.lang.Override
@@ -500,7 +680,7 @@ public  final class PlayerStatePacket extends
       return instance.getStatus();
     }
     /**
-     * <code>.airtak.PlayerStatus status = 4;</code>
+     * <code>.airtak.PlayerStatus status = 3;</code>
      * @param value The enum numeric value on the wire for status to set.
      * @return This builder for chaining.
      */
@@ -510,7 +690,7 @@ public  final class PlayerStatePacket extends
       return this;
     }
     /**
-     * <code>.airtak.PlayerStatus status = 4;</code>
+     * <code>.airtak.PlayerStatus status = 3;</code>
      * @return This builder for chaining.
      */
     public Builder clearStatus() {
@@ -520,47 +700,7 @@ public  final class PlayerStatePacket extends
     }
 
     /**
-     * <pre>
-     * epoch seconds; non-zero when RESPAWNING
-     * </pre>
-     *
-     * <code>uint32 respawn_at_unix = 5;</code>
-     * @return The respawnAtUnix.
-     */
-    @java.lang.Override
-    public int getRespawnAtUnix() {
-      return instance.getRespawnAtUnix();
-    }
-    /**
-     * <pre>
-     * epoch seconds; non-zero when RESPAWNING
-     * </pre>
-     *
-     * <code>uint32 respawn_at_unix = 5;</code>
-     * @param value The respawnAtUnix to set.
-     * @return This builder for chaining.
-     */
-    public Builder setRespawnAtUnix(int value) {
-      copyOnWrite();
-      instance.setRespawnAtUnix(value);
-      return this;
-    }
-    /**
-     * <pre>
-     * epoch seconds; non-zero when RESPAWNING
-     * </pre>
-     *
-     * <code>uint32 respawn_at_unix = 5;</code>
-     * @return This builder for chaining.
-     */
-    public Builder clearRespawnAtUnix() {
-      copyOnWrite();
-      instance.clearRespawnAtUnix();
-      return this;
-    }
-
-    /**
-     * <code>uint32 color_rgb = 6;</code>
+     * <code>uint32 color_rgb = 4;</code>
      * @return The colorRgb.
      */
     @java.lang.Override
@@ -568,7 +708,7 @@ public  final class PlayerStatePacket extends
       return instance.getColorRgb();
     }
     /**
-     * <code>uint32 color_rgb = 6;</code>
+     * <code>uint32 color_rgb = 4;</code>
      * @param value The colorRgb to set.
      * @return This builder for chaining.
      */
@@ -578,7 +718,7 @@ public  final class PlayerStatePacket extends
       return this;
     }
     /**
-     * <code>uint32 color_rgb = 6;</code>
+     * <code>uint32 color_rgb = 4;</code>
      * @return This builder for chaining.
      */
     public Builder clearColorRgb() {
@@ -589,10 +729,10 @@ public  final class PlayerStatePacket extends
 
     /**
      * <pre>
-     * true = status changed; false = position heartbeat
+     * true = status changed; false = heartbeat
      * </pre>
      *
-     * <code>bool is_state_transition = 7;</code>
+     * <code>bool is_state_transition = 5;</code>
      * @return The isStateTransition.
      */
     @java.lang.Override
@@ -601,10 +741,10 @@ public  final class PlayerStatePacket extends
     }
     /**
      * <pre>
-     * true = status changed; false = position heartbeat
+     * true = status changed; false = heartbeat
      * </pre>
      *
-     * <code>bool is_state_transition = 7;</code>
+     * <code>bool is_state_transition = 5;</code>
      * @param value The isStateTransition to set.
      * @return This builder for chaining.
      */
@@ -615,15 +755,291 @@ public  final class PlayerStatePacket extends
     }
     /**
      * <pre>
-     * true = status changed; false = position heartbeat
+     * true = status changed; false = heartbeat
      * </pre>
      *
-     * <code>bool is_state_transition = 7;</code>
+     * <code>bool is_state_transition = 5;</code>
      * @return This builder for chaining.
      */
     public Builder clearIsStateTransition() {
       copyOnWrite();
       instance.clearIsStateTransition();
+      return this;
+    }
+
+    /**
+     * <pre>
+     * e.g., "Alpha"; free-text, optional
+     * </pre>
+     *
+     * <code>string fireteam_id = 6;</code>
+     * @return The fireteamId.
+     */
+    @java.lang.Override
+    public java.lang.String getFireteamId() {
+      return instance.getFireteamId();
+    }
+    /**
+     * <pre>
+     * e.g., "Alpha"; free-text, optional
+     * </pre>
+     *
+     * <code>string fireteam_id = 6;</code>
+     * @return The bytes for fireteamId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getFireteamIdBytes() {
+      return instance.getFireteamIdBytes();
+    }
+    /**
+     * <pre>
+     * e.g., "Alpha"; free-text, optional
+     * </pre>
+     *
+     * <code>string fireteam_id = 6;</code>
+     * @param value The fireteamId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setFireteamId(
+        java.lang.String value) {
+      copyOnWrite();
+      instance.setFireteamId(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "Alpha"; free-text, optional
+     * </pre>
+     *
+     * <code>string fireteam_id = 6;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearFireteamId() {
+      copyOnWrite();
+      instance.clearFireteamId();
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "Alpha"; free-text, optional
+     * </pre>
+     *
+     * <code>string fireteam_id = 6;</code>
+     * @param value The bytes for fireteamId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setFireteamIdBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setFireteamIdBytes(value);
+      return this;
+    }
+
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 7;</code>
+     * @return The squadId.
+     */
+    @java.lang.Override
+    public java.lang.String getSquadId() {
+      return instance.getSquadId();
+    }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 7;</code>
+     * @return The bytes for squadId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSquadIdBytes() {
+      return instance.getSquadIdBytes();
+    }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 7;</code>
+     * @param value The squadId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setSquadId(
+        java.lang.String value) {
+      copyOnWrite();
+      instance.setSquadId(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 7;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearSquadId() {
+      copyOnWrite();
+      instance.clearSquadId();
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 7;</code>
+     * @param value The bytes for squadId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setSquadIdBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setSquadIdBytes(value);
+      return this;
+    }
+
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 8;</code>
+     * @return The platoonId.
+     */
+    @java.lang.Override
+    public java.lang.String getPlatoonId() {
+      return instance.getPlatoonId();
+    }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 8;</code>
+     * @return The bytes for platoonId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getPlatoonIdBytes() {
+      return instance.getPlatoonIdBytes();
+    }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 8;</code>
+     * @param value The platoonId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setPlatoonId(
+        java.lang.String value) {
+      copyOnWrite();
+      instance.setPlatoonId(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 8;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearPlatoonId() {
+      copyOnWrite();
+      instance.clearPlatoonId();
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 8;</code>
+     * @param value The bytes for platoonId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setPlatoonIdBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setPlatoonIdBytes(value);
+      return this;
+    }
+
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 9;</code>
+     * @return The companyId.
+     */
+    @java.lang.Override
+    public java.lang.String getCompanyId() {
+      return instance.getCompanyId();
+    }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 9;</code>
+     * @return The bytes for companyId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getCompanyIdBytes() {
+      return instance.getCompanyIdBytes();
+    }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 9;</code>
+     * @param value The companyId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setCompanyId(
+        java.lang.String value) {
+      copyOnWrite();
+      instance.setCompanyId(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 9;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearCompanyId() {
+      copyOnWrite();
+      instance.clearCompanyId();
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 9;</code>
+     * @param value The bytes for companyId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setCompanyIdBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setCompanyIdBytes(value);
       return this;
     }
 
@@ -645,15 +1061,17 @@ public  final class PlayerStatePacket extends
           java.lang.Object[] objects = new java.lang.Object[] {
             "nodeId_",
             "callsign_",
-            "teamId_",
             "status_",
-            "respawnAtUnix_",
             "colorRgb_",
             "isStateTransition_",
+            "fireteamId_",
+            "squadId_",
+            "platoonId_",
+            "companyId_",
           };
           java.lang.String info =
-              "\u0000\u0007\u0000\u0000\u0001\u0007\u0007\u0000\u0000\u0000\u0001\u000b\u0002\u0208" +
-              "\u0003\u000b\u0004\f\u0005\u000b\u0006\u000b\u0007\u0007";
+              "\u0000\t\u0000\u0000\u0001\t\t\u0000\u0000\u0000\u0001\u000b\u0002\u0208\u0003\f" +
+              "\u0004\u000b\u0005\u0007\u0006\u0208\u0007\u0208\b\u0208\t\u0208";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       // fall through

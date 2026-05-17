@@ -29,31 +29,101 @@ public interface GameConfigOrBuilder extends
 
   /**
    * <pre>
-   * 0 = SPECTATOR; team 0 excluded from scoring
+   * e.g., "Alpha"; free-text, optional
    * </pre>
    *
-   * <code>uint32 team_id = 2;</code>
-   * @return The teamId.
+   * <code>string fireteam_id = 2;</code>
+   * @return The fireteamId.
    */
-  int getTeamId();
+  java.lang.String getFireteamId();
+  /**
+   * <pre>
+   * e.g., "Alpha"; free-text, optional
+   * </pre>
+   *
+   * <code>string fireteam_id = 2;</code>
+   * @return The bytes for fireteamId.
+   */
+  com.google.protobuf.ByteString
+      getFireteamIdBytes();
+
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 3;</code>
+   * @return The squadId.
+   */
+  java.lang.String getSquadId();
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 3;</code>
+   * @return The bytes for squadId.
+   */
+  com.google.protobuf.ByteString
+      getSquadIdBytes();
+
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 4;</code>
+   * @return The platoonId.
+   */
+  java.lang.String getPlatoonId();
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 4;</code>
+   * @return The bytes for platoonId.
+   */
+  com.google.protobuf.ByteString
+      getPlatoonIdBytes();
+
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 5;</code>
+   * @return The companyId.
+   */
+  java.lang.String getCompanyId();
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 5;</code>
+   * @return The bytes for companyId.
+   */
+  com.google.protobuf.ByteString
+      getCompanyIdBytes();
 
   /**
    * <pre>
    * 24-bit RGB; displayed on map pins
    * </pre>
    *
-   * <code>uint32 player_color_rgb = 3;</code>
+   * <code>uint32 player_color_rgb = 6;</code>
    * @return The playerColorRgb.
    */
   int getPlayerColorRgb();
 
   /**
    * <pre>
-   * enables admin controls in Android app
+   * enable long-press HIT toggle on device button; default false
    * </pre>
    *
-   * <code>bool is_admin = 4;</code>
-   * @return The isAdmin.
+   * <code>bool hit_button_enabled = 7;</code>
+   * @return The hitButtonEnabled.
    */
-  boolean getIsAdmin();
+  boolean getHitButtonEnabled();
 }

@@ -3,7 +3,7 @@
 // Planning: §12.6, §7.1 | Roadmap: 1.7
 //
 // Detects short press, long press (≥ 3 s), and double press on USER button (P1.10, active low).
-// Routes gestures to Display::nextScreen() and PlayerState::reportHit() per §12.6.
+// Routes gestures to Display::nextScreen() and PlayerState::toggleHit() per §12.6.
 
 #pragma once
 

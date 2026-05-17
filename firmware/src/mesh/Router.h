@@ -114,11 +114,9 @@ public:
     static bool isAcknowledgedPortnum(Portnum portnum) {
         switch (portnum) {
             case Portnum::TEXT_MESSAGE_APP:
-            case Portnum::AIRTAK_GAME:
             case Portnum::AIRTAK_PLAYER:
-            case Portnum::AIRTAK_ZONE:
-            case Portnum::AIRTAK_OBJECTIVE:
-            case Portnum::AIRTAK_ADMIN:
+            case Portnum::AIRTAK_TACTICAL:
+            case Portnum::AIRTAK_MODERATION:
                 return true;
             default:
                 return false;

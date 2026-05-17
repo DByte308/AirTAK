@@ -113,14 +113,16 @@ typedef struct _airtak_PowerConfig {
     uint32_t display_off_secs; /* 0 = never off */
 } airtak_PowerConfig;
 
-/* Roadmap: 3.4, 5.1–5.7 | Per-player game configuration. No radio restart.
- is_admin = true enables the admin control panel in the Android app (§11.8).
- Admin status is PSK-enforced by convention, not by cryptographic auth (§15.4). */
+/* Roadmap: 3.4, 5.1–5.2 | Per-player tactical coordination configuration. No radio restart.
+ Unit hierarchy fields are free-text, self-assigned, all optional. No central enrollment. */
 typedef struct _airtak_GameConfig {
     char callsign[17]; /* max 16 bytes */
-    uint32_t team_id; /* 0 = SPECTATOR; team 0 excluded from scoring */
+    char fireteam_id[33]; /* e.g., "Alpha"; free-text, optional */
+    char squad_id[33]; /* e.g., "1st Squad"; free-text, optional */
+    char platoon_id[33]; /* e.g., "Red Platoon"; free-text, optional */
+    char company_id[33]; /* e.g., "1st Company"; free-text, optional */
     uint32_t player_color_rgb; /* 24-bit RGB; displayed on map pins */
-    bool is_admin; /* enables admin controls in Android app */
+    bool hit_button_enabled; /* enable long-press HIT toggle on device button; default false */
 } airtak_GameConfig;
 
 /* Roadmap: 1.5 | BLE bond management. No radio restart required. */
@@ -168,7 +170,7 @@ extern "C" {
 #define airtak_AudioConfig_init_default          {0, 0, 0, 0}
 #define airtak_PositionConfig_init_default       {0, 0, 0, 0, 0, 0}
 #define airtak_PowerConfig_init_default          {0, 0, 0, 0}
-#define airtak_GameConfig_init_default           {"", 0, 0, 0}
+#define airtak_GameConfig_init_default           {"", "", "", "", "", 0, 0}
 #define airtak_SecurityConfig_init_default       {0}
 #define airtak_DeviceConfig_init_zero            {"", ""}
 #define airtak_PhyProfile_init_zero              {"", 0, 0, 0}
@@ -178,7 +180,7 @@ extern "C" {
 #define airtak_AudioConfig_init_zero             {0, 0, 0, 0}
 #define airtak_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0}
 #define airtak_PowerConfig_init_zero             {0, 0, 0, 0}
-#define airtak_GameConfig_init_zero              {"", 0, 0, 0}
+#define airtak_GameConfig_init_zero              {"", "", "", "", "", 0, 0}
 #define airtak_SecurityConfig_init_zero          {0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -215,9 +217,12 @@ extern "C" {
 #define airtak_PowerConfig_gps_off_secs_tag      3
 #define airtak_PowerConfig_display_off_secs_tag  4
 #define airtak_GameConfig_callsign_tag           1
-#define airtak_GameConfig_team_id_tag            2
-#define airtak_GameConfig_player_color_rgb_tag   3
-#define airtak_GameConfig_is_admin_tag           4
+#define airtak_GameConfig_fireteam_id_tag        2
+#define airtak_GameConfig_squad_id_tag           3
+#define airtak_GameConfig_platoon_id_tag         4
+#define airtak_GameConfig_company_id_tag         5
+#define airtak_GameConfig_player_color_rgb_tag   6
+#define airtak_GameConfig_hit_button_enabled_tag 7
 #define airtak_SecurityConfig_max_bonded_devices_tag 1
 
 /* Struct field encoding specification for nanopb */
@@ -289,9 +294,12 @@ X(a, STATIC,   SINGULAR, UINT32,   display_off_secs,   4)
 
 #define airtak_GameConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   callsign,          1) \
-X(a, STATIC,   SINGULAR, UINT32,   team_id,           2) \
-X(a, STATIC,   SINGULAR, UINT32,   player_color_rgb,   3) \
-X(a, STATIC,   SINGULAR, BOOL,     is_admin,          4)
+X(a, STATIC,   SINGULAR, STRING,   fireteam_id,       2) \
+X(a, STATIC,   SINGULAR, STRING,   squad_id,          3) \
+X(a, STATIC,   SINGULAR, STRING,   platoon_id,        4) \
+X(a, STATIC,   SINGULAR, STRING,   company_id,        5) \
+X(a, STATIC,   SINGULAR, UINT32,   player_color_rgb,   6) \
+X(a, STATIC,   SINGULAR, BOOL,     hit_button_enabled,   7)
 #define airtak_GameConfig_CALLBACK NULL
 #define airtak_GameConfig_DEFAULT NULL
 
@@ -329,7 +337,7 @@ extern const pb_msgdesc_t airtak_SecurityConfig_msg;
 #define airtak_ChannelConfig_size                624
 #define airtak_ChannelSlot_size                  76
 #define airtak_DeviceConfig_size                 47
-#define airtak_GameConfig_size                   32
+#define airtak_GameConfig_size                   162
 #define airtak_LoraConfig_size                   198
 #define airtak_PhyProfile_size                   36
 #define airtak_PositionConfig_size               32

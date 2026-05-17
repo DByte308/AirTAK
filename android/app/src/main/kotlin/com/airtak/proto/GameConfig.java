@@ -5,9 +5,8 @@ package com.airtak.proto;
 
 /**
  * <pre>
- * Roadmap: 3.4, 5.1–5.7 | Per-player game configuration. No radio restart.
- * is_admin = true enables the admin control panel in the Android app (§11.8).
- * Admin status is PSK-enforced by convention, not by cryptographic auth (§15.4).
+ * Roadmap: 3.4, 5.1–5.2 | Per-player tactical coordination configuration. No radio restart.
+ * Unit hierarchy fields are free-text, self-assigned, all optional. No central enrollment.
  * </pre>
  *
  * Protobuf type {@code airtak.GameConfig}
@@ -19,6 +18,10 @@ public  final class GameConfig extends
     GameConfigOrBuilder {
   private GameConfig() {
     callsign_ = "";
+    fireteamId_ = "";
+    squadId_ = "";
+    platoonId_ = "";
+    companyId_ = "";
   }
   public static final int CALLSIGN_FIELD_NUMBER = 1;
   private java.lang.String callsign_;
@@ -87,52 +90,282 @@ public  final class GameConfig extends
     
   }
 
-  public static final int TEAM_ID_FIELD_NUMBER = 2;
-  private int teamId_;
+  public static final int FIRETEAM_ID_FIELD_NUMBER = 2;
+  private java.lang.String fireteamId_;
   /**
    * <pre>
-   * 0 = SPECTATOR; team 0 excluded from scoring
+   * e.g., "Alpha"; free-text, optional
    * </pre>
    *
-   * <code>uint32 team_id = 2;</code>
-   * @return The teamId.
+   * <code>string fireteam_id = 2;</code>
+   * @return The fireteamId.
    */
   @java.lang.Override
-  public int getTeamId() {
-    return teamId_;
+  public java.lang.String getFireteamId() {
+    return fireteamId_;
   }
   /**
    * <pre>
-   * 0 = SPECTATOR; team 0 excluded from scoring
+   * e.g., "Alpha"; free-text, optional
    * </pre>
    *
-   * <code>uint32 team_id = 2;</code>
-   * @param value The teamId to set.
+   * <code>string fireteam_id = 2;</code>
+   * @return The bytes for fireteamId.
    */
-  private void setTeamId(int value) {
-    
-    teamId_ = value;
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getFireteamIdBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(fireteamId_);
   }
   /**
    * <pre>
-   * 0 = SPECTATOR; team 0 excluded from scoring
+   * e.g., "Alpha"; free-text, optional
    * </pre>
    *
-   * <code>uint32 team_id = 2;</code>
+   * <code>string fireteam_id = 2;</code>
+   * @param value The fireteamId to set.
    */
-  private void clearTeamId() {
+  private void setFireteamId(
+      java.lang.String value) {
+    java.lang.Class<?> valueClass = value.getClass();
+  
+    fireteamId_ = value;
+  }
+  /**
+   * <pre>
+   * e.g., "Alpha"; free-text, optional
+   * </pre>
+   *
+   * <code>string fireteam_id = 2;</code>
+   */
+  private void clearFireteamId() {
     
-    teamId_ = 0;
+    fireteamId_ = getDefaultInstance().getFireteamId();
+  }
+  /**
+   * <pre>
+   * e.g., "Alpha"; free-text, optional
+   * </pre>
+   *
+   * <code>string fireteam_id = 2;</code>
+   * @param value The bytes for fireteamId to set.
+   */
+  private void setFireteamIdBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    fireteamId_ = value.toStringUtf8();
+    
   }
 
-  public static final int PLAYER_COLOR_RGB_FIELD_NUMBER = 3;
+  public static final int SQUAD_ID_FIELD_NUMBER = 3;
+  private java.lang.String squadId_;
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 3;</code>
+   * @return The squadId.
+   */
+  @java.lang.Override
+  public java.lang.String getSquadId() {
+    return squadId_;
+  }
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 3;</code>
+   * @return The bytes for squadId.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getSquadIdBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(squadId_);
+  }
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 3;</code>
+   * @param value The squadId to set.
+   */
+  private void setSquadId(
+      java.lang.String value) {
+    java.lang.Class<?> valueClass = value.getClass();
+  
+    squadId_ = value;
+  }
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 3;</code>
+   */
+  private void clearSquadId() {
+    
+    squadId_ = getDefaultInstance().getSquadId();
+  }
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 3;</code>
+   * @param value The bytes for squadId to set.
+   */
+  private void setSquadIdBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    squadId_ = value.toStringUtf8();
+    
+  }
+
+  public static final int PLATOON_ID_FIELD_NUMBER = 4;
+  private java.lang.String platoonId_;
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 4;</code>
+   * @return The platoonId.
+   */
+  @java.lang.Override
+  public java.lang.String getPlatoonId() {
+    return platoonId_;
+  }
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 4;</code>
+   * @return The bytes for platoonId.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getPlatoonIdBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(platoonId_);
+  }
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 4;</code>
+   * @param value The platoonId to set.
+   */
+  private void setPlatoonId(
+      java.lang.String value) {
+    java.lang.Class<?> valueClass = value.getClass();
+  
+    platoonId_ = value;
+  }
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 4;</code>
+   */
+  private void clearPlatoonId() {
+    
+    platoonId_ = getDefaultInstance().getPlatoonId();
+  }
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 4;</code>
+   * @param value The bytes for platoonId to set.
+   */
+  private void setPlatoonIdBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    platoonId_ = value.toStringUtf8();
+    
+  }
+
+  public static final int COMPANY_ID_FIELD_NUMBER = 5;
+  private java.lang.String companyId_;
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 5;</code>
+   * @return The companyId.
+   */
+  @java.lang.Override
+  public java.lang.String getCompanyId() {
+    return companyId_;
+  }
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 5;</code>
+   * @return The bytes for companyId.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getCompanyIdBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(companyId_);
+  }
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 5;</code>
+   * @param value The companyId to set.
+   */
+  private void setCompanyId(
+      java.lang.String value) {
+    java.lang.Class<?> valueClass = value.getClass();
+  
+    companyId_ = value;
+  }
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 5;</code>
+   */
+  private void clearCompanyId() {
+    
+    companyId_ = getDefaultInstance().getCompanyId();
+  }
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 5;</code>
+   * @param value The bytes for companyId to set.
+   */
+  private void setCompanyIdBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    companyId_ = value.toStringUtf8();
+    
+  }
+
+  public static final int PLAYER_COLOR_RGB_FIELD_NUMBER = 6;
   private int playerColorRgb_;
   /**
    * <pre>
    * 24-bit RGB; displayed on map pins
    * </pre>
    *
-   * <code>uint32 player_color_rgb = 3;</code>
+   * <code>uint32 player_color_rgb = 6;</code>
    * @return The playerColorRgb.
    */
   @java.lang.Override
@@ -144,7 +377,7 @@ public  final class GameConfig extends
    * 24-bit RGB; displayed on map pins
    * </pre>
    *
-   * <code>uint32 player_color_rgb = 3;</code>
+   * <code>uint32 player_color_rgb = 6;</code>
    * @param value The playerColorRgb to set.
    */
   private void setPlayerColorRgb(int value) {
@@ -156,49 +389,49 @@ public  final class GameConfig extends
    * 24-bit RGB; displayed on map pins
    * </pre>
    *
-   * <code>uint32 player_color_rgb = 3;</code>
+   * <code>uint32 player_color_rgb = 6;</code>
    */
   private void clearPlayerColorRgb() {
     
     playerColorRgb_ = 0;
   }
 
-  public static final int IS_ADMIN_FIELD_NUMBER = 4;
-  private boolean isAdmin_;
+  public static final int HIT_BUTTON_ENABLED_FIELD_NUMBER = 7;
+  private boolean hitButtonEnabled_;
   /**
    * <pre>
-   * enables admin controls in Android app
+   * enable long-press HIT toggle on device button; default false
    * </pre>
    *
-   * <code>bool is_admin = 4;</code>
-   * @return The isAdmin.
+   * <code>bool hit_button_enabled = 7;</code>
+   * @return The hitButtonEnabled.
    */
   @java.lang.Override
-  public boolean getIsAdmin() {
-    return isAdmin_;
+  public boolean getHitButtonEnabled() {
+    return hitButtonEnabled_;
   }
   /**
    * <pre>
-   * enables admin controls in Android app
+   * enable long-press HIT toggle on device button; default false
    * </pre>
    *
-   * <code>bool is_admin = 4;</code>
-   * @param value The isAdmin to set.
+   * <code>bool hit_button_enabled = 7;</code>
+   * @param value The hitButtonEnabled to set.
    */
-  private void setIsAdmin(boolean value) {
+  private void setHitButtonEnabled(boolean value) {
     
-    isAdmin_ = value;
+    hitButtonEnabled_ = value;
   }
   /**
    * <pre>
-   * enables admin controls in Android app
+   * enable long-press HIT toggle on device button; default false
    * </pre>
    *
-   * <code>bool is_admin = 4;</code>
+   * <code>bool hit_button_enabled = 7;</code>
    */
-  private void clearIsAdmin() {
+  private void clearHitButtonEnabled() {
     
-    isAdmin_ = false;
+    hitButtonEnabled_ = false;
   }
 
   public static com.airtak.proto.GameConfig parseFrom(
@@ -284,9 +517,8 @@ public  final class GameConfig extends
 
   /**
    * <pre>
-   * Roadmap: 3.4, 5.1–5.7 | Per-player game configuration. No radio restart.
-   * is_admin = true enables the admin control panel in the Android app (§11.8).
-   * Admin status is PSK-enforced by convention, not by cryptographic auth (§15.4).
+   * Roadmap: 3.4, 5.1–5.2 | Per-player tactical coordination configuration. No radio restart.
+   * Unit hierarchy fields are free-text, self-assigned, all optional. No central enrollment.
    * </pre>
    *
    * Protobuf type {@code airtak.GameConfig}
@@ -373,41 +605,277 @@ public  final class GameConfig extends
 
     /**
      * <pre>
-     * 0 = SPECTATOR; team 0 excluded from scoring
+     * e.g., "Alpha"; free-text, optional
      * </pre>
      *
-     * <code>uint32 team_id = 2;</code>
-     * @return The teamId.
+     * <code>string fireteam_id = 2;</code>
+     * @return The fireteamId.
      */
     @java.lang.Override
-    public int getTeamId() {
-      return instance.getTeamId();
+    public java.lang.String getFireteamId() {
+      return instance.getFireteamId();
     }
     /**
      * <pre>
-     * 0 = SPECTATOR; team 0 excluded from scoring
+     * e.g., "Alpha"; free-text, optional
      * </pre>
      *
-     * <code>uint32 team_id = 2;</code>
-     * @param value The teamId to set.
+     * <code>string fireteam_id = 2;</code>
+     * @return The bytes for fireteamId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getFireteamIdBytes() {
+      return instance.getFireteamIdBytes();
+    }
+    /**
+     * <pre>
+     * e.g., "Alpha"; free-text, optional
+     * </pre>
+     *
+     * <code>string fireteam_id = 2;</code>
+     * @param value The fireteamId to set.
      * @return This builder for chaining.
      */
-    public Builder setTeamId(int value) {
+    public Builder setFireteamId(
+        java.lang.String value) {
       copyOnWrite();
-      instance.setTeamId(value);
+      instance.setFireteamId(value);
       return this;
     }
     /**
      * <pre>
-     * 0 = SPECTATOR; team 0 excluded from scoring
+     * e.g., "Alpha"; free-text, optional
      * </pre>
      *
-     * <code>uint32 team_id = 2;</code>
+     * <code>string fireteam_id = 2;</code>
      * @return This builder for chaining.
      */
-    public Builder clearTeamId() {
+    public Builder clearFireteamId() {
       copyOnWrite();
-      instance.clearTeamId();
+      instance.clearFireteamId();
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "Alpha"; free-text, optional
+     * </pre>
+     *
+     * <code>string fireteam_id = 2;</code>
+     * @param value The bytes for fireteamId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setFireteamIdBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setFireteamIdBytes(value);
+      return this;
+    }
+
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 3;</code>
+     * @return The squadId.
+     */
+    @java.lang.Override
+    public java.lang.String getSquadId() {
+      return instance.getSquadId();
+    }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 3;</code>
+     * @return The bytes for squadId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSquadIdBytes() {
+      return instance.getSquadIdBytes();
+    }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 3;</code>
+     * @param value The squadId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setSquadId(
+        java.lang.String value) {
+      copyOnWrite();
+      instance.setSquadId(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 3;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearSquadId() {
+      copyOnWrite();
+      instance.clearSquadId();
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 3;</code>
+     * @param value The bytes for squadId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setSquadIdBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setSquadIdBytes(value);
+      return this;
+    }
+
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 4;</code>
+     * @return The platoonId.
+     */
+    @java.lang.Override
+    public java.lang.String getPlatoonId() {
+      return instance.getPlatoonId();
+    }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 4;</code>
+     * @return The bytes for platoonId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getPlatoonIdBytes() {
+      return instance.getPlatoonIdBytes();
+    }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 4;</code>
+     * @param value The platoonId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setPlatoonId(
+        java.lang.String value) {
+      copyOnWrite();
+      instance.setPlatoonId(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 4;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearPlatoonId() {
+      copyOnWrite();
+      instance.clearPlatoonId();
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 4;</code>
+     * @param value The bytes for platoonId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setPlatoonIdBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setPlatoonIdBytes(value);
+      return this;
+    }
+
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 5;</code>
+     * @return The companyId.
+     */
+    @java.lang.Override
+    public java.lang.String getCompanyId() {
+      return instance.getCompanyId();
+    }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 5;</code>
+     * @return The bytes for companyId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getCompanyIdBytes() {
+      return instance.getCompanyIdBytes();
+    }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 5;</code>
+     * @param value The companyId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setCompanyId(
+        java.lang.String value) {
+      copyOnWrite();
+      instance.setCompanyId(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 5;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearCompanyId() {
+      copyOnWrite();
+      instance.clearCompanyId();
+      return this;
+    }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 5;</code>
+     * @param value The bytes for companyId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setCompanyIdBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setCompanyIdBytes(value);
       return this;
     }
 
@@ -416,7 +884,7 @@ public  final class GameConfig extends
      * 24-bit RGB; displayed on map pins
      * </pre>
      *
-     * <code>uint32 player_color_rgb = 3;</code>
+     * <code>uint32 player_color_rgb = 6;</code>
      * @return The playerColorRgb.
      */
     @java.lang.Override
@@ -428,7 +896,7 @@ public  final class GameConfig extends
      * 24-bit RGB; displayed on map pins
      * </pre>
      *
-     * <code>uint32 player_color_rgb = 3;</code>
+     * <code>uint32 player_color_rgb = 6;</code>
      * @param value The playerColorRgb to set.
      * @return This builder for chaining.
      */
@@ -442,7 +910,7 @@ public  final class GameConfig extends
      * 24-bit RGB; displayed on map pins
      * </pre>
      *
-     * <code>uint32 player_color_rgb = 3;</code>
+     * <code>uint32 player_color_rgb = 6;</code>
      * @return This builder for chaining.
      */
     public Builder clearPlayerColorRgb() {
@@ -453,41 +921,41 @@ public  final class GameConfig extends
 
     /**
      * <pre>
-     * enables admin controls in Android app
+     * enable long-press HIT toggle on device button; default false
      * </pre>
      *
-     * <code>bool is_admin = 4;</code>
-     * @return The isAdmin.
+     * <code>bool hit_button_enabled = 7;</code>
+     * @return The hitButtonEnabled.
      */
     @java.lang.Override
-    public boolean getIsAdmin() {
-      return instance.getIsAdmin();
+    public boolean getHitButtonEnabled() {
+      return instance.getHitButtonEnabled();
     }
     /**
      * <pre>
-     * enables admin controls in Android app
+     * enable long-press HIT toggle on device button; default false
      * </pre>
      *
-     * <code>bool is_admin = 4;</code>
-     * @param value The isAdmin to set.
+     * <code>bool hit_button_enabled = 7;</code>
+     * @param value The hitButtonEnabled to set.
      * @return This builder for chaining.
      */
-    public Builder setIsAdmin(boolean value) {
+    public Builder setHitButtonEnabled(boolean value) {
       copyOnWrite();
-      instance.setIsAdmin(value);
+      instance.setHitButtonEnabled(value);
       return this;
     }
     /**
      * <pre>
-     * enables admin controls in Android app
+     * enable long-press HIT toggle on device button; default false
      * </pre>
      *
-     * <code>bool is_admin = 4;</code>
+     * <code>bool hit_button_enabled = 7;</code>
      * @return This builder for chaining.
      */
-    public Builder clearIsAdmin() {
+    public Builder clearHitButtonEnabled() {
       copyOnWrite();
-      instance.clearIsAdmin();
+      instance.clearHitButtonEnabled();
       return this;
     }
 
@@ -508,13 +976,16 @@ public  final class GameConfig extends
       case BUILD_MESSAGE_INFO: {
           java.lang.Object[] objects = new java.lang.Object[] {
             "callsign_",
-            "teamId_",
+            "fireteamId_",
+            "squadId_",
+            "platoonId_",
+            "companyId_",
             "playerColorRgb_",
-            "isAdmin_",
+            "hitButtonEnabled_",
           };
           java.lang.String info =
-              "\u0000\u0004\u0000\u0000\u0001\u0004\u0004\u0000\u0000\u0000\u0001\u0208\u0002\u000b" +
-              "\u0003\u000b\u0004\u0007";
+              "\u0000\u0007\u0000\u0000\u0001\u0007\u0007\u0000\u0000\u0000\u0001\u0208\u0002\u0208" +
+              "\u0003\u0208\u0004\u0208\u0005\u0208\u0006\u000b\u0007\u0007";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       // fall through

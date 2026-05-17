@@ -98,7 +98,7 @@ message ChannelSlot {
 
   // Factory defaults:
   //   Slot 0: PRIMARY   "AirTAK"  profile=0  Meshtastic-interop + AirTAK game traffic
-  //   Slot 1: SECONDARY "Game"  profile=0  AirTAK game-only traffic (separate PSK)
+  //   Slot 1: SECONDARY "Tactical" profile=0  AirTAK tactical traffic (separate PSK)
   //   Slot 2: DISABLED  "Audio" profile=1  Pre-configured for Phase 7 PTT audio
   //   Slots 3–7: DISABLED
 }
@@ -145,14 +145,16 @@ message PowerConfig {
 
 // ── Game ──────────────────────────────────────────────────────────────────────
 
-// Roadmap: 3.4, 5.1–5.7 | Per-player game configuration. No radio restart.
-// is_admin = true enables the admin control panel in the Android app (§11.8).
-// Admin status is PSK-enforced by convention, not by cryptographic auth (§15.4).
+// Roadmap: 3.4, 5.1–5.2 | Per-player tactical coordination configuration. No radio restart.
+// Unit hierarchy fields are free-text, self-assigned, all optional. No central enrollment.
 message GameConfig {
-  string callsign         = 1;   // max 16 bytes
-  uint32 team_id          = 2;   // 0 = SPECTATOR; team 0 excluded from scoring
-  uint32 player_color_rgb = 3;   // 24-bit RGB; displayed on map pins
-  bool   is_admin         = 4;   // enables admin controls in Android app
+  string callsign          = 1;   // max 16 bytes
+  string fireteam_id       = 2;   // e.g., "Alpha"; free-text, optional
+  string squad_id          = 3;   // e.g., "1st Squad"; free-text, optional
+  string platoon_id        = 4;   // e.g., "Red Platoon"; free-text, optional
+  string company_id        = 5;   // e.g., "1st Company"; free-text, optional
+  uint32 player_color_rgb  = 6;   // 24-bit RGB; displayed on map pins
+  bool   hit_button_enabled = 7;  // enable long-press HIT toggle on device button; default false
 }
 
 // ── Security ──────────────────────────────────────────────────────────────────

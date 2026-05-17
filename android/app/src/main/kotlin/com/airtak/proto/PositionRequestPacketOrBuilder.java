@@ -8,10 +8,6 @@ public interface PositionRequestPacketOrBuilder extends
     com.google.protobuf.MessageLiteOrBuilder {
 
   /**
-   * <pre>
-   * node to respond
-   * </pre>
-   *
    * <code>uint32 target_node_id = 1;</code>
    * @return The targetNodeId.
    */

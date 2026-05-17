@@ -5,9 +5,8 @@ package com.airtak.proto;
 
 /**
  * <pre>
- * Roadmap: 2.12, 5.9 | Unicast request to refresh a stale map pin on demand.
- * target_node_id must respond with POSITION_APP within 2 seconds (§8.7 Smart Beaconing).
- * BEST_EFFORT delivery; hop_limit=7. See §8.7.
+ * Roadmap: 2.12, 5.6 | Unicast request to refresh a stale map pin.
+ * Target responds with POSITION_APP within 2 seconds. BEST_EFFORT; hop_limit=7.
  * </pre>
  *
  * Protobuf type {@code airtak.PositionRequestPacket}
@@ -22,10 +21,6 @@ public  final class PositionRequestPacket extends
   public static final int TARGET_NODE_ID_FIELD_NUMBER = 1;
   private int targetNodeId_;
   /**
-   * <pre>
-   * node to respond
-   * </pre>
-   *
    * <code>uint32 target_node_id = 1;</code>
    * @return The targetNodeId.
    */
@@ -34,10 +29,6 @@ public  final class PositionRequestPacket extends
     return targetNodeId_;
   }
   /**
-   * <pre>
-   * node to respond
-   * </pre>
-   *
    * <code>uint32 target_node_id = 1;</code>
    * @param value The targetNodeId to set.
    */
@@ -46,10 +37,6 @@ public  final class PositionRequestPacket extends
     targetNodeId_ = value;
   }
   /**
-   * <pre>
-   * node to respond
-   * </pre>
-   *
    * <code>uint32 target_node_id = 1;</code>
    */
   private void clearTargetNodeId() {
@@ -166,9 +153,8 @@ public  final class PositionRequestPacket extends
 
   /**
    * <pre>
-   * Roadmap: 2.12, 5.9 | Unicast request to refresh a stale map pin on demand.
-   * target_node_id must respond with POSITION_APP within 2 seconds (§8.7 Smart Beaconing).
-   * BEST_EFFORT delivery; hop_limit=7. See §8.7.
+   * Roadmap: 2.12, 5.6 | Unicast request to refresh a stale map pin.
+   * Target responds with POSITION_APP within 2 seconds. BEST_EFFORT; hop_limit=7.
    * </pre>
    *
    * Protobuf type {@code airtak.PositionRequestPacket}
@@ -185,10 +171,6 @@ public  final class PositionRequestPacket extends
 
 
     /**
-     * <pre>
-     * node to respond
-     * </pre>
-     *
      * <code>uint32 target_node_id = 1;</code>
      * @return The targetNodeId.
      */
@@ -197,10 +179,6 @@ public  final class PositionRequestPacket extends
       return instance.getTargetNodeId();
     }
     /**
-     * <pre>
-     * node to respond
-     * </pre>
-     *
      * <code>uint32 target_node_id = 1;</code>
      * @param value The targetNodeId to set.
      * @return This builder for chaining.
@@ -211,10 +189,6 @@ public  final class PositionRequestPacket extends
       return this;
     }
     /**
-     * <pre>
-     * node to respond
-     * </pre>
-     *
      * <code>uint32 target_node_id = 1;</code>
      * @return This builder for chaining.
      */

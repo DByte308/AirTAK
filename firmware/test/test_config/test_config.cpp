@@ -147,18 +147,24 @@ static void test_power_roundtrip() {
 static void test_game_roundtrip() {
     airtak_GameConfig out = airtak_GameConfig_init_zero;
     strncpy(out.callsign, defaults::GAME_CALLSIGN, sizeof(out.callsign) - 1);
-    out.team_id = defaults::GAME_TEAM_ID;
+    strncpy(out.fireteam_id, defaults::GAME_FIRETEAM_ID, sizeof(out.fireteam_id) - 1);
+    strncpy(out.squad_id, defaults::GAME_SQUAD_ID, sizeof(out.squad_id) - 1);
+    strncpy(out.platoon_id, defaults::GAME_PLATOON_ID, sizeof(out.platoon_id) - 1);
+    strncpy(out.company_id, defaults::GAME_COMPANY_ID, sizeof(out.company_id) - 1);
     out.player_color_rgb = defaults::GAME_PLAYER_COLOR_RGB;
-    out.is_admin = defaults::GAME_IS_ADMIN;
+    out.hit_button_enabled = defaults::GAME_HIT_BUTTON_ENABLED;
 
     size_t len = encodeMessage(airtak_GameConfig_fields, out);
     airtak_GameConfig in = airtak_GameConfig_init_zero;
     decodeMessage(airtak_GameConfig_fields, s_encoded, len, in);
 
     TEST_ASSERT_EQUAL_STRING(defaults::GAME_CALLSIGN, in.callsign);
-    TEST_ASSERT_EQUAL(defaults::GAME_TEAM_ID, in.team_id);
+    TEST_ASSERT_EQUAL_STRING(defaults::GAME_FIRETEAM_ID, in.fireteam_id);
+    TEST_ASSERT_EQUAL_STRING(defaults::GAME_SQUAD_ID, in.squad_id);
+    TEST_ASSERT_EQUAL_STRING(defaults::GAME_PLATOON_ID, in.platoon_id);
+    TEST_ASSERT_EQUAL_STRING(defaults::GAME_COMPANY_ID, in.company_id);
     TEST_ASSERT_EQUAL(defaults::GAME_PLAYER_COLOR_RGB, in.player_color_rgb);
-    TEST_ASSERT_FALSE(in.is_admin);
+    TEST_ASSERT_EQUAL(defaults::GAME_HIT_BUTTON_ENABLED, in.hit_button_enabled);
 }
 
 static void test_security_roundtrip() {

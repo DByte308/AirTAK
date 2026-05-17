@@ -10,8 +10,10 @@
 // name is not substituted. If Arduino.h is included after ChannelManager.h
 // the macro is re-defined and all subsequent ChannelRole::DISABLED
 // expressions break at preprocessing.
-#if !defined(AIRTAK_NATIVE_TEST)
+// On native (AIRTAK_NATIVE_TEST), the native_stubs/Arduino.h provides
+// millis()/max()/random() stubs and does NOT define DISABLED.
 #include <Arduino.h>
+#if !defined(AIRTAK_NATIVE_TEST)
 #include <FreeRTOS.h>
 #endif
 #include "mesh/ChannelManager.h"
@@ -855,10 +857,8 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
         case Portnum::TEXT_MESSAGE_APP:
             want_ack = meta.want_response || (meta.dest != 0xFFFFFFFF);
             break;
-        case Portnum::AIRTAK_GAME:
-        case Portnum::AIRTAK_ZONE:
-        case Portnum::AIRTAK_OBJECTIVE:
-        case Portnum::AIRTAK_ADMIN:
+        case Portnum::AIRTAK_TACTICAL:
+        case Portnum::AIRTAK_MODERATION:
             want_ack = true;
             break;
         case Portnum::AIRTAK_PLAYER:
@@ -1043,10 +1043,8 @@ uint8_t Router::defaultHopLimit(Portnum portnum) {
         case Portnum::TRACEROUTE_APP:      return defaults::HOP_LIMIT_TRACEROUTE;
         case Portnum::NEIGHBORINFO_APP:    return defaults::HOP_LIMIT_NEIGHBORINFO;
         case Portnum::AIRTAK_PLAYER:         return defaults::HOP_LIMIT_AIRTAK_PLAYER;
-        case Portnum::AIRTAK_GAME:           return defaults::HOP_LIMIT_AIRTAK_GAME;
-        case Portnum::AIRTAK_ZONE:           return defaults::HOP_LIMIT_AIRTAK_ZONE;
-        case Portnum::AIRTAK_OBJECTIVE:      return defaults::HOP_LIMIT_AIRTAK_OBJECTIVE;
-        case Portnum::AIRTAK_ADMIN:          return defaults::HOP_LIMIT_AIRTAK_ADMIN;
+        case Portnum::AIRTAK_TACTICAL:        return defaults::HOP_LIMIT_AIRTAK_TACTICAL;
+        case Portnum::AIRTAK_MODERATION:      return defaults::HOP_LIMIT_AIRTAK_MODERATION;
         case Portnum::AIRTAK_ACK:            return defaults::HOP_LIMIT_AIRTAK_ACK;
         case Portnum::AIRTAK_POSITION_REQUEST: return defaults::HOP_LIMIT_POSITION_REQUEST;
         case Portnum::AIRTAK_AUDIO:          return defaults::HOP_LIMIT_AIRTAK_AUDIO;

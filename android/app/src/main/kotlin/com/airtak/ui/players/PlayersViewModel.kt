@@ -1,4 +1,6 @@
 // AirTAK Android — ui/players/PlayersViewModel.kt
+// v1.6: Team-based grouping replaced with unit hierarchy grouping.
+// Admin roles and force-status/reassign-team removed (decentralized, no admin).
 
 package com.airtak.ui.players
 
@@ -10,8 +12,6 @@ import com.airtak.data.game.GameRepository
 import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.mesh.RemoteNodeRepository
 import com.airtak.data.status.DeviceStatusRepository
-import com.airtak.proto.AdminAction
-import com.airtak.proto.AdminPacket
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.GameConfig
 import com.airtak.proto.PlayerStatePacket
@@ -32,8 +32,10 @@ import javax.inject.Inject
 data class PlayerRow(
     val nodeId: Long,
     val callsign: String,
-    val teamId: Int,
-    val teamName: String,
+    val fireteamId: String,
+    val squadId: String,
+    val platoonId: String,
+    val companyId: String,
     val colorRgb: Int,
     val status: PlayerStatus,
     val lastSeenMs: Long,
@@ -43,18 +45,16 @@ data class PlayerRow(
     val online: Boolean,
 )
 
-data class TeamGroup(
-    val teamId: Int,
-    val name: String,
-    val colorRgb: Int,
+data class UnitGroup(
+    val label: String,
+    val hierarchyLevel: String,
     val players: List<PlayerRow>,
 )
 
 data class PlayersUiState(
     val showOnlineOnly: Boolean = false,
-    val isAdmin: Boolean = false,
     val ownStatus: PlayerStatus = PlayerStatus.PLAYER_STATUS_ACTIVE,
-    val groups: List<TeamGroup> = emptyList(),
+    val groups: List<UnitGroup> = emptyList(),
     val onlineCount: Int = 0,
     val totalCount: Int = 0,
     val query: String = "",
@@ -83,7 +83,6 @@ class PlayersViewModel @Inject constructor(
         val nodes: List<RemoteNodeEntity>,
         val deviceStatus: com.airtak.proto.DeviceStatus?,
         val gameConfig: GameConfig,
-        val game: com.airtak.data.game.GameMirror,
     )
 
     init {
@@ -95,8 +94,8 @@ class PlayersViewModel @Inject constructor(
             ?: GameConfig.getDefaultInstance()
     }
 
-    private val source = combine(remoteNodes.nodes, status, gameConfig, gameRepository.state) { nodes, deviceStatus, cfg, game ->
-        Source(nodes, deviceStatus, cfg, game)
+    private val source = combine(remoteNodes.nodes, status, gameConfig) { nodes, deviceStatus, cfg ->
+        Source(nodes, deviceStatus, cfg)
     }
 
     val uiState: StateFlow<PlayersUiState> = combine(
@@ -105,15 +104,17 @@ class PlayersViewModel @Inject constructor(
             val deviceStatus = source.deviceStatus
             val remoteRows = source.nodes
                 .filter { it.nodeId != ownNodeId }
-                .map { it.toPlayerRow(now, false, source.game.teams) }
+                .map { it.toPlayerRow(now, false) }
             val ownRow = if (deviceStatus != null) {
                 val selfNodeId = deviceStatus.nodeId.toLong() and 0xFFFF_FFFFL
                 PlayerRow(
                     nodeId = selfNodeId,
                     callsign = source.gameConfig.callsign.ifBlank { deviceStatus.nodeName.ifBlank { "You" } },
-                    teamId = source.gameConfig.teamId,
-                    teamName = teamName(source.gameConfig.teamId, source.game.teams),
-                    colorRgb = teamColor(source.gameConfig.teamId, source.game.teams),
+                    fireteamId = source.gameConfig.fireteamId,
+                    squadId = source.gameConfig.squadId,
+                    platoonId = source.gameConfig.platoonId,
+                    companyId = source.gameConfig.companyId,
+                    colorRgb = source.gameConfig.playerColorRgb,
                     status = own,
                     lastSeenMs = now,
                     lastPlayerMs = now,
@@ -124,18 +125,9 @@ class PlayersViewModel @Inject constructor(
             } else null
             val rows = (listOfNotNull(ownRow) + remoteRows)
                 .filter { !onlineOnly || it.online }
-                .sortedWith(compareBy<PlayerRow> { it.teamId }.thenBy { it.callsign.lowercase() })
-            val groups = rows.groupBy { it.teamId }.map { (teamId, players) ->
-                TeamGroup(
-                    teamId = teamId,
-                    name = teamName(teamId, source.game.teams),
-                    colorRgb = teamColor(teamId, source.game.teams),
-                    players = players,
-                )
-            }
+            val groups = groupByHierarchy(rows)
             PlayersUiState(
                 showOnlineOnly = onlineOnly,
-                isAdmin = source.gameConfig.isAdmin,
                 ownStatus = own,
                 groups = groups,
                 onlineCount = (listOfNotNull(ownRow) + remoteRows).count { it.online },
@@ -150,7 +142,7 @@ class PlayersViewModel @Inject constructor(
             groups = state.groups.mapNotNull { grp ->
                 val filtered = grp.players.filter {
                     it.callsign.contains(q, ignoreCase = true) ||
-                        it.teamName.contains(q, ignoreCase = true)
+                        grp.label.contains(q, ignoreCase = true)
                 }
                 if (filtered.isEmpty()) null else grp.copy(players = filtered)
             },
@@ -169,28 +161,6 @@ class PlayersViewModel @Inject constructor(
 
     fun refreshOwnState() = broadcastOwnStatus(ownStatus.value, false)
 
-    fun forceStatus(targetNodeId: Long, status: PlayerStatus) {
-        val adminNodeId = statusNodeId() ?: return
-        val packet = AdminPacket.newBuilder()
-            .setAdminNodeId(adminNodeId)
-            .setAction(AdminAction.ADMIN_ACTION_FORCE_PLAYER_STATE)
-            .setTargetNodeId((targetNodeId and 0xFFFF_FFFFL).toInt())
-            .setValue(status.number)
-            .build()
-        mesh.sendAdminPacket(packet)
-    }
-
-    fun reassignTeam(targetNodeId: Long, teamId: Int) {
-        val adminNodeId = statusNodeId() ?: return
-        val packet = AdminPacket.newBuilder()
-            .setAdminNodeId(adminNodeId)
-            .setAction(AdminAction.ADMIN_ACTION_FORCE_PLAYER_TEAM)
-            .setTargetNodeId((targetNodeId and 0xFFFF_FFFFL).toInt())
-            .setValue(teamId.coerceAtLeast(0))
-            .build()
-        mesh.sendAdminPacket(packet)
-    }
-
     fun requestPosition(nodeId: Long) {
         mesh.requestPosition(nodeId, statusNodeId()?.toLong()?.and(0xFFFF_FFFFL) ?: 0L)
     }
@@ -200,14 +170,16 @@ class PlayersViewModel @Inject constructor(
         val cfg = runCatching { uiState.value }.getOrNull()
         val row = cfg?.groups?.flatMap { it.players }?.firstOrNull { it.isSelf }
         val callsign = row?.callsign?.takeIf { it.isNotBlank() } ?: currentStatus.nodeName.ifBlank { "AirTAK" }
-        val teamId = row?.teamId ?: 0
         val packet = PlayerStatePacket.newBuilder()
             .setNodeId(currentStatus.nodeId)
             .setCallsign(callsign)
-            .setTeamId(teamId)
             .setStatus(statusValue)
-            .setColorRgb(row?.colorRgb ?: defaultTeamColor(teamId))
+            .setColorRgb(row?.colorRgb ?: 0xFFFFFF)
             .setIsStateTransition(transition)
+            .setFireteamId(row?.fireteamId ?: "")
+            .setSquadId(row?.squadId ?: "")
+            .setPlatoonId(row?.platoonId ?: "")
+            .setCompanyId(row?.companyId ?: "")
             .build()
         mesh.sendPlayerState(packet)
     }
@@ -217,16 +189,17 @@ class PlayersViewModel @Inject constructor(
     private fun RemoteNodeEntity.toPlayerRow(
         now: Long,
         isSelf: Boolean,
-        teams: Map<Int, com.airtak.data.game.TeamInfo>,
     ): PlayerRow {
         val online = lastPlayerMs != null && now - lastPlayerMs <= PLAYER_STALE_MS
         val displayName = callsign.ifBlank { shortName.ifBlank { nodeId.toString(16).uppercase().takeLast(4) } }
         return PlayerRow(
             nodeId = nodeId,
             callsign = displayName,
-            teamId = teamId,
-            teamName = teamName(teamId, teams),
-            colorRgb = colorRgb.takeIf { it != 0 } ?: teamColor(teamId, teams),
+            fireteamId = fireteamId,
+            squadId = squadId,
+            platoonId = platoonId,
+            companyId = companyId,
+            colorRgb = colorRgb.takeIf { it != 0 } ?: defaultPlayerColor(nodeId),
             status = if (online) PlayerStatus.forNumber(statusValue) ?: PlayerStatus.PLAYER_STATUS_ACTIVE else PlayerStatus.UNRECOGNIZED,
             lastSeenMs = lastSeenMs,
             lastPlayerMs = lastPlayerMs,
@@ -236,20 +209,13 @@ class PlayersViewModel @Inject constructor(
         )
     }
 
-    private fun teamName(teamId: Int, teams: Map<Int, com.airtak.data.game.TeamInfo>): String =
-        teams[teamId]?.name ?: if (teamId == 0) "Spectators" else "Team $teamId"
-
-    private fun teamColor(teamId: Int, teams: Map<Int, com.airtak.data.game.TeamInfo>): Int =
-        teams[teamId]?.colorRgb?.takeIf { it != 0 } ?: defaultTeamColor(teamId)
-
-    private fun defaultTeamColor(teamId: Int): Int {
-        if (teamId <= 0) return 0x6E7681
-        return DEFAULT_TEAM_COLORS[(teamId - 1) % DEFAULT_TEAM_COLORS.size]
+    private fun defaultPlayerColor(nodeId: Long): Int {
+        return DEFAULT_COLORS[(nodeId % DEFAULT_COLORS.size).toInt().coerceAtLeast(0)]
     }
 
     private companion object {
         const val PLAYER_STALE_MS = 5 * 60 * 1_000L
-        val DEFAULT_TEAM_COLORS = intArrayOf(
+        val DEFAULT_COLORS = intArrayOf(
             0xE63946,
             0x1D9BF0,
             0xFFB300,
@@ -260,4 +226,47 @@ class PlayersViewModel @Inject constructor(
             0xF06292,
         )
     }
+}
+
+private fun groupByHierarchy(rows: List<PlayerRow>): List<UnitGroup> {
+    val sorted = rows.sortedBy { it.callsign.lowercase() }
+
+    // Group by the most specific hierarchy level available.
+    // Priority: company → platoon → squad → fireteam
+    val groups = mutableMapOf<String, MutableList<PlayerRow>>()
+    val ungrouped = mutableListOf<PlayerRow>()
+
+    for (row in sorted) {
+        val key = when {
+            row.companyId.isNotBlank() -> "company:${row.companyId}"
+            row.platoonId.isNotBlank() -> "platoon:${row.platoonId}"
+            row.squadId.isNotBlank() -> "squad:${row.squadId}"
+            row.fireteamId.isNotBlank() -> "fireteam:${row.fireteamId}"
+            else -> null
+        }
+        if (key != null) {
+            groups.getOrPut(key) { mutableListOf() }.add(row)
+        } else {
+            ungrouped.add(row)
+        }
+    }
+
+    val result = mutableListOf<UnitGroup>()
+    for ((key, players) in groups.entries.sortedBy { it.key }) {
+        val parts = key.split(":", limit = 2)
+        val level = parts[0]
+        val id = parts.getOrElse(1) { "" }
+        val label = when (level) {
+            "company" -> id
+            "platoon" -> id
+            "squad" -> id
+            "fireteam" -> id
+            else -> id
+        }
+        result.add(UnitGroup(label = label, hierarchyLevel = level, players = players))
+    }
+    if (ungrouped.isNotEmpty()) {
+        result.add(UnitGroup(label = "Ungrouped", hierarchyLevel = "", players = ungrouped))
+    }
+    return result
 }

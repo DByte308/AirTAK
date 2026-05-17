@@ -1,4 +1,5 @@
 // AirTAK Android — ui/players/PlayersScreen.kt
+// v1.6: Team grouping replaced with unit hierarchy. Admin controls removed.
 
 package com.airtak.ui.players
 
@@ -22,14 +23,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Message
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,9 +36,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -70,7 +64,7 @@ fun PlayersScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
@@ -84,7 +78,7 @@ fun PlayersScreen(
                 value = ui.query,
                 onValueChange = viewModel::setQuery,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search callsign or team…", style = MaterialTheme.typography.bodyMedium) },
+                placeholder = { Text("Search callsign or unit…", style = MaterialTheme.typography.bodyMedium) },
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 singleLine = true,
             )
@@ -99,14 +93,11 @@ fun PlayersScreen(
             )
         }
         ui.groups.forEach { group ->
-            item(key = "team-${group.teamId}") { TeamHeader(group) }
+            item(key = "unit-${group.label}") { UnitGroupHeader(group) }
             items(group.players, key = { it.nodeId }) { player ->
                 PlayerCard(
                     player = player,
-                    isAdmin = ui.isAdmin,
                     onRequestPosition = { viewModel.requestPosition(player.nodeId) },
-                    onForceStatus = { status -> viewModel.forceStatus(player.nodeId, status) },
-                    onReassignTeam = { teamId -> viewModel.reassignTeam(player.nodeId, teamId) },
                     onMessage = { onMessagePlayer(player.nodeId) },
                     onLocate = { onLocatePlayer(player.nodeId) },
                 )
@@ -140,6 +131,7 @@ private fun OwnStatusPanel(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 listOf(
                     PlayerStatus.PLAYER_STATUS_ACTIVE,
+                    PlayerStatus.PLAYER_STATUS_INACTIVE,
                     PlayerStatus.PLAYER_STATUS_HIT,
                     PlayerStatus.PLAYER_STATUS_RESPAWNING,
                     PlayerStatus.PLAYER_STATUS_ELIMINATED,
@@ -201,18 +193,18 @@ private fun ButtonLabel(text: String) {
 }
 
 @Composable
-private fun TeamHeader(group: TeamGroup) {
+private fun UnitGroupHeader(group: UnitGroup) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-        Box(
-            Modifier
-                .size(10.dp)
-                .background(teamColor(group.colorRgb), RoundedCornerShape(50)),
+        Text(
+            group.label.uppercase(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            group.name.uppercase(),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            group.hierarchyLevel.takeIf { it.isNotBlank() }?.let { "($it)" } ?: "",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.width(8.dp))
         Text(
@@ -226,22 +218,18 @@ private fun TeamHeader(group: TeamGroup) {
 @Composable
 private fun PlayerCard(
     player: PlayerRow,
-    isAdmin: Boolean,
     onRequestPosition: () -> Unit,
-    onForceStatus: (PlayerStatus) -> Unit,
-    onReassignTeam: (Int) -> Unit,
     onMessage: () -> Unit,
     onLocate: () -> Unit,
 ) {
-    var menuOpen by remember(player.nodeId) { mutableStateOf(false) }
     val status = if (player.online) player.status else PlayerStatus.UNRECOGNIZED
-    HudCard(Modifier.fillMaxWidth(), accent = teamColor(player.colorRgb)) {
+    HudCard(Modifier.fillMaxWidth(), accent = playerColor(player.colorRgb)) {
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier
                     .width(4.dp)
                     .fillMaxHeight()
-                    .background(teamColor(player.colorRgb), RoundedCornerShape(2.dp)),
+                    .background(playerColor(player.colorRgb), RoundedCornerShape(2.dp)),
             )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -260,7 +248,7 @@ private fun PlayerCard(
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        player.teamName,
+                        hierarchyLabel(player),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -287,40 +275,10 @@ private fun PlayerCard(
                         Text("Locate")
                     }
                     if (!player.isSelf) {
-                        if (isAdmin) OutlinedButton(onClick = onRequestPosition, modifier = Modifier.weight(1f)) {
+                        OutlinedButton(onClick = onRequestPosition, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Outlined.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Ping")
-                        }
-                        if (isAdmin) Box {
-                            IconButton(onClick = { menuOpen = true }) {
-                                Icon(Icons.Outlined.MoreVert, contentDescription = "Admin")
-                            }
-                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                listOf(
-                                    PlayerStatus.PLAYER_STATUS_ACTIVE,
-                                    PlayerStatus.PLAYER_STATUS_HIT,
-                                    PlayerStatus.PLAYER_STATUS_RESPAWNING,
-                                    PlayerStatus.PLAYER_STATUS_ELIMINATED,
-                                ).forEach { statusOption ->
-                                    DropdownMenuItem(
-                                        text = { Text("Force ${statusOption.shortLabel()}") },
-                                        onClick = {
-                                            menuOpen = false
-                                            onForceStatus(statusOption)
-                                        },
-                                    )
-                                }
-                                (0..8).forEach { teamId ->
-                                    DropdownMenuItem(
-                                        text = { Text(if (teamId == 0) "Move to Spectators" else "Move to Team $teamId") },
-                                        onClick = {
-                                            menuOpen = false
-                                            onReassignTeam(teamId)
-                                        },
-                                    )
-                                }
-                            }
                         }
                     }
                 }
@@ -363,6 +321,15 @@ private fun BatteryIndicator(percent: Int?) {
     }
 }
 
+private fun hierarchyLabel(player: PlayerRow): String {
+    val parts = mutableListOf<String>()
+    if (player.companyId.isNotBlank()) parts.add(player.companyId)
+    if (player.platoonId.isNotBlank()) parts.add(player.platoonId)
+    if (player.squadId.isNotBlank()) parts.add(player.squadId)
+    if (player.fireteamId.isNotBlank()) parts.add(player.fireteamId)
+    return parts.joinToString(" / ").ifBlank { "No unit" }
+}
+
 private fun ageText(timestampMs: Long?): String {
     if (timestampMs == null) return "—"
     val ageSec = ((System.currentTimeMillis() - timestampMs) / 1_000L).coerceAtLeast(0)
@@ -375,15 +342,16 @@ private fun ageText(timestampMs: Long?): String {
 
 private fun PlayerStatus.shortLabel(): String = when (this) {
     PlayerStatus.PLAYER_STATUS_ACTIVE -> "ACTIVE"
+    PlayerStatus.PLAYER_STATUS_INACTIVE -> "INACT"
     PlayerStatus.PLAYER_STATUS_HIT -> "HIT"
     PlayerStatus.PLAYER_STATUS_RESPAWNING -> "RESPAWN"
     PlayerStatus.PLAYER_STATUS_ELIMINATED -> "ELIM"
-    PlayerStatus.PLAYER_STATUS_SPECTATING -> "SPEC"
     else -> "OFFLINE"
 }
 
 private fun PlayerStatus.shortButtonLabel(): String = when (this) {
     PlayerStatus.PLAYER_STATUS_ACTIVE -> "Active"
+    PlayerStatus.PLAYER_STATUS_INACTIVE -> "Inact"
     PlayerStatus.PLAYER_STATUS_HIT -> "Hit"
     PlayerStatus.PLAYER_STATUS_RESPAWNING -> "Resp"
     PlayerStatus.PLAYER_STATUS_ELIMINATED -> "Elim"
@@ -392,11 +360,11 @@ private fun PlayerStatus.shortButtonLabel(): String = when (this) {
 
 private fun statusColor(status: PlayerStatus): Color = when (status) {
     PlayerStatus.PLAYER_STATUS_ACTIVE -> StatusActive
+    PlayerStatus.PLAYER_STATUS_INACTIVE -> StatusOffline
     PlayerStatus.PLAYER_STATUS_HIT -> StatusHit
     PlayerStatus.PLAYER_STATUS_RESPAWNING -> StatusRespawning
     PlayerStatus.PLAYER_STATUS_ELIMINATED -> StatusEliminated
-    PlayerStatus.PLAYER_STATUS_SPECTATING -> StatusOffline
     else -> StatusOffline
 }
 
-private fun teamColor(rgb: Int): Color = Color(0xFF000000L or (rgb.toLong() and 0xFFFFFFL))
+private fun playerColor(rgb: Int): Color = Color(0xFF000000L or (rgb.toLong() and 0xFFFFFFL))

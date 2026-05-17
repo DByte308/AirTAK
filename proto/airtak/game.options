@@ -1,8 +1,10 @@
 airtak.PlayerStatePacket.callsign max_size:17
-airtak.GameStatePacket.teams max_count:8
-airtak.GameStatePacket.scores max_count:8
-airtak.TeamDefinition.name max_size:17
-airtak.ZonePacket.name max_size:17
-airtak.ZonePacket.polygon max_count:32
+airtak.PlayerStatePacket.fireteam_id max_size:33
+airtak.PlayerStatePacket.squad_id max_size:33
+airtak.PlayerStatePacket.platoon_id max_size:33
+airtak.PlayerStatePacket.company_id max_size:33
+airtak.TacticalMarker.label max_size:33
+airtak.TacticalMarker.description max_size:257
+airtak.TacticalMarker.points max_count:16
 airtak.AudioPacket.audio_data max_size:200
 airtak.AudioPacket.fec_prev_audio_data max_size:200

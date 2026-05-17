@@ -9,7 +9,6 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "remote_nodes",
     indices = [
-        Index("teamId"),
         Index("lastSeenMs"),
         Index("lastPositionMs"),
         Index("lastPlayerMs"),
@@ -20,7 +19,10 @@ data class RemoteNodeEntity(
     val callsign: String = "",
     val shortName: String = "",
     val longName: String = "",
-    val teamId: Int = 0,
+    val fireteamId: String = "",
+    val squadId: String = "",
+    val platoonId: String = "",
+    val companyId: String = "",
     val statusValue: Int = PLAYER_STATUS_UNKNOWN,
     val colorRgb: Int = 0,
     val latitude: Double? = null,

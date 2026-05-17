@@ -168,8 +168,12 @@ void test_default_hop_limit_airtak_audio_is_one() {
     TEST_ASSERT_EQUAL(1, Router::defaultHopLimit(Portnum::AIRTAK_AUDIO));
 }
 
-void test_default_hop_limit_airtak_game() {
-    TEST_ASSERT_EQUAL(defaults::HOP_LIMIT_AIRTAK_GAME, Router::defaultHopLimit(Portnum::AIRTAK_GAME));
+void test_default_hop_limit_airtak_tactical() {
+    TEST_ASSERT_EQUAL(defaults::HOP_LIMIT_AIRTAK_TACTICAL, Router::defaultHopLimit(Portnum::AIRTAK_TACTICAL));
+}
+
+void test_default_hop_limit_airtak_moderation() {
+    TEST_ASSERT_EQUAL(defaults::HOP_LIMIT_AIRTAK_MODERATION, Router::defaultHopLimit(Portnum::AIRTAK_MODERATION));
 }
 
 // All non-audio packet types must use hop_limit=7 (§8.9, §v1.5 unification).
@@ -180,10 +184,8 @@ void test_all_non_audio_types_use_hop7() {
     TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::TRACEROUTE_APP));
     TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::NEIGHBORINFO_APP));
     TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_PLAYER));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_GAME));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_ZONE));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_OBJECTIVE));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_ADMIN));
+    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_TACTICAL));
+    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_MODERATION));
     TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_POSITION_REQUEST));
 }
 
@@ -386,7 +388,7 @@ void test_send_data_packet_adds_ack_retry_and_handle_ack_clears_it() {
     Router::init();
 
     uint8_t data[96];
-    uint16_t data_len = build_data(data, Portnum::AIRTAK_GAME);
+    uint16_t data_len = build_data(data, Portnum::AIRTAK_TACTICAL);
     TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
     TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
 
@@ -441,13 +443,13 @@ void test_acknowledged_receiver_deduplicates_by_request_id() {
 
     uint8_t raw[192];
     uint8_t raw_len = build_ota(raw, 0xAABBCCDD, 0x50, 7,
-                                Portnum::AIRTAK_GAME, nullptr, 0,
+                                Portnum::AIRTAK_TACTICAL, nullptr, 0,
                                 true, 0x1234);
     Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
     TEST_ASSERT_EQUAL_UINT32(1, Router::testAppDedupCount());
 
     raw_len = build_ota(raw, 0xAABBCCDD, 0x51, 7,
-                        Portnum::AIRTAK_GAME, nullptr, 0,
+                        Portnum::AIRTAK_TACTICAL, nullptr, 0,
                         true, 0x1234);
     Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
     TEST_ASSERT_EQUAL_UINT32(1, Router::testAppDedupCount());
@@ -457,7 +459,7 @@ void test_ack_retry_tick_retransmits_with_attempt_count() {
     Router::init();
 
     uint8_t data[96];
-    uint16_t data_len = build_data(data, Portnum::AIRTAK_GAME);
+    uint16_t data_len = build_data(data, Portnum::AIRTAK_TACTICAL);
     TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
 
     delay(6000);
@@ -511,7 +513,7 @@ void test_ack_to_other_node_does_not_clear_retry() {
 
     // Create a retry entry via sendDataPacket (ACKNOWLEDGED packet).
     uint8_t data[96];
-    uint16_t data_len = build_data(data, Portnum::AIRTAK_GAME);
+    uint16_t data_len = build_data(data, Portnum::AIRTAK_TACTICAL);
     TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
     TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
 
@@ -553,7 +555,7 @@ void test_ack_to_us_broadcast_clears_retry() {
     Router::init();
 
     uint8_t data[96];
-    uint16_t data_len = build_data(data, Portnum::AIRTAK_GAME);
+    uint16_t data_len = build_data(data, Portnum::AIRTAK_TACTICAL);
     TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
     TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
 
@@ -610,9 +612,9 @@ void test_intermediate_relay_still_relays_unicast_for_other_node() {
 void test_retry_entry_remains_after_max_retries_until_timeout_expires() {
     Router::init();
 
-    // Create a retry entry via sendDataPacket (AIRTAK_GAME, hop_start=7).
+    // Create a retry entry via sendDataPacket (AIRTAK_TACTICAL, hop_start=7).
     uint8_t data[96];
-    uint16_t data_len = build_data(data, Portnum::AIRTAK_GAME);
+    uint16_t data_len = build_data(data, Portnum::AIRTAK_TACTICAL);
     TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
     TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
 
@@ -720,7 +722,7 @@ void test_ack_generated_with_zero_hop_start_fallback() {
     // Build a packet with hop_start=0 (legacy device).
     uint8_t raw[192];
     uint8_t raw_len = build_ota(raw, 0xAABBCCDD, 0x60, 7,
-                                Portnum::AIRTAK_GAME, nullptr, 0,
+                                Portnum::AIRTAK_TACTICAL, nullptr, 0,
                                 true, 0x5678);
     // Overwrite the hop_start in Flags [2:0] to 0 (only hop_limit in [7:5]).
     raw[12] = static_cast<uint8_t>(((7 & 0x07) << 5) | (1 << 4) | (0 & 0x07));
@@ -777,9 +779,9 @@ void test_default_hop_limit_airtak_ack_is_nonzero() {
 void test_implicit_ack_own_packet_cancels_retry() {
     Router::init();
 
-    // Create a retry entry via sendDataPacket (AIRTAK_GAME, acknowledged).
+    // Create a retry entry via sendDataPacket (AIRTAK_TACTICAL, acknowledged).
     uint8_t data[96];
-    uint16_t data_len = build_data(data, Portnum::AIRTAK_GAME);
+    uint16_t data_len = build_data(data, Portnum::AIRTAK_TACTICAL);
     TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
     TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
 
@@ -797,7 +799,7 @@ void test_implicit_ack_own_packet_cancels_retry() {
     // src_node_id = MeshNode::nodeId() = 0x12345678.
     uint8_t raw[192];
     uint8_t raw_len = build_ota(raw, MeshNode::nodeId(), 0x9999, 3,
-                                Portnum::AIRTAK_GAME, nullptr, 0,
+                                Portnum::AIRTAK_TACTICAL, nullptr, 0,
                                 true, msg_id);
     Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
 
@@ -868,7 +870,8 @@ int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_default_hop_limit_position);
     RUN_TEST(test_default_hop_limit_airtak_audio_is_one);
-    RUN_TEST(test_default_hop_limit_airtak_game);
+    RUN_TEST(test_default_hop_limit_airtak_tactical);
+    RUN_TEST(test_default_hop_limit_airtak_moderation);
     RUN_TEST(test_all_non_audio_types_use_hop7);
     RUN_TEST(test_ack_timeout_formula_hop3);
     RUN_TEST(test_ack_timeout_formula_hop7);

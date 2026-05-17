@@ -26,45 +26,109 @@ public interface PlayerStatePacketOrBuilder extends
       getCallsignBytes();
 
   /**
-   * <code>uint32 team_id = 3;</code>
-   * @return The teamId.
-   */
-  int getTeamId();
-
-  /**
-   * <code>.airtak.PlayerStatus status = 4;</code>
+   * <code>.airtak.PlayerStatus status = 3;</code>
    * @return The enum numeric value on the wire for status.
    */
   int getStatusValue();
   /**
-   * <code>.airtak.PlayerStatus status = 4;</code>
+   * <code>.airtak.PlayerStatus status = 3;</code>
    * @return The status.
    */
   com.airtak.proto.PlayerStatus getStatus();
 
   /**
-   * <pre>
-   * epoch seconds; non-zero when RESPAWNING
-   * </pre>
-   *
-   * <code>uint32 respawn_at_unix = 5;</code>
-   * @return The respawnAtUnix.
-   */
-  int getRespawnAtUnix();
-
-  /**
-   * <code>uint32 color_rgb = 6;</code>
+   * <code>uint32 color_rgb = 4;</code>
    * @return The colorRgb.
    */
   int getColorRgb();
 
   /**
    * <pre>
-   * true = status changed; false = position heartbeat
+   * true = status changed; false = heartbeat
    * </pre>
    *
-   * <code>bool is_state_transition = 7;</code>
+   * <code>bool is_state_transition = 5;</code>
    * @return The isStateTransition.
    */
   boolean getIsStateTransition();
+
+  /**
+   * <pre>
+   * e.g., "Alpha"; free-text, optional
+   * </pre>
+   *
+   * <code>string fireteam_id = 6;</code>
+   * @return The fireteamId.
+   */
+  java.lang.String getFireteamId();
+  /**
+   * <pre>
+   * e.g., "Alpha"; free-text, optional
+   * </pre>
+   *
+   * <code>string fireteam_id = 6;</code>
+   * @return The bytes for fireteamId.
+   */
+  com.google.protobuf.ByteString
+      getFireteamIdBytes();
+
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 7;</code>
+   * @return The squadId.
+   */
+  java.lang.String getSquadId();
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>string squad_id = 7;</code>
+   * @return The bytes for squadId.
+   */
+  com.google.protobuf.ByteString
+      getSquadIdBytes();
+
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 8;</code>
+   * @return The platoonId.
+   */
+  java.lang.String getPlatoonId();
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>string platoon_id = 8;</code>
+   * @return The bytes for platoonId.
+   */
+  com.google.protobuf.ByteString
+      getPlatoonIdBytes();
+
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 9;</code>
+   * @return The companyId.
+   */
+  java.lang.String getCompanyId();
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>string company_id = 9;</code>
+   * @return The bytes for companyId.
+   */
+  com.google.protobuf.ByteString
+      getCompanyIdBytes();
 }

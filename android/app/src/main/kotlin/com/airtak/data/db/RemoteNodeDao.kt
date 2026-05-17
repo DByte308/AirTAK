@@ -16,7 +16,7 @@ interface RemoteNodeDao {
     @Query("SELECT * FROM remote_nodes WHERE nodeId = :nodeId LIMIT 1")
     suspend fun get(nodeId: Long): RemoteNodeEntity?
 
-    @Query("SELECT * FROM remote_nodes ORDER BY teamId ASC, callsign COLLATE NOCASE ASC, shortName COLLATE NOCASE ASC")
+    @Query("SELECT * FROM remote_nodes ORDER BY companyId ASC, platoonId ASC, squadId ASC, fireteamId ASC, callsign COLLATE NOCASE ASC, shortName COLLATE NOCASE ASC")
     fun observeAll(): Flow<List<RemoteNodeEntity>>
 
     @Query("DELETE FROM remote_nodes WHERE lastSeenMs < :olderThanMs")

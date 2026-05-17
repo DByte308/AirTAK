@@ -27,14 +27,12 @@ object Portnum {
     const val POSITION_APP     = 3
     const val NODEINFO_APP     = 4
     const val TELEMETRY_APP    = 67
-    const val AIRTAK_PLAYER    = 256
-    const val AIRTAK_GAME      = 257
-    const val AIRTAK_ZONE      = 258
-    const val AIRTAK_OBJECTIVE = 259
-    const val AIRTAK_ADMIN     = 260
-    const val AIRTAK_ACK       = 261
-    const val AIRTAK_POSREQ    = 262
-    const val AIRTAK_AUDIO     = 263
+    const val AIRTAK_PLAYER      = 256
+    const val AIRTAK_TACTICAL    = 257
+    const val AIRTAK_MODERATION  = 258
+    const val AIRTAK_ACK         = 261
+    const val AIRTAK_POSREQ      = 262
+    const val AIRTAK_AUDIO       = 263
 }
 
 /** Decoded MESH_RX envelope. */

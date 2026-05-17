@@ -23,10 +23,6 @@ public object PositionRequestPacketKt {
     internal fun _build(): com.airtak.proto.PositionRequestPacket = _builder.build()
 
     /**
-     * <pre>
-     * node to respond
-     * </pre>
-     *
      * <code>uint32 target_node_id = 1;</code>
      */
     public var targetNodeId: kotlin.Int
@@ -37,10 +33,6 @@ public object PositionRequestPacketKt {
         _builder.setTargetNodeId(value)
       }
     /**
-     * <pre>
-     * node to respond
-     * </pre>
-     *
      * <code>uint32 target_node_id = 1;</code>
      */
     public fun clearTargetNodeId() {

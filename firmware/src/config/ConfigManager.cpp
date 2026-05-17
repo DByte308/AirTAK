@@ -171,9 +171,12 @@ static size_t encodePowerConfig(uint8_t* buf, size_t buf_len) {
 static size_t encodeGameConfig(uint8_t* buf, size_t buf_len) {
     airtak_GameConfig msg = airtak_GameConfig_init_zero;
     copyString(msg.callsign, sizeof(msg.callsign), defaults::GAME_CALLSIGN);
-    msg.team_id = defaults::GAME_TEAM_ID;
+    copyString(msg.fireteam_id, sizeof(msg.fireteam_id), defaults::GAME_FIRETEAM_ID);
+    copyString(msg.squad_id, sizeof(msg.squad_id), defaults::GAME_SQUAD_ID);
+    copyString(msg.platoon_id, sizeof(msg.platoon_id), defaults::GAME_PLATOON_ID);
+    copyString(msg.company_id, sizeof(msg.company_id), defaults::GAME_COMPANY_ID);
     msg.player_color_rgb = defaults::GAME_PLAYER_COLOR_RGB;
-    msg.is_admin = defaults::GAME_IS_ADMIN;
+    msg.hit_button_enabled = defaults::GAME_HIT_BUTTON_ENABLED;
     return encodeMessage(airtak_GameConfig_fields, &msg, buf, buf_len);
 }
 

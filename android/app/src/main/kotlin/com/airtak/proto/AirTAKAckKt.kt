@@ -74,7 +74,7 @@ public object AirTAKAckKt {
 
     /**
      * <pre>
-     * hop_start of the ACKed packet; used for sender validation
+     * hop_start of the ACKed packet; sender validation
      * </pre>
      *
      * <code>uint32 original_hop_start = 3;</code>
@@ -88,7 +88,7 @@ public object AirTAKAckKt {
       }
     /**
      * <pre>
-     * hop_start of the ACKed packet; used for sender validation
+     * hop_start of the ACKed packet; sender validation
      * </pre>
      *
      * <code>uint32 original_hop_start = 3;</code>

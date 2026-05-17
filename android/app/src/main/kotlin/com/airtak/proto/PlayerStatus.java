@@ -13,25 +13,25 @@ public enum PlayerStatus
    */
   PLAYER_STATUS_ACTIVE(0),
   /**
-   * <code>PLAYER_STATUS_HIT = 1;</code>
+   * <code>PLAYER_STATUS_INACTIVE = 1;</code>
    */
-  PLAYER_STATUS_HIT(1),
-  /**
-   * <code>PLAYER_STATUS_RESPAWNING = 2;</code>
-   */
-  PLAYER_STATUS_RESPAWNING(2),
-  /**
-   * <code>PLAYER_STATUS_ELIMINATED = 3;</code>
-   */
-  PLAYER_STATUS_ELIMINATED(3),
+  PLAYER_STATUS_INACTIVE(1),
   /**
    * <pre>
-   * team_id=0; excluded from hit/respawn mechanics and scoring
+   * Extended statuses (optional, manually toggled, informational only):
    * </pre>
    *
-   * <code>PLAYER_STATUS_SPECTATING = 4;</code>
+   * <code>PLAYER_STATUS_HIT = 2;</code>
    */
-  PLAYER_STATUS_SPECTATING(4),
+  PLAYER_STATUS_HIT(2),
+  /**
+   * <code>PLAYER_STATUS_RESPAWNING = 3;</code>
+   */
+  PLAYER_STATUS_RESPAWNING(3),
+  /**
+   * <code>PLAYER_STATUS_ELIMINATED = 4;</code>
+   */
+  PLAYER_STATUS_ELIMINATED(4),
   UNRECOGNIZED(-1),
   ;
 
@@ -40,25 +40,25 @@ public enum PlayerStatus
    */
   public static final int PLAYER_STATUS_ACTIVE_VALUE = 0;
   /**
-   * <code>PLAYER_STATUS_HIT = 1;</code>
+   * <code>PLAYER_STATUS_INACTIVE = 1;</code>
    */
-  public static final int PLAYER_STATUS_HIT_VALUE = 1;
-  /**
-   * <code>PLAYER_STATUS_RESPAWNING = 2;</code>
-   */
-  public static final int PLAYER_STATUS_RESPAWNING_VALUE = 2;
-  /**
-   * <code>PLAYER_STATUS_ELIMINATED = 3;</code>
-   */
-  public static final int PLAYER_STATUS_ELIMINATED_VALUE = 3;
+  public static final int PLAYER_STATUS_INACTIVE_VALUE = 1;
   /**
    * <pre>
-   * team_id=0; excluded from hit/respawn mechanics and scoring
+   * Extended statuses (optional, manually toggled, informational only):
    * </pre>
    *
-   * <code>PLAYER_STATUS_SPECTATING = 4;</code>
+   * <code>PLAYER_STATUS_HIT = 2;</code>
    */
-  public static final int PLAYER_STATUS_SPECTATING_VALUE = 4;
+  public static final int PLAYER_STATUS_HIT_VALUE = 2;
+  /**
+   * <code>PLAYER_STATUS_RESPAWNING = 3;</code>
+   */
+  public static final int PLAYER_STATUS_RESPAWNING_VALUE = 3;
+  /**
+   * <code>PLAYER_STATUS_ELIMINATED = 4;</code>
+   */
+  public static final int PLAYER_STATUS_ELIMINATED_VALUE = 4;
 
 
   @java.lang.Override
@@ -83,10 +83,10 @@ public enum PlayerStatus
   public static PlayerStatus forNumber(int value) {
     switch (value) {
       case 0: return PLAYER_STATUS_ACTIVE;
-      case 1: return PLAYER_STATUS_HIT;
-      case 2: return PLAYER_STATUS_RESPAWNING;
-      case 3: return PLAYER_STATUS_ELIMINATED;
-      case 4: return PLAYER_STATUS_SPECTATING;
+      case 1: return PLAYER_STATUS_INACTIVE;
+      case 2: return PLAYER_STATUS_HIT;
+      case 3: return PLAYER_STATUS_RESPAWNING;
+      case 4: return PLAYER_STATUS_ELIMINATED;
       default: return null;
     }
   }

@@ -9,25 +9,13 @@
 PB_BIND(airtak_PlayerStatePacket, airtak_PlayerStatePacket, AUTO)
 
 
-PB_BIND(airtak_TeamDefinition, airtak_TeamDefinition, AUTO)
-
-
-PB_BIND(airtak_TeamScore, airtak_TeamScore, AUTO)
-
-
-PB_BIND(airtak_GameStatePacket, airtak_GameStatePacket, 2)
-
-
 PB_BIND(airtak_LatLng, airtak_LatLng, AUTO)
 
 
-PB_BIND(airtak_ZonePacket, airtak_ZonePacket, 2)
+PB_BIND(airtak_TacticalMarker, airtak_TacticalMarker, 2)
 
 
-PB_BIND(airtak_ObjectivePacket, airtak_ObjectivePacket, AUTO)
-
-
-PB_BIND(airtak_AdminPacket, airtak_AdminPacket, AUTO)
+PB_BIND(airtak_ModerationPacket, airtak_ModerationPacket, AUTO)
 
 
 PB_BIND(airtak_AirTAKAck, airtak_AirTAKAck, AUTO)

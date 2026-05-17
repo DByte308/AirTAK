@@ -23,10 +23,9 @@ enum class Portnum : uint32_t {
     // Relayed by Meshtastic nodes but not decryptable without the game channel PSK.
 
     AIRTAK_PLAYER           = 256,  // PlayerStatePacket; hop_limit=7; ACKNOWLEDGED on transition
-    AIRTAK_GAME             = 257,  // GameStatePacket; hop_limit=7; ACKNOWLEDGED
-    AIRTAK_ZONE             = 258,  // ZonePacket; hop_limit=7; ACKNOWLEDGED
-    AIRTAK_OBJECTIVE        = 259,  // ObjectivePacket; hop_limit=7; ACKNOWLEDGED
-    AIRTAK_ADMIN            = 260,  // AdminPacket; hop_limit=7; ACKNOWLEDGED
+    AIRTAK_TACTICAL         = 257,  // TacticalMarker; hop_limit=7; ACKNOWLEDGED
+    AIRTAK_MODERATION       = 258,  // ModerationPacket; hop_limit=7; ACKNOWLEDGED
+    // 259–260 reserved (was AIRTAK_OBJECTIVE/ADMIN)
     AIRTAK_ACK              = 261,  // AirTAKAck; hop_limit=hop_start of original; required for §8.9
     AIRTAK_POSITION_REQUEST = 262,  // PositionRequestPacket; hop_limit=7; BEST_EFFORT
     AIRTAK_AUDIO            = 263,  // AudioPacket; hop_limit=1; BEST_EFFORT; MUST NOT relay

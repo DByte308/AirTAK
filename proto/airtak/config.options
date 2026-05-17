@@ -6,3 +6,7 @@ airtak.ChannelSlot.name max_size:17
 airtak.ChannelSlot.psk max_size:32
 airtak.ChannelConfig.slots max_count:8
 airtak.GameConfig.callsign max_size:17
+airtak.GameConfig.fireteam_id max_size:33
+airtak.GameConfig.squad_id max_size:33
+airtak.GameConfig.platoon_id max_size:33
+airtak.GameConfig.company_id max_size:33

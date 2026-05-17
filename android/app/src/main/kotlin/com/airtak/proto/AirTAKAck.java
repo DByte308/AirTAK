@@ -6,15 +6,9 @@ package com.airtak.proto;
 /**
  * <pre>
  * Roadmap: 2.11 | Application-layer acknowledgment for ACKNOWLEDGED-class packets.
- * KEY FIELDS:
- *   ack_request_id = Data.request_id of the packet being ACKed (NOT MeshPacket.id,
- *                   which changes on each retry attempt). Used by the sender's retry
- *                   queue to correlate this ACK with the outstanding entry.
- *   hop_limit on this packet = hop_start of the original packet (Flags bits [2:0] of
- *                   the OTA wire header), so the ACK can traverse the full mesh diameter
- *                   back to the sender. If hop_start is zero (legacy device), use 7.
- * See §8.9 for the full ACKNOWLEDGED delivery flow including timeout formula and
- * retry backoff.
+ * ack_request_id = Data.request_id of the packet being ACKed (NOT MeshPacket.id).
+ * hop_limit = hop_start of the original packet (Flags bits [2:0]); fallback 7.
+ * See §8.9 for full ACK flow, timeout formula, retry backoff.
  * </pre>
  *
  * Protobuf type {@code airtak.AirTAKAck}
@@ -106,7 +100,7 @@ public  final class AirTAKAck extends
   private int originalHopStart_;
   /**
    * <pre>
-   * hop_start of the ACKed packet; used for sender validation
+   * hop_start of the ACKed packet; sender validation
    * </pre>
    *
    * <code>uint32 original_hop_start = 3;</code>
@@ -118,7 +112,7 @@ public  final class AirTAKAck extends
   }
   /**
    * <pre>
-   * hop_start of the ACKed packet; used for sender validation
+   * hop_start of the ACKed packet; sender validation
    * </pre>
    *
    * <code>uint32 original_hop_start = 3;</code>
@@ -130,7 +124,7 @@ public  final class AirTAKAck extends
   }
   /**
    * <pre>
-   * hop_start of the ACKed packet; used for sender validation
+   * hop_start of the ACKed packet; sender validation
    * </pre>
    *
    * <code>uint32 original_hop_start = 3;</code>
@@ -224,15 +218,9 @@ public  final class AirTAKAck extends
   /**
    * <pre>
    * Roadmap: 2.11 | Application-layer acknowledgment for ACKNOWLEDGED-class packets.
-   * KEY FIELDS:
-   *   ack_request_id = Data.request_id of the packet being ACKed (NOT MeshPacket.id,
-   *                   which changes on each retry attempt). Used by the sender's retry
-   *                   queue to correlate this ACK with the outstanding entry.
-   *   hop_limit on this packet = hop_start of the original packet (Flags bits [2:0] of
-   *                   the OTA wire header), so the ACK can traverse the full mesh diameter
-   *                   back to the sender. If hop_start is zero (legacy device), use 7.
-   * See §8.9 for the full ACKNOWLEDGED delivery flow including timeout formula and
-   * retry backoff.
+   * ack_request_id = Data.request_id of the packet being ACKed (NOT MeshPacket.id).
+   * hop_limit = hop_start of the original packet (Flags bits [2:0]); fallback 7.
+   * See §8.9 for full ACK flow, timeout formula, retry backoff.
    * </pre>
    *
    * Protobuf type {@code airtak.AirTAKAck}
@@ -330,7 +318,7 @@ public  final class AirTAKAck extends
 
     /**
      * <pre>
-     * hop_start of the ACKed packet; used for sender validation
+     * hop_start of the ACKed packet; sender validation
      * </pre>
      *
      * <code>uint32 original_hop_start = 3;</code>
@@ -342,7 +330,7 @@ public  final class AirTAKAck extends
     }
     /**
      * <pre>
-     * hop_start of the ACKed packet; used for sender validation
+     * hop_start of the ACKed packet; sender validation
      * </pre>
      *
      * <code>uint32 original_hop_start = 3;</code>
@@ -356,7 +344,7 @@ public  final class AirTAKAck extends
     }
     /**
      * <pre>
-     * hop_start of the ACKed packet; used for sender validation
+     * hop_start of the ACKed packet; sender validation
      * </pre>
      *
      * <code>uint32 original_hop_start = 3;</code>

@@ -72,8 +72,8 @@ struct ChannelSlotDefault {
 constexpr ChannelSlotDefault CHANNEL_SLOTS[8] = {
     // Slot 0: PRIMARY — Meshtastic-compatible + AirTAK game traffic
     { 0, "AirTAK",  1, true,  true,  32, 0 },
-    // Slot 1: SECONDARY — AirTAK game-only traffic (separate PSK)
-    { 1, "Game",  2, true,  true,  32, 0 },
+    // Slot 1: SECONDARY — AirTAK tactical traffic (separate PSK)
+    { 1, "Tactical",  2, true,  true,  32, 0 },
     // Slot 2: DISABLED — pre-configured for Phase 7 PTT audio (Profile 1: Short/Speed)
     { 2, "Audio", 0, true,  true,  32, 1 },
     // Slots 3–7: DISABLED
@@ -105,10 +105,8 @@ constexpr uint8_t HOP_LIMIT_TELEMETRY        = 7;
 constexpr uint8_t HOP_LIMIT_TRACEROUTE       = 7;
 constexpr uint8_t HOP_LIMIT_NEIGHBORINFO     = 7;
 constexpr uint8_t HOP_LIMIT_AIRTAK_PLAYER      = 7;
-constexpr uint8_t HOP_LIMIT_AIRTAK_GAME        = 7;
-constexpr uint8_t HOP_LIMIT_AIRTAK_ZONE        = 7;
-constexpr uint8_t HOP_LIMIT_AIRTAK_OBJECTIVE   = 7;
-constexpr uint8_t HOP_LIMIT_AIRTAK_ADMIN       = 7;
+constexpr uint8_t HOP_LIMIT_AIRTAK_TACTICAL     = 7;
+constexpr uint8_t HOP_LIMIT_AIRTAK_MODERATION   = 7;
 constexpr uint8_t HOP_LIMIT_AIRTAK_ACK         = 7;  // Fallback: ACK built dynamically in processIncoming()
                                                     // uses hop_start of the original packet; this is the
                                                     // safety default if sendPacket is called directly. (§8.9)
@@ -122,11 +120,13 @@ constexpr uint32_t POWER_GPS_OFF_SECS      = 60;
 constexpr uint32_t POWER_DISPLAY_OFF_SECS  = 0;      // 0 = never off
 
 // ── GameConfig ────────────────────────────────────────────────────────────────
-constexpr const char* GAME_CALLSIGN         = "Player";
-constexpr uint32_t    GAME_TEAM_ID          = 0;    // 0 = SPECTATOR until user sets a team
-constexpr uint32_t    GAME_PLAYER_COLOR_RGB = 0x2196F3; // Material Blue
-constexpr bool        GAME_IS_ADMIN         = false;
-constexpr uint32_t    RESPAWN_TIMER_SECS    = 30;   // seconds to respawn after HIT cancel window expires (§12.6)
+constexpr const char* GAME_CALLSIGN           = "Player";
+constexpr const char* GAME_FIRETEAM_ID        = "";    // free-text, optional
+constexpr const char* GAME_SQUAD_ID           = "";    // free-text, optional
+constexpr const char* GAME_PLATOON_ID         = "";    // free-text, optional
+constexpr const char* GAME_COMPANY_ID         = "";    // free-text, optional
+constexpr uint32_t    GAME_PLAYER_COLOR_RGB   = 0x2196F3; // Material Blue
+constexpr bool        GAME_HIT_BUTTON_ENABLED = false;   // long-press HIT toggle on device button
 
 // ── SecurityConfig ────────────────────────────────────────────────────────────
 constexpr uint32_t SECURITY_MAX_BONDED_DEVICES = 1;

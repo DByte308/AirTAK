@@ -16,7 +16,7 @@ import com.airtak.data.ble.InboundChannel
 import com.airtak.data.config.ConfigRepository
 import com.airtak.data.db.MessageDao
 import com.airtak.data.db.MessageEntity
-import com.airtak.proto.AdminPacket
+import com.airtak.proto.ModerationPacket
 import com.airtak.proto.ChannelConfig
 import com.airtak.proto.ChannelRole
 import com.airtak.proto.ChannelSlot
@@ -198,9 +198,9 @@ class MeshRepository @Inject constructor(
         return SendResult.Ok
     }
 
-    fun sendAdminPacket(packet: AdminPacket): SendResult {
+    fun sendModerationPacket(packet: ModerationPacket): SendResult {
         val data = MeshWire.encodeData(
-            portnum = Portnum.AIRTAK_ADMIN,
+            portnum = Portnum.AIRTAK_MODERATION,
             payload = packet.toByteArray(),
             wantResponse = true,
         )

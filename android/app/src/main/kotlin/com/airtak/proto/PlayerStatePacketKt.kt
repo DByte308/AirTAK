@@ -57,24 +57,7 @@ public object PlayerStatePacketKt {
     }
 
     /**
-     * <code>uint32 team_id = 3;</code>
-     */
-    public var teamId: kotlin.Int
-      @JvmName("getTeamId")
-      get() = _builder.getTeamId()
-      @JvmName("setTeamId")
-      set(value) {
-        _builder.setTeamId(value)
-      }
-    /**
-     * <code>uint32 team_id = 3;</code>
-     */
-    public fun clearTeamId() {
-      _builder.clearTeamId()
-    }
-
-    /**
-     * <code>.airtak.PlayerStatus status = 4;</code>
+     * <code>.airtak.PlayerStatus status = 3;</code>
      */
     public var status: com.airtak.proto.PlayerStatus
       @JvmName("getStatus")
@@ -84,39 +67,14 @@ public object PlayerStatePacketKt {
         _builder.setStatus(value)
       }
     /**
-     * <code>.airtak.PlayerStatus status = 4;</code>
+     * <code>.airtak.PlayerStatus status = 3;</code>
      */
     public fun clearStatus() {
       _builder.clearStatus()
     }
 
     /**
-     * <pre>
-     * epoch seconds; non-zero when RESPAWNING
-     * </pre>
-     *
-     * <code>uint32 respawn_at_unix = 5;</code>
-     */
-    public var respawnAtUnix: kotlin.Int
-      @JvmName("getRespawnAtUnix")
-      get() = _builder.getRespawnAtUnix()
-      @JvmName("setRespawnAtUnix")
-      set(value) {
-        _builder.setRespawnAtUnix(value)
-      }
-    /**
-     * <pre>
-     * epoch seconds; non-zero when RESPAWNING
-     * </pre>
-     *
-     * <code>uint32 respawn_at_unix = 5;</code>
-     */
-    public fun clearRespawnAtUnix() {
-      _builder.clearRespawnAtUnix()
-    }
-
-    /**
-     * <code>uint32 color_rgb = 6;</code>
+     * <code>uint32 color_rgb = 4;</code>
      */
     public var colorRgb: kotlin.Int
       @JvmName("getColorRgb")
@@ -126,7 +84,7 @@ public object PlayerStatePacketKt {
         _builder.setColorRgb(value)
       }
     /**
-     * <code>uint32 color_rgb = 6;</code>
+     * <code>uint32 color_rgb = 4;</code>
      */
     public fun clearColorRgb() {
       _builder.clearColorRgb()
@@ -134,10 +92,10 @@ public object PlayerStatePacketKt {
 
     /**
      * <pre>
-     * true = status changed; false = position heartbeat
+     * true = status changed; false = heartbeat
      * </pre>
      *
-     * <code>bool is_state_transition = 7;</code>
+     * <code>bool is_state_transition = 5;</code>
      */
     public var isStateTransition: kotlin.Boolean
       @JvmName("getIsStateTransition")
@@ -148,13 +106,113 @@ public object PlayerStatePacketKt {
       }
     /**
      * <pre>
-     * true = status changed; false = position heartbeat
+     * true = status changed; false = heartbeat
      * </pre>
      *
-     * <code>bool is_state_transition = 7;</code>
+     * <code>bool is_state_transition = 5;</code>
      */
     public fun clearIsStateTransition() {
       _builder.clearIsStateTransition()
+    }
+
+    /**
+     * <pre>
+     * e.g., "Alpha"; free-text, optional
+     * </pre>
+     *
+     * <code>string fireteam_id = 6;</code>
+     */
+    public var fireteamId: kotlin.String
+      @JvmName("getFireteamId")
+      get() = _builder.getFireteamId()
+      @JvmName("setFireteamId")
+      set(value) {
+        _builder.setFireteamId(value)
+      }
+    /**
+     * <pre>
+     * e.g., "Alpha"; free-text, optional
+     * </pre>
+     *
+     * <code>string fireteam_id = 6;</code>
+     */
+    public fun clearFireteamId() {
+      _builder.clearFireteamId()
+    }
+
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 7;</code>
+     */
+    public var squadId: kotlin.String
+      @JvmName("getSquadId")
+      get() = _builder.getSquadId()
+      @JvmName("setSquadId")
+      set(value) {
+        _builder.setSquadId(value)
+      }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>string squad_id = 7;</code>
+     */
+    public fun clearSquadId() {
+      _builder.clearSquadId()
+    }
+
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 8;</code>
+     */
+    public var platoonId: kotlin.String
+      @JvmName("getPlatoonId")
+      get() = _builder.getPlatoonId()
+      @JvmName("setPlatoonId")
+      set(value) {
+        _builder.setPlatoonId(value)
+      }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>string platoon_id = 8;</code>
+     */
+    public fun clearPlatoonId() {
+      _builder.clearPlatoonId()
+    }
+
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 9;</code>
+     */
+    public var companyId: kotlin.String
+      @JvmName("getCompanyId")
+      get() = _builder.getCompanyId()
+      @JvmName("setCompanyId")
+      set(value) {
+        _builder.setCompanyId(value)
+      }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>string company_id = 9;</code>
+     */
+    public fun clearCompanyId() {
+      _builder.clearCompanyId()
     }
   }
 }
