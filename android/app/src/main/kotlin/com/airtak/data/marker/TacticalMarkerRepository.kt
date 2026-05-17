@@ -175,6 +175,50 @@ class TacticalMarkerRepository @Inject constructor(
         return entity
     }
 
+    /**
+     * Edit a locally-owned marker. Preserves the marker id, creator and original
+     * point geometry but updates the label, description, color, scope, team and
+     * priority fields and re-broadcasts so receivers replace their copy.
+     *
+     * Returns the updated entity, or null if the marker is unknown or not owned
+     * locally.
+     */
+    suspend fun updateMarker(
+        markerId: Long,
+        label: String,
+        description: String,
+        colorRgb: Int,
+        scopeKind: Scope,
+        controllingTeam: TeamControl = TeamControl.TEAM_CONTROL_UNKNOWN,
+        priority: Int = 0,
+    ): TacticalMarkerEntity? {
+        val existing = dao.get(markerId) ?: return null
+        if (!existing.ownedLocally || existing.deleted) return null
+        val nowSec = (System.currentTimeMillis() / 1000L).toInt()
+        val type = MarkerType.forNumber(existing.typeValue) ?: MarkerType.MARKER_TYPE_POINT
+        val builder = TacticalMarker.newBuilder()
+            .setMarkerId(existing.markerId.toInt())
+            .setType(type)
+            .setLabel(label.take(MAX_LABEL_LEN))
+            .setDescription(description.take(MAX_DESC_LEN))
+            .setColorRgb(colorRgb and 0xFFFFFF)
+            .setScope(scopeKind)
+            .setCreatorNodeId(existing.creatorNodeId.toInt())
+            .setCreatedAtUnix(existing.createdAtUnix.toInt())
+            .setUpdatedAtUnix(nowSec)
+            .setDeleted(false)
+            .setControllingTeam(controllingTeam)
+            .setPriority(priority)
+        existing.points().forEach { (lat, lng) ->
+            builder.addPoints(LatLng.newBuilder().setLat(lat).setLng(lng).build())
+        }
+        val proto = builder.build()
+        val entity = toEntity(proto, ownedLocally = true, lastSeenMs = System.currentTimeMillis())
+        dao.upsert(entity)
+        mesh.sendTacticalMarker(proto, channelSlotForScope(scopeKind))
+        return entity
+    }
+
     /** Soft-delete: marks the marker as tombstoned and broadcasts the tombstone. */
     suspend fun deleteMarker(markerId: Long): Boolean {
         val existing = dao.get(markerId) ?: return false

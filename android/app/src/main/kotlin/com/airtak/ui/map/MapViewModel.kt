@@ -298,6 +298,30 @@ class MapViewModel @Inject constructor(
         viewModelScope.launch { markerRepo.deleteMarker(markerId) }
     }
 
+    fun updateMarker(
+        markerId: Long,
+        label: String,
+        description: String,
+        colorRgb: Int,
+        scopeKind: Scope,
+        controllingTeam: TeamControl = TeamControl.TEAM_CONTROL_UNKNOWN,
+        priority: Int = 0,
+    ) {
+        val safeLabel = label.trim().take(TacticalMarkerRepository.MAX_LABEL_LEN)
+        val safeDesc = description.trim().take(TacticalMarkerRepository.MAX_DESC_LEN)
+        viewModelScope.launch {
+            markerRepo.updateMarker(
+                markerId = markerId,
+                label = safeLabel,
+                description = safeDesc,
+                colorRgb = colorRgb and 0xFFFFFF,
+                scopeKind = scopeKind,
+                controllingTeam = controllingTeam,
+                priority = priority,
+            )
+        }
+    }
+
     private fun TacticalMarkerEntity.toVisual(): MarkerVisual = MarkerVisual(
         markerId = markerId,
         type = MarkerType.forNumber(typeValue) ?: MarkerType.MARKER_TYPE_POINT,

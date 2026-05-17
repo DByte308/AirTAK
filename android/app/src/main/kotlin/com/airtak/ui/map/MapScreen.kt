@@ -114,14 +114,21 @@ import org.maplibre.android.style.layers.PropertyFactory.fillColor
 import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineColor
 import org.maplibre.android.style.layers.PropertyFactory.lineWidth
+import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory.rasterOpacity
+import org.maplibre.android.style.layers.PropertyFactory.symbolPlacement
+import org.maplibre.android.style.layers.PropertyFactory.symbolSpacing
 import org.maplibre.android.style.layers.PropertyFactory.textAllowOverlap
 import org.maplibre.android.style.layers.PropertyFactory.textColor
 import org.maplibre.android.style.layers.PropertyFactory.textField
+import org.maplibre.android.style.layers.PropertyFactory.textFont
 import org.maplibre.android.style.layers.PropertyFactory.textHaloColor
 import org.maplibre.android.style.layers.PropertyFactory.textHaloWidth
 import org.maplibre.android.style.layers.PropertyFactory.textIgnorePlacement
+import org.maplibre.android.style.layers.PropertyFactory.textKeepUpright
 import org.maplibre.android.style.layers.PropertyFactory.textOffset
+import org.maplibre.android.style.layers.PropertyFactory.textPitchAlignment
+import org.maplibre.android.style.layers.PropertyFactory.textRotationAlignment
 import org.maplibre.android.style.layers.PropertyFactory.textSize
 import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.layers.SymbolLayer
@@ -176,6 +183,7 @@ fun MapScreen(
     val gameActive by viewModel.gameActive.collectAsState()
     var pendingCommit by remember { mutableStateOf<MarkerTool?>(null) }
     var tappedMarker by remember { mutableStateOf<MarkerVisual?>(null) }
+    var editingMarker by remember { mutableStateOf<MarkerVisual?>(null) }
 
     fun updateOwnLabelPoint() {
         val pos = ui.ownPosition
@@ -308,8 +316,22 @@ fun MapScreen(
                 } else if (drawing is DrawingState.Active) {
                     viewModel.addDrawingPoint(latLng.latitude, latLng.longitude)
                 } else {
-                    pendingWaypoint = latLng
-                    waypointLabel = ""
+                    // Long-press on a marker → edit (if locally owned) or detail.
+                    val screen = targetMap.projection.toScreenLocation(latLng)
+                    val features = targetMap.queryRenderedFeatures(
+                        screen,
+                        MARKER_POINT_LAYER,
+                        MARKER_ROUTE_LINE_LAYER,
+                        MARKER_AREA_FILL_LAYER,
+                    )
+                    val mid = features.firstOrNull()?.getStringProperty("markerId")?.toLongOrNull()
+                    val hit = mid?.let { id -> viewModel.markers.value.firstOrNull { it.markerId == id } }
+                    if (hit != null) {
+                        if (hit.ownedLocally) editingMarker = hit else tappedMarker = hit
+                    } else {
+                        pendingWaypoint = latLng
+                        waypointLabel = ""
+                    }
                 }
                 true
             }
@@ -592,6 +614,29 @@ fun MapScreen(
             onDelete = {
                 viewModel.deleteMarker(marker.markerId)
                 tappedMarker = null
+            },
+        )
+    }
+
+    editingMarker?.let { marker ->
+        MarkerEditDialog(
+            marker = marker,
+            onDismiss = { editingMarker = null },
+            onDelete = {
+                viewModel.deleteMarker(marker.markerId)
+                editingMarker = null
+            },
+            onSave = { label, description, color, scope, team, priority ->
+                viewModel.updateMarker(
+                    markerId = marker.markerId,
+                    label = label,
+                    description = description,
+                    colorRgb = color,
+                    scopeKind = scope,
+                    controllingTeam = team,
+                    priority = priority,
+                )
+                editingMarker = null
             },
         )
     }
@@ -973,6 +1018,87 @@ private fun MarkerCommitDialog(
 }
 
 @Composable
+private fun MarkerEditDialog(
+    marker: MarkerVisual,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit,
+    onSave: (label: String, description: String, colorRgb: Int, scope: Scope, team: TeamControl, priority: Int) -> Unit,
+) {
+    var label by remember(marker.markerId) { mutableStateOf(marker.label) }
+    var description by remember(marker.markerId) { mutableStateOf(marker.description) }
+    var colorRgb by remember(marker.markerId) { mutableStateOf(marker.colorRgb and 0xFFFFFF) }
+    var scope by remember(marker.markerId) { mutableStateOf(marker.scope) }
+    var team by remember(marker.markerId) { mutableStateOf(marker.controllingTeam) }
+    var priority by remember(marker.markerId) { mutableStateOf(marker.priority) }
+    val isObjective = marker.type == MarkerType.MARKER_TYPE_OBJECTIVE
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit ${markerTypeLabel(marker.type).lowercase()}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it.take(32) },
+                    label = { Text("Label") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it.take(256) },
+                    label = { Text("Description (optional)") },
+                    minLines = 2,
+                    maxLines = 4,
+                )
+                Text("Color", style = MaterialTheme.typography.labelSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MARKER_COLOR_PRESETS.forEach { c ->
+                        val selected = colorRgb == c
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(androidx.compose.ui.graphics.Color(0xFF000000L or c.toLong()))
+                                .clickable { colorRgb = c }
+                                .padding(2.dp),
+                        ) {
+                            if (selected) {
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(androidx.compose.ui.graphics.Color.Transparent),
+                                ) {
+                                    Text("✓", color = androidx.compose.ui.graphics.Color.Black, modifier = Modifier.align(Alignment.Center))
+                                }
+                            }
+                        }
+                    }
+                }
+                Text("Visible to", style = MaterialTheme.typography.labelSmall)
+                ScopeDropdown(scope, onSelect = { scope = it })
+                if (isObjective) {
+                    Text("Controlling team", style = MaterialTheme.typography.labelSmall)
+                    TeamDropdown(team, onSelect = { team = it })
+                    Text("Priority", style = MaterialTheme.typography.labelSmall)
+                    PriorityDropdown(priority, onSelect = { priority = it })
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(label, description, colorRgb, scope, team, priority) }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onDelete) { Text("Delete") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
+}
+
+@Composable
 private fun ScopeDropdown(selected: Scope, onSelect: (Scope) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -1349,6 +1475,7 @@ private fun ensureLayers(style: Style, textColor: Int) {
         style.addLayer(
             SymbolLayer(REMOTE_LABEL_LAYER, REMOTE_SOURCE).withProperties(
                 textField(Expression.get("label")),
+                textFont(arrayOf("Noto Sans Regular")),
                 textSize(12f),
                 textOffset(arrayOf(0f, -1.35f)),
                 textColor("#%06X".format(textColor and 0xFFFFFF)),
@@ -1373,6 +1500,7 @@ private fun ensureLayers(style: Style, textColor: Int) {
         style.addLayer(
             SymbolLayer(WAYPOINT_LABEL_LAYER, WAYPOINT_SOURCE).withProperties(
                 textField(Expression.get("label")),
+                textFont(arrayOf("Noto Sans Regular")),
                 textSize(12f),
                 textOffset(arrayOf(0f, 1.2f)),
                 textColor("#%06X".format(textColor and 0xFFFFFF)),
@@ -1423,6 +1551,73 @@ private fun ensureMarkerLayers(style: Style, textColor: Int) {
                 circleColor(Expression.toColor(Expression.get("markerColor"))),
                 circleStrokeColor("#0A0F14"),
                 circleStrokeWidth(2f),
+            ),
+        )
+    }
+    val haloColor = if ((textColor and 0xFFFFFF) < 0x808080) "#FFFFFF" else "#000000"
+    val labelColor = "#%06X".format(textColor and 0xFFFFFF)
+    if (style.getLayer(MARKER_POINT_LABEL_LAYER) == null) {
+        style.addLayer(
+            SymbolLayer(MARKER_POINT_LABEL_LAYER, MARKER_POINT_SOURCE).withProperties(
+                textField(Expression.get("label")),
+                textFont(arrayOf("Noto Sans Regular")),
+                textSize(12f),
+                textOffset(arrayOf(0f, 1.3f)),
+                textColor(labelColor),
+                textHaloColor(haloColor),
+                textHaloWidth(1.2f),
+                textAllowOverlap(true),
+                textIgnorePlacement(true),
+            ),
+        )
+    }
+    if (style.getLayer(MARKER_ROUTE_LABEL_LAYER) == null) {
+        style.addLayer(
+            SymbolLayer(MARKER_ROUTE_LABEL_LAYER, MARKER_ROUTE_SOURCE).withProperties(
+                textField(Expression.get("label")),
+                textFont(arrayOf("Noto Sans Regular")),
+                textSize(12f),
+                textColor(labelColor),
+                textHaloColor(haloColor),
+                textHaloWidth(1.2f),
+                symbolPlacement(Property.SYMBOL_PLACEMENT_LINE_CENTER),
+                textKeepUpright(true),
+                textAllowOverlap(true),
+                textIgnorePlacement(true),
+                textOffset(arrayOf(0f, -1.1f)),
+            ),
+        )
+    }
+    if (style.getLayer(MARKER_ROUTE_ARROW_LAYER) == null) {
+        style.addLayer(
+            SymbolLayer(MARKER_ROUTE_ARROW_LAYER, MARKER_ROUTE_SOURCE).withProperties(
+                textField("▶"),
+                textFont(arrayOf("Noto Sans Regular")),
+                textSize(16f),
+                textColor(Expression.toColor(Expression.get("markerColor"))),
+                textHaloColor(haloColor),
+                textHaloWidth(1.6f),
+                symbolPlacement(Property.SYMBOL_PLACEMENT_LINE),
+                symbolSpacing(120f),
+                textKeepUpright(false),
+                textRotationAlignment(Property.TEXT_ROTATION_ALIGNMENT_MAP),
+                textPitchAlignment(Property.TEXT_PITCH_ALIGNMENT_VIEWPORT),
+                textAllowOverlap(true),
+                textIgnorePlacement(true),
+            ),
+        )
+    }
+    if (style.getLayer(MARKER_AREA_LABEL_LAYER) == null) {
+        style.addLayer(
+            SymbolLayer(MARKER_AREA_LABEL_LAYER, MARKER_AREA_SOURCE).withProperties(
+                textField(Expression.get("label")),
+                textFont(arrayOf("Noto Sans Regular")),
+                textSize(12f),
+                textColor(labelColor),
+                textHaloColor(haloColor),
+                textHaloWidth(1.2f),
+                textAllowOverlap(true),
+                textIgnorePlacement(true),
             ),
         )
     }
@@ -1754,6 +1949,7 @@ private fun mapStyleJson(
     {
       "version": 8,
       "name": "AirTAK Field",
+      "glyphs": "asset://glyphs/{fontstack}/{range}.pbf",
       "sources": {
         "blank": { "type": "geojson", "data": { "type": "FeatureCollection", "features": [] } }
         $baseSource
@@ -1791,8 +1987,12 @@ private const val MARKER_AREA_FILL_LAYER = "marker-area-fill-layer"
 private const val MARKER_AREA_LINE_LAYER = "marker-area-line-layer"
 private const val MARKER_ROUTE_SOURCE = "marker-route-source"
 private const val MARKER_ROUTE_LINE_LAYER = "marker-route-line-layer"
+private const val MARKER_ROUTE_LABEL_LAYER = "marker-route-label-layer"
+private const val MARKER_ROUTE_ARROW_LAYER = "marker-route-arrow-layer"
 private const val MARKER_POINT_SOURCE = "marker-point-source"
 private const val MARKER_POINT_LAYER = "marker-point-layer"
+private const val MARKER_POINT_LABEL_LAYER = "marker-point-label-layer"
+private const val MARKER_AREA_LABEL_LAYER = "marker-area-label-layer"
 private const val DRAFT_SOURCE = "draft-marker-source"
 private const val DRAFT_POINT_LAYER = "draft-marker-point-layer"
 private const val DRAFT_LINE_LAYER = "draft-marker-line-layer"
