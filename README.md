@@ -2,7 +2,7 @@
 
 LoRa mesh radio firmware for the **LilyGo T-Echo Plus** and a native **Android** companion app, purpose-built for airsoft situational awareness.
 
-AirTAK is Meshtastic wire-format compatible on the shared channel and introduces a dedicated game-mode protocol on top.
+AirTAK is Meshtastic wire-format compatible on the shared channel and introduces a dedicated tactical coordination protocol on top for unit hierarchy, scoped messaging, and shared tactical markers.
 
 > **Status:** Phase 2 firmware mesh stack is buildable and covered by native config, framing, crypto, and router tests. Automated and hardware signoff status is tracked in [docs/phase2-acceptance.md](docs/phase2-acceptance.md).
 
@@ -11,8 +11,9 @@ AirTAK is Meshtastic wire-format compatible on the shared channel and introduces
 ## What it will do
 
 - Display every player's GPS position on an offline map in real time
-- Track player state (active / hit / respawning / eliminated) with push-to-device acknowledgment
-- Broadcast game zones, objectives, and phase changes to the whole mesh
+- Self-organized unit hierarchy (Fireteam → Squad → Platoon → Company) with scoped information sharing
+- Share tactical markers on the map: points, routes, areas, notes, and objectives with team-control status
+- Player status tracking (Active/Inactive with optional HIT/RESPAWNING/ELIMINATED flags) — purely informational, no enforced game logic
 - Designed for deployment of up to 100 players on a 10 km × 10 km field; smart beaconing helps each device stay within regulatory duty-cycle limits
 - Interoperate with stock Meshtastic devices on the shared channel
 - PTT voice over LoRa via Codec2 (Phase 7)
@@ -108,7 +109,7 @@ docs/
 ├── phase2-acceptance.md  Phase 2 mesh-stack acceptance record
 ├── radio-protocol.md   Wire format with annotated byte diagrams
 ├── ble-service.md      GATT UUID table and characteristic flows
-└── game-protocol.md    Game packet flow diagrams
+└── tactical-protocol.md   Tactical coordination packet flow diagrams
 ```
 
 ## Design document

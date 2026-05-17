@@ -1,11 +1,12 @@
 # AirTAK — Airsoft Team Awareness Kit
-## Master Planning Document v1.5
+## Master Planning Document v1.6
 ### Status: IMMUTABLE AFTER ACCEPTANCE — 2026-05-13
 ### Amendments: v1.1 — 2026-05-13 — Multi-PHY per-channel-slot architecture; transparent PHY parameter model replacing opaque modem presets; all channel slots interchangeable between Meshtastic and AirTAK use; GPS position multi-hop relay fix; AIRTAK_POSITION_REQUEST; per-packet-type hop limits; heard-by relay suppression; application-layer reliability (MeshCore-derived); PTT audio Phase 7; RECORD_AUDIO conditional permission
 ### Amendments: v1.2 — 2026-05-13 — 100-node airtime budget analysis; smart beaconing replacing fixed 30 s interval (movement-triggered + 90 s heartbeat); POSITION_APP and AIRTAK_PLAYER hop_limit reduced 5→3; EU 868 MHz duty-cycle compliance guidance; audio packet size redesigned 73-frame→8-frame; FEC piggyback (fec_prev_audio_data); jitter buffer and PLC; AudioConfig.frame_count; infrastructure relay node guidance (§13.4); 3 new risks; Duty Cycle, FEC, PLC, Smart Beaconing, TDM glossary entries
 ### Amendments: v1.3 — 2026-05-13 — Three ACK reliability bugs fixed: (1) AIRTAK_ACK hop_limit now mirrors original packet's hop_start so ACK can return across any mesh diameter; (2) ACK timeout scaled to 2×hop_start×400 ms (was flat 200 ms, too short for multi-hop); (3) retries use new packet_id + Data.request_id correlation to bypass relay duplicate-suppression cache; honest MeshCore comparison added to §8.9; AirTAKAck proto updated; Phase 2.11 and integration tests updated
 ### Amendments: v1.4 — 2026-05-13 — Full protocol audit, 10 bugs fixed: (A) §8.2 Flags byte [2:0] corrected from reserved to hop_start — required for v1.3 ACK fix to be implementable; (B) §8.7 position relay exception removed — was dead code that could never trigger, gave false assurance; (C) §12.7/§8.1 audio ToA corrected from ~13 ms to ~84 ms with FEC (correct LoRa calculation for 92-byte packet); EU duty-cycle compliance guidance corrected — sub-band g (1%) is not viable at 1300 bps, sub-band g1 (10%) requires frame_count ≥ 42; (D) §8.7 AIRTAK_POSITION_REQUEST hop_limit raised 3→5 for 10 km field coverage; (E) §12.7/§14.3 FEC cross-session contamination fixed — fec_prev_audio_data must be empty on first packet of each PTT session; (F) §8.9/§14.3 AIRTAK_PLAYER ACK vs BEST_EFFORT ambiguity resolved — is_state_transition field added to PlayerStatePacket; (G) §14.3/§8.9 AirTAKAck.ack_packet_id renamed to ack_request_id to prevent implementer confusion; (H) §14.3/§12.7 AudioPacket session_id field added — prevents lost end_of_transmission causing FEC chaos on session boundary; (I) §12.7 firmware-level audio PHY enforcement requirement added; (J) §8.9 retry backoff formula corrected 1000→200 ms base to match §20 risks table
 ### Amendments: v1.5 — 2026-05-14 — Five categories corrected: (1) All duty-cycle §8.1/§8.7/§12.7/§20/glossary/README reframed — EU duty cycle is a per-device regulatory obligation, not a mesh-governance concern; 100-node airtime figures are worst-case estimates, not guarantees one operator can control; smart beaconing helps each device comply but does not enforce mesh-wide limits. (2) Per-packet-type hop limit rationales updated — all players in the command hierarchy need information from all other players; text removed implying only certain role categories need certain messages. (3) Hop limits unified to 7 for all packet types except AIRTAK_AUDIO (hop_limit=1, physical latency constraint); hop_limit does not create extra relay traffic — relay count is bounded by mesh topology, not the hop_limit field; airtime control is via smart beaconing TX interval, not restricted hop budgets. (4) §8.1 expanded with practical SF/BW/CR definitions explaining what each parameter means, how they interact, and why mismatches cause silent failures. (5) SHORT_SLOW-equivalent PHY profile added as Profile 3 (Medium/Slow, SF10/BW250/CR4/5); profile table expanded from 4 to 5 entries; all dependent sections updated (§8.1, §9.4.1, §11.9, §14.2)
+### Amendments: v1.6 — 2026-05-17 — Phase 5 redesign: game-mode system replaced with tactical coordination model. Formal game modes (ELIMINATION/TIME_LIMIT/DOMINATION), admin role, lobby/pause phases, respawn timers, win conditions, and scoring removed. Replaced with: self-organized unit hierarchy (Fireteam→Squad→Platoon→Company), scoped information sharing by organizational level, tactical marker system (points/routes/areas/notes/objectives) shared over mesh via AIRTAK_TACTICAL (portnum 257), simplified player status (Active/Inactive with optional informational HIT/RESPAWNING/ELIMINATED flags), manual game Active/Ended toggle, and decentralized vote-kick moderation (AIRTAK_MODERATION portnum 258) with 3-vote shadowban threshold and 24-hour auto-expiry. Portnums 259–260 reserved (was AIRTAK_OBJECTIVE/ADMIN). All dependent sections updated: §8.4 (portnums), §8.7 (hop-limit table), §8.9 (reliability classes), §11.4–§11.8 (Android navigation and screens), §12 (complete rewrite — Airsoft Feature Set → Tactical Coordination, §12.8 vote-kick added), §13.1 (interop references), §14.3 (game.proto restructured — PlayerStatePacket simplified, GameStatePacket/ZonePacket/ObjectivePacket/AdminPacket removed, TacticalMarker and ModerationPacket added), §16 Phase 5 (all items rewritten, 5.10 moderation added), §19.1/§19.3 (tests updated), §20 (risks updated), §21 (glossary updated). ROADMAP.md Phase 5 section rewritten accordingly.
 
 ---
 
@@ -160,11 +161,11 @@ The following are deliberately out of scope and will not be implemented:
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                     Android Application                      │
-│  ┌────────────┐  ┌──────────┐  ┌────────────┐  ┌────────┐  │
-│  │  Map View  │  │ Messages │  │  Players   │  │  Game  │  │
-│  └────────────┘  └──────────┘  └────────────┘  └────────┘  │
+│  ┌────────────┐  ┌──────────┐  ┌────────────┐  ┌──────────┐  │
+│  │  Map View  │  │ Messages │  │   Roster   │  │ Markers  │  │
+│  └────────────┘  └──────────┘  └────────────┘  └──────────┘  │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │                Game Engine (Kotlin)                   │   │
+│  │           Tactical Coordination (Kotlin)              │   │
 │  └──────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │              BLE Transport Layer                      │   │
@@ -316,7 +317,7 @@ The table below shows typical time-on-air (ToA) for a 50-byte mesh packet and th
 Key constraints:
 - **EU 1 % duty cycle (sub-band g)**: Profile 0 at 310 ms ToA means each device may legally transmit ≈ 1 packet per 31 s on sub-band g. AirTAK's smart beaconing defaults (§8.7) are designed so that a device with default settings operates within this limit; the operator is ultimately responsible for ensuring their device's configuration complies with their region's regulations.
 - **Hop amplification and the hop_limit safety margin**: Each source packet triggers one relay per node within radio range, bounded by the mesh topology — not by the hop_limit field. A hop_limit of 7 on a 5-hop diameter mesh does not create extra relay transmissions because no nodes exist at hop distances 6 or 7. Setting hop_limit to the maximum available (7) ensures delivery to the furthest node and costs nothing in airtime beyond what the mesh topology already dictates. The table's 100-node load columns account only for source transmissions; relay amplification adds roughly `(diameter − 1)` copies per packet. At a 4-hop mesh diameter this is a ~3× multiplier — the reason smart beaconing's 90 s heartbeat (§8.7) is the primary airtime control, not hop_limit restrictions.
-- **AirTAK game events**: Routing game-critical packets (AIRTAK_GAME, AIRTAK_ZONE, etc.) on Profile 1 or Profile 3 consumes less airtime per packet than Profile 0 and is recommended when sub-second game-state propagation is required.
+- **AirTAK game events**: Routing tactical markers (AIRTAK_TACTICAL) on Profile 1 or Profile 3 consumes less airtime per packet than Profile 0 and is recommended when sub-second propagation is required.
 
 ### 8.2 Over-the-Air Packet Format
 
@@ -374,11 +375,11 @@ AirTAK-specific portnums occupy the private range 256–511. These packets are s
 
 | Portnum | Name | Description |
 |---------|------|-------------|
-| 256 | AIRTAK_PLAYER | Player state update (callsign, team, status) |
-| 257 | AIRTAK_GAME | Game phase broadcast (start, pause, stop, scores) |
-| 258 | AIRTAK_ZONE | Zone polygon definition or update |
-| 259 | AIRTAK_OBJECTIVE | Objective capture state |
-| 260 | AIRTAK_ADMIN | Admin command (game control, player override) |
+| 256 | AIRTAK_PLAYER | Player status update (callsign, unit hierarchy, status) |
+| 257 | AIRTAK_TACTICAL | Tactical marker broadcast (points, routes, areas, notes, objectives, zones) |
+| 258 | AIRTAK_MODERATION | Vote-kick / shadowban moderation (vote-ban, unban) |
+| 259 | — | Reserved for future use (was AIRTAK_OBJECTIVE; merged into AIRTAK_TACTICAL) |
+| 260 | — | Reserved for future use (was AIRTAK_ADMIN; removed — no centralized admin) |
 | 261 | AIRTAK_ACK | Application-layer acknowledgment for acknowledged-delivery packets |
 | 262 | AIRTAK_POSITION_REQUEST | Request immediate position re-broadcast from a specific node |
 | 263 | AIRTAK_AUDIO | Codec2-encoded PTT audio frame (Phase 7; Short/Speed PHY only) |
@@ -399,8 +400,8 @@ AirTAK manages 8 channel slots numbered 0–7. Each slot is independently config
 | `phy_profile_index` | uint8 | Index into the device's PHY profile table (see §8.1); default 0 |
 
 **Default slot assignments (factory defaults):**
-- Slot 0: role=PRIMARY, name="AirTAK", phy_profile_index=0 (Long/Mesh). PSK configured to match local Meshtastic network or a shared AirTAK group key. Carries Meshtastic-compatible AND AirTAK game traffic.
-- Slot 1: role=SECONDARY, name="Game", phy_profile_index=0 (Long/Mesh). Separate PSK for AirTAK game-only traffic when channel isolation from Meshtastic is desired.
+- Slot 0: role=PRIMARY, name="AirTAK", phy_profile_index=0 (Long/Mesh). PSK configured to match local Meshtastic network or a shared AirTAK group key. Carries Meshtastic-compatible AND AirTAK tactical traffic.
+- Slot 1: role=SECONDARY, name="Tactical", phy_profile_index=0 (Long/Mesh). Separate PSK for AirTAK tactical-only traffic when channel isolation from Meshtastic is desired.
 - Slot 2: role=DISABLED, name="Audio", phy_profile_index=1 (Short/Speed). Pre-configured but disabled; activated in Phase 7 for PTT audio.
 - Slots 3–7: role=DISABLED.
 
@@ -438,11 +439,9 @@ AirTAK uses a modified flooding router compatible with Meshtastic's `ManagedFloo
 | POSITION_APP | 7 | Every player's position must be visible to every other player; hop_limit must match the full mesh diameter so no position goes stale for nodes at the far edge |
 | NODEINFO_APP | 7 | Node identity must propagate across the full mesh so every device knows about every other device |
 | TELEMETRY_APP | 7 | Battery and environment telemetry reaches all nodes; situational awareness includes which devices are running low on power |
-| AIRTAK_PLAYER | 7 | Player state (active/hit/respawning/eliminated) must propagate to every node in the command hierarchy; a squad leader on the opposite end of the map must see player state changes from all fireteams |
-| AIRTAK_GAME | 7 | Game phase broadcast must reach every player; maximum hop budget |
-| AIRTAK_ZONE | 7 | Zone definitions must reach every player; maximum hop budget |
-| AIRTAK_OBJECTIVE | 7 | Objective capture state must reach every player; maximum hop budget |
-| AIRTAK_ADMIN | 7 | Admin commands must reach every player; maximum hop budget |
+| AIRTAK_PLAYER | 7 | Player status and unit assignment must propagate to every node; a squad leader on the opposite end of the map must see status changes from all fireteams |
+| AIRTAK_TACTICAL | 7 | Tactical markers (objectives, zones, routes, notes) must reach every player; maximum hop budget |
+| AIRTAK_MODERATION | 7 | Vote-kick packets must reach all nodes in the affected scope so votes are tallied consistently |
 | AIRTAK_ACK | mirrors original | ACK must be able to return to the sender along any path the original took; hop_limit is set to the original packet's hop_start (see §8.9) |
 | AIRTAK_POSITION_REQUEST | 7 | Unicast position request must reach the target node regardless of distance; maximum hop budget |
 | AIRTAK_AUDIO | 1 | Audio must never be relayed; relay latency makes audio unintelligible — the sole packet type with a restricted hop budget due to a hard physical constraint |
@@ -455,7 +454,7 @@ Transmitting position at a fixed short interval is incompatible with EU duty-cyc
 
 - Position is sent when **GPS displacement ≥ 10 m** since the last TX, provided at least **15 s** have elapsed since the last TX (prevents bursts during rapid GPS updates).
 - Position is sent when **90 s have elapsed** since the last TX regardless of movement (heartbeat).
-- Players marked **dead or respawning** extend the heartbeat to **5 min** (no tactically relevant movement occurs in this state).
+- Players with extended status HIT, RESPAWNING, or ELIMINATED extend the heartbeat to **5 min** (reduced tactical movement value).
 - A AIRTAK_POSITION_REQUEST unicast (portnum 262) causes the target to send a position packet within **2 s**, bypassing the beaconing timer. This lets the Android map screen refresh a stale pin on demand.
 
 Under typical active-player movement, this yields an average TX rate of ≈ 1 packet per 60 s, helping each device stay within its EU duty-cycle obligations at Profile 0 and keeping typical channel utilisation low in a 100-player deployment.
@@ -475,7 +474,7 @@ Meshtastic's flood router provides best-effort delivery. AirTAK adds a lightweig
 | Class | Behavior | Used For |
 |-------|----------|----------|
 | BEST_EFFORT | Standard flood, no retry | POSITION_APP, TELEMETRY_APP, AIRTAK_AUDIO |
-| ACKNOWLEDGED | Send + wait for AIRTAK_ACK (portnum 261); retry up to 3 times with jittered exponential backoff | TEXT_MESSAGE_APP (unicast), AIRTAK_PLAYER **state transitions** (see note below), AIRTAK_GAME, AIRTAK_ZONE, AIRTAK_OBJECTIVE, AIRTAK_ADMIN |
+| ACKNOWLEDGED | Send + wait for AIRTAK_ACK (portnum 261); retry up to 3 times with jittered exponential backoff | TEXT_MESSAGE_APP (unicast), AIRTAK_PLAYER **state transitions** (see note below), AIRTAK_TACTICAL, AIRTAK_MODERATION |
 
 > **AIRTAK_PLAYER ACKNOWLEDGED vs BEST_EFFORT rule**: A AIRTAK_PLAYER packet is sent ACKNOWLEDGED (`Data.want_response = true`, `PlayerStatePacket.is_state_transition = true`) **only when the player's status field changes** (e.g., ACTIVE→HIT, HIT→RESPAWNING, RESPAWNING→ACTIVE, any admin-forced transition). Heartbeat position-update packets where status is **unchanged** are sent BEST_EFFORT (`Data.want_response = false`, `PlayerStatePacket.is_state_transition = false`). This prevents the 8-entry retry queue from being saturated by heartbeats and ensures state transitions receive all three retry slots. AIRTAK_POSITION_REQUEST responses are always BEST_EFFORT.
 
@@ -556,7 +555,7 @@ firmware/src/
 │   └── Framing.h / ...             Length-prefixed chunked BLE framing
 ├── game/
 │   ├── GameState.h / ...           Local mirror of game phase, zone table
-│   └── PlayerState.h / ...         Own player state, respawn timer
+│   └── PlayerState.h / ...         Own player status (simplified; manual toggle)
 └── ui/
     ├── Screens.h                   Screen ID enum, layout constants
     ├── MainScreen.cpp              Status: GPS, radio, battery, node count
@@ -826,7 +825,7 @@ Domain Layer (Use Cases)
 Data Layer
   ├── BleRepository        BLE transport, framing, reconnect logic
   ├── MeshRepository       Received packet store, node table
-  ├── GameRepository       Game state, player state, zones, objectives
+  ├── GameRepository       Tactical markers, player state, scope resolution
   ├── ConfigRepository     Device config read/write via BLE
   └── TileRepository       MapLibre tile cache management
 ```
@@ -839,10 +838,10 @@ Bottom navigation bar with 5 top-level destinations. No nested bottom navigation
 
 | Tab | Route | Description |
 |-----|-------|-------------|
-| Map | `map` | Situational awareness map (default at launch) |
-| Messages | `messages` | Channel-tabbed message list |
-| Players | `players` | Team roster with status |
-| Game | `game` | Game phase control and scoring |
+| Map | `map` | Situational awareness map with tactical markers (default at launch) |
+| Messages | `messages` | Channel-tabbed message list with scope filtering |
+| Roster | `roster` | Node list organized by unit hierarchy |
+| Markers | `markers` | Tactical marker list, filter, and management |
 | Settings | `settings` | Device config and app preferences |
 
 ### 11.5 Map Screen
@@ -852,13 +851,12 @@ The primary screen, shown at app launch.
 **Features:**
 - MapLibre GL rendering with offline vector tile support.
 - Own position: blue directional arrow (bearing from device compass, if available, else heading from GPS track).
-- Remote nodes: colored circular pin with short-name label; color reflects team assignment from AIRTAK_PLAYER data.
-- Node status overlay: active = solid pin; hit = hollow pin; eliminated = pin with X; no recent position = grayed out.
-- Tap a pin: bottom sheet with player details (callsign, team, battery %, status, last-seen time).
-- Long-press map: place a local waypoint (label + icon; stored in Room DB; not broadcast).
-- Zone polygons: rendered as semi-transparent fills with colored borders per zone type (see §12.3 for zone type colors).
-- Objective icons: flag icon at zone centroid with capture-bar overlay.
-- Toolbar: recenter on own position, toggle layer visibility (zones, objectives, players, waypoints), open tile manager.
+- Remote nodes: colored circular pin with short-name label; color reflects unit assignment from AIRTAK_PLAYER data.
+- Node status overlay: active = solid pin; hit = hollow pin (if player toggles HIT); eliminated = pin with X (if player toggles ELIMINATED); no recent position = grayed out.
+- Tap a pin: bottom sheet with node details (callsign, unit hierarchy, battery %, status, last-seen time, "Request position" button).
+- Long-press map: place a tactical marker (point, note, or start drawing a route/area).
+- Tactical markers: rendered on map per type — point markers as pins, routes as polylines, areas as semi-transparent polygons, notes as text callouts, objectives with team-control color coding.
+- Toolbar: recenter on own position, toggle layer visibility (tactical markers, nodes, waypoints), open tile manager, enter draw mode.
 
 **Tile management:**
 - The app is distributed with a bundled world overview tileset at zoom levels 0–5.
@@ -874,33 +872,25 @@ The primary screen, shown at app launch.
 - Message persistence: Room DB, rolling window of 1 000 messages per channel. Oldest messages are deleted automatically.
 - Messages received while the screen is in the background generate a POST_NOTIFICATIONS notification (if permission granted).
 
-### 11.7 Players Screen
+### 11.7 Roster Screen
 
-- Section headers by team name (team color as left border accent).
-- Per player row: callsign, relative last-seen time, battery level indicator, status chip (ACTIVE / HIT / RESPAWNING / ELIMINATED / OFFLINE).
+- Nodes organized by unit hierarchy: Company → Platoon → Squad → Fireteam.
+- Section headers by unit name with collapsible groups.
+- Per-node row: callsign, relative last-seen time, battery level indicator, status chip (ACTIVE / HIT / RESPAWNING / ELIMINATED / OFFLINE).
 - OFFLINE = no AIRTAK_PLAYER packet received in the last 5 minutes.
+- Extended status flags (HIT, RESPAWNING, ELIMINATED) are only shown when the node has explicitly set them; otherwise only ACTIVE/INACTIVE is displayed.
 - Filter toggle: Show All / Online Only.
-- Admin accounts (see §11.8) see additional controls per row: reassign team (dropdown), force status change (button).
+- Unit assignment is self-managed per device in Settings; no admin override.
 
-### 11.8 Game Screen
+### 11.8 Markers Screen
 
-All users see the full game screen. Admin-specific controls are conditionally shown only when `GameConfig.is_admin = true` on the connected device.
-
-**All users:**
-- Own status badge (large, prominent — ACTIVE / HIT / RESPAWNING / ELIMINATED).
-- **HIT button**: large red button; triggers HIT state on own device and broadcasts AIRTAK_PLAYER packet. Requires confirmation hold (500 ms) to prevent accidental activation.
-- **Cancel hit**: visible for 3 seconds after a HIT is reported; cancels the report if tapped before propagation window closes.
-- Respawn countdown timer when status = RESPAWNING.
-- Game phase indicator (LOBBY / ACTIVE / PAUSED / ENDED).
-- Score summary: team scores, objective count, active player counts.
-
-**Admin only:**
-- Game phase controls: Start / Pause / Resume / Stop (with confirmation dialog for Stop).
-- Round timer: set duration, visible countdown.
-- Zone editor: button to enter zone-draw mode on the map (draws polygon → AIRTAK_ZONE broadcast).
-- Player override panel: force any player's status, reassign teams.
-- Force respawn all.
-- Reset scores.
+- List of all active tactical markers with type icon, label, creator, scope, and last-modified time.
+- Filter by marker type (Point / Route / Area / Note / Objective), scope, or creator.
+- Tap a marker to fly to it on the map.
+- Swipe to delete own markers (marker is broadcast with `deleted=true`).
+- Markers created by other nodes can be hidden (local setting) but not deleted.
+- Objective markers show team-control status with color coding (OWN=green, OPPOSING=red, NEUTRAL=yellow, UNKNOWN=grey).
+- Any node can update an objective's `controlling_team` field; changes are broadcast to all.
 
 ### 11.9 Settings Screen
 
@@ -913,7 +903,7 @@ Settings are organized by config group. All changes are staged; an **Apply** but
 | Channels | Channel slot list: tap slot to edit name, PSK (password field), role, position precision, PHY profile (picker shows profile name + SF/BW/CR; compatibility indicator flags mismatch with known nearby nodes on that slot) |
 | Position | Broadcast interval (slider), precision bits (slider), smart broadcast toggle, movement threshold |
 | Power | GPS duty cycle toggle, GPS on/off durations, display sleep timeout |
-| Game | Callsign, team ID, player color, admin mode toggle |
+| Game | Callsign, unit IDs (fireteam/squad/platoon/company), player color |
 | App | Theme (light / dark / system), default map zoom, tile server URL, notification prefs |
 | About | Firmware version, node ID (hex), Bluetooth address, diagnostic log export, factory reset |
 
@@ -942,95 +932,196 @@ CONNECTED  ──(link loss)──► RECONNECTING ──(backoff: 1 s, 2 s, 4 s
 - The persistent notification reads "AirTAK — Connected to [node name]" with a disconnect action.
 - Reconnect backoff resets to 1 s on any successful connection.
 
-### 11.11 Game Admin Authorization
+### 11.11 Unit Hierarchy & Information Scope
 
-Admin status is stored in `GameConfig.is_admin` on the device, not on the server (there is no server). A device acting as game admin broadcasts AIRTAK_GAME, AIRTAK_ZONE, AIRTAK_OBJECTIVE, and AIRTAK_ADMIN packets. Other devices accept game-state packets from any source (trust is implicit within the PSK-encrypted game channel). The admin role is therefore enforced by convention within a game group and by the PSK, not by cryptographic authorization. This is an accepted limitation for the airsoft use case; see §15.4.
+AirTAK uses a self-organized unit hierarchy. Each device is assigned unit identifiers at up to four levels in Settings > Game: Fireteam (e.g., "Alpha"), Squad (e.g., "1st Squad"), Platoon (e.g., "Red Platoon"), Company (e.g., "1st Company"). All fields are optional; a device may participate at any subset of levels.
+
+Unit IDs are simple free-text strings. There is no central enrollment, no uniqueness enforcement, and no admin. Groups self-organize by agreeing on unit name conventions.
+
+When sending a message or tactical marker, the sender chooses a **scope level** (Fireteam, Squad, Platoon, Company, or All). Receivers filter inbound information: a message scoped to "Squad" is only displayed if the receiver shares the same squad ID as the sender. ALL scope bypasses all filtering. Scope is enforced at the receiver display layer; the mesh relays all packets regardless of scope.
+
+This design lets a platoon lead broadcast to all platoon members (scope=PLATOON), a squad lead coordinate within their squad (scope=SQUAD), a fireteam operate semi-autonomously (scope=FIRE_TEAM), and company-wide announcements reach everyone (scope=COMPANY or ALL). Information does not leak upward — a fireteam-scoped message is not displayed to other fireteams in the same squad unless they explicitly monitor that scope.
 
 ---
 
-## 12. Airsoft Feature Set
+## 12. Tactical Coordination
 
-### 12.1 Player State Machine
+AirTAK Phase 5 replaces formal game-mode mechanics with a flexible tactical coordination model. There is no game admin, no lobby/pause phases, no scoring, no win conditions, no automatic respawn timers, and no enforced state transitions. Instead, AirTAK provides tools for self-organized units to share positional awareness, tactical markers, and scoped communication across an optional hierarchy.
 
-```
-               ┌──────────────────────────────────┐
-               │            ACTIVE                │◄──────┐
-               └──────────────────┬───────────────┘       │
-                          HIT button / long press          │ respawn timer expires
-                                  │                         │ (auto)
-               ┌──────────────────▼───────────────┐       │
-               │             HIT                  │       │
-               └──────────────────┬───────────────┘       │
-                      (if respawns remaining)              │
-               ┌──────────────────▼───────────────┐       │
-               │          RESPAWNING              ├───────┘
-               └──────────────────┬───────────────┘
-                    (if no respawns remaining)
-               ┌──────────────────▼───────────────┐
-               │          ELIMINATED              │
-               └──────────────────────────────────┘
-                           ▲
-                  Admin force-eliminate
-```
+### 12.1 Unit Hierarchy
 
-- State is stored on the device and broadcast as a AIRTAK_PLAYER packet on every transition.
-- Respawn count and timer duration are set by the game admin via a AIRTAK_GAME packet at game start.
-- Admin can force any state transition via AIRTAK_ADMIN packet.
-- On game STOP, all player states reset to ACTIVE.
+AirTAK supports an optional four-level unit hierarchy. Each device may be assigned a unit identifier at each level:
 
-### 12.2 Teams
+| Level | Typical Size | Example ID | Use |
+|-------|-------------|-----------|-----|
+| **Fireteam** | 4–6 people | `"Alpha"` | Intra-team coordination; room-clearing, flanking |
+| **Squad** | 2–3 fireteams | `"1st Squad"` | Squad-lead direction; fireteam tasking |
+| **Platoon** | 2–4 squads | `"Red Platoon"` | Multi-squad objectives; platoon-lead coordination |
+| **Company** | 2–4 platoons | `"1st Company"` | Field-wide announcements; company command |
 
-- Up to 8 teams per game.
-- Configurable by game admin via AIRTAK_GAME packet: name (max 16 chars), color (24-bit RGB), max player count.
-- Team assignment is stored in `GameConfig.team_id` on each device. The player sets their own team in Settings > Game before the game. Admin can override any player's team via AIRTAK_ADMIN.
-- Team 0 is reserved for SPECTATOR role (no hit/respawn mechanics, not included in scoring).
+All unit ID fields are free-text strings configured per-device in Settings > Game. All fields are optional — a device may participate at any subset of levels or none at all. There is no central enrollment, no uniqueness enforcement, and no admin. Groups self-organize by agreeing on unit name conventions.
 
-### 12.3 Game Zones
+Unit IDs are broadcast as part of the AIRTAK_PLAYER packet so every node can determine organizational relationships.
 
-Zones are polygonal geographic boundaries defined by the game admin and broadcast as AIRTAK_ZONE packets to all nodes. Zones are rendered on the map as filled polygons with per-type styling:
+### 12.2 Scoped Information Sharing
 
-| Zone Type | Fill Color | Border | Description |
-|-----------|-----------|--------|-------------|
-| BOUNDARY | transparent | red dashed | Hard outer field boundary |
-| SAFE_ZONE | team color, 30% opacity | team color solid | Respawn area for a team |
-| OBJECTIVE | yellow, 40% opacity | yellow solid | Capturable point |
-| EXCLUSION | dark grey, 50% opacity | grey dashed | Out-of-bounds area |
+When sending a message or tactical marker, the sender selects a **scope level**: Fireteam, Squad, Platoon, Company, or All. The scope is encoded in the packet and enforced at the receiver display layer:
 
-Players whose GPS position falls outside the BOUNDARY zone trigger a visual warning in the Android app (amber banner). No automatic enforcement is applied; enforcement is by game organizer.
+| Scope | Displayed To |
+|-------|-------------|
+| ALL | Every node on the mesh (no filtering) |
+| COMPANY | Nodes sharing the sender's `company_id` |
+| PLATOON | Nodes sharing the sender's `platoon_id` |
+| SQUAD | Nodes sharing the sender's `squad_id` |
+| FIRE_TEAM | Nodes sharing the sender's `fireteam_id` |
 
-Zones are stored by ID. A AIRTAK_ZONE packet with the same `zone_id` as an existing zone replaces it. A AIRTAK_ZONE packet with `polygon` empty deletes the zone. The full zone table is re-broadcast by the admin at game start.
+Scope filtering is a receiver-side display decision. The mesh relays ALL packets regardless of scope — scoped information is still encrypted with the channel PSK and physically relayed by every node. This means scoped traffic contributes to channel load for all participants, which is the trade-off for maintaining Meshtastic wire-format compatibility (the flood router does not inspect scope fields).
 
-### 12.4 Objectives
+A message scoped to SQUAD is visible to all members of that squad. A message scoped to PLATOON is visible to all squads within that platoon. Information does not automatically "leak upward" — a fireteam-scoped message is not displayed to other fireteams in the same squad unless they actively monitor that scope (the Android app can show all scopes if the user chooses).
 
-Each objective references a zone and carries:
-- `objective_id`: unique within the game
-- `zone_id`: the OBJECTIVE zone it occupies
-- `controlling_team_id`: team currently in control (0 = NEUTRAL)
-- `capture_percent`: 0–100, displayed as a progress arc on the map icon
-- `score_value`: points awarded per unit time while held
+**Typical coordination patterns:**
+- Platoon lead broadcasts objective assignments to all squads (scope=PLATOON)
+- Squad lead tasks fireteams (scope=SQUAD)
+- Fireteam coordinates internally during movement (scope=FIRE_TEAM)
+- Company command issues field-wide notices (scope=COMPANY or ALL)
+- Two platoon leads coordinate between platoons (scope=COMPANY, since they share a company ID)
 
-Objective state is administered exclusively by the game admin device. The admin app increments `capture_percent` based on proximity data it aggregates from received AIRTAK_PLAYER (position) packets.
+### 12.3 Tactical Markers
 
-### 12.5 Game Modes
+Tactical markers are the primary coordination tool. Any node can create, update, or delete markers. Markers are broadcast as AIRTAK_TACTICAL packets (portnum 257) with ACKNOWLEDGED delivery — they use the application-layer reliability mechanism from §8.9 to ensure delivery.
 
-Three built-in modes. Mode is set in the AIRTAK_GAME packet at game start and determines the scoring display and win-condition banner.
+**Marker types:**
 
-| Mode | Win Condition |
-|------|--------------|
-| ELIMINATION | Last team with at least one ACTIVE player wins |
-| TIME_LIMIT | Team with most ACTIVE players when timer expires wins |
-| DOMINATION | Team controlling most objectives when timer expires wins; objective time-held is weighted by score_value |
+| Type | Geometry | Use Case |
+|------|----------|----------|
+| POINT | Single coordinate | RV point, observation post, enemy contact, supply cache |
+| ROUTE | Polyline (ordered series of points) | Patrol route, extraction path, movement corridor |
+| AREA | Polygon | Zone of control, search area, danger area, boundary |
+| NOTE | Single coordinate + text | Text annotation pinned to a location |
+| OBJECTIVE | Point or polygon + team-control fields | Named objective with owning/controlling team status |
+
+**Marker fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `marker_id` | uint32 | Unique marker identifier; generated by creator |
+| `type` | enum | POINT / ROUTE / AREA / NOTE / OBJECTIVE |
+| `label` | string | Short name, max 32 chars |
+| `description` | string | Optional longer text, max 256 chars |
+| `color_rgb` | uint32 | 24-bit RGB color for map rendering |
+| `scope` | enum | ALL / COMPANY / PLATOON / SQUAD / FIRE_TEAM |
+| `creator_node_id` | uint32 | Node that created the marker |
+| `created_at_unix` | uint32 | Creation timestamp |
+| `updated_at_unix` | uint32 | Last modification timestamp |
+| `deleted` | bool | If true, remove this marker from display and storage |
+| `points` | repeated LatLng | Geometry: 1 for POINT/NOTE, ≥2 for ROUTE, ≥3 for AREA |
+| `controlling_team` | enum | (OBJECTIVE only) OWN / OPPOSING / NEUTRAL / UNKNOWN |
+| `priority` | uint32 | (OBJECTIVE only) 0=info, 1=low, 2=medium, 3=high, 4=critical |
+
+**Marker lifecycle:**
+- **Create**: User draws on the map → marker is assigned a new `marker_id` → broadcast as AIRTAK_TACTICAL.
+- **Update**: Same `marker_id`, modified fields, `updated_at_unix` bumped → broadcast. Any node can update any marker (trust-based, like all AirTAK data).
+- **Delete**: Same `marker_id` with `deleted=true` → broadcast. Receivers remove the marker from display and local storage.
+- **Persistence**: All markers are stored locally in Room DB (Android) and survive app restart. Received markers are merged into the local store by `marker_id`.
+- **Re-broadcast**: On app launch, the device re-broadcasts all locally-created active markers so late-joining nodes receive the full marker set.
+
+**Objective markers:**
+Objectives are markers with `type=OBJECTIVE`. They add two fields beyond standard markers:
+- `controlling_team`: Who currently holds the objective. Manually set by any node (typically the platoon or squad lead observing the objective). Values: OWN (green), OPPOSING (red), NEUTRAL (yellow), UNKNOWN (grey).
+- `priority`: Importance level displayed as a badge on the objective icon.
+
+There is no automated capture mechanic, no proximity-based control, and no scoring. Objectives are shared reference points for human coordination.
+
+**Rendering:**
+- POINT: Colored pin with label
+- ROUTE: Colored polyline with directional arrows; tap to see waypoint sequence
+- AREA: Semi-transparent filled polygon (30 % opacity) with colored border
+- NOTE: Pin with text callout bubble
+- OBJECTIVE: Flag icon at centroid; fill color reflects `controlling_team`; priority badge overlay
+
+### 12.4 Player Status
+
+Each node broadcasts its status via AIRTAK_PLAYER (portnum 256) packets. Status is manually set by the user — there are no automatic transitions and no game-logic enforcement.
+
+**Base statuses (always available):**
+
+| Status | Meaning | Map Pin |
+|--------|---------|---------|
+| ACTIVE | Online and participating | Solid colored pin |
+| INACTIVE | Not participating (game ended or user opted out) | Grey pin, no position broadcast |
+
+**Extended statuses (optional, manually toggled):**
+
+| Status | Meaning | Map Pin |
+|--------|---------|---------|
+| HIT | Player reports being hit (informational) | Hollow pin |
+| RESPAWNING | Player is returning to play (informational) | Hollow pin with timer icon |
+| ELIMINATED | Player is out for the round (informational) | Pin with X overlay |
+
+Extended status flags are purely informational. No game logic depends on them. Players toggle them manually in the Android app or via the T-Echo Plus device button (long-press to toggle HIT, configurable; disabled by default). There are no respawn timers, no respawn counts, no automatic state transitions, and no admin overrides.
+
+A player who toggles HIT and later returns to play simply toggles back to ACTIVE. The status history is visible to squad and platoon leads for situational awareness (who is currently effective), but the system imposes no constraints.
+
+**Heartbeat behavior:**
+- ACTIVE players: position broadcast at smart beaconing intervals (§8.7)
+- INACTIVE players: no position broadcast
+- Players with extended status HIT/RESPAWNING/ELIMINATED: position broadcast continues at the 5-minute heartbeat (reduced from 90 s, since frequent updates have less tactical value)
+
+### 12.5 Game Active/Ended Toggle
+
+Each device has a simple binary participation state: **Active** or **Ended**.
+
+- **Active**: Full mesh participation — position broadcast, tactical markers active, messages processed. This is the normal operating state.
+- **Ended**: Device stops broadcasting position and markers. The display and app show "ENDED." The device continues to relay mesh packets for other participants.
+
+The toggle is manual per-device in the Android app (visible on the Map screen toolbar). There is no centralized game control, no lobby, no pause, and no round timers. A player arriving late simply sets their device to Active and joins the ongoing coordination.
+
+This design reflects field reality: airsoft game days have a natural start (players arrive, turn on devices) and end (players leave, turn off devices). Formal phase transitions managed by a central admin are overhead that field experience shows is never used in practice.
 
 ### 12.6 Device Button Behavior Summary
 
 | Gesture | State | Action |
 |---------|-------|--------|
 | Short press | any | Advance to next display screen |
-| Long press (≥ 3 s) | ACTIVE | Report HIT; transition to HIT state |
-| Short press within 3 s of HIT report | HIT | Cancel HIT report (if not yet propagated) |
+| Long press (≥ 3 s) | any | If HIT-toggle enabled: toggle own HIT status (ACTIVE↔HIT); otherwise no action |
+| Short press within 3 s of HIT toggle | HIT | Cancel HIT report (if not yet acknowledged by mesh) |
 | Double press | any | Toggle display backlight (not applicable for e-ink; reserved for future hardware) |
 
-### 12.7 PTT Audio (Phase 7)
+HIT-toggle via device button is disabled by default. It can be enabled in Settings > Game for players who want a physical button for status changes without pulling out their phone.
+
+### 12.7 Vote-Kick Moderation (Shadowban)
+
+AirTAK includes a decentralized vote-kick mechanism that lets a unit collectively suppress display of data from a problematic node. There is no central admin — moderation is by group consensus within a scope level.
+
+**Concept:**
+- Any node may cast a **VOTE_BAN** against another node at a specific scope level (Squad, Platoon, or Company).
+- When **3 distinct nodes** within the same scope have voted to ban the same target, the ban **activates** on every node that shares that scope.
+- While banned, all data originating from the target node is **suppressed at the application display layer**: AIRTAK_PLAYER packets, AIRTAK_TACTICAL markers, and text messages from the banned node are not shown on the map, roster, or message list. POSITION_APP packets from the banned node are also hidden from the map.
+- The banned node's packets are still **relayed by the mesh** (the flood router does not inspect bans). The ban is purely receiver-side display filtering — a "shadowban."
+- Bans **expire automatically after 24 hours** from the most recent vote. Any node that previously voted may also cast an **UNBAN** to immediately lift the ban, which resets the vote tally.
+- Ban state and vote tallies are stored locally per device and survive app restart.
+
+**Protocol:**
+- Votes are broadcast as AIRTAK_MODERATION packets (portnum 258) with ACKNOWLEDGED delivery (§8.9).
+- Each `ModerationPacket` carries: `action` (VOTE_BAN or UNBAN), `target_node_id`, `scope` (the unit level at which the ban applies), `voter_node_id`, and a `timestamp`.
+- Receivers tally votes independently: when 3 distinct `voter_node_id` values with action=VOTE_BAN targeting the same `target_node_id` at the same `scope` are observed, the ban activates. An UNBAN from any previous voter resets the tally.
+- Bans are scoped: a ban at SQUAD level only affects display for nodes sharing that squad ID. A ban at COMPANY level affects the entire company.
+
+**Android UI:**
+- Roster screen: tap a node → detail sheet includes "Vote to Ban" option with scope selector (Squad/Platoon/Company).
+- Confirmation dialog explains: "This will suppress [node name]'s data for your [scope]. 3 votes from distinct [scope] members are required. Ban expires after 24 hours."
+- When a ban is active against a node, the roster shows a ⛔ icon next to the banned node's entry.
+- Settings > App includes a "Moderation" section listing all active bans with: banned node callsign, scope, vote count, time remaining, and an "Unban" button (visible only if this node previously voted).
+- The banned node sees no indication it has been banned (shadowban).
+
+**Design rationale:**
+- The 3-vote threshold prevents a single malicious actor from silencing others.
+- Scope-limiting ensures a squad cannot ban someone from a different squad unless they escalate to a higher scope where they share membership.
+- Auto-expiry prevents permanent exclusion from forgotten votes.
+- No central admin means the system scales with self-organized groups.
+- ACKNOWLEDGED delivery ensures votes propagate reliably through the mesh.
+
+### 12.8 PTT Audio (Phase 7)
 
 PTT audio enables half-duplex voice communication across the AirTAK mesh, routed through the phone as the audio input/output device. The T-Echo Plus has no onboard microphone or speaker; all audio I/O is handled by the Android device over BLE.
 
@@ -1078,7 +1169,7 @@ When a AirTAK device shares channel 0 PHY parameters and PSK with a Meshtastic d
 | AirTAK relays Meshtastic packets | ✓ | Flood router is compatible |
 | Meshtastic relays AirTAK packets | ✓ | Unknown portnums are relayed, not dropped |
 | Meshtastic app shows AirTAK as a node | ✓ | NODEINFO_APP with hw_model |
-| Meshtastic sees AirTAK game data (AIRTAK_PLAYER, etc.) | ✗ | Sent on AirTAK game channel slot (different PSK); relayed but not decryptable by Meshtastic |
+| Meshtastic sees AirTAK tactical data (AIRTAK_PLAYER, AIRTAK_TACTICAL, etc.) | ✗ | Sent on AirTAK channel slot (different PSK); relayed but not decryptable by Meshtastic |
 
 ### 13.2 NODEINFO Broadcast
 
@@ -1225,9 +1316,12 @@ message PowerConfig {
 
 message GameConfig {
   string callsign         = 1;   // max 16 bytes
-  uint32 team_id          = 2;   // 0 = spectator
-  uint32 player_color_rgb = 3;
-  bool   is_admin         = 4;
+  string fireteam_id      = 2;   // e.g., "Alpha"; free-text, optional
+  string squad_id         = 3;   // e.g., "1st Squad"; free-text, optional
+  string platoon_id       = 4;   // e.g., "Red Platoon"; free-text, optional
+  string company_id       = 5;   // e.g., "1st Company"; free-text, optional
+  uint32 player_color_rgb = 6;
+  bool   hit_button_enabled = 7; // enable long-press HIT toggle on device button; default false
 }
 
 message SecurityConfig {
@@ -1245,75 +1339,53 @@ package airtak;
 
 enum PlayerStatus {
   ACTIVE      = 0;
-  HIT         = 1;
-  RESPAWNING  = 2;
-  ELIMINATED  = 3;
-  SPECTATING  = 4;
+  INACTIVE    = 1;
+  // Extended statuses (optional, manually toggled, informational only):
+  HIT         = 2;
+  RESPAWNING  = 3;
+  ELIMINATED  = 4;
 }
 
-// Portnum 256 — sent on channel 1 on every player state transition
-// and at least once every broadcast_interval_secs (heartbeat).
-// is_state_transition distinguishes a status change (ACKNOWLEDGED) from a
-// position-only heartbeat (BEST_EFFORT). See §8.9 for the ACK rule.
+// Portnum 256 — sent on every player state change (ACKNOWLEDGED when
+// is_state_transition=true) and at least every broadcast_interval_secs (BEST_EFFORT
+// heartbeat when is_state_transition=false). See §8.9 for the ACK rule.
 message PlayerStatePacket {
-  uint32       node_id           = 1;
-  string       callsign          = 2;
-  uint32       team_id           = 3;
-  PlayerStatus status            = 4;
-  uint32       respawn_at_unix   = 5;   // epoch seconds; non-zero when RESPAWNING
-  uint32       color_rgb         = 6;
-  bool         is_state_transition = 7; // true = status changed; send ACKNOWLEDGED (want_response=true)
-                                         // false = heartbeat; send BEST_EFFORT (want_response=false)
+  uint32       node_id             = 1;
+  string       callsign            = 2;
+  PlayerStatus status              = 3;
+  uint32       color_rgb           = 4;
+  bool         is_state_transition = 5; // true = status changed; send ACKNOWLEDGED
+                                         // false = heartbeat; send BEST_EFFORT
+  // Unit hierarchy (all optional free-text; self-assigned, not centrally managed)
+  string       fireteam_id         = 6;   // e.g., "Alpha"
+  string       squad_id            = 7;   // e.g., "1st Squad"
+  string       platoon_id          = 8;   // e.g., "Red Platoon"
+  string       company_id          = 9;   // e.g., "1st Company"
 }
 
-// ── Game ──────────────────────────────────────────────────────
+// ── Tactical Markers ─────────────────────────────────────────
 
-enum GamePhase {
-  LOBBY   = 0;
-  ACTIVE  = 1;
-  PAUSED  = 2;
-  ENDED   = 3;
+enum MarkerType {
+  POINT     = 0;   // single coordinate
+  ROUTE     = 1;   // polyline (ordered series of points)
+  AREA      = 2;   // polygon
+  NOTE      = 3;   // text annotation at a coordinate
+  OBJECTIVE = 4;   // objective with team-control fields
 }
 
-enum GameMode {
-  ELIMINATION = 0;
-  TIME_LIMIT  = 1;
-  DOMINATION  = 2;
+enum TeamControl {
+  OWN      = 0;
+  OPPOSING = 1;
+  NEUTRAL  = 2;
+  UNKNOWN  = 3;
 }
 
-message TeamDefinition {
-  uint32 team_id   = 1;
-  string name      = 2;
-  uint32 color_rgb = 3;
-  uint32 max_players       = 4;
-  uint32 respawn_count     = 5;   // respawns allowed; 0 = unlimited
-  uint32 respawn_secs      = 6;   // respawn timer duration
-}
-
-message TeamScore {
-  uint32 team_id        = 1;
-  uint32 score          = 2;
-  uint32 active_players = 3;
-}
-
-// Portnum 257 — broadcast by admin on phase change or score update
-message GameStatePacket {
-  uint32                   admin_node_id    = 1;
-  GamePhase                phase            = 2;
-  GameMode                 mode             = 3;
-  uint32                   started_at_unix  = 4;
-  uint32                   ends_at_unix     = 5;   // 0 = no timer
-  repeated TeamDefinition  teams            = 6;
-  repeated TeamScore       scores           = 7;
-}
-
-// ── Zones ─────────────────────────────────────────────────────
-
-enum ZoneType {
-  BOUNDARY  = 0;
-  SAFE_ZONE = 1;
-  OBJECTIVE = 2;
-  EXCLUSION = 3;
+enum Scope {
+  ALL        = 0;
+  COMPANY    = 1;
+  PLATOON    = 2;
+  SQUAD      = 3;
+  FIRE_TEAM  = 4;
 }
 
 message LatLng {
@@ -1321,42 +1393,47 @@ message LatLng {
   double lng = 2;
 }
 
-// Portnum 258 — broadcast by admin; empty polygon = delete zone
-message ZonePacket {
-  uint32          zone_id       = 1;
-  ZoneType        type          = 2;
-  string          name          = 3;
-  repeated LatLng polygon       = 4;
-  uint32          owner_team_id = 5;   // relevant for SAFE_ZONE
+// Portnum 257 — tactical marker broadcast.
+// Sent ACKNOWLEDGED (want_response=true) per §8.9.
+// All nodes relay; scope filtering is receiver-side display logic.
+// A marker with deleted=true removes the marker from display and storage.
+message TacticalMarker {
+  uint32          marker_id        = 1;
+  MarkerType      type             = 2;
+  string          label            = 3;   // max 32 chars
+  string          description      = 4;   // max 256 chars, optional
+  uint32          color_rgb        = 5;
+  Scope           scope            = 6;
+  uint32          creator_node_id  = 7;
+  uint32          created_at_unix  = 8;
+  uint32          updated_at_unix  = 9;
+  bool            deleted          = 10;  // true = remove this marker
+  repeated LatLng points           = 11;  // POINT/NOTE: 1; ROUTE: >=2; AREA: >=3
+  // Objective-specific fields (meaningful only when type=OBJECTIVE):
+  TeamControl     controlling_team = 12;  // OWN/OPPOSING/NEUTRAL/UNKNOWN
+  uint32          priority         = 13;  // 0=info, 1=low, 2=medium, 3=high, 4=critical
 }
 
-// ── Objectives ────────────────────────────────────────────────
+// ── Moderation ──────────────────────────────────────────────────
 
-// Portnum 259 — broadcast by admin
-message ObjectivePacket {
-  uint32 objective_id        = 1;
-  uint32 zone_id             = 2;
-  uint32 controlling_team_id = 3;   // 0 = NEUTRAL
-  uint32 capture_percent     = 4;   // 0–100
-  uint32 score_value         = 5;
+enum ModerationAction {
+  VOTE_BAN = 0;
+  UNBAN    = 1;
 }
 
-// ── Admin ─────────────────────────────────────────────────────
-
-enum AdminAction {
-  FORCE_PLAYER_STATE   = 0;
-  FORCE_PLAYER_TEAM    = 1;
-  FORCE_RESPAWN_ALL    = 2;
-  RESET_SCORES         = 3;
-  BROADCAST_ZONES      = 4;   // admin re-broadcasts all zone packets
-}
-
-// Portnum 260
-message AdminPacket {
-  uint32      admin_node_id = 1;
-  AdminAction action        = 2;
-  uint32      target_node_id = 3;   // for player-specific actions
-  uint32      value         = 4;    // PlayerStatus or team_id depending on action
+// Portnum 258 — vote-kick / shadowban moderation.
+// Sent ACKNOWLEDGED (want_response=true) per §8.9.
+// Ban activates when 3 distinct voter_node_id values cast VOTE_BAN
+// against the same target_node_id at the same scope. Ban expires after
+// 24 hours from the most recent vote, or immediately on UNBAN from any
+// previous voter. Ban effect is receiver-side display suppression only
+// (shadowban); the mesh continues to relay all packets.
+message ModerationPacket {
+  ModerationAction action         = 1;
+  uint32           target_node_id = 2;
+  Scope            scope          = 3;   // scope at which the ban applies
+  uint32           voter_node_id  = 4;
+  uint32           timestamp_unix = 5;
 }
 
 // ── Ack ───────────────────────────────────────────────────────
@@ -1376,7 +1453,6 @@ message AirTAKAck {
 
 // Portnum 262 -- unicast request asking target_node_id to immediately re-broadcast
 // its current POSITION_APP packet. The receiving node responds within 2 seconds.
-// Useful when a node appears on the mesh but its position data is stale.
 message PositionRequestPacket {
   uint32 target_node_id    = 1;
   uint32 requester_node_id = 2;
@@ -1506,7 +1582,7 @@ message AdminResponse {
 
 ### 15.4 Threat Model
 
-The operational threat model is: **participants sharing a field in an airsoft game may attempt to cheat by spoofing or replaying game state packets**. The PSK-encrypted game channel provides basic protection against participants who do not know the PSK. Participants who do know the PSK (all players) can construct arbitrary game packets. Full per-packet cryptographic authentication is not implemented and is not planned. Game integrity is enforced socially by the game admin and field organizers, not technically by AirTAK.
+The operational threat model is: **participants sharing a field may attempt to spoof or replay tactical coordination packets**. The PSK-encrypted channel provides basic protection against participants who do not know the PSK. Participants who do know the PSK (all players) can construct arbitrary packets. Full per-packet cryptographic authentication is not implemented and is not planned. Information integrity is enforced socially by the participants and field organizers, not technically by AirTAK.
 
 ---
 
@@ -1538,7 +1614,7 @@ Phases are sequential. A phase is not considered complete until all items within
 | 2.6 | SNR-based relay delay (measured, not just compiled) |
 | 2.7 | Multi-channel: two channel slots simultaneously active; separate PSKs; packet routing verified |
 | 2.8 | Hot-reload config: all config groups apply without MCU reboot; radio restart path verified |
-| 2.9 | Per-packet-type hop limits: verify all packet types (TEXT_MESSAGE_APP, POSITION_APP, AIRTAK_PLAYER, AIRTAK_GAME, etc.) use hop_limit=7; verify AIRTAK_AUDIO uses hop_limit=1; verify hop_start in Flags bits [2:0] preserves the original value across relay hops |
+| 2.9 | Per-packet-type hop limits: verify all packet types (TEXT_MESSAGE_APP, POSITION_APP, AIRTAK_PLAYER, AIRTAK_TACTICAL, etc.) use hop_limit=7; verify AIRTAK_AUDIO uses hop_limit=1; verify hop_start in Flags bits [2:0] preserves the original value across relay hops |
 | 2.10 | Heard-by suppression: 3-device linear chain test; middle node cancels relay after overhearing relay from end node |
 | 2.11 | Application-layer reliability: (a) ACKNOWLEDGED packet delivered over 3-hop chain; verify AIRTAK_ACK hop_limit mirrors original hop_start and reaches sender; (b) mid-path packet drop (jamming R1→D link): verify retry with new packet_id passes through R1 and is received by D; verify single delivery at D; (c) timeout validation: hop_start=3 → timeout=2400 ms; hop_start=7 → timeout=5600 ms |
 | 2.12 | AIRTAK_POSITION_REQUEST: unicast request causes target to re-broadcast POSITION_APP within 2 s |
@@ -1561,23 +1637,24 @@ Phases are sequential. A phase is not considered complete until all items within
 |----|------|
 | 4.1 | Node positions on map: POSITION_APP packets render as colored pins with callsigns |
 | 4.2 | AIRTAK_PLAYER TX/RX: team color applied to pins; status overlay renders |
-| 4.3 | Players screen: team grouping, status chips, online/offline filter |
+| 4.3 | Roster screen: node list organized by unit hierarchy, status chips, online/offline filter |
 | 4.4 | Tile downloader: bounding box UI, download, offline verification (airplane mode) |
 | 4.5 | Local waypoints: place, label, persist in Room DB, render on map |
 
-### Phase 5 — Game Mode
+### Phase 5 — Tactical Coordination
 
 | ID | Item |
 |----|------|
-| 5.1 | Game state engine: phase management, timer, team score tracking |
-| 5.2 | AIRTAK_GAME TX/RX: game phase changes propagate to all devices |
-| 5.3 | Hit button: device button → HIT state → AIRTAK_PLAYER broadcast |
-| 5.4 | Respawn timer: countdown on device display and in app; ACTIVE set on expiry |
-| 5.5 | AIRTAK_ZONE TX/RX: zone polygons render on map with correct type styling |
-| 5.6 | AIRTAK_OBJECTIVE TX/RX: capture state renders on map |
-| 5.7 | Admin controls: start / pause / stop game; force player state; force respawn all |
-| 5.8 | All three game modes: win condition detection and result screen |
-| 5.9 | Position request: Android app "Request position" tap on player pin triggers AIRTAK_POSITION_REQUEST; stale pin updates within 2 s |
+| 5.1 | Unit hierarchy configuration: Android Settings > Game fields for fireteam_id, squad_id, platoon_id, company_id; broadcast in AIRTAK_PLAYER heartbeat |
+| 5.2 | Simplified player status: ACTIVE/INACTIVE base statuses; optional HIT/RESPAWNING/ELIMINATED extended flags; manual toggle in Android app (no automatic transitions, no respawn timers, no admin overrides) |
+| 5.3 | Tactical marker protocol: AIRTAK_TACTICAL (portnum 257) with all five marker types; ACKNOWLEDGED delivery; create/update/delete lifecycle; local Room DB persistence and mesh sync |
+| 5.4 | Tactical marker drawing tools: Android map drawing modes for point placement, route drawing (tap waypoints), area drawing (polygon vertex placement), note annotation, and objective pinning with team-control and priority fields |
+| 5.5 | Scoped information sharing: scope enum on AIRTAK_TACTICAL and text messages; receiver-side display filtering by unit ID match; scope selector in send UI; ALL scope bypasses filtering |
+| 5.6 | Roster screen: nodes organized by unit hierarchy with collapsible groups; status chips; online/offline filter; tap for node detail sheet |
+| 5.7 | Markers screen: filterable list of all active tactical markers by type/scope/creator; tap to fly-to on map; swipe to delete own markers; objective team-control color coding |
+| 5.8 | Game Active/Ended toggle: manual per-device toggle on Map toolbar; ACTIVE = full participation; ENDED = stop broadcasting position and markers, continue relay |
+| 5.9 | Marker re-broadcast on connect: on app launch or BLE reconnect, re-broadcast all locally-created active markers so late-joining nodes receive the full marker set |
+| 5.10 | Vote-kick moderation: AIRTAK_MODERATION (portnum 258) with VOTE_BAN/UNBAN actions; 3-vote activation threshold per scope; 24-hour auto-expiry; receiver-side shadowban display suppression (AIRTAK_PLAYER, AIRTAK_TACTICAL, text messages, POSITION_APP from banned node hidden); ACKNOWLEDGED delivery; Android moderation UI (vote from roster detail sheet, active ban list in Settings, unban for previous voters) |
 
 ### Phase 6 — Polish & Hardening
 
@@ -1586,7 +1663,7 @@ Phases are sequential. A phase is not considered complete until all items within
 | 6.1 | Nordic DFU OTA firmware update via Android app |
 | 6.2 | GPS duty cycle: verified power saving with acceptable position update rate |
 | 6.3 | Battery life validation: ≥ 8 hours under Phase 6 field test conditions |
-| 6.4 | Field test: 10+ devices, 2+ teams, 60-minute game, verified all P5 features functional |
+| 6.4 | Field test: 10+ devices, 2+ organizational units, 60-minute exercise, verified all P5 features functional |
 | 6.5 | Meshtastic interop field test: stock Meshtastic device on mesh; text exchange and node visibility verified |
 | 6.6 | Android background stability: BLE connection held for ≥ 8 hours on 3 different Android devices |
 | 6.7 | Fully offline test: airplane mode from app launch to end of game; all features functional |
@@ -1655,8 +1732,8 @@ airtak/
 │   │   │   ├── DFUService.h / DFUService.cpp
 │   │   │   └── Framing.h / Framing.cpp
 │   │   ├── game/
-│   │   │   ├── GameState.h / GameState.cpp
 │   │   │   ├── PlayerState.h / PlayerState.cpp
+│   │   │   ├── TacticalMarker.h / TacticalMarker.cpp    Tactical marker protocol handlers (Phase 5)
 │   │   │   └── AudioCodec.h / AudioCodec.cpp       Codec2 encode/decode wrapper (Phase 7)
 │   │   ├── ui/
 │   │   │   ├── Screens.h
@@ -1695,8 +1772,8 @@ airtak/
 │           │   │       ├── ui/
 │           │   │       │   ├── map/
 │           │   │       │   ├── messages/
-│           │   │       │   ├── players/
-│           │   │       │   ├── game/
+│           │   │       │   ├── markers/
+│           │   │       │   ├── roster/
 │           │   │       │   └── settings/
 │           │   │       ├── domain/
 │           │   │       │   ├── usecase/
@@ -1720,7 +1797,7 @@ airtak/
 └── docs/
     ├── radio-protocol.md                Wire format reference with annotated byte diagrams
     ├── ble-service.md                   GATT service UUID table and characteristic flows
-    └── game-protocol.md                 Game packet flow diagrams (lobby → active → ended)
+    └── tactical-protocol.md             Tactical coordination packet flow diagrams
 ```
 
 ---
@@ -1815,15 +1892,15 @@ Generated files are committed to the repository. Proto compilation is not part o
 **Integration tests** (2 AirTAK devices required):
 - Loopback text message: device A sends TEXT_MESSAGE_APP, device B receives and delivers to BLE client.
 - Multi-hop relay: 3-device linear chain; message from device A reaches device C via device B; hop count correct.
-- Channel isolation: AIRTAK_PLAYER packet on AirTAK game slot not received by a device with only the interop channel slot active (different PSK).
+- Channel isolation: AIRTAK_PLAYER packet on AirTAK channel slot not received by a device with only the interop channel slot active (different PSK).
 - Hot-reload: change `DeviceConfig.long_name` over BLE; verify NODEINFO_APP broadcast within 5 s; no reboot.
 - Radio restart: change `LoraConfig.tx_power_dbm` over BLE; verify radio restart completes in ≤ 300 ms; BLE connection maintained.
-- Per-type hop limit: TEXT_MESSAGE_APP packet traced across 4-device chain; verify hop_limit starts at 7 and decrements correctly at each hop; verify AIRTAK_AUDIO starts at hop_limit=1 and is not relayed.
+- Per-type hop limit: TEXT_MESSAGE_APP packet traced across 4-device chain; verify hop_limit starts at 7 and decrements correctly at each hop; verify AIRTAK_AUDIO starts at hop_limit=1 and is not relayed; verify AIRTAK_TACTICAL starts at hop_limit=7.
 - Heard-by suppression: 3-device triangle; all three can hear each other; device A sends; verify that B and C each relay at most once.
 - Application-layer retry — relay-drop scenario: 3-device chain A→R→B; jam R→B link; verify A retries with new MeshPacket.id but same Data.request_id; verify R forwards retry; verify B receives and applies message exactly once; verify A receives ACK and removes from retry queue.
 - Application-layer retry — ACK-lost scenario: 3-device chain A→R→B; B receives but ACK is jammed; verify A retries; verify B deduplicates by Data.request_id and re-sends ACK; verify A ultimately clears queue.
-- ACK hop_limit: send AIRTAK_GAME (hop_start=7) over 5-hop chain; verify AIRTAK_ACK is generated with hop_limit=7 and reaches sender at hop 5.
-- Implicit ACK: device A broadcasts AIRTAK_PLAYER; device A overhears B's relay; verify A cancels pending retries.
+- ACK hop_limit: send AIRTAK_TACTICAL (hop_start=7) over 5-hop chain; verify AIRTAK_ACK is generated with hop_limit=7 and reaches sender at hop 5.
+- Implicit ACK: device A broadcasts AIRTAK_TACTICAL; device A overhears B's relay; verify A cancels pending retries.
 - AIRTAK_POSITION_REQUEST: device A sends AIRTAK_POSITION_REQUEST targeting device B; verify device B broadcasts POSITION_APP within 2 s.
 - PHY profile isolation: two AirTAK devices -- one Profile 0, one Profile 1 on the same slot; verify they cannot receive each other's transmissions.
 - Multi-PHY same device: one AirTAK device with slot 0 on Profile 0 and slot 2 on Profile 1; verify it can receive transmissions on both profiles.
@@ -1842,11 +1919,12 @@ Generated files are committed to the repository. Proto compilation is not part o
 ### 19.2 Android Tests
 
 **Unit tests** (JVM, no device):
-- Game state machine: all valid state transitions; invalid transitions rejected.
+- Tactical marker lifecycle: create, update, delete, re-broadcast logic.
+- Scope filtering: correct display/hide decisions for all scope levels and unit ID match/mismatch.
 - BLE framing: chunk/reassemble at various payload sizes and MTU values.
 - Config validation: out-of-range values rejected before BLE transmission.
 - Tile coordinate math: MBTiles tile index computation from WGS-84 coordinates.
-- Player state: respawn timer expiry triggers ACTIVE transition.
+- Player state: status transitions are manual-only; no automatic transitions.
 
 **Instrumented tests** (emulator or device):
 - Navigation: tab switches, back navigation, settings apply flow.
@@ -1864,15 +1942,16 @@ Generated files are committed to the repository. Proto compilation is not part o
 The following test must pass before Phase 6 is considered complete:
 
 - **Devices**: 10 AirTAK devices active simultaneously.
-- **Teams**: At minimum 2 teams with at least 3 players each; 1 admin device (may overlap).
+- **Organizational units**: At minimum 2 units with at least 3 participants each; coordination roles are self-assigned (no admin device required).
 - **Duration**: 60-minute simulated game.
 - **Validators**:
-  - All 10 players visible on every admin Android app map throughout the game.
-  - Hit → respawn cycle completes correctly on all devices.
-  - Game start/stop broadcast reaches all 10 devices within 10 seconds.
-  - No device requires a reboot during the 60-minute game.
+  - All 10 players visible on every Android app map throughout the exercise.
+  - Tactical markers created on one device appear on all other devices within 10 seconds.
+  - Scoped messages only appear for receivers sharing the correct unit ID.
+  - Unit hierarchy roster correctly groups nodes by their self-assigned unit IDs.
+  - No device requires a reboot during the 60-minute exercise.
   - At least 1 stock Meshtastic device present on the same channel 0; text message exchange verified.
-  - Test conducted with Android app in airplane mode (no internet) from launch to end of game.
+  - Test conducted with Android app in airplane mode (no internet) from launch to end.
   - Battery level on all devices ≥ 20% at end of 60-minute test (starting from 100%).
 
 ---
@@ -1886,7 +1965,7 @@ The following test must pass before Phase 6 is considered complete:
 | Multi-channel simultaneous RX has higher-than-expected packet loss | Medium | Medium | Both channels share PHY so no frequency switching occurs; channel hash filtering is O(1) per received packet; validate loss rate in integration test 2.7 |
 | BLE MTU negotiation fails on older Android 12 devices | Low | Medium | The framing protocol handles any MTU ≥ 23 bytes; test on a minimum-spec Android 12 device in Phase 3 |
 | 400 mAh battery insufficient for 8-hour target | Medium | Medium | Implement GPS duty cycle in Phase 6; run power profiler measurement after Phase 2 completion to calibrate duty-cycle parameters before field test |
-| Protobuf-encoded AirTAK game packet exceeds 237-byte LoRa payload limit | Medium | Low | Enforce max_size annotations in nanopb proto definitions; Android app shows byte count before send; oversized packets are logged and dropped, never silently truncated |
+| Protobuf-encoded AirTAK tactical marker exceeds 237-byte LoRa payload limit | Medium | Low | Enforce max_size annotations in nanopb proto definitions; Android app shows byte count before send; oversized packets are logged and dropped, never silently truncated |
 | Android foreground service killed by OS battery optimization on aggressive OEM firmware | Medium | Medium | Use `startForeground` with `FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE`; Settings screen includes a direct deep-link to battery optimization exemption for the app |
 | Meshtastic upstream changes wire format between project start and field use | Low | High | Pin Meshtastic protobuf files at a specific commit (recorded in `VERSION`); no automatic proto updates; treat any Meshtastic proto update as a deliberate compatibility-tested action |
 | SPI NOR flash wear from frequent config writes during development | Low | Low | LittleFS handles wear leveling; additionally, avoid writing config on every BLE packet; write only on explicit commit |
@@ -1895,11 +1974,15 @@ The following test must pass before Phase 6 is considered complete:
 | Codec2 decode on nRF52840 Cortex-M4F exceeds real-time budget | Low | High | Codec2 1300 bps decode requires ~1.5 ms per 20 ms frame on M4F; well within budget; if needed fall back to 700C mode (~0.8 ms) and notify Android app |
 | Android RECORD_AUDIO permission denied on hardened OEM builds | Low | Low | PTT audio is opt-in; denial disables PTT button with explanation; does not affect any other app functionality |
 | Application-layer retry storms during congestion cause further congestion | Low | Medium | Retry backoff uses full-jitter formula: `wait_ms = random(0, 200 * 2^attempt)`; maximum 3 retries; firmware retry queue bounded at 8 in-flight packets; oldest entries evicted if queue is full |
-| Per-packet-type hop limit misconfiguration causes packets not to reach distant nodes | Low | High | All packet types default to hop_limit=7 (maximum); relay count is bounded by mesh topology, not hop_limit, so the safety margin costs no extra airtime; Android app settings show estimated mesh diameter based on last known node positions, with a warning if any node reports a hop distance exceeding the configured hop_limit |
+| Tactical marker payload size exceeds 237-byte limit for complex polygons | Low | Medium | Limit polygon vertices to 12 points for AREA markers (fits within 237 bytes at full precision); routes limited to 16 waypoints; Android app enforces vertex limit in draw mode and warns user before hitting the limit |
 | 100-node mesh channel saturation on Profile 0 at default broadcast interval | High | High | Smart beaconing (§8.7) replaces fixed 30 s interval with movement-triggered TX + 90 s heartbeat; all packet types use hop_limit=7 but relay count is bounded by mesh topology, not hop_limit; airtime control is achieved through TX interval policy, not restricted hop budgets |
 | EU 868 MHz 1 % duty-cycle limit violated by short position intervals or audio frame_count too low | Medium | High | Duty cycle is a per-device regulatory obligation; smart beaconing defaults yield ≈ 310 ms ToA per 90 s = 0.34 % DC per device on Profile 0; audio with FEC has ~84 ms ToA on Profile 1 — frame_count ≥ 42 required for sub-band g1 (10 %) compliance; sub-band g (1 %) is not viable at 1300 bps and requires 915 MHz; AudioConfig screen displays calculated per-device DC and warns on non-compliance; final responsibility rests with the operator |
-| PTT audio single-hop range insufficient on 10 km fields | Medium | Medium | Documented in §12.7 and §13.4; fixed relay nodes on elevation extend mesh range; audio itself does not relay (hop_limit=1); players rely on mesh relay nodes for text/game data and accept direct-range limitation for voice |
+| PTT audio single-hop range insufficient on 10 km fields | Medium | Medium | Documented in §12.8 and §13.4; fixed relay nodes on elevation extend mesh range; audio itself does not relay (hop_limit=1); players rely on mesh relay nodes for text/game data and accept direct-range limitation for voice |
+| Vote-kick manipulation: a coordinated group of 3 malicious nodes votes to shadowban a legitimate node | Medium | Medium | Ban is scoped — a squad-level ban only affects that squad's display. Company-level bans require broader consensus. Banned node can still communicate via other scope levels (e.g., banned at SQUAD level but PLATOON-level data still visible). Auto-expiry after 24 hours limits duration. Future: consider vote-weighting by unit role or requiring a supermajority percentage rather than fixed count. |
+| Vote-kick packet storms during disputes cause channel congestion | Low | Low | ACKNOWLEDGED delivery with 3-retry backoff limits per-vote airtime. Ban activation is idempotent — additional votes beyond the threshold are ignored. UNBAN resets the tally cleanly. |
 | Flood-based ACK is probabilistic, not guaranteed (unlike MeshCore routed ACK) | Low | Low | Ten systematic issues addressed in v1.3–v1.4: AIRTAK_ACK hop_limit mirrors original hop_start (wire header Flags [2:0]); retries use new packet_id; timeout scaled to 2×hop_start×400 ms; hop_start fallback=7 for legacy devices; AIRTAK_PLAYER ACK rule clarified (state transitions only); retry backoff standardised at 200 ms base; residual failure mode is genuine unreachability, not a protocol artifact |
+| Scope-filtered messages not visible to intended recipients due to mismatched unit IDs | Medium | Medium | Unit IDs are free-text; typos cause mismatches. Android app shows a preview of "who will see this" based on currently known nodes sharing the same unit ID at the selected scope, so the sender can verify before transmitting. Roster screen shows unit IDs for all known nodes so mismatches are visible. |
+| UNIT hierarchy self-organization creates ambiguity when two groups use the same unit name | Medium | Low | Unit IDs are not required to be unique; the mesh does not enforce uniqueness. If two independent squads both use "1st Squad," scoped messages reach both groups. This is by design — groups that want isolation use different unit names or different channel PSKs. Documented in user guide. |
 
 ---
 
@@ -1921,6 +2004,11 @@ The following test must pass before Phase 6 is considered complete:
 | **LittleFS** | Lightweight filesystem designed for NOR flash storage; provides wear leveling |
 | **LoRa** | Long Range — spread-spectrum radio modulation by Semtech |
 | **AirTAK** | Airsoft Team Awareness Kit — this project |
+| **Tactical Marker** | A geo-referenced annotation shared over the mesh: point, route, area, note, or objective; used for coordination without centralized game management |
+| **Unit Hierarchy** | Self-organized four-level structure (Fireteam→Squad→Platoon→Company); unit IDs are free-text, assigned per-device; used for scoped information sharing |
+| **Scope** | The organizational level at which information is shared (ALL, COMPANY, PLATOON, SQUAD, FIRE_TEAM); determines which receivers display the information based on matching unit IDs |
+| **Shadowban** | A receiver-side display suppression of all data from a node that has received 3 VOTE_BAN moderation votes at a given scope; the banned node's packets are still relayed by the mesh but not shown to members of the banning scope |
+| **Vote-Kick** | Decentralized moderation mechanism: 3 distinct nodes must vote to ban a target at a specific scope before display suppression activates; bans auto-expire after 24 hours or can be lifted by UNBAN from any previous voter |
 | **MBTiles** | An SQLite-based container format for map tile data |
 | **Meshtastic** | Open-source LoRa mesh networking project (Apache 2.0); AirTAK is interoperable with it |
 | **MTU** | Maximum Transmission Unit — maximum byte count per BLE ATT packet |
@@ -1941,5 +2029,5 @@ The following test must pass before Phase 6 is considered complete:
 
 ---
 
-*End of AirTAK Master Planning Document v1.4*
+*End of AirTAK Master Planning Document v1.6*
 *This document is immutable after acceptance. Implementation decisions that deviate from this document require a new versioned planning document, not amendments here.*
