@@ -119,4 +119,8 @@ Do not modify `PLANNING.md` directly; changes require a versioned amendment.
 
 ## License
 
-TBD.
+AirTAK is free software licensed under the GNU General Public License v3.0 or later.
+
+The firmware adopts Meshtastic's GPL-3.0-licensed AES-128-CTR crypto and E-Ink display driver code. The full license text is in [`LICENSE`](LICENSE).
+
+SPDX-License-Identifier: GPL-3.0-or-later

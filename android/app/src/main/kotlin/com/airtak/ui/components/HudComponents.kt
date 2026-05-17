@@ -77,8 +77,12 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun TacticalText(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
-    Text(text = text, style = TacticalReadout, color = color, modifier = modifier, overflow = TextOverflow.Ellipsis, maxLines = 1)
+fun TacticalText(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface, singleLine: Boolean = false) {
+    if (singleLine) {
+        Text(text = text, style = TacticalReadout, color = color, modifier = modifier, overflow = TextOverflow.Ellipsis, maxLines = 1)
+    } else {
+        Text(text = text, style = TacticalReadout, color = color, modifier = modifier)
+    }
 }
 
 /**

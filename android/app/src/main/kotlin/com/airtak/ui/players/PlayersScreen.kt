@@ -251,8 +251,6 @@ private fun PlayerCard(
                         hierarchyLabel(player),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                     BatteryIndicator(player.batteryPercent)
