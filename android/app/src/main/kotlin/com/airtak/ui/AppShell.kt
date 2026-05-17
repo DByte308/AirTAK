@@ -7,15 +7,20 @@
 
 package com.airtak.ui
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Forum
@@ -27,6 +32,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -70,8 +79,67 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
     val currentRoute = backStack?.destination?.route
     val pendingDmNodeId by viewModel.pendingDmNodeId.collectAsState()
     val pendingLocateNodeId by viewModel.pendingLocateNodeId.collectAsState()
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    Scaffold(
+    if (isLandscape) {
+        // Landscape: NavigationRail on the left, slim HUD at top, body beside rail
+        Row(Modifier.fillMaxSize().statusBarsPadding()) {
+            NavigationRail(
+                modifier = Modifier.fillMaxHeight(),
+                containerColor = MaterialTheme.colorScheme.surface,
+            ) {
+                Spacer(Modifier.height(8.dp))
+                Destination.entries.forEach { dest ->
+                    val selected = currentRoute == dest.route ||
+                        currentRoute?.startsWith(dest.route + "/") == true
+                    NavigationRailItem(
+                        selected = selected,
+                        onClick = { navController.navigateTopLevel(dest.route) },
+                        icon = { Icon(dest.icon, contentDescription = null) },
+                        label = { Text(androidx.compose.ui.res.stringResource(dest.labelRes)) },
+                        colors = NavigationRailItemDefaults.colors(
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    )
+                }
+            }
+            Column(Modifier.fillMaxSize()) {
+                HudBar(
+                    linkState = link,
+                    callsign = status?.nodeName?.takeIf { it.isNotBlank() } ?: "AirTAK",
+                    batteryPercent = status?.batteryLevel?.let { (it * 100).toInt() },
+                    satellites = status?.gps?.satellites,
+                    rssi = status?.radio?.lastRssi,
+                    onLinkClick = { navController.navigateTopLevel("pair") },
+                    compact = true,
+                )
+                Box(Modifier.fillMaxSize()) {
+                    AppNavHost(
+                        navController = navController,
+                        pendingDmNodeId = pendingDmNodeId,
+                        onDmOpened = viewModel::clearDmTarget,
+                        pendingLocateNodeId = pendingLocateNodeId,
+                        onLocateConsumed = viewModel::clearLocateTarget,
+                        onMessagePlayer = { nodeId ->
+                            viewModel.setDmTarget(nodeId)
+                            navController.navigateTopLevel(Destination.Messages.route)
+                        },
+                        onLocatePlayer = { nodeId ->
+                            viewModel.setLocateTarget(nodeId)
+                            navController.navigateTopLevel(Destination.Map.route)
+                        },
+                    )
+                }
+            }
+        }
+    } else {
+        // Portrait: standard Scaffold with top HUD + bottom NavigationBar
+        Scaffold(
         topBar = {
             HudBar(
                 linkState = link,
@@ -80,6 +148,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
                 satellites = status?.gps?.satellites,
                 rssi = status?.radio?.lastRssi,
                 onLinkClick = { navController.navigateTopLevel("pair") },
+                compact = false,
             )
         },
         bottomBar = {
@@ -89,23 +158,24 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
-    ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            AppNavHost(
-                navController = navController,
-                pendingDmNodeId = pendingDmNodeId,
-                onDmOpened = viewModel::clearDmTarget,
-                pendingLocateNodeId = pendingLocateNodeId,
-                onLocateConsumed = viewModel::clearLocateTarget,
-                onMessagePlayer = { nodeId ->
-                    viewModel.setDmTarget(nodeId)
-                    navController.navigateTopLevel(Destination.Messages.route)
-                },
-                onLocatePlayer = { nodeId ->
-                    viewModel.setLocateTarget(nodeId)
-                    navController.navigateTopLevel(Destination.Map.route)
-                },
-            )
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding)) {
+                AppNavHost(
+                    navController = navController,
+                    pendingDmNodeId = pendingDmNodeId,
+                    onDmOpened = viewModel::clearDmTarget,
+                    pendingLocateNodeId = pendingLocateNodeId,
+                    onLocateConsumed = viewModel::clearLocateTarget,
+                    onMessagePlayer = { nodeId ->
+                        viewModel.setDmTarget(nodeId)
+                        navController.navigateTopLevel(Destination.Messages.route)
+                    },
+                    onLocatePlayer = { nodeId ->
+                        viewModel.setLocateTarget(nodeId)
+                        navController.navigateTopLevel(Destination.Map.route)
+                    },
+                )
+            }
         }
     }
 }
@@ -118,45 +188,87 @@ private fun HudBar(
     satellites: Int?,
     rssi: Float?,
     onLinkClick: () -> Unit,
+    compact: Boolean = false,
 ) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    ) {
+    if (compact) {
+        // Landscape: single slim row — just link chip + callsign + inline metrics
         Row(
-            Modifier.fillMaxWidth().padding(top = 4.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             LinkChip(state = linkState, onClick = onLinkClick)
             Text(
                 callsign.uppercase(),
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.weight(1f),
+                maxLines = 1,
             )
+            Spacer(Modifier.weight(1f))
+            batteryPercent?.let {
+                Text(
+                    "$it%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            satellites?.let {
+                Text(
+                    "$it sat",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            rssi?.let {
+                Text(
+                    "${it.toInt()} dBm",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+    } else {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            MetricTile(
-                label = "BAT",
-                value = batteryPercent?.let { "$it%" } ?: "—",
-                modifier = Modifier.weight(1f),
-            )
-            MetricTile(
-                label = "GPS",
-                value = satellites?.let { "$it sat" } ?: "—",
-                modifier = Modifier.weight(1f),
-            )
-            MetricTile(
-                label = "RSSI",
-                value = rssi?.let { "${it.toInt()} dBm" } ?: "—",
-                modifier = Modifier.weight(1f),
-            )
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                LinkChip(state = linkState, onClick = onLinkClick)
+                Text(
+                    callsign.uppercase(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MetricTile(
+                    label = "BAT",
+                    value = batteryPercent?.let { "$it%" } ?: "—",
+                    modifier = Modifier.weight(1f),
+                )
+                MetricTile(
+                    label = "GPS",
+                    value = satellites?.let { "$it sat" } ?: "—",
+                    modifier = Modifier.weight(1f),
+                )
+                MetricTile(
+                    label = "RSSI",
+                    value = rssi?.let { "${it.toInt()} dBm" } ?: "—",
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
