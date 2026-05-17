@@ -57,11 +57,21 @@ class TileRepository @Inject constructor(
     private val _downloadState = MutableStateFlow<TileDownloadState>(TileDownloadState.Idle)
     val downloadState: StateFlow<TileDownloadState> = _downloadState.asStateFlow()
 
-    private val _tileTemplate = MutableStateFlow<String?>(prefs.tileServerUrl())
+    private val _tileTemplate = MutableStateFlow<String?>(configuredOrDefaultTileUrl())
     val tileTemplate: StateFlow<String?> = _tileTemplate.asStateFlow()
+
+    private val _localTileTemplate = MutableStateFlow<String?>(null)
+    val localTileTemplate: StateFlow<String?> = _localTileTemplate.asStateFlow()
+
+    private val _localTileMaxZoom = MutableStateFlow<Int?>(null)
+    val localTileMaxZoom: StateFlow<Int?> = _localTileMaxZoom.asStateFlow()
+
+    private val _configuredTileTemplate = MutableStateFlow(configuredOrDefaultTileUrl())
+    val configuredTileTemplate: StateFlow<String> = _configuredTileTemplate.asStateFlow()
 
     @Volatile private var server: ServerSocket? = null
     @Volatile private var mbtilesFiles: List<File> = emptyList()
+    @Volatile private var mbtilesRevision: Long = 0L
 
     init {
         tileDir.mkdirs()
@@ -69,7 +79,8 @@ class TileRepository @Inject constructor(
         refreshLocalTiles()
         scope.launch {
             prefs.observe().collect {
-                _tileTemplate.value = localTemplateOrConfiguredUrl()
+                _configuredTileTemplate.value = configuredOrDefaultTileUrl()
+                _tileTemplate.value = configuredOrDefaultTileUrl()
             }
         }
     }
@@ -90,11 +101,16 @@ class TileRepository @Inject constructor(
         }
     }
 
-    fun download(bounds: TileBounds, minZoom: Int, maxZoom: Int) {
-        val urlTemplate = prefs.tileServerUrl()?.trim().orEmpty()
+    fun download(bounds: TileBounds, minZoom: Int, maxZoom: Int, urlTemplateOverride: String? = null) {
+        val urlTemplate = urlTemplateOverride?.trim()?.ifBlank { null }
+            ?: configuredOrDefaultTileUrl()
         if (!urlTemplate.contains("{z}") || !urlTemplate.contains("{x}") || !urlTemplate.contains("{y}")) {
             _downloadState.value = TileDownloadState.Failed("Set a tile URL with {z}, {x}, and {y}.")
             return
+        }
+        if (urlTemplate != prefs.tileServerUrl()?.trim().orEmpty()) {
+            prefs.setTileServerUrl(urlTemplate)
+            _configuredTileTemplate.value = urlTemplate
         }
         val zMin = minZoom.coerceIn(0, 22)
         val zMax = maxZoom.coerceIn(zMin, 22)
@@ -147,24 +163,52 @@ class TileRepository @Inject constructor(
             downloaded++
         }
         db.close()
+        file.setLastModified(System.currentTimeMillis())
         refreshLocalTiles()
         _downloadState.value = TileDownloadState.Complete(file.name, downloaded, skipped)
     }
 
     private fun refreshLocalTiles() {
         mbtilesFiles = tileDir.listFiles { f -> f.extension.equals("mbtiles", ignoreCase = true) }
-            ?.sortedByDescending { it.lastModified() }
+            ?.sortedWith(
+                compareBy<File> { it.name == WORLD_OVERVIEW_FILE }
+                    .thenByDescending { it.lastModified() },
+            )
             .orEmpty()
+        mbtilesRevision = mbtilesFiles.maxOfOrNull { it.lastModified() } ?: 0L
+        _localTileMaxZoom.value = downloadedTileMaxZoom(mbtilesFiles)
         if (mbtilesFiles.isNotEmpty()) ensureServer()
-        _tileTemplate.value = localTemplateOrConfiguredUrl()
+        _localTileTemplate.value = localTileUrl()
     }
 
-    private fun localTemplateOrConfiguredUrl(): String? {
-        val local = server?.localPort?.takeIf { it > 0 }?.let { port ->
-            if (mbtilesFiles.isNotEmpty()) "http://127.0.0.1:$port/tiles/{z}/{x}/{y}.png" else null
-        }
-        return local ?: prefs.tileServerUrl()?.takeIf { it.isNotBlank() }
+    private fun downloadedTileMaxZoom(files: List<File>): Int? {
+        val overviewMaxZoom = files.firstOrNull { it.name == WORLD_OVERVIEW_FILE }?.let { readMaxZoom(it) }
+        return files
+            .filterNot { it.name == WORLD_OVERVIEW_FILE }
+            .mapNotNull { readMaxZoom(it) }
+            .maxOrNull()
+            ?.takeIf { overviewMaxZoom == null || it > overviewMaxZoom }
     }
+
+    private fun readMaxZoom(file: File): Int? = runCatching {
+        val db = SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+        try {
+            db.rawQuery("SELECT MAX(zoom_level) FROM tiles", emptyArray()).use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getInt(0) else null
+            }
+        } finally {
+            db.close()
+        }
+    }.getOrNull()
+
+    private fun localTileUrl(): String? {
+        return server?.localPort?.takeIf { it > 0 }?.let { port ->
+            if (mbtilesFiles.isNotEmpty()) "http://127.0.0.1:$port/tiles/{z}/{x}/{y}.png?v=$mbtilesRevision" else null
+        }
+    }
+
+    private fun configuredOrDefaultTileUrl(): String =
+        prefs.tileServerUrl()?.trim()?.takeIf { it.isNotBlank() } ?: DEFAULT_TILE_URL
 
     private fun ensureServer() {
         if (server != null) return
@@ -216,18 +260,20 @@ class TileRepository @Inject constructor(
     private fun readTile(z: Int, x: Int, y: Int): ByteArray? {
         val tmsY = (1 shl z) - 1 - y
         for (file in mbtilesFiles) {
-            val db = SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-            db.rawQuery(
-                "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=? LIMIT 1",
-                arrayOf(z.toString(), x.toString(), tmsY.toString()),
-            ).use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val bytes = cursor.getBlob(0)
+            val bytes = runCatching {
+                val db = SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+                try {
+                    db.rawQuery(
+                        "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=? LIMIT 1",
+                        arrayOf(z.toString(), x.toString(), tmsY.toString()),
+                    ).use { cursor ->
+                        if (cursor.moveToFirst()) cursor.getBlob(0) else null
+                    }
+                } finally {
                     db.close()
-                    return bytes
                 }
-            }
-            db.close()
+            }.getOrNull()
+            if (bytes != null) return bytes
         }
         return null
     }
@@ -277,6 +323,7 @@ class TileRepository @Inject constructor(
 
     private companion object {
         val TILE_PATH = Regex("/tiles/(\\d+)/(\\d+)/(\\d+)\\.png")
+        const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         const val WORLD_OVERVIEW_FILE = "world-overview.mbtiles"
         const val MAX_TILES_PER_DOWNLOAD = 15_000
     }

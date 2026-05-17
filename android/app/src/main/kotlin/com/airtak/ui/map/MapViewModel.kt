@@ -2,18 +2,29 @@
 
 package com.airtak.ui.map
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.airtak.data.config.ConfigRepository
 import com.airtak.data.db.RemoteNodeEntity
 import com.airtak.data.db.WaypointDao
 import com.airtak.data.db.WaypointEntity
 import com.airtak.data.game.GameRepository
+import com.airtak.data.geocoding.GeocodingRepository
+import com.airtak.data.geocoding.GeocodingResult
 import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.mesh.RemoteNodeRepository
+import com.airtak.data.overlays.MissionOverlay
+import com.airtak.data.overlays.MissionOverlayCornerId
+import com.airtak.data.overlays.MissionOverlayCorners
+import com.airtak.data.overlays.MissionOverlayPoint
+import com.airtak.data.overlays.MissionOverlayRepository
 import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.data.tiles.TileBounds
 import com.airtak.data.tiles.TileDownloadState
 import com.airtak.data.tiles.TileRepository
+import com.airtak.proto.ConfigGroup
+import com.airtak.proto.GameConfig
 import com.airtak.proto.PlayerStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -28,7 +39,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class OwnPosition(val latitude: Double, val longitude: Double)
+data class OwnPosition(val latitude: Double, val longitude: Double, val label: String = "")
 
 data class MapNode(
     val nodeId: Long,
@@ -58,7 +69,11 @@ data class MapUiState(
     val showPlayers: Boolean = true,
     val showWaypoints: Boolean = true,
     val tileTemplate: String? = null,
+    val localTileTemplate: String? = null,
+    val localTileMaxZoom: Int? = null,
+    val configuredTileTemplate: String = "",
     val tileDownload: TileDownloadState = TileDownloadState.Idle,
+    val missionOverlay: MissionOverlay? = null,
 )
 
 @HiltViewModel
@@ -69,6 +84,9 @@ class MapViewModel @Inject constructor(
     private val waypointDao: WaypointDao,
     private val mesh: MeshRepository,
     private val tileRepository: TileRepository,
+    private val missionOverlayRepository: MissionOverlayRepository,
+    private val config: ConfigRepository,
+    private val geocodingRepository: GeocodingRepository,
 ) : ViewModel() {
     private val showPlayers = MutableStateFlow(true)
     private val showWaypoints = MutableStateFlow(true)
@@ -81,19 +99,42 @@ class MapViewModel @Inject constructor(
     }
 
     private data class LayerState(val players: Boolean, val waypoints: Boolean)
-    private data class TileState(val template: String?, val download: TileDownloadState)
+    private data class TileState(
+        val baseTemplate: String?,
+        val localTemplate: String?,
+        val localMaxZoom: Int?,
+        val configuredTemplate: String,
+        val download: TileDownloadState,
+    )
     private data class SourceState(
         val status: com.airtak.proto.DeviceStatus?,
         val nodes: List<RemoteNodeEntity>,
         val waypoints: List<WaypointEntity>,
         val game: com.airtak.data.game.GameMirror,
+        val gameConfig: GameConfig,
     )
 
     private val layerState = combine(showPlayers, showWaypoints) { players, waypoints ->
         LayerState(players, waypoints)
     }
-    private val tileState = combine(tileRepository.tileTemplate, tileRepository.downloadState) { template, download ->
-        TileState(template, download)
+
+    init {
+        viewModelScope.launch { config.read(ConfigGroup.GAME) }
+    }
+
+    private val gameConfig = config.groupBytes.map { map ->
+        map[ConfigGroup.GAME]?.let { runCatching { GameConfig.parseFrom(it) }.getOrNull() }
+            ?: GameConfig.getDefaultInstance()
+    }
+
+    private val tileState = combine(
+        tileRepository.tileTemplate,
+        tileRepository.localTileTemplate,
+        tileRepository.localTileMaxZoom,
+        tileRepository.configuredTileTemplate,
+        tileRepository.downloadState,
+    ) { baseTemplate, localTemplate, localMaxZoom, configuredTemplate, download ->
+        TileState(baseTemplate, localTemplate, localMaxZoom, configuredTemplate, download)
     }
 
     private val sourceState = combine(
@@ -101,12 +142,14 @@ class MapViewModel @Inject constructor(
         remoteNodes.nodes,
         waypointDao.observeAll(),
         gameRepository.state,
-    ) { status, nodes, waypoints, game ->
-        SourceState(status, nodes, waypoints, game)
+        gameConfig,
+    ) { status, nodes, waypoints, game, gameConfig ->
+        SourceState(status, nodes, waypoints, game, gameConfig)
     }
 
     private val mapCore = combine(sourceState, layerState, clock) { source, layers, now ->
-        val own = source.status?.gps?.takeIf { it.fix }?.let { OwnPosition(it.latitude, it.longitude) }
+        val ownLabel = source.gameConfig.callsign.ifBlank { source.status?.nodeName.orEmpty().ifBlank { "You" } }
+        val own = source.status?.gps?.takeIf { it.fix }?.let { OwnPosition(it.latitude, it.longitude, ownLabel) }
         val ownNodeId = source.status?.nodeId?.toLong()?.and(0xFFFF_FFFFL)
         MapUiState(
             ownPosition = own,
@@ -119,8 +162,15 @@ class MapViewModel @Inject constructor(
         )
     }
 
-    val uiState: StateFlow<MapUiState> = combine(mapCore, tileState) { core, tile ->
-        core.copy(tileTemplate = tile.template, tileDownload = tile.download)
+    val uiState: StateFlow<MapUiState> = combine(mapCore, tileState, missionOverlayRepository.overlay) { core, tile, overlay ->
+        core.copy(
+            tileTemplate = tile.baseTemplate,
+            localTileTemplate = tile.localTemplate,
+            localTileMaxZoom = tile.localMaxZoom,
+            configuredTileTemplate = tile.configuredTemplate,
+            tileDownload = tile.download,
+            missionOverlay = overlay,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapUiState())
 
     /** Kept for older composables/tests that only need own GPS position. */
@@ -171,8 +221,67 @@ class MapViewModel @Inject constructor(
 
     fun clearFocus() { _focusTarget.value = null }
 
-    fun downloadVisible(bounds: TileBounds, minZoom: Int = 6, maxZoom: Int = 17) {
-        tileRepository.download(bounds, minZoom, maxZoom)
+    // --- Location search ---
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery
+
+    private val _searchResults = MutableStateFlow<List<GeocodingResult>>(emptyList())
+    val searchResults: StateFlow<List<GeocodingResult>> = _searchResults
+
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching: StateFlow<Boolean> = _isSearching
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+        if (query.isBlank()) {
+            _searchResults.value = emptyList()
+        }
+    }
+
+    fun searchLocations(query: String) {
+        if (query.isBlank()) {
+            _searchResults.value = emptyList()
+            return
+        }
+        viewModelScope.launch {
+            _isSearching.value = true
+            _searchResults.value = geocodingRepository.search(query)
+            _isSearching.value = false
+        }
+    }
+
+    fun selectSearchResult(result: GeocodingResult) {
+        _focusTarget.value = OwnPosition(result.latitude, result.longitude, result.displayName)
+        _searchQuery.value = ""
+        _searchResults.value = emptyList()
+    }
+
+    fun clearSearch() {
+        _searchQuery.value = ""
+        _searchResults.value = emptyList()
+    }
+
+    fun downloadVisible(bounds: TileBounds, minZoom: Int = 6, maxZoom: Int = 17, tileUrl: String? = null) {
+        tileRepository.download(bounds, minZoom, maxZoom, tileUrl)
+    }
+
+    fun importMissionOverlay(uri: Uri, corners: MissionOverlayCorners) {
+        viewModelScope.launch {
+            missionOverlayRepository.importImage(uri, corners)
+        }
+    }
+
+    fun moveMissionOverlayCorner(cornerId: MissionOverlayCornerId, latitude: Double, longitude: Double) {
+        missionOverlayRepository.updateCorner(cornerId, MissionOverlayPoint(latitude, longitude))
+    }
+
+    fun setMissionOverlayOpacity(opacity: Float) {
+        missionOverlayRepository.updateOpacity(opacity)
+    }
+
+    fun removeMissionOverlay() {
+        missionOverlayRepository.remove()
     }
 
     private fun RemoteNodeEntity.toMapNode(now: Long, teams: Map<Int, com.airtak.data.game.TeamInfo>): MapNode {
