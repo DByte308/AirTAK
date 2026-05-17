@@ -29,6 +29,7 @@ class RemoteNodeRepository @Inject constructor(
                     Portnum.POSITION_APP -> handlePosition(packet)
                     Portnum.NODEINFO_APP -> handleNodeInfo(packet)
                     Portnum.AIRTAK_PLAYER -> handlePlayer(packet)
+                    Portnum.TELEMETRY_APP -> handleTelemetry(packet)
                 }
             }
         }
@@ -80,6 +81,17 @@ class RemoteNodeRepository @Inject constructor(
                 statusValue = player.statusValue,
                 colorRgb = player.colorRgb,
                 lastPlayerMs = now,
+                lastSeenMs = now,
+            )
+        }
+    }
+
+    private suspend fun handleTelemetry(packet: MeshRxPacket) {
+        val payload = packet.payload ?: return
+        val battery = MeshWire.decodeTelemetryBattery(payload) ?: return
+        update(packet.srcNodeId) { existing, now ->
+            existing.copy(
+                batteryPercent = battery,
                 lastSeenMs = now,
             )
         }

@@ -217,6 +217,64 @@ object MeshWire {
         return if (id == null && longName == null && shortName == null) null else MeshtasticUser(id, longName, shortName)
     }
 
+    /**
+     * Decode battery_level from a Meshtastic Telemetry protobuf.
+     * Navigates: Telemetry.device_metrics (field 2, LEN) → DeviceMetrics.battery_level (field 2, VARINT).
+     * Returns battery percentage 0-100, or null if the field is absent or unparseable.
+     */
+    fun decodeTelemetryBattery(payload: ByteArray): Int? {
+        var i = 0
+        while (i < payload.size) {
+            val (tag, ni) = readVarint(payload, i) ?: return null
+            i = ni
+            val field = (tag shr 3).toInt()
+            val wire = (tag and 0x07L).toInt()
+            when {
+                wire == WIRETYPE_LEN && field == 2 -> {
+                    val (len, n2) = readVarint(payload, i) ?: return null
+                    i = n2
+                    val end = i + len.toInt()
+                    if (end > payload.size) return null
+                    // Inside DeviceMetrics submessage
+                    var j = i
+                    while (j < end) {
+                        val (innerTag, nj) = readVarint(payload, j) ?: return null
+                        j = nj
+                        val innerField = (innerTag shr 3).toInt()
+                        val innerWire = (innerTag and 0x07L).toInt()
+                        if (innerWire == WIRETYPE_VARINT && innerField == 2) {
+                            val (battery, _) = readVarint(payload, j) ?: return null
+                            return battery.toInt().coerceIn(0, 100)
+                        }
+                        // Skip unknown fields inside DeviceMetrics
+                        j = skipField(payload, j, innerWire) ?: return null
+                    }
+                    i = end
+                }
+                else -> {
+                    i = skipField(payload, i, wire) ?: return null
+                }
+            }
+        }
+        return null
+    }
+
+    private fun skipField(buf: ByteArray, start: Int, wire: Int): Int? {
+        return when (wire) {
+            WIRETYPE_VARINT -> {
+                val (_, ni) = readVarint(buf, start) ?: return null
+                ni
+            }
+            WIRETYPE_FIXED64 -> (start + 8).takeIf { it <= buf.size }
+            WIRETYPE_LEN -> {
+                val (len, ni) = readVarint(buf, start) ?: return null
+                (ni + len.toInt()).takeIf { it <= buf.size }
+            }
+            WIRETYPE_FIXED32 -> (start + 4).takeIf { it <= buf.size }
+            else -> null
+        }
+    }
+
     // ── Minimal Data decoder ──────────────────────────────────────────────────
 
     private data class DecodedData(

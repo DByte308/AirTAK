@@ -189,20 +189,26 @@ class MeshRepository @Inject constructor(
     }
 
     fun sendPlayerState(packet: PlayerStatePacket): SendResult {
+        val requestId = if (packet.isStateTransition) {
+            (System.nanoTime() and 0x7FFF_FFFFL) or 1L
+        } else null
         val data = MeshWire.encodeData(
             portnum = Portnum.AIRTAK_PLAYER,
             payload = packet.toByteArray(),
             wantResponse = packet.isStateTransition,
+            requestId = requestId,
         )
         ble.send(BleRepository.OutboundChannel.MeshTx, data)
         return SendResult.Ok
     }
 
     fun sendModerationPacket(packet: ModerationPacket): SendResult {
+        val requestId = (System.nanoTime() and 0x7FFF_FFFFL) or 1L
         val data = MeshWire.encodeData(
             portnum = Portnum.AIRTAK_MODERATION,
             payload = packet.toByteArray(),
             wantResponse = true,
+            requestId = requestId,
         )
         ble.send(BleRepository.OutboundChannel.MeshTx, data)
         return SendResult.Ok

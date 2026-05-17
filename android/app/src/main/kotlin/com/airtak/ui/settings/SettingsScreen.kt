@@ -80,15 +80,13 @@ import com.airtak.ui.theme.AccentAmber
 import com.airtak.ui.theme.ThemeMode
 
 private enum class Section(val title: String, val subtitle: String) {
-    Device("Device",     "Callsign, long/short name"),
-    Lora("LoRa Radio",   "Region, TX power, PHY profiles"),
-    Channels("Channels", "8 channel slots with PSK"),
-    Position("Position", "Broadcast interval, smart-beacon"),
-    Power("Power",       "GPS duty cycle, display"),
-    Game("Game",         "Callsign, unit hierarchy, hit button"),
-    Security("Security", "BLE bond count"),
-    App("Application",   "Theme, tile server, defaults"),
-    About("About",       "Diagnostics, factory reset"),
+    Player("Player",        "Callsign, name, unit hierarchy, hit button"),
+    Lora("LoRa Radio",      "Region, TX power, PHY profiles"),
+    Channels("Channels",    "8 channel slots with PSK"),
+    PositionPower("Position & Power", "GPS broadcast, smart-beacon, battery saving"),
+    Security("Security",    "BLE bond count"),
+    App("Application",      "Theme, tile server, defaults"),
+    About("About",          "Diagnostics, factory reset"),
 }
 
 @Composable
@@ -102,15 +100,13 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 TopRow(title = title, onBack = { current = null })
                 when (sec) {
-                    Section.Device   -> DeviceSection(viewModel)
-                    Section.Lora     -> LoraSection(viewModel)
-                    Section.Channels -> ChannelsSection(viewModel)
-                    Section.Position -> PositionSection(viewModel)
-                    Section.Power    -> PowerSection(viewModel)
-                    Section.Game     -> GameSection(viewModel)
-                    Section.Security -> SecuritySection(viewModel)
-                    Section.App      -> AppSection(viewModel)
-                    Section.About    -> AboutSection(viewModel)
+                    Section.Player         -> PlayerSection(viewModel)
+                    Section.Lora           -> LoraSection(viewModel)
+                    Section.Channels       -> ChannelsSection(viewModel)
+                    Section.PositionPower  -> PositionPowerSection(viewModel)
+                    Section.Security       -> SecuritySection(viewModel)
+                    Section.App            -> AppSection(viewModel)
+                    Section.About          -> AboutSection(viewModel)
                 }
             }
         }
@@ -186,17 +182,37 @@ private fun ApplyRow(onRead: () -> Unit, onApply: () -> Unit, busy: Boolean) {
     }
 }
 
-// ── DEVICE ────────────────────────────────────────────────────────────────────
+// ── PLAYER ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun DeviceSection(vm: SettingsViewModel) {
-    val state by vm.device.collectAsState()
+private fun PlayerSection(vm: SettingsViewModel) {
+    val device by vm.device.collectAsState()
+    val game by vm.game.collectAsState()
     LaunchedEffect(Unit) { vm.readDevice() }
+    LaunchedEffect(Unit) { vm.readGame() }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-        SectionLabel("Identification")
+        SectionLabel("Player identity")
+        TacticalText(
+            "Your callsign is visible to all players on the mesh grid.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            value = state.longName,
+            value = game.callsign,
+            onValueChange = { vm.updateGame { copy(callsign = it.take(16)) } },
+            label = { Text("Callsign (max 16 B)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Spacer(Modifier.height(16.dp))
+        SectionLabel("Device identifiers")
+        TacticalText(
+            "These names identify your device on the mesh. The short name is shown on device displays and node lists.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = device.longName,
             onValueChange = { vm.updateDevice { copy(longName = it.take(39)) } },
             label = { Text("Long name (max 39 B)") },
             modifier = Modifier.fillMaxWidth(),
@@ -204,13 +220,83 @@ private fun DeviceSection(vm: SettingsViewModel) {
         )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            value = state.shortName,
+            value = device.shortName,
             onValueChange = { vm.updateDevice { copy(shortName = it.take(4)) } },
             label = { Text("Short name (max 4 B)") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        ApplyRow(onRead = vm::readDevice, onApply = vm::applyDevice, busy = vm.busy.collectAsState().value)
+        Spacer(Modifier.height(16.dp))
+        SectionLabel("Unit hierarchy (optional, self-organized)")
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = game.companyId,
+            onValueChange = { vm.updateGame { copy(companyId = it.take(32)) } },
+            label = { Text("Company (e.g. \"1st Company\")") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = game.platoonId,
+            onValueChange = { vm.updateGame { copy(platoonId = it.take(32)) } },
+            label = { Text("Platoon (e.g. \"Red Platoon\")") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = game.squadId,
+            onValueChange = { vm.updateGame { copy(squadId = it.take(32)) } },
+            label = { Text("Squad (e.g. \"1st Squad\")") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = game.fireteamId,
+            onValueChange = { vm.updateGame { copy(fireteamId = it.take(32)) } },
+            label = { Text("Fireteam (e.g. \"Alpha\")") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Spacer(Modifier.height(8.dp))
+        TacticalText(
+            "All fields are optional and self-assigned. Nodes sharing the same unit ID are grouped in the roster.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+        SectionLabel("Appearance")
+        OutlinedTextField(
+            value = game.playerColorRgb.toString(16).uppercase().padStart(6, '0'),
+            onValueChange = { hex ->
+                hex.take(6).toIntOrNull(16)?.let { vm.updateGame { copy(playerColorRgb = it) } }
+            },
+            label = { Text("Player color (hex RRGGBB)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Device button = HIT toggle", style = MaterialTheme.typography.bodyMedium,
+                 modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onBackground)
+            Switch(checked = game.hitButtonEnabled,
+                   onCheckedChange = { vm.updateGame { copy(hitButtonEnabled = it) } })
+        }
+        TacticalText(
+            "When enabled, long-press the device button to toggle HIT status.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+        val busy = vm.busy.collectAsState().value
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = { vm.readDevice(); vm.readGame() }, modifier = Modifier.weight(1f), enabled = !busy) {
+                Text("Read")
+            }
+            Button(onClick = { vm.applyDevice(); vm.applyGame() }, modifier = Modifier.weight(1f), enabled = !busy) {
+                Text(if (busy) "Applying…" else "Apply")
+            }
+        }
     }
 }
 
@@ -661,15 +747,19 @@ private fun ChannelRole.roleColor(): Color = when (this) {
     else                  -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
-// ── POSITION ──────────────────────────────────────────────────────────────────
+// ── POSITION & POWER ───────────────────────────────────────────────────────────
 
 @Composable
-private fun PositionSection(vm: SettingsViewModel) {
-    val state by vm.position.collectAsState()
+private fun PositionPowerSection(vm: SettingsViewModel) {
+    val position by vm.position.collectAsState()
+    val power by vm.power.collectAsState()
     LaunchedEffect(Unit) { vm.readPosition() }
+    LaunchedEffect(Unit) { vm.readPower() }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+        SectionLabel("Position broadcast")
+        Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            value = state.broadcastIntervalSecs.toString(),
+            value = position.broadcastIntervalSecs.toString(),
             onValueChange = { v ->
                 v.toIntOrNull()?.let { vm.updatePosition { copy(broadcastIntervalSecs = it) } }
             },
@@ -679,7 +769,7 @@ private fun PositionSection(vm: SettingsViewModel) {
         )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            value = state.minTxIntervalSecs.toString(),
+            value = position.minTxIntervalSecs.toString(),
             onValueChange = { v ->
                 v.toIntOrNull()?.let { vm.updatePosition { copy(minTxIntervalSecs = it) } }
             },
@@ -691,29 +781,21 @@ private fun PositionSection(vm: SettingsViewModel) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Smart beaconing", style = MaterialTheme.typography.bodyMedium,
                  modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onBackground)
-            Switch(checked = state.smartBroadcast,
+            Switch(checked = position.smartBroadcast,
                    onCheckedChange = { vm.updatePosition { copy(smartBroadcast = it) } })
         }
-        ApplyRow(onRead = vm::readPosition, onApply = vm::applyPosition, busy = vm.busy.collectAsState().value)
-    }
-}
-
-// ── POWER ─────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun PowerSection(vm: SettingsViewModel) {
-    val state by vm.power.collectAsState()
-    LaunchedEffect(Unit) { vm.readPower() }
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+        Spacer(Modifier.height(24.dp))
+        SectionLabel("Power saving")
+        Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("GPS duty cycle (Phase 6+)", style = MaterialTheme.typography.bodyMedium,
                  modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onBackground)
-            Switch(checked = state.gpsDutyCycle,
+            Switch(checked = power.gpsDutyCycle,
                    onCheckedChange = { vm.updatePower { copy(gpsDutyCycle = it) } })
         }
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            value = state.displayOffSecs.toString(),
+            value = power.displayOffSecs.toString(),
             onValueChange = { v ->
                 v.toIntOrNull()?.let { vm.updatePower { copy(displayOffSecs = it) } }
             },
@@ -721,87 +803,16 @@ private fun PowerSection(vm: SettingsViewModel) {
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
         )
-        ApplyRow(onRead = vm::readPower, onApply = vm::applyPower, busy = vm.busy.collectAsState().value)
-    }
-}
-
-// ── GAME ──────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun GameSection(vm: SettingsViewModel) {
-    val state by vm.game.collectAsState()
-    LaunchedEffect(Unit) { vm.readGame() }
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-        SectionLabel("Callsign")
-        OutlinedTextField(
-            value = state.callsign,
-            onValueChange = { vm.updateGame { copy(callsign = it.take(16)) } },
-            label = { Text("Callsign (max 16 B)") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
         Spacer(Modifier.height(16.dp))
-        SectionLabel("Unit hierarchy (optional, self-organized)")
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = state.companyId,
-            onValueChange = { vm.updateGame { copy(companyId = it.take(32)) } },
-            label = { Text("Company (e.g. \"1st Company\")") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = state.platoonId,
-            onValueChange = { vm.updateGame { copy(platoonId = it.take(32)) } },
-            label = { Text("Platoon (e.g. \"Red Platoon\")") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = state.squadId,
-            onValueChange = { vm.updateGame { copy(squadId = it.take(32)) } },
-            label = { Text("Squad (e.g. \"1st Squad\")") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = state.fireteamId,
-            onValueChange = { vm.updateGame { copy(fireteamId = it.take(32)) } },
-            label = { Text("Fireteam (e.g. \"Alpha\")") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        Spacer(Modifier.height(8.dp))
-        TacticalText(
-            "All fields are optional and self-assigned. Nodes sharing the same unit ID will be grouped in the roster.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(16.dp))
-        SectionLabel("Appearance")
-        OutlinedTextField(
-            value = state.playerColorRgb.toString(16).uppercase().padStart(6, '0'),
-            onValueChange = { hex ->
-                hex.take(6).toIntOrNull(16)?.let { vm.updateGame { copy(playerColorRgb = it) } }
-            },
-            label = { Text("Player color (hex RRGGBB)") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Device button = HIT toggle", style = MaterialTheme.typography.bodyMedium,
-                 modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onBackground)
-            Switch(checked = state.hitButtonEnabled,
-                   onCheckedChange = { vm.updateGame { copy(hitButtonEnabled = it) } })
+        val busy = vm.busy.collectAsState().value
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = { vm.readPosition(); vm.readPower() }, modifier = Modifier.weight(1f), enabled = !busy) {
+                Text("Read")
+            }
+            Button(onClick = { vm.applyPosition(); vm.applyPower() }, modifier = Modifier.weight(1f), enabled = !busy) {
+                Text(if (busy) "Applying…" else "Apply")
+            }
         }
-        TacticalText(
-            "When enabled, long-press the device button to toggle HIT status.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        ApplyRow(onRead = vm::readGame, onApply = vm::applyGame, busy = vm.busy.collectAsState().value)
     }
 }
 

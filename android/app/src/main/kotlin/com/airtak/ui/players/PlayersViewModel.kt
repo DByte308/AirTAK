@@ -142,7 +142,11 @@ class PlayersViewModel @Inject constructor(
             groups = state.groups.mapNotNull { grp ->
                 val filtered = grp.players.filter {
                     it.callsign.contains(q, ignoreCase = true) ||
-                        grp.label.contains(q, ignoreCase = true)
+                        grp.label.contains(q, ignoreCase = true) ||
+                        it.companyId.contains(q, ignoreCase = true) ||
+                        it.platoonId.contains(q, ignoreCase = true) ||
+                        it.squadId.contains(q, ignoreCase = true) ||
+                        it.fireteamId.contains(q, ignoreCase = true)
                 }
                 if (filtered.isEmpty()) null else grp.copy(players = filtered)
             },
