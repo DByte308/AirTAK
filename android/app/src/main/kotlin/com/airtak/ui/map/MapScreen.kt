@@ -127,6 +127,7 @@ import org.maplibre.android.style.layers.PropertyFactory.textHaloColor
 import org.maplibre.android.style.layers.PropertyFactory.textHaloWidth
 import org.maplibre.android.style.layers.PropertyFactory.textIgnorePlacement
 import org.maplibre.android.style.layers.PropertyFactory.textKeepUpright
+import org.maplibre.android.style.layers.PropertyFactory.textMaxAngle
 import org.maplibre.android.style.layers.PropertyFactory.textOffset
 import org.maplibre.android.style.layers.PropertyFactory.textPitchAlignment
 import org.maplibre.android.style.layers.PropertyFactory.textRotationAlignment
@@ -296,8 +297,13 @@ fun MapScreen(
                     val features = targetMap.queryRenderedFeatures(
                         screen,
                         MARKER_POINT_LAYER,
+                        MARKER_POINT_LABEL_LAYER,
                         MARKER_ROUTE_LINE_LAYER,
+                        MARKER_ROUTE_LABEL_LAYER,
+                        MARKER_ROUTE_ARROW_LAYER,
+                        MARKER_ROUTE_END_ARROW_LAYER,
                         MARKER_AREA_FILL_LAYER,
+                        MARKER_AREA_LABEL_LAYER,
                     )
                     val markerIdStr = features.firstOrNull()?.getStringProperty("markerId")
                     val mid = markerIdStr?.toLongOrNull()
@@ -322,8 +328,13 @@ fun MapScreen(
                     val features = targetMap.queryRenderedFeatures(
                         screen,
                         MARKER_POINT_LAYER,
+                        MARKER_POINT_LABEL_LAYER,
                         MARKER_ROUTE_LINE_LAYER,
+                        MARKER_ROUTE_LABEL_LAYER,
+                        MARKER_ROUTE_ARROW_LAYER,
+                        MARKER_ROUTE_END_ARROW_LAYER,
                         MARKER_AREA_FILL_LAYER,
+                        MARKER_AREA_LABEL_LAYER,
                     )
                     val mid = features.firstOrNull()?.getStringProperty("markerId")?.toLongOrNull()
                     val hit = mid?.let { id -> viewModel.markers.value.firstOrNull { it.markerId == id } }
@@ -1492,7 +1503,7 @@ private fun ensureLayers(style: Style, textColor: Int) {
             SymbolLayer(REMOTE_LABEL_LAYER, REMOTE_SOURCE).withProperties(
                 textField(Expression.get("label")),
                 textFont(arrayOf("Noto Sans Regular")),
-                textSize(12f),
+                textSize(14f),
                 textOffset(arrayOf(0f, -1.35f)),
                 textColor("#%06X".format(textColor and 0xFFFFFF)),
                 textHaloColor("#000000"),
@@ -1517,7 +1528,7 @@ private fun ensureLayers(style: Style, textColor: Int) {
             SymbolLayer(WAYPOINT_LABEL_LAYER, WAYPOINT_SOURCE).withProperties(
                 textField(Expression.get("label")),
                 textFont(arrayOf("Noto Sans Regular")),
-                textSize(12f),
+                textSize(14f),
                 textOffset(arrayOf(0f, 1.2f)),
                 textColor("#%06X".format(textColor and 0xFFFFFF)),
                 textHaloColor("#000000"),
@@ -1534,6 +1545,7 @@ private fun ensureMarkerLayers(style: Style, textColor: Int) {
     if (style.getSource(MARKER_AREA_SOURCE) == null) style.addSource(emptyGeoJsonSource(MARKER_AREA_SOURCE))
     if (style.getSource(MARKER_ROUTE_SOURCE) == null) style.addSource(emptyGeoJsonSource(MARKER_ROUTE_SOURCE))
     if (style.getSource(MARKER_POINT_SOURCE) == null) style.addSource(emptyGeoJsonSource(MARKER_POINT_SOURCE))
+    if (style.getSource(MARKER_ROUTE_END_SOURCE) == null) style.addSource(emptyGeoJsonSource(MARKER_ROUTE_END_SOURCE))
     if (style.getSource(DRAFT_SOURCE) == null) style.addSource(emptyGeoJsonSource(DRAFT_SOURCE))
 
     if (style.getLayer(MARKER_AREA_FILL_LAYER) == null) {
@@ -1556,7 +1568,7 @@ private fun ensureMarkerLayers(style: Style, textColor: Int) {
         style.addLayer(
             LineLayer(MARKER_ROUTE_LINE_LAYER, MARKER_ROUTE_SOURCE).withProperties(
                 lineColor(Expression.toColor(Expression.get("markerColor"))),
-                lineWidth(3f),
+                lineWidth(5f),
             ),
         )
     }
@@ -1577,7 +1589,7 @@ private fun ensureMarkerLayers(style: Style, textColor: Int) {
             SymbolLayer(MARKER_POINT_LABEL_LAYER, MARKER_POINT_SOURCE).withProperties(
                 textField(Expression.get("label")),
                 textFont(arrayOf("Noto Sans Regular")),
-                textSize(12f),
+                textSize(14f),
                 textOffset(arrayOf(0f, 1.3f)),
                 textColor(labelColor),
                 textHaloColor(haloColor),
@@ -1592,15 +1604,16 @@ private fun ensureMarkerLayers(style: Style, textColor: Int) {
             SymbolLayer(MARKER_ROUTE_LABEL_LAYER, MARKER_ROUTE_SOURCE).withProperties(
                 textField(Expression.get("label")),
                 textFont(arrayOf("Noto Sans Regular")),
-                textSize(12f),
+                textSize(14f),
                 textColor(labelColor),
                 textHaloColor(haloColor),
                 textHaloWidth(1.2f),
                 symbolPlacement(Property.SYMBOL_PLACEMENT_LINE_CENTER),
+                textMaxAngle(180f),
                 textKeepUpright(true),
                 textAllowOverlap(true),
                 textIgnorePlacement(true),
-                textOffset(arrayOf(0f, -1.1f)),
+                textOffset(arrayOf(0f, -1.2f)),
             ),
         )
     }
@@ -1628,10 +1641,24 @@ private fun ensureMarkerLayers(style: Style, textColor: Int) {
             SymbolLayer(MARKER_AREA_LABEL_LAYER, MARKER_AREA_SOURCE).withProperties(
                 textField(Expression.get("label")),
                 textFont(arrayOf("Noto Sans Regular")),
-                textSize(12f),
+                textSize(14f),
                 textColor(labelColor),
                 textHaloColor(haloColor),
                 textHaloWidth(1.2f),
+                textAllowOverlap(true),
+                textIgnorePlacement(true),
+            ),
+        )
+    }
+    if (style.getLayer(MARKER_ROUTE_END_ARROW_LAYER) == null) {
+        style.addLayer(
+            SymbolLayer(MARKER_ROUTE_END_ARROW_LAYER, MARKER_ROUTE_END_SOURCE).withProperties(
+                textField("▼"),
+                textFont(arrayOf("Noto Sans Regular")),
+                textSize(18f),
+                textColor(Expression.toColor(Expression.get("markerColor"))),
+                textHaloColor(haloColor),
+                textHaloWidth(1.6f),
                 textAllowOverlap(true),
                 textIgnorePlacement(true),
             ),
@@ -1683,6 +1710,7 @@ private fun updateLayers(style: Style, ui: MapUiState) {
 private fun updateMarkerLayers(style: Style, markers: List<MarkerVisual>) {
     val pointFeatures = mutableListOf<Feature>()
     val routeFeatures = mutableListOf<Feature>()
+    val routeEndFeatures = mutableListOf<Feature>()
     val areaFeatures = mutableListOf<Feature>()
     for (m in markers) {
         val colorHex = "#%06X".format(m.colorRgb and 0xFFFFFF)
@@ -1699,12 +1727,16 @@ private fun updateMarkerLayers(style: Style, markers: List<MarkerVisual>) {
             }
             MarkerType.MARKER_TYPE_ROUTE -> {
                 if (m.points.size < 2) continue
+                val lngLats = m.points.map { Point.fromLngLat(it.second, it.first) }
                 routeFeatures += Feature.fromGeometry(
-                    LineString.fromLngLats(m.points.map { Point.fromLngLat(it.second, it.first) }),
+                    LineString.fromLngLats(lngLats),
                 ).apply {
                     addStringProperty("label", m.label)
                     addStringProperty("markerColor", colorHex)
                     addStringProperty("markerId", m.markerId.toString())
+                }
+                routeEndFeatures += Feature.fromGeometry(lngLats.last()).apply {
+                    addStringProperty("markerColor", colorHex)
                 }
             }
             MarkerType.MARKER_TYPE_AREA -> {
@@ -1723,6 +1755,8 @@ private fun updateMarkerLayers(style: Style, markers: List<MarkerVisual>) {
         ?.setGeoJson(FeatureCollection.fromFeatures(pointFeatures))
     style.getSourceAs<GeoJsonSource>(MARKER_ROUTE_SOURCE)
         ?.setGeoJson(FeatureCollection.fromFeatures(routeFeatures))
+    style.getSourceAs<GeoJsonSource>(MARKER_ROUTE_END_SOURCE)
+        ?.setGeoJson(FeatureCollection.fromFeatures(routeEndFeatures))
     style.getSourceAs<GeoJsonSource>(MARKER_AREA_SOURCE)
         ?.setGeoJson(FeatureCollection.fromFeatures(areaFeatures))
 }
@@ -2005,6 +2039,8 @@ private const val MARKER_ROUTE_SOURCE = "marker-route-source"
 private const val MARKER_ROUTE_LINE_LAYER = "marker-route-line-layer"
 private const val MARKER_ROUTE_LABEL_LAYER = "marker-route-label-layer"
 private const val MARKER_ROUTE_ARROW_LAYER = "marker-route-arrow-layer"
+private const val MARKER_ROUTE_END_SOURCE = "marker-route-end-source"
+private const val MARKER_ROUTE_END_ARROW_LAYER = "marker-route-end-arrow-layer"
 private const val MARKER_POINT_SOURCE = "marker-point-source"
 private const val MARKER_POINT_LAYER = "marker-point-layer"
 private const val MARKER_POINT_LABEL_LAYER = "marker-point-label-layer"
