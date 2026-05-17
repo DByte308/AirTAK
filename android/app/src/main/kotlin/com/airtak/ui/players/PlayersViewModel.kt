@@ -11,11 +11,14 @@ import com.airtak.data.db.RemoteNodeEntity
 import com.airtak.data.game.GameRepository
 import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.mesh.RemoteNodeRepository
+import com.airtak.data.moderation.ModerationRepository
 import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.GameConfig
+import com.airtak.proto.ModerationAction
 import com.airtak.proto.PlayerStatePacket
 import com.airtak.proto.PlayerStatus
+import com.airtak.proto.Scope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -67,6 +70,7 @@ class PlayersViewModel @Inject constructor(
     statusRepo: DeviceStatusRepository,
     remoteNodes: RemoteNodeRepository,
     gameRepository: GameRepository,
+    private val moderation: ModerationRepository,
 ) : ViewModel() {
     private val showOnlineOnly = MutableStateFlow(false)
     private val ownStatus = MutableStateFlow(PlayerStatus.PLAYER_STATUS_ACTIVE)
@@ -167,6 +171,20 @@ class PlayersViewModel @Inject constructor(
 
     fun requestPosition(nodeId: Long) {
         mesh.requestPosition(nodeId, statusNodeId()?.toLong()?.and(0xFFFF_FFFFL) ?: 0L)
+    }
+
+    val activeBans: StateFlow<Set<Pair<Long, Int>>> = moderation.activeBans
+
+    fun submitVoteKick(targetNodeId: Long, scope: Scope) {
+        viewModelScope.launch {
+            moderation.submitVote(targetNodeId, scope, ModerationAction.MODERATION_ACTION_VOTE_BAN)
+        }
+    }
+
+    fun submitUnban(targetNodeId: Long, scope: Scope) {
+        viewModelScope.launch {
+            moderation.submitVote(targetNodeId, scope, ModerationAction.MODERATION_ACTION_UNBAN)
+        }
     }
 
     private fun broadcastOwnStatus(statusValue: PlayerStatus, transition: Boolean) {

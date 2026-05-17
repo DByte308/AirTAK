@@ -36,6 +36,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -61,6 +64,8 @@ fun PlayersScreen(
     onLocatePlayer: (Long) -> Unit = {},
 ) {
     val ui by viewModel.uiState.collectAsState()
+    val bans by viewModel.activeBans.collectAsState()
+    var pendingKick by remember { mutableStateOf<PlayerRow?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -93,13 +98,19 @@ fun PlayersScreen(
             )
         }
         ui.groups.forEach { group ->
-            item(key = "unit-${group.label}") { UnitGroupHeader(group) }
-            items(group.players, key = { it.nodeId }) { player ->
+            val visible = group.players.filter { p ->
+                // Hide players banned at any scope (shadowban).
+                bans.none { (target, _) -> target == p.nodeId } || p.isSelf
+            }
+            if (visible.isEmpty()) return@forEach
+            item(key = "unit-${group.label}") { UnitGroupHeader(group.copy(players = visible)) }
+            items(visible, key = { it.nodeId }) { player ->
                 PlayerCard(
                     player = player,
                     onRequestPosition = { viewModel.requestPosition(player.nodeId) },
                     onMessage = { onMessagePlayer(player.nodeId) },
                     onLocate = { onLocatePlayer(player.nodeId) },
+                    onVoteKick = { pendingKick = player }.takeIf { !player.isSelf },
                 )
             }
         }
@@ -115,6 +126,65 @@ fun PlayersScreen(
             }
         }
     }
+
+    pendingKick?.let { target ->
+        VoteKickDialog(
+            target = target,
+            onDismiss = { pendingKick = null },
+            onConfirm = { scope ->
+                viewModel.submitVoteKick(target.nodeId, scope)
+                pendingKick = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun VoteKickDialog(
+    target: PlayerRow,
+    onDismiss: () -> Unit,
+    onConfirm: (com.airtak.proto.Scope) -> Unit,
+) {
+    val scopes = listOf(
+        com.airtak.proto.Scope.SCOPE_FIRE_TEAM to "Fireteam",
+        com.airtak.proto.Scope.SCOPE_SQUAD to "Squad",
+        com.airtak.proto.Scope.SCOPE_PLATOON to "Platoon",
+        com.airtak.proto.Scope.SCOPE_COMPANY to "Company",
+        com.airtak.proto.Scope.SCOPE_ALL to "All players",
+    )
+    var selected by remember { mutableStateOf(com.airtak.proto.Scope.SCOPE_FIRE_TEAM) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Vote-kick ${target.callsign}?") },
+        text = {
+            Column {
+                Text(
+                    "When 3 distinct players cast a vote-kick at the same scope, the target is hidden from your local UI for 24 h. This affects display only — the mesh keeps relaying their packets.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                scopes.forEach { (s, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = selected == s,
+                            onClick = { selected = s },
+                        )
+                        Text(label, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.Button(onClick = { onConfirm(selected) }) { Text("Vote kick") }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable
@@ -221,6 +291,7 @@ private fun PlayerCard(
     onRequestPosition: () -> Unit,
     onMessage: () -> Unit,
     onLocate: () -> Unit,
+    onVoteKick: (() -> Unit)? = null,
 ) {
     val status = if (player.online) player.status else PlayerStatus.UNRECOGNIZED
     HudCard(Modifier.fillMaxWidth(), accent = playerColor(player.colorRgb)) {
@@ -278,6 +349,15 @@ private fun PlayerCard(
                             Spacer(Modifier.width(6.dp))
                             Text("Ping")
                         }
+                    }
+                }
+                if (onVoteKick != null) {
+                    Spacer(Modifier.height(6.dp))
+                    androidx.compose.material3.TextButton(
+                        onClick = onVoteKick,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Vote-kick…", color = MaterialTheme.colorScheme.error)
                     }
                 }
             }

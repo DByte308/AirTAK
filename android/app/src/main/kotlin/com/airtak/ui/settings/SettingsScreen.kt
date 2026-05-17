@@ -43,6 +43,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +67,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.airtak.proto.AdminCommand
@@ -92,17 +94,27 @@ private enum class Section(val title: String, val subtitle: String) {
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     var current by remember { mutableStateOf<Section?>(null) }
+    // When non-null, the Channels editor scrolls / highlights the given slot
+    // index on entry (used by the "Set up channel" flow from the Player section).
+    var focusChannelSlot by remember { mutableStateOf<Int?>(null) }
 
     when (val sec = current) {
         null -> SectionList(onPick = { current = it })
         else -> {
             val title = sec.title
             Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                TopRow(title = title, onBack = { current = null })
+                TopRow(title = title, onBack = { current = null; focusChannelSlot = null })
                 when (sec) {
-                    Section.Player         -> PlayerSection(viewModel, onNavigateToChannels = { current = Section.Channels })
+                    Section.Player         -> PlayerSection(
+                        vm = viewModel,
+                        onNavigateToChannels = { current = Section.Channels },
+                        onNavigateToChannelSlot = { slot ->
+                            focusChannelSlot = slot
+                            current = Section.Channels
+                        },
+                    )
                     Section.Lora           -> LoraSection(viewModel)
-                    Section.Channels       -> ChannelsSection(viewModel)
+                    Section.Channels       -> ChannelsSection(viewModel, initialFocusSlot = focusChannelSlot)
                     Section.PositionPower  -> PositionPowerSection(viewModel)
                     Section.Security       -> SecuritySection(viewModel)
                     Section.App            -> AppSection(viewModel)
@@ -185,7 +197,11 @@ private fun ApplyRow(onRead: () -> Unit, onApply: () -> Unit, busy: Boolean) {
 // ── PLAYER ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun PlayerSection(vm: SettingsViewModel, onNavigateToChannels: () -> Unit = {}) {
+private fun PlayerSection(
+    vm: SettingsViewModel,
+    onNavigateToChannels: () -> Unit = {},
+    onNavigateToChannelSlot: (Int) -> Unit = { onNavigateToChannels() },
+) {
     val device by vm.device.collectAsState()
     val game by vm.game.collectAsState()
     val channels by vm.channels.collectAsState()
@@ -231,22 +247,39 @@ private fun PlayerSection(vm: SettingsViewModel, onNavigateToChannels: () -> Uni
         Spacer(Modifier.height(16.dp))
         SectionLabel("Unit hierarchy (optional, self-organized)")
         TacticalText(
-            "Assign yourself to a unit and link it to a channel slot below. Nodes sharing the same unit ID are grouped in the roster.",
+            "Assign yourself to a unit and link it to a channel slot below. Nodes sharing the same unit ID are grouped in the roster. " +
+            "Slots 0 and 1 are reserved for mesh-wide traffic, slot 2 is reserved for PTT audio — pick slots 3+ for unit-scoped comms.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
 
-        val channelOptions = channels.slots.map { editor ->
+        val channelOptions: List<UnitChannelOption> = channels.slots.map { editor ->
             val slot = editor.slot
-            val label = when {
-                slot.index == 0 -> "Slot 0 — ${slot.name.ifBlank { "AirTAK" }} (global)"
-                slot.index == 1 -> "Slot 1 — ${slot.name.ifBlank { "Tactical" }} (global)"
-                slot.index == 2 -> "Slot 2 — ${slot.name.ifBlank { "Audio" }} (reserved)"
-                else -> "Slot ${slot.index} — ${slot.name.ifBlank { "Ch ${slot.index}" }}"
-            }
-            val enabled = slot.role != ChannelRole.DISABLED
+            val role = slot.role
             val encrypted = slot.psk.size() > 0
-            Triple(slot.index.toInt(), label, Pair(enabled, encrypted))
+            val kind = when {
+                slot.index == 0 -> UnitChannelKind.GlobalMesh
+                slot.index == 1 -> UnitChannelKind.GlobalTactical
+                slot.index == 2 -> UnitChannelKind.AudioReserved
+                role == ChannelRole.DISABLED -> UnitChannelKind.Available
+                else -> UnitChannelKind.UnitScoped
+            }
+            UnitChannelOption(
+                index = slot.index,
+                name = slot.name,
+                kind = kind,
+                encrypted = encrypted,
+                hasPsk = encrypted,
+                role = role,
+            )
+        }
+        // Collect slot indices already claimed by another unit level so users see
+        // the conflict in the dropdown.
+        val claimedSlots: Map<Int, String> = buildMap {
+            game.fireteamChannelSlot.takeIf { it >= 0 }?.let { put(it, "fireteam") }
+            game.squadChannelSlot.takeIf { it >= 0 }?.let { put(it, "squad") }
+            game.platoonChannelSlot.takeIf { it >= 0 }?.let { put(it, "platoon") }
+            game.companyChannelSlot.takeIf { it >= 0 }?.let { put(it, "company") }
         }
 
         // Company
@@ -259,9 +292,16 @@ private fun PlayerSection(vm: SettingsViewModel, onNavigateToChannels: () -> Uni
                 singleLine = true,
             )
             UnitChannelDropdown(
+                level = "company",
+                unitLabel = game.companyId.ifBlank { "Company" },
                 selectedSlot = game.companyChannelSlot,
                 channelOptions = channelOptions,
+                claimedSlots = claimedSlots,
                 onSelect = { slot -> vm.updateGame { copy(companyChannelSlot = slot) } },
+                onSetupNewChannel = {
+                    val newSlot = vm.prepareUnitChannel("company", game.companyId.ifBlank { "Company" })
+                    if (newSlot != null) onNavigateToChannelSlot(newSlot) else onNavigateToChannels()
+                },
                 onManageChannels = onNavigateToChannels,
             )
         }
@@ -277,9 +317,16 @@ private fun PlayerSection(vm: SettingsViewModel, onNavigateToChannels: () -> Uni
                 singleLine = true,
             )
             UnitChannelDropdown(
+                level = "platoon",
+                unitLabel = game.platoonId.ifBlank { "Platoon" },
                 selectedSlot = game.platoonChannelSlot,
                 channelOptions = channelOptions,
+                claimedSlots = claimedSlots,
                 onSelect = { slot -> vm.updateGame { copy(platoonChannelSlot = slot) } },
+                onSetupNewChannel = {
+                    val newSlot = vm.prepareUnitChannel("platoon", game.platoonId.ifBlank { "Platoon" })
+                    if (newSlot != null) onNavigateToChannelSlot(newSlot) else onNavigateToChannels()
+                },
                 onManageChannels = onNavigateToChannels,
             )
         }
@@ -295,9 +342,16 @@ private fun PlayerSection(vm: SettingsViewModel, onNavigateToChannels: () -> Uni
                 singleLine = true,
             )
             UnitChannelDropdown(
+                level = "squad",
+                unitLabel = game.squadId.ifBlank { "Squad" },
                 selectedSlot = game.squadChannelSlot,
                 channelOptions = channelOptions,
+                claimedSlots = claimedSlots,
                 onSelect = { slot -> vm.updateGame { copy(squadChannelSlot = slot) } },
+                onSetupNewChannel = {
+                    val newSlot = vm.prepareUnitChannel("squad", game.squadId.ifBlank { "Squad" })
+                    if (newSlot != null) onNavigateToChannelSlot(newSlot) else onNavigateToChannels()
+                },
                 onManageChannels = onNavigateToChannels,
             )
         }
@@ -313,9 +367,16 @@ private fun PlayerSection(vm: SettingsViewModel, onNavigateToChannels: () -> Uni
                 singleLine = true,
             )
             UnitChannelDropdown(
+                level = "fireteam",
+                unitLabel = game.fireteamId.ifBlank { "Fireteam" },
                 selectedSlot = game.fireteamChannelSlot,
                 channelOptions = channelOptions,
+                claimedSlots = claimedSlots,
                 onSelect = { slot -> vm.updateGame { copy(fireteamChannelSlot = slot) } },
+                onSetupNewChannel = {
+                    val newSlot = vm.prepareUnitChannel("fireteam", game.fireteamId.ifBlank { "Fireteam" })
+                    if (newSlot != null) onNavigateToChannelSlot(newSlot) else onNavigateToChannels()
+                },
                 onManageChannels = onNavigateToChannels,
             )
         }
@@ -498,7 +559,7 @@ private fun ProfileEditor(
 // ── CHANNELS ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ChannelsSection(vm: SettingsViewModel) {
+private fun ChannelsSection(vm: SettingsViewModel, initialFocusSlot: Int? = null) {
     val state by vm.channels.collectAsState()
     val lora by vm.lora.collectAsState()
     LaunchedEffect(Unit) { vm.readChannels() }
@@ -516,23 +577,22 @@ private fun ChannelsSection(vm: SettingsViewModel) {
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    "Each slot can serve as a dedicated radio channel for a different unit level — squad, platoon, or company. " +
-                    "Give the slot a recognisable name (e.g. \"Squad 1\", \"Platoon A\", \"Company Red\") and set a shared password. " +
-                    "Every device in that unit must use the same slot index, name, and password.",
+                    "Slots 0–2 are fixed by AirTAK; slots 3–7 are free for unit-scoped traffic (squad, fireteam, platoon, company). " +
+                    "Pick a recognisable name and a shared password — every device in that unit must use the same slot index, name, and password. " +
+                    "Link a slot to a unit level from Settings → Player.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    "Suggested layout:",
+                    "Slot layout:",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    "Slot 0 — Mesh (primary, open) — all players\n" +
-                    "Slot 1 — Game (admin events, match flow)\n" +
-                    "Slot 2 — Squad  (e.g. \"Squad 1\", squad PSK)\n" +
-                    "Slot 3 — Platoon (e.g. \"Platoon A\", platoon PSK)\n" +
-                    "Slot 4 — Team   (e.g. \"Team Red\", team PSK)",
+                    "Slot 0 — AirTAK (primary, Meshtastic-compatible) — all players\n" +
+                    "Slot 1 — Tactical (AirTAK-wide secondary) — all players\n" +
+                    "Slot 2 — Audio (reserved for PTT in a future phase)\n" +
+                    "Slot 3+ — Unit channels (e.g. \"Squad 1\", \"Platoon A\", \"Company Red\")",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -567,6 +627,15 @@ private fun ChannelsSection(vm: SettingsViewModel) {
             )
         }
         state.slots.forEachIndexed { index, editor ->
+            val highlighted = initialFocusSlot != null && initialFocusSlot == editor.slot.index
+            if (highlighted) {
+                Text(
+                    "↓ New channel for your unit — set a password below and tap Apply.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                )
+            }
             ChannelSlotEditor(
                 editor = editor,
                 profileNames = lora.profiles.mapIndexed { i, profile -> "${i}: ${profile.name.ifBlank { profilePreset(i) }}" },
@@ -998,82 +1067,199 @@ private fun LabelValue(label: String, value: String) {
     }
 }
 
+// Kinds of slots presented in the unit-hierarchy dropdown.
+private enum class UnitChannelKind {
+    GlobalMesh,        // slot 0 — Meshtastic-compatible global; not selectable for unit scope
+    GlobalTactical,    // slot 1 — AirTAK-wide tactical; not selectable for unit scope
+    AudioReserved,     // slot 2 — reserved for Phase 7 PTT audio; not selectable
+    UnitScoped,        // slots 3–7 with a non-DISABLED role — selectable
+    Available,         // slots 3–7 currently DISABLED — pickable via "Set up"
+}
+
+private data class UnitChannelOption(
+    val index: Int,
+    val name: String,
+    val kind: UnitChannelKind,
+    val encrypted: Boolean,
+    val hasPsk: Boolean,
+    val role: ChannelRole,
+)
+
 @Composable
 private fun UnitChannelDropdown(
+    level: String,
+    unitLabel: String,
     selectedSlot: Int,
-    channelOptions: List<Triple<Int, String, Pair<Boolean, Boolean>>>,
+    channelOptions: List<UnitChannelOption>,
+    claimedSlots: Map<Int, String>,
     onSelect: (Int) -> Unit,
+    onSetupNewChannel: () -> Unit,
     onManageChannels: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val selectedLabel = if (selectedSlot < 0) {
-        "Channel: None"
-    } else {
-        channelOptions.firstOrNull { (index, _, _) -> index == selectedSlot }?.let { (_, label, _) ->
-            "Ch: $label"
-        } ?: "Channel: Slot $selectedSlot"
+
+    val selectedOption = channelOptions.firstOrNull { it.index == selectedSlot }
+    val buttonLabel = when {
+        selectedSlot < 0 -> "Channel: none"
+        selectedOption == null -> "Slot $selectedSlot"
+        selectedOption.kind == UnitChannelKind.Available -> "Slot ${selectedOption.index} — not yet set up"
+        else -> "${selectedOption.name.ifBlank { "Ch ${selectedOption.index}" }} (slot ${selectedOption.index})"
+    }
+
+    val tactical = channelOptions.filter { it.kind == UnitChannelKind.UnitScoped }
+    val available = channelOptions.filter { it.kind == UnitChannelKind.Available }
+    val reserved = channelOptions.filter {
+        it.kind == UnitChannelKind.GlobalMesh ||
+        it.kind == UnitChannelKind.GlobalTactical ||
+        it.kind == UnitChannelKind.AudioReserved
     }
 
     Box {
         OutlinedButton(onClick = { expanded = true }) {
-            Text(selectedLabel, maxLines = 1)
+            Text(buttonLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            // "None" — clear binding
             DropdownMenuItem(
                 text = {
-                    Text(
-                        "None (use global channels)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (selectedSlot < 0) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurface,
-                    )
+                    Column {
+                        Text(
+                            "None",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (selectedSlot < 0) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "Use global channels for this unit level.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 },
-                onClick = {
-                    expanded = false
-                    onSelect(-1)
-                },
+                onClick = { expanded = false; onSelect(-1) },
             )
-            channelOptions.forEach { (index, label, state) ->
-                val (enabled, encrypted) = state
+
+            if (tactical.isNotEmpty()) {
+                HorizontalDivider()
+                DropdownSectionLabel("Configured channels")
+                tactical.forEach { option ->
+                    val claimedBy = claimedSlots[option.index]
+                    val claimedByOther = claimedBy != null && claimedBy != level
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    "${option.name.ifBlank { "Ch ${option.index}" }} · slot ${option.index}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (option.index == selectedSlot) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurface,
+                                )
+                                val subtitle = buildString {
+                                    append(if (option.encrypted) "Encrypted" else "Open (no PSK)")
+                                    if (claimedByOther) append(" · already linked to ${claimedBy}")
+                                }
+                                Text(
+                                    subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (claimedByOther) AccentAmber
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        },
+                        onClick = { expanded = false; onSelect(option.index) },
+                    )
+                }
+            }
+
+            HorizontalDivider()
+            if (available.isNotEmpty()) {
                 DropdownMenuItem(
                     text = {
                         Column {
                             Text(
-                                label,
+                                "Set up a new channel for $unitLabel…",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (index == selectedSlot) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurface,
+                                color = MaterialTheme.colorScheme.primary,
                             )
                             Text(
-                                when {
-                                    !enabled -> "Disabled"
-                                    encrypted -> "Encrypted"
-                                    else -> "Open"
-                                },
+                                "Uses slot ${available.first().index}. You'll set the password next.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     },
-                    onClick = {
-                        expanded = false
-                        onSelect(index)
+                    onClick = { expanded = false; onSetupNewChannel() },
+                )
+            } else if (tactical.size < MAX_UNIT_SLOTS) {
+                // Should not happen given 5 tactical slots; defensive only.
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "No free slots — open Channels…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     },
+                    enabled = false,
+                    onClick = {},
                 )
             }
             DropdownMenuItem(
                 text = {
                     Text(
-                        "Manage channels...",
+                        "Manage channels…",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
                 },
-                onClick = {
-                    expanded = false
-                    onManageChannels()
-                },
+                onClick = { expanded = false; onManageChannels() },
             )
+
+            if (reserved.isNotEmpty()) {
+                HorizontalDivider()
+                DropdownSectionLabel("Reserved slots (not selectable)")
+                reserved.forEach { option ->
+                    val subtitle = when (option.kind) {
+                        UnitChannelKind.GlobalMesh ->
+                            "Mesh-wide / Meshtastic interop. All players share this channel."
+                        UnitChannelKind.GlobalTactical ->
+                            "AirTAK-wide tactical traffic. All players share this channel."
+                        UnitChannelKind.AudioReserved ->
+                            "Reserved for PTT audio (Phase 7)."
+                        else -> ""
+                    }
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    "${option.name.ifBlank { "Ch ${option.index}" }} · slot ${option.index}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        },
+                        enabled = false,
+                        onClick = {},
+                    )
+                }
+            }
         }
     }
 }
+
+@Composable
+private fun DropdownSectionLabel(text: String) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+    )
+}
+
+private const val MAX_UNIT_SLOTS = 5  // slots 3–7

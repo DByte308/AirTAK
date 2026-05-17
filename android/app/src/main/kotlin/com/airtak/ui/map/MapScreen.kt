@@ -7,6 +7,7 @@ import android.graphics.PointF
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,16 +31,21 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.MyLocation
+import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
@@ -56,6 +63,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -77,7 +85,10 @@ import com.airtak.data.geocoding.GeocodingResult
 import com.airtak.data.overlays.MissionOverlayCornerId
 import com.airtak.data.overlays.MissionOverlayCorners
 import com.airtak.data.overlays.MissionOverlayPoint
+import com.airtak.proto.MarkerType
 import com.airtak.proto.PlayerStatus
+import com.airtak.proto.Scope
+import com.airtak.proto.TeamControl
 import com.airtak.ui.theme.AccentAmber
 import com.airtak.ui.theme.AccentCyan
 import com.airtak.ui.theme.DarkBackground
@@ -133,6 +144,8 @@ fun MapScreen(
     viewModel: MapViewModel = hiltViewModel(),
     focusNodeId: Long? = null,
     onFocusConsumed: () -> Unit = {},
+    focusMarkerId: Long? = null,
+    onMarkerFocusConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -158,6 +171,11 @@ fun MapScreen(
     var selectedOverlayCorner by remember { mutableStateOf(MissionOverlayCornerId.TOP_LEFT) }
     var overlayCornerPoints by remember { mutableStateOf<Map<MissionOverlayCornerId, Offset>>(emptyMap()) }
     var showSearch by remember { mutableStateOf(false) }
+    val markers by viewModel.markers.collectAsState()
+    val drawing by viewModel.drawing.collectAsState()
+    val gameActive by viewModel.gameActive.collectAsState()
+    var pendingCommit by remember { mutableStateOf<MarkerTool?>(null) }
+    var tappedMarker by remember { mutableStateOf<MarkerVisual?>(null) }
 
     fun updateOwnLabelPoint() {
         val pos = ui.ownPosition
@@ -249,7 +267,7 @@ fun MapScreen(
         }
     }
 
-    DisposableEffect(map, tileSelectMode, tileFirstCorner, missionOverlayEditMode, selectedOverlayCorner, ui.missionOverlay) {
+    DisposableEffect(map, tileSelectMode, tileFirstCorner, missionOverlayEditMode, selectedOverlayCorner, ui.missionOverlay, drawing) {
         val targetMap = map
         if (targetMap == null) {
             onDispose {}
@@ -260,8 +278,26 @@ fun MapScreen(
                 } else if (tileSelectMode) {
                     markTileCorner(latLng)
                     true
+                } else if (drawing is DrawingState.Active) {
+                    viewModel.addDrawingPoint(latLng.latitude, latLng.longitude)
+                    true
                 } else {
-                    false
+                    // Hit-test marker layers — surface tapped marker in detail sheet.
+                    val screen = targetMap.projection.toScreenLocation(latLng)
+                    val features = targetMap.queryRenderedFeatures(
+                        screen,
+                        MARKER_POINT_LAYER,
+                        MARKER_ROUTE_LINE_LAYER,
+                        MARKER_AREA_FILL_LAYER,
+                    )
+                    val markerIdStr = features.firstOrNull()?.getStringProperty("markerId")
+                    val mid = markerIdStr?.toLongOrNull()
+                    if (mid != null) {
+                        tappedMarker = viewModel.markers.value.firstOrNull { it.markerId == mid }
+                        true
+                    } else {
+                        false
+                    }
                 }
             }
             val longClickListener = MapLibreMap.OnMapLongClickListener { latLng ->
@@ -269,6 +305,8 @@ fun MapScreen(
                     // Corner alignment is handled by draggable screen-space handles.
                 } else if (tileSelectMode) {
                     markTileCorner(latLng)
+                } else if (drawing is DrawingState.Active) {
+                    viewModel.addDrawingPoint(latLng.latitude, latLng.longitude)
                 } else {
                     pendingWaypoint = latLng
                     waypointLabel = ""
@@ -342,6 +380,13 @@ fun MapScreen(
         }
     }
 
+    LaunchedEffect(map, markers) {
+        map?.getStyle { style -> updateMarkerLayers(style, markers) }
+    }
+    LaunchedEffect(map, drawing) {
+        map?.getStyle { style -> updateDraftLayer(style, drawing) }
+    }
+
     LaunchedEffect(map, tileFirstCorner, selectedTileBounds) {
         map?.getStyle { style -> updateTileSelectionLayer(style, selectedTileBounds) }
     }
@@ -362,6 +407,12 @@ fun MapScreen(
             onFocusConsumed()
         }
     }
+    LaunchedEffect(focusMarkerId, markers) {
+        if (focusMarkerId != null && markers.any { it.markerId == focusMarkerId }) {
+            viewModel.focusMarker(focusMarkerId)
+            onMarkerFocusConsumed()
+        }
+    }
     LaunchedEffect(map, focusTarget) {
         val target = focusTarget ?: return@LaunchedEffect
         if (map != null) {
@@ -377,6 +428,8 @@ fun MapScreen(
             showPlayers = ui.showPlayers,
             showWaypoints = ui.showWaypoints,
             selectingTiles = tileSelectMode,
+            gameActive = gameActive,
+            onToggleGameActive = { viewModel.setGameActive(!gameActive) },
             onTogglePlayers = { viewModel.setShowPlayers(!ui.showPlayers) },
             onToggleWaypoints = { viewModel.setShowWaypoints(!ui.showWaypoints) },
             onSearch = { showSearch = true },
@@ -474,6 +527,21 @@ fun MapScreen(
         ) {
             Icon(Icons.Outlined.MyLocation, contentDescription = "Recenter")
         }
+
+        MarkerDrawingToolbar(
+            drawing = drawing,
+            onPick = { tool -> viewModel.startDrawing(tool) },
+            onCancel = { viewModel.cancelDrawing() },
+            onUndo = { viewModel.removeLastDrawingPoint() },
+            onCommit = {
+                val active = drawing as? DrawingState.Active ?: return@MarkerDrawingToolbar
+                if (viewModel.canCommitDrawing()) pendingCommit = active.tool
+            },
+            canCommit = viewModel.canCommitDrawing(),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp),
+        )
     }
 
     pendingWaypoint?.let { latLng ->
@@ -496,6 +564,34 @@ fun MapScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingWaypoint = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    pendingCommit?.let { tool ->
+        val active = drawing as? DrawingState.Active
+        if (active == null || active.tool != tool) {
+            pendingCommit = null
+        } else {
+            MarkerCommitDialog(
+                tool = tool,
+                pointCount = active.points.size,
+                onDismiss = { pendingCommit = null },
+                onCommit = { label, description, color, scope, team, priority ->
+                    viewModel.commitDrawing(label, description, color, scope, team, priority)
+                    pendingCommit = null
+                },
+            )
+        }
+    }
+
+    tappedMarker?.let { marker ->
+        MarkerDetailDialog(
+            marker = marker,
+            onDismiss = { tappedMarker = null },
+            onDelete = {
+                viewModel.deleteMarker(marker.markerId)
+                tappedMarker = null
             },
         )
     }
@@ -658,6 +754,8 @@ private fun MapToolbar(
     showPlayers: Boolean,
     showWaypoints: Boolean,
     selectingTiles: Boolean,
+    gameActive: Boolean,
+    onToggleGameActive: () -> Unit,
     onTogglePlayers: () -> Unit,
     onToggleWaypoints: () -> Unit,
     onSearch: () -> Unit,
@@ -684,6 +782,18 @@ private fun MapToolbar(
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             ) { Icon(Icons.Outlined.Search, contentDescription = "Search location") }
+            IconButton(
+                onClick = onToggleGameActive,
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = if (gameActive) AccentAmber else MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+            ) {
+                if (gameActive) {
+                    Icon(Icons.Outlined.Pause, contentDescription = "End game")
+                } else {
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = "Resume game")
+                }
+            }
             IconButton(
                 onClick = onTogglePlayers,
                 colors = IconButtonDefaults.iconButtonColors(
@@ -712,6 +822,274 @@ private fun MapToolbar(
             }
         }
     }
+}
+
+// ── Tactical marker drawing UI ──────────────────────────────────────────────
+
+@Composable
+private fun MarkerDrawingToolbar(
+    drawing: DrawingState,
+    onPick: (MarkerTool) -> Unit,
+    onCancel: () -> Unit,
+    onUndo: () -> Unit,
+    onCommit: () -> Unit,
+    canCommit: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        tonalElevation = 0.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (drawing is DrawingState.Active) {
+                Text(
+                    "${drawing.tool.displayLabel}: ${drawing.points.size} point${if (drawing.points.size == 1) "" else "s"} placed",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                val instructions = when (drawing.tool) {
+                    MarkerTool.POINT, MarkerTool.NOTE, MarkerTool.OBJECTIVE -> "Tap on the map to place."
+                    MarkerTool.ROUTE -> "Tap 2–${drawing.tool.maxPoints} points along the route, then Commit."
+                    MarkerTool.AREA  -> "Tap 3–${drawing.tool.maxPoints} corners, then Commit (closes polygon)."
+                }
+                Text(
+                    instructions,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = onCancel) { Text("Cancel") }
+                    if (drawing.tool == MarkerTool.ROUTE || drawing.tool == MarkerTool.AREA) {
+                        TextButton(
+                            onClick = onUndo,
+                            enabled = drawing.points.isNotEmpty(),
+                        ) { Text("Undo") }
+                    }
+                    Button(onClick = onCommit, enabled = canCommit) { Text("Commit") }
+                }
+            } else {
+                Text("Add marker", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    MarkerTool.values().forEach { tool ->
+                        OutlinedButton(
+                            onClick = { onPick(tool) },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        ) { Text(tool.displayLabel, style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val MARKER_COLOR_PRESETS: List<Int> = listOf(
+    0xE63946, 0xFFB300, 0x00E676, 0x1D9BF0, 0xB388FF, 0xFFFFFF,
+).map { it.toInt() }
+
+@Composable
+private fun MarkerCommitDialog(
+    tool: MarkerTool,
+    pointCount: Int,
+    onDismiss: () -> Unit,
+    onCommit: (label: String, description: String, colorRgb: Int, scope: Scope, team: TeamControl, priority: Int) -> Unit,
+) {
+    var label by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var colorRgb by remember { mutableStateOf(MARKER_COLOR_PRESETS.first()) }
+    var scope by remember { mutableStateOf(Scope.SCOPE_ALL) }
+    var team by remember { mutableStateOf(TeamControl.TEAM_CONTROL_UNKNOWN) }
+    var priority by remember { mutableStateOf(2) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New ${tool.displayLabel.lowercase()}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "$pointCount point${if (pointCount == 1) "" else "s"} captured.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it.take(32) },
+                    label = { Text("Label") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it.take(256) },
+                    label = { Text("Description (optional)") },
+                    minLines = 2,
+                    maxLines = 4,
+                )
+                Text("Color", style = MaterialTheme.typography.labelSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MARKER_COLOR_PRESETS.forEach { c ->
+                        val selected = (colorRgb and 0xFFFFFF) == c
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(androidx.compose.ui.graphics.Color(0xFF000000L or c.toLong()))
+                                .clickable { colorRgb = c }
+                                .padding(2.dp),
+                        ) {
+                            if (selected) {
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(androidx.compose.ui.graphics.Color.Transparent),
+                                ) {
+                                    Text("✓", color = androidx.compose.ui.graphics.Color.Black, modifier = Modifier.align(Alignment.Center))
+                                }
+                            }
+                        }
+                    }
+                }
+                Text("Visible to", style = MaterialTheme.typography.labelSmall)
+                ScopeDropdown(scope, onSelect = { scope = it })
+                if (tool == MarkerTool.OBJECTIVE) {
+                    Text("Controlling team", style = MaterialTheme.typography.labelSmall)
+                    TeamDropdown(team, onSelect = { team = it })
+                    Text("Priority", style = MaterialTheme.typography.labelSmall)
+                    PriorityDropdown(priority, onSelect = { priority = it })
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onCommit(label, description, colorRgb, scope, team, priority) }) {
+                Text("Send")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+@Composable
+private fun ScopeDropdown(selected: Scope, onSelect: (Scope) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { expanded = true }) { Text(scopeLabel(selected)) }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            listOf(Scope.SCOPE_ALL, Scope.SCOPE_COMPANY, Scope.SCOPE_PLATOON, Scope.SCOPE_SQUAD, Scope.SCOPE_FIRE_TEAM).forEach { s ->
+                DropdownMenuItem(text = { Text(scopeLabel(s)) }, onClick = { expanded = false; onSelect(s) })
+            }
+        }
+    }
+}
+
+private fun scopeLabel(scope: Scope): String = when (scope) {
+    Scope.SCOPE_ALL -> "All players"
+    Scope.SCOPE_COMPANY -> "Company"
+    Scope.SCOPE_PLATOON -> "Platoon"
+    Scope.SCOPE_SQUAD -> "Squad"
+    Scope.SCOPE_FIRE_TEAM -> "Fireteam"
+    else -> "All players"
+}
+
+@Composable
+private fun TeamDropdown(selected: TeamControl, onSelect: (TeamControl) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { expanded = true }) { Text(teamLabel(selected)) }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            listOf(
+                TeamControl.TEAM_CONTROL_OWN,
+                TeamControl.TEAM_CONTROL_OPPOSING,
+                TeamControl.TEAM_CONTROL_NEUTRAL,
+                TeamControl.TEAM_CONTROL_UNKNOWN,
+            ).forEach { t ->
+                DropdownMenuItem(text = { Text(teamLabel(t)) }, onClick = { expanded = false; onSelect(t) })
+            }
+        }
+    }
+}
+
+private fun teamLabel(team: TeamControl): String = when (team) {
+    TeamControl.TEAM_CONTROL_OWN -> "Own"
+    TeamControl.TEAM_CONTROL_OPPOSING -> "Opposing"
+    TeamControl.TEAM_CONTROL_NEUTRAL -> "Neutral"
+    TeamControl.TEAM_CONTROL_UNKNOWN -> "Unknown"
+    else -> "Unknown"
+}
+
+@Composable
+private fun PriorityDropdown(selected: Int, onSelect: (Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { expanded = true }) { Text(priorityLabel(selected)) }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            (0..4).forEach { p ->
+                DropdownMenuItem(text = { Text(priorityLabel(p)) }, onClick = { expanded = false; onSelect(p) })
+            }
+        }
+    }
+}
+
+private fun priorityLabel(priority: Int): String = when (priority) {
+    0 -> "Info"
+    1 -> "Low"
+    2 -> "Medium"
+    3 -> "High"
+    4 -> "Critical"
+    else -> "Medium"
+}
+
+@Composable
+private fun MarkerDetailDialog(
+    marker: MarkerVisual,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(marker.label.ifBlank { "Marker" }) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Type: ${markerTypeLabel(marker.type)}", style = MaterialTheme.typography.bodySmall)
+                Text("Scope: ${scopeLabel(marker.scope)}", style = MaterialTheme.typography.bodySmall)
+                if (marker.type == MarkerType.MARKER_TYPE_OBJECTIVE) {
+                    Text("Team: ${teamLabel(marker.controllingTeam)}", style = MaterialTheme.typography.bodySmall)
+                    Text("Priority: ${priorityLabel(marker.priority)}", style = MaterialTheme.typography.bodySmall)
+                }
+                if (marker.description.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(marker.description, style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(
+                    "Creator: ${if (marker.ownedLocally) "you" else "%08X".format(marker.creatorNodeId)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            if (marker.ownedLocally) {
+                TextButton(onClick = onDelete) { Text("Delete") }
+            } else {
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        },
+        dismissButton = if (marker.ownedLocally) {
+            { TextButton(onClick = onDismiss) { Text("Close") } }
+        } else null,
+    )
+}
+
+private fun markerTypeLabel(type: MarkerType): String = when (type) {
+    MarkerType.MARKER_TYPE_POINT -> "Point"
+    MarkerType.MARKER_TYPE_NOTE -> "Note"
+    MarkerType.MARKER_TYPE_OBJECTIVE -> "Objective"
+    MarkerType.MARKER_TYPE_ROUTE -> "Route"
+    MarkerType.MARKER_TYPE_AREA -> "Area"
+    else -> "Marker"
 }
 
 @Composable
@@ -1005,6 +1383,76 @@ private fun ensureLayers(style: Style, textColor: Int) {
             ),
         )
     }
+    ensureMarkerLayers(style, textColor)
+}
+
+private fun ensureMarkerLayers(style: Style, textColor: Int) {
+    if (style.getSource(MARKER_AREA_SOURCE) == null) style.addSource(emptyGeoJsonSource(MARKER_AREA_SOURCE))
+    if (style.getSource(MARKER_ROUTE_SOURCE) == null) style.addSource(emptyGeoJsonSource(MARKER_ROUTE_SOURCE))
+    if (style.getSource(MARKER_POINT_SOURCE) == null) style.addSource(emptyGeoJsonSource(MARKER_POINT_SOURCE))
+    if (style.getSource(DRAFT_SOURCE) == null) style.addSource(emptyGeoJsonSource(DRAFT_SOURCE))
+
+    if (style.getLayer(MARKER_AREA_FILL_LAYER) == null) {
+        style.addLayer(
+            FillLayer(MARKER_AREA_FILL_LAYER, MARKER_AREA_SOURCE).withProperties(
+                fillColor(Expression.toColor(Expression.get("markerColor"))),
+                fillOpacity(0.22f),
+            ),
+        )
+    }
+    if (style.getLayer(MARKER_AREA_LINE_LAYER) == null) {
+        style.addLayer(
+            LineLayer(MARKER_AREA_LINE_LAYER, MARKER_AREA_SOURCE).withProperties(
+                lineColor(Expression.toColor(Expression.get("markerColor"))),
+                lineWidth(2.4f),
+            ),
+        )
+    }
+    if (style.getLayer(MARKER_ROUTE_LINE_LAYER) == null) {
+        style.addLayer(
+            LineLayer(MARKER_ROUTE_LINE_LAYER, MARKER_ROUTE_SOURCE).withProperties(
+                lineColor(Expression.toColor(Expression.get("markerColor"))),
+                lineWidth(3f),
+            ),
+        )
+    }
+    if (style.getLayer(MARKER_POINT_LAYER) == null) {
+        style.addLayer(
+            CircleLayer(MARKER_POINT_LAYER, MARKER_POINT_SOURCE).withProperties(
+                circleRadius(9f),
+                circleColor(Expression.toColor(Expression.get("markerColor"))),
+                circleStrokeColor("#0A0F14"),
+                circleStrokeWidth(2f),
+            ),
+        )
+    }
+    // Draft preview while the user is placing points.
+    if (style.getLayer(DRAFT_FILL_LAYER) == null) {
+        style.addLayer(
+            FillLayer(DRAFT_FILL_LAYER, DRAFT_SOURCE).withProperties(
+                fillColor("#FFB300"),
+                fillOpacity(0.18f),
+            ),
+        )
+    }
+    if (style.getLayer(DRAFT_LINE_LAYER) == null) {
+        style.addLayer(
+            LineLayer(DRAFT_LINE_LAYER, DRAFT_SOURCE).withProperties(
+                lineColor("#FFB300"),
+                lineWidth(2.4f),
+            ),
+        )
+    }
+    if (style.getLayer(DRAFT_POINT_LAYER) == null) {
+        style.addLayer(
+            CircleLayer(DRAFT_POINT_LAYER, DRAFT_SOURCE).withProperties(
+                circleRadius(5f),
+                circleColor("#FFB300"),
+                circleStrokeColor("#0A0F14"),
+                circleStrokeWidth(2f),
+            ),
+        )
+    }
 }
 
 private fun updateLayers(style: Style, ui: MapUiState) {
@@ -1019,6 +1467,81 @@ private fun updateLayers(style: Style, ui: MapUiState) {
     style.getSourceAs<GeoJsonSource>(WAYPOINT_SOURCE)?.setGeoJson(
         if (ui.showWaypoints) FeatureCollection.fromFeatures(ui.waypoints.map { it.toFeature() }) else emptyFeatureCollection(),
     )
+}
+
+private fun updateMarkerLayers(style: Style, markers: List<MarkerVisual>) {
+    val pointFeatures = mutableListOf<Feature>()
+    val routeFeatures = mutableListOf<Feature>()
+    val areaFeatures = mutableListOf<Feature>()
+    for (m in markers) {
+        val colorHex = "#%06X".format(m.colorRgb and 0xFFFFFF)
+        when (m.type) {
+            MarkerType.MARKER_TYPE_POINT,
+            MarkerType.MARKER_TYPE_NOTE,
+            MarkerType.MARKER_TYPE_OBJECTIVE -> {
+                val p = m.points.firstOrNull() ?: continue
+                pointFeatures += Feature.fromGeometry(Point.fromLngLat(p.second, p.first)).apply {
+                    addStringProperty("label", m.label)
+                    addStringProperty("markerColor", colorHex)
+                    addStringProperty("markerId", m.markerId.toString())
+                }
+            }
+            MarkerType.MARKER_TYPE_ROUTE -> {
+                if (m.points.size < 2) continue
+                routeFeatures += Feature.fromGeometry(
+                    LineString.fromLngLats(m.points.map { Point.fromLngLat(it.second, it.first) }),
+                ).apply {
+                    addStringProperty("label", m.label)
+                    addStringProperty("markerColor", colorHex)
+                    addStringProperty("markerId", m.markerId.toString())
+                }
+            }
+            MarkerType.MARKER_TYPE_AREA -> {
+                if (m.points.size < 3) continue
+                val ring = (m.points + m.points.first()).map { Point.fromLngLat(it.second, it.first) }
+                areaFeatures += Feature.fromGeometry(Polygon.fromLngLats(listOf(ring))).apply {
+                    addStringProperty("label", m.label)
+                    addStringProperty("markerColor", colorHex)
+                    addStringProperty("markerId", m.markerId.toString())
+                }
+            }
+            else -> {}
+        }
+    }
+    style.getSourceAs<GeoJsonSource>(MARKER_POINT_SOURCE)
+        ?.setGeoJson(FeatureCollection.fromFeatures(pointFeatures))
+    style.getSourceAs<GeoJsonSource>(MARKER_ROUTE_SOURCE)
+        ?.setGeoJson(FeatureCollection.fromFeatures(routeFeatures))
+    style.getSourceAs<GeoJsonSource>(MARKER_AREA_SOURCE)
+        ?.setGeoJson(FeatureCollection.fromFeatures(areaFeatures))
+}
+
+private fun updateDraftLayer(style: Style, drawing: DrawingState) {
+    val source = style.getSourceAs<GeoJsonSource>(DRAFT_SOURCE) ?: return
+    if (drawing !is DrawingState.Active || drawing.points.isEmpty()) {
+        source.setGeoJson(emptyFeatureCollection())
+        return
+    }
+    val pts = drawing.points.map { Point.fromLngLat(it.second, it.first) }
+    val features = mutableListOf<Feature>()
+    when (drawing.tool) {
+        MarkerTool.POINT, MarkerTool.NOTE, MarkerTool.OBJECTIVE -> {
+            pts.forEach { features += Feature.fromGeometry(it) }
+        }
+        MarkerTool.ROUTE -> {
+            pts.forEach { features += Feature.fromGeometry(it) }
+            if (pts.size >= 2) features += Feature.fromGeometry(LineString.fromLngLats(pts))
+        }
+        MarkerTool.AREA -> {
+            pts.forEach { features += Feature.fromGeometry(it) }
+            if (pts.size >= 2) features += Feature.fromGeometry(LineString.fromLngLats(pts))
+            if (pts.size >= 3) {
+                val ring = pts + pts.first()
+                features += Feature.fromGeometry(Polygon.fromLngLats(listOf(ring)))
+            }
+        }
+    }
+    source.setGeoJson(FeatureCollection.fromFeatures(features))
 }
 
 private fun updateMissionOverlay(style: Style, overlay: MissionOverlay?) {
@@ -1263,6 +1786,17 @@ private const val WAYPOINT_LABEL_LAYER = "waypoint-label-layer"
 private const val TILE_SELECTION_SOURCE = "tile-selection-source"
 private const val TILE_SELECTION_FILL_LAYER = "tile-selection-fill-layer"
 private const val TILE_SELECTION_LINE_LAYER = "tile-selection-line-layer"
+private const val MARKER_AREA_SOURCE = "marker-area-source"
+private const val MARKER_AREA_FILL_LAYER = "marker-area-fill-layer"
+private const val MARKER_AREA_LINE_LAYER = "marker-area-line-layer"
+private const val MARKER_ROUTE_SOURCE = "marker-route-source"
+private const val MARKER_ROUTE_LINE_LAYER = "marker-route-line-layer"
+private const val MARKER_POINT_SOURCE = "marker-point-source"
+private const val MARKER_POINT_LAYER = "marker-point-layer"
+private const val DRAFT_SOURCE = "draft-marker-source"
+private const val DRAFT_POINT_LAYER = "draft-marker-point-layer"
+private const val DRAFT_LINE_LAYER = "draft-marker-line-layer"
+private const val DRAFT_FILL_LAYER = "draft-marker-fill-layer"
 private const val MAX_TILES_PER_DOWNLOAD = 15_000
 private const val NUDGE_PX = 2f
 private const val MISSION_OVERLAY_IMAGE_MIME = "image/*"

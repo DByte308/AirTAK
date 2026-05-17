@@ -55,7 +55,7 @@ import androidx.navigation.compose.rememberNavController
 import com.airtak.R
 import com.airtak.ui.components.LinkChip
 import com.airtak.ui.components.MetricTile
-import com.airtak.ui.game.GameScreen
+// (legacy GameScreen import retired — Markers tab now lives in com.airtak.ui.markers.MarkersScreen)
 import com.airtak.ui.map.MapScreen
 import com.airtak.ui.messages.MessagesScreen
 import com.airtak.ui.pairing.PairingScreen
@@ -79,6 +79,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
     val currentRoute = backStack?.destination?.route
     val pendingDmNodeId by viewModel.pendingDmNodeId.collectAsState()
     val pendingLocateNodeId by viewModel.pendingLocateNodeId.collectAsState()
+    val pendingLocateMarkerId by viewModel.pendingLocateMarkerId.collectAsState()
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -125,12 +126,18 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
                         onDmOpened = viewModel::clearDmTarget,
                         pendingLocateNodeId = pendingLocateNodeId,
                         onLocateConsumed = viewModel::clearLocateTarget,
+                        pendingLocateMarkerId = pendingLocateMarkerId,
+                        onLocateMarkerConsumed = viewModel::clearLocateMarker,
                         onMessagePlayer = { nodeId ->
                             viewModel.setDmTarget(nodeId)
                             navController.navigateTopLevel(Destination.Messages.route)
                         },
                         onLocatePlayer = { nodeId ->
                             viewModel.setLocateTarget(nodeId)
+                            navController.navigateTopLevel(Destination.Map.route)
+                        },
+                        onLocateMarker = { markerId ->
+                            viewModel.setLocateMarker(markerId)
                             navController.navigateTopLevel(Destination.Map.route)
                         },
                     )
@@ -166,12 +173,18 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
                     onDmOpened = viewModel::clearDmTarget,
                     pendingLocateNodeId = pendingLocateNodeId,
                     onLocateConsumed = viewModel::clearLocateTarget,
+                    pendingLocateMarkerId = pendingLocateMarkerId,
+                    onLocateMarkerConsumed = viewModel::clearLocateMarker,
                     onMessagePlayer = { nodeId ->
                         viewModel.setDmTarget(nodeId)
                         navController.navigateTopLevel(Destination.Messages.route)
                     },
                     onLocatePlayer = { nodeId ->
                         viewModel.setLocateTarget(nodeId)
+                        navController.navigateTopLevel(Destination.Map.route)
+                    },
+                    onLocateMarker = { markerId ->
+                        viewModel.setLocateMarker(markerId)
                         navController.navigateTopLevel(Destination.Map.route)
                     },
                 )
@@ -306,14 +319,19 @@ private fun AppNavHost(
     onDmOpened: () -> Unit,
     pendingLocateNodeId: Long?,
     onLocateConsumed: () -> Unit,
+    pendingLocateMarkerId: Long?,
+    onLocateMarkerConsumed: () -> Unit,
     onMessagePlayer: (Long) -> Unit,
     onLocatePlayer: (Long) -> Unit,
+    onLocateMarker: (Long) -> Unit,
 ) {
     NavHost(navController = navController, startDestination = Destination.Map.route) {
         composable(Destination.Map.route)      {
             MapScreen(
                 focusNodeId = pendingLocateNodeId,
                 onFocusConsumed = onLocateConsumed,
+                focusMarkerId = pendingLocateMarkerId,
+                onMarkerFocusConsumed = onLocateMarkerConsumed,
             )
         }
         composable(Destination.Messages.route) {
@@ -323,7 +341,7 @@ private fun AppNavHost(
             )
         }
         composable(Destination.Players.route)  { PlayersScreen(onMessagePlayer = onMessagePlayer, onLocatePlayer = onLocatePlayer) }
-        composable(Destination.Game.route)     { GameScreen() }
+        composable(Destination.Game.route)     { com.airtak.ui.markers.MarkersScreen(onLocateMarker = onLocateMarker) }
         composable(Destination.Settings.route) { SettingsScreen() }
         composable("pair")                     { PairingScreen(onDone = { navController.popBackStack() }) }
     }

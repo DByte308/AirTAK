@@ -6,7 +6,9 @@ import android.content.Context
 import androidx.room.Room
 import com.airtak.data.db.AppDatabase
 import com.airtak.data.db.MessageDao
+import com.airtak.data.db.ModerationVoteDao
 import com.airtak.data.db.RemoteNodeDao
+import com.airtak.data.db.TacticalMarkerDao
 import com.airtak.data.db.WaypointDao
 import dagger.Module
 import dagger.Provides
@@ -36,4 +38,10 @@ object AppModule {
 
     @Provides
     fun provideWaypointDao(db: AppDatabase): WaypointDao = db.waypointDao()
+
+    @Provides
+    fun provideTacticalMarkerDao(db: AppDatabase): TacticalMarkerDao = db.tacticalMarkerDao()
+
+    @Provides
+    fun provideModerationVoteDao(db: AppDatabase): ModerationVoteDao = db.moderationVoteDao()
 }

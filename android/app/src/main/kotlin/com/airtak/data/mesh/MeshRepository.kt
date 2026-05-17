@@ -23,6 +23,7 @@ import com.airtak.proto.ChannelSlot
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.PlayerStatePacket
 import com.airtak.proto.PositionRequestPacket
+import com.airtak.proto.TacticalMarker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -214,6 +215,32 @@ class MeshRepository @Inject constructor(
         return SendResult.Ok
     }
 
+    /**
+     * Broadcast a tactical marker (create / update / delete tombstone).
+     * ACKNOWLEDGED delivery (§5.3, §8.9). [channelSlot] selects which channel
+     * slot the firmware should encrypt with — typically slot 1 (AirTAK-wide
+     * tactical) for SCOPE_ALL markers, or the unit-bound slot for scoped ones.
+     * Pass `null` to fall back to the primary slot.
+     */
+    fun sendTacticalMarker(marker: TacticalMarker, channelSlot: Int? = null): SendResult {
+        val payload = marker.toByteArray()
+        if (payload.size > MAX_MARKER_BYTES) return SendResult.TooLong(payload.size)
+        val requestId = (System.nanoTime() and 0x7FFF_FFFFL) or 1L
+        val dataProto = MeshWire.encodeData(
+            portnum = Portnum.AIRTAK_TACTICAL,
+            payload = payload,
+            wantResponse = true,
+            requestId = requestId,
+        )
+        val data = if (channelSlot != null && channelSlot in 0..7) {
+            byteArrayOf((channelSlot and 0x07).toByte()) + dataProto
+        } else {
+            dataProto
+        }
+        ble.send(BleRepository.OutboundChannel.MeshTx, data)
+        return SendResult.Ok
+    }
+
     fun requestPosition(targetNodeId: Long, requesterNodeId: Long): SendResult {
         val request = PositionRequestPacket.newBuilder()
             .setTargetNodeId((targetNodeId and 0xFFFF_FFFFL).toInt())
@@ -256,6 +283,9 @@ class MeshRepository @Inject constructor(
 
     companion object {
         const val MAX_TEXT_BYTES = 237
+        /** Conservative upper bound for a TacticalMarker proto body. The 237-byte
+         *  LoRa payload (§11.6) minus the small Data envelope overhead. */
+        const val MAX_MARKER_BYTES = 220
         const val MESSAGE_WINDOW = 1_000
         /** Synthetic channelIndex value used internally for DM rows; never shown as a tab index. */
         const val DM_CHANNEL_INDEX = -1

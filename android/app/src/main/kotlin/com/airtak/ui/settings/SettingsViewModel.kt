@@ -278,6 +278,61 @@ class SettingsViewModel @Inject constructor(
         config.sendAdmin(req.toByteArray())
     }
 
+    /**
+     * Prepare a new unit-scoped channel slot for the given unit level
+     * ("fireteam" / "squad" / "platoon" / "company"). Picks the first
+     * DISABLED slot with index ≥ 3 (slots 0/1 are global, slot 2 is reserved
+     * for audio), enables it as SECONDARY with [suggestedName], binds it to
+     * this unit level, and returns the slot index. Returns null if all
+     * tactical slots are already in use.
+     *
+     * The change is staged in the editor state only — the user must press
+     * Apply on the Channels section to push it to the device, and provide a
+     * PSK (the slot is created without one so it is visible as "open" until
+     * the user enters a shared password).
+     */
+    fun prepareUnitChannel(level: String, suggestedName: String): Int? {
+        val current = _channels.value
+        val slots = current.slots
+        val target = slots.firstOrNull { editor ->
+            editor.slot.index >= MIN_UNIT_SLOT_INDEX &&
+            editor.slot.role == ChannelRole.DISABLED
+        } ?: return null
+        val targetIdx = target.slot.index
+        val name = suggestedName.take(16).ifBlank { "Slot ${target.slot.index}" }
+        _channels.value = current.copy(
+            slots = slots.map { editor ->
+                if (editor.slot.index == targetIdx) {
+                    editor.copy(
+                        slot = editor.slot.toBuilder()
+                            .setName(name)
+                            .setRole(ChannelRole.SECONDARY)
+                            .setUplinkEnabled(true)
+                            .setDownlinkEnabled(true)
+                            .build(),
+                    )
+                } else editor
+            },
+        )
+        val newGame = _game.value.let { s ->
+            when (level) {
+                "fireteam" -> s.copy(fireteamChannelSlot = targetIdx)
+                "squad"    -> s.copy(squadChannelSlot = targetIdx)
+                "platoon"  -> s.copy(platoonChannelSlot = targetIdx)
+                "company"  -> s.copy(companyChannelSlot = targetIdx)
+                else -> s
+            }
+        }
+        _game.value = newGame
+        prefs.setUnitChannelSlot(level, targetIdx)
+        return targetIdx
+    }
+
+    private companion object {
+        /** Slots 0 and 1 are global (mesh/AirTAK-wide). Slot 2 is reserved for PTT audio. */
+        const val MIN_UNIT_SLOT_INDEX = 3
+    }
+
     private val _themeMode = MutableStateFlow(prefs.themeMode())
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
     fun setThemeMode(mode: ThemeMode) { prefs.setThemeMode(mode); _themeMode.value = mode }

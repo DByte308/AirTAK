@@ -6,7 +6,7 @@
     <string name="nav_map">Map</string>
     <string name="nav_messages">Net</string>
     <string name="nav_players">Roster</string>
-    <string name="nav_game">Mission</string>
+    <string name="nav_game">Markers</string>
     <string name="nav_settings">Config</string>
 
     <!-- Link / Status -->

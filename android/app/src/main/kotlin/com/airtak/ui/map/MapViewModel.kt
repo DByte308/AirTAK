@@ -7,10 +7,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.airtak.data.config.ConfigRepository
 import com.airtak.data.db.RemoteNodeEntity
+import com.airtak.data.db.TacticalMarkerEntity
 import com.airtak.data.db.WaypointDao
 import com.airtak.data.db.WaypointEntity
 import com.airtak.data.geocoding.GeocodingRepository
 import com.airtak.data.geocoding.GeocodingResult
+import com.airtak.data.marker.TacticalMarkerRepository
 import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.mesh.RemoteNodeRepository
 import com.airtak.data.overlays.MissionOverlay
@@ -24,7 +26,10 @@ import com.airtak.data.tiles.TileDownloadState
 import com.airtak.data.tiles.TileRepository
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.GameConfig
+import com.airtak.proto.MarkerType
 import com.airtak.proto.PlayerStatus
+import com.airtak.proto.Scope
+import com.airtak.proto.TeamControl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -59,6 +64,36 @@ data class MapWaypoint(
     val longitude: Double,
 )
 
+/** Drawing tool currently active on the map toolbar. */
+enum class MarkerTool(val proto: MarkerType, val displayLabel: String, val minPoints: Int, val maxPoints: Int) {
+    POINT(MarkerType.MARKER_TYPE_POINT, "Point", 1, 1),
+    NOTE(MarkerType.MARKER_TYPE_NOTE, "Note", 1, 1),
+    OBJECTIVE(MarkerType.MARKER_TYPE_OBJECTIVE, "Objective", 1, 1),
+    ROUTE(MarkerType.MARKER_TYPE_ROUTE, "Route", 2, 12),
+    AREA(MarkerType.MARKER_TYPE_AREA, "Area", 3, 12),
+}
+
+sealed interface DrawingState {
+    data object Idle : DrawingState
+    data class Active(val tool: MarkerTool, val points: List<Pair<Double, Double>>) : DrawingState
+}
+
+/** Lightweight view of a tactical marker for map rendering. */
+data class MarkerVisual(
+    val markerId: Long,
+    val type: MarkerType,
+    val label: String,
+    val description: String,
+    val colorRgb: Int,
+    val scope: Scope,
+    val creatorNodeId: Long,
+    val ownedLocally: Boolean,
+    val controllingTeam: TeamControl,
+    val priority: Int,
+    val points: List<Pair<Double, Double>>,
+    val updatedAtUnix: Long,
+)
+
 data class MapUiState(
     val ownPosition: OwnPosition? = null,
     val nodes: List<MapNode> = emptyList(),
@@ -83,6 +118,8 @@ class MapViewModel @Inject constructor(
     private val missionOverlayRepository: MissionOverlayRepository,
     private val config: ConfigRepository,
     private val geocodingRepository: GeocodingRepository,
+    private val markerRepo: TacticalMarkerRepository,
+    private val gameRepo: com.airtak.data.game.GameRepository,
 ) : ViewModel() {
     private val showPlayers = MutableStateFlow(true)
     private val showWaypoints = MutableStateFlow(true)
@@ -195,6 +232,87 @@ class MapViewModel @Inject constructor(
         mesh.requestPosition(nodeId, ownNodeId)
     }
 
+    // ── Tactical markers ──────────────────────────────────────────────────────
+
+    val markers: StateFlow<List<MarkerVisual>> = markerRepo.visibleMarkers
+        .map { list -> list.map { it.toVisual() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _drawing = MutableStateFlow<DrawingState>(DrawingState.Idle)
+    val drawing: StateFlow<DrawingState> = _drawing
+
+    fun startDrawing(tool: MarkerTool) {
+        _drawing.value = DrawingState.Active(tool, emptyList())
+    }
+
+    fun cancelDrawing() {
+        _drawing.value = DrawingState.Idle
+    }
+
+    fun addDrawingPoint(latitude: Double, longitude: Double) {
+        val state = _drawing.value as? DrawingState.Active ?: return
+        if (state.points.size >= state.tool.maxPoints) return
+        _drawing.value = state.copy(points = state.points + (latitude to longitude))
+    }
+
+    fun removeLastDrawingPoint() {
+        val state = _drawing.value as? DrawingState.Active ?: return
+        if (state.points.isEmpty()) return
+        _drawing.value = state.copy(points = state.points.dropLast(1))
+    }
+
+    /** True when the current drawing has enough points to commit. */
+    fun canCommitDrawing(): Boolean {
+        val state = _drawing.value as? DrawingState.Active ?: return false
+        return state.points.size in state.tool.minPoints..state.tool.maxPoints
+    }
+
+    fun commitDrawing(
+        label: String,
+        description: String,
+        colorRgb: Int,
+        scopeKind: Scope,
+        controllingTeam: TeamControl = TeamControl.TEAM_CONTROL_UNKNOWN,
+        priority: Int = 0,
+    ) {
+        val state = _drawing.value as? DrawingState.Active ?: return
+        if (state.points.size !in state.tool.minPoints..state.tool.maxPoints) return
+        val safeLabel = label.trim().take(TacticalMarkerRepository.MAX_LABEL_LEN).ifBlank { state.tool.displayLabel }
+        val safeDesc = description.trim().take(TacticalMarkerRepository.MAX_DESC_LEN)
+        viewModelScope.launch {
+            markerRepo.createMarker(
+                type = state.tool.proto,
+                label = safeLabel,
+                description = safeDesc,
+                colorRgb = colorRgb and 0xFFFFFF,
+                scopeKind = scopeKind,
+                points = state.points,
+                controllingTeam = controllingTeam,
+                priority = priority,
+            )
+            _drawing.value = DrawingState.Idle
+        }
+    }
+
+    fun deleteMarker(markerId: Long) {
+        viewModelScope.launch { markerRepo.deleteMarker(markerId) }
+    }
+
+    private fun TacticalMarkerEntity.toVisual(): MarkerVisual = MarkerVisual(
+        markerId = markerId,
+        type = MarkerType.forNumber(typeValue) ?: MarkerType.MARKER_TYPE_POINT,
+        label = label,
+        description = description,
+        colorRgb = colorRgb,
+        scope = Scope.forNumber(scopeValue) ?: Scope.SCOPE_ALL,
+        creatorNodeId = creatorNodeId,
+        ownedLocally = ownedLocally,
+        controllingTeam = TeamControl.forNumber(controllingTeamValue) ?: TeamControl.TEAM_CONTROL_UNKNOWN,
+        priority = priority,
+        points = points(),
+        updatedAtUnix = updatedAtUnix,
+    )
+
     /**
      * Emits the lat/lng to fly to. Callers set this via [focusNode]; cleared after the map
      * consumes it via [clearFocus].
@@ -214,6 +332,18 @@ class MapViewModel @Inject constructor(
     }
 
     fun clearFocus() { _focusTarget.value = null }
+
+    fun focusMarker(markerId: Long) {
+        val m = markers.value.firstOrNull { it.markerId == markerId } ?: return
+        val first = m.points.firstOrNull() ?: return
+        _focusTarget.value = OwnPosition(first.first, first.second)
+    }
+
+    // --- Game Active/Ended toggle (§5.8) ---
+    val gameActive: StateFlow<Boolean> =
+        gameRepo.state.map { it.active }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setGameActive(active: Boolean) { gameRepo.setActive(active) }
 
     // --- Location search ---
 

@@ -29,4 +29,10 @@ class AppShellViewModel @Inject constructor(
 
     fun setLocateTarget(nodeId: Long) { _pendingLocateNodeId.value = nodeId }
     fun clearLocateTarget() { _pendingLocateNodeId.value = null }
+
+    private val _pendingLocateMarkerId = MutableStateFlow<Long?>(null)
+    val pendingLocateMarkerId = _pendingLocateMarkerId.asStateFlow()
+
+    fun setLocateMarker(markerId: Long) { _pendingLocateMarkerId.value = markerId }
+    fun clearLocateMarker() { _pendingLocateMarkerId.value = null }
 }
