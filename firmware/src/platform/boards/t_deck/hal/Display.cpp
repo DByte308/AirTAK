@@ -55,6 +55,7 @@ static TFT_eSPI s_tft;
 static ScreenId  s_current_screen  = ScreenId::MAIN;
 static uint16_t  s_dirty_mask      = DISPLAY_DIRTY_ALL;
 static uint32_t  s_last_refresh_ms = 0;
+static bool       s_bl_asleep       = false;
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
@@ -238,10 +239,41 @@ static void renderRadioScreen() {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+// Backlight state for pulse-train protocol
+static uint8_t  s_bl_level = 0;
+static constexpr uint8_t BL_STEPS = 16;
+
+// LilyGo T-Deck backlight chip counts LOW→HIGH edges on GPIO 42.
+// Each edge increments an internal counter; the brightness is the counter value.
+// 0 = off, 16 = max.  To turn off, hold the pin LOW.
+static void applyBacklight(uint8_t target) {
+    if (target > BL_STEPS) target = BL_STEPS;
+    if (target == 0) {
+        digitalWrite(AIRTAK_PIN_TFT_BL, LOW);
+        delay(3);                              // backlight chip needs ms-level hold
+        s_bl_level = 0;
+        return;
+    }
+    if (s_bl_level == 0) {
+        digitalWrite(AIRTAK_PIN_TFT_BL, HIGH);
+        s_bl_level = BL_STEPS;
+        delayMicroseconds(30);
+    }
+    int from = BL_STEPS - s_bl_level;
+    int to   = BL_STEPS - target;
+    int num  = (BL_STEPS + to - from) % BL_STEPS;
+    for (int i = 0; i < num; i++) {
+        digitalWrite(AIRTAK_PIN_TFT_BL, LOW);
+        digitalWrite(AIRTAK_PIN_TFT_BL, HIGH);
+    }
+    s_bl_level = target;
+}
+
 void Display::init() {
-    // Backlight on
     pinMode(AIRTAK_PIN_TFT_BL, OUTPUT);
     digitalWrite(AIRTAK_PIN_TFT_BL, HIGH);
+    delayMicroseconds(30);
+    s_bl_level = BL_STEPS;
 
     s_tft.init();
     s_tft.setRotation(1);   // landscape: 320 wide, 240 tall
@@ -333,5 +365,28 @@ ui::ScreenId Display::currentScreen()    { return s_current_screen; }
 void Display::markDirty(uint16_t mask)   { s_dirty_mask |= mask; }
 void Display::clearDirty()               { s_dirty_mask = 0; }
 void Display::forceRefresh()             { s_dirty_mask = DISPLAY_DIRTY_ALL; s_last_refresh_ms = 0; }
+
+void Display::setBrightness(uint8_t pct) {
+    if (pct > 100) pct = 100;
+    uint8_t level = (uint8_t)(((uint16_t)pct * BL_STEPS + 50) / 100);
+    if (level == 0) level = 1;
+    if (!s_bl_asleep) applyBacklight(level);  // don't wake backlight while display is asleep
+}
+
+void Display::sleep() {
+    s_bl_asleep = true;
+    applyBacklight(0);
+    s_tft.writecommand(0x10);
+}
+
+void Display::wake() {
+    s_bl_asleep = false;
+    s_tft.writecommand(0x11);
+    delay(20);
+    uint8_t pct = config::ConfigManager::powerBrightnessPct();
+    uint8_t level = (uint8_t)(((uint16_t)pct * BL_STEPS + 50) / 100);
+    if (level == 0) level = 1;
+    applyBacklight(level);
+}
 
 } // namespace airtak

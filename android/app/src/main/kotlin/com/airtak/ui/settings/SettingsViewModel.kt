@@ -74,7 +74,7 @@ class SettingsViewModel @Inject constructor(
         val smartBroadcast: Boolean = true,
         val gpsSource: GpsSource = GpsSource.DEVICE_GPS,
     )
-    data class PowerState(val gpsDutyCycle: Boolean = false, val displayOffSecs: Int = 0)
+    data class PowerState(val gpsDutyCycle: Boolean = false, val displayOffSecs: Int = 0, val brightnessPct: Int = 100)
     data class GameState(
         val callsign: String = "",
         val fireteamId: String = "",
@@ -124,7 +124,7 @@ class SettingsViewModel @Inject constructor(
                     _position.value = PositionState(it.broadcastIntervalSecs, it.minTxIntervalSecs, it.smartBroadcast, it.gpsSource)
                 }
                 map[ConfigGroup.POWER]?.let { b -> tryDecode { PowerConfig.parseFrom(b) } }?.let {
-                    _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs)
+                    _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs, it.brightnessPct)
                 }
                 map[ConfigGroup.GAME]?.let { b -> tryDecode { GameConfig.parseFrom(b) } }?.let {
                     _game.value = GameState(
@@ -258,7 +258,9 @@ class SettingsViewModel @Inject constructor(
     fun applyPower() {
         val s = _power.value
         val msg = PowerConfig.newBuilder()
-            .setGpsDutyCycle(s.gpsDutyCycle).setDisplayOffSecs(s.displayOffSecs).build()
+            .setGpsDutyCycle(s.gpsDutyCycle)
+            .setDisplayOffSecs(s.displayOffSecs)
+            .setBrightnessPct(s.brightnessPct).build()
         config.apply(ConfigGroup.POWER, msg.toByteArray())
     }
     fun applyGame() {

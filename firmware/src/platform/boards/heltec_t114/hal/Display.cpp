@@ -236,9 +236,9 @@ void Display::init() {
     pinMode(AIRTAK_PIN_ADC_CTRL, OUTPUT);
     digitalWrite(AIRTAK_PIN_ADC_CTRL, HIGH);
 
-    // Backlight on.
+    // Backlight: PWM-capable GPIO for brightness control
     pinMode(AIRTAK_PIN_TFT_BL, OUTPUT);
-    digitalWrite(AIRTAK_PIN_TFT_BL, HIGH);
+    analogWrite(AIRTAK_PIN_TFT_BL, 255);    // full brightness initially
 
     // Initialize SPI1 for the ST7789 display (separate from radio SPI0).
     s_tft_spi.begin();
@@ -334,5 +334,21 @@ ui::ScreenId Display::currentScreen()    { return s_current_screen; }
 void Display::markDirty(uint16_t mask)   { s_dirty_mask |= mask; }
 void Display::clearDirty()               { s_dirty_mask = 0; }
 void Display::forceRefresh()             { s_dirty_mask = DISPLAY_DIRTY_ALL; s_last_refresh_ms = 0; }
+
+void Display::setBrightness(uint8_t pct) {
+    if (pct > 100) pct = 100;
+    uint16_t duty = (uint16_t)pct * 255 / 100;
+    analogWrite(AIRTAK_PIN_TFT_BL, duty);
+}
+
+void Display::sleep() {
+    analogWrite(AIRTAK_PIN_TFT_BL, 0);     // backlight off
+    // TFT wake-on-touch; no explicit sleep command on ST7789
+}
+
+void Display::wake() {
+    uint8_t pct = config::ConfigManager::powerBrightnessPct();
+    setBrightness(pct);
+}
 
 } // namespace airtak

@@ -76,56 +76,32 @@ void Touch::init() {
     }
 
     if (!s_i2c_addr) {
-        Serial.println("Touch: no controller at 0x5D/0x14/0x15");
         return;
     }
-    Serial.printf("Touch: found at 0x%02X\n", s_i2c_addr);
 
     if (s_i2c_addr == 0x5D || s_i2c_addr == 0x14) {
-        // Read config version
-        uint8_t cfg_ver = gt911ReadReg(s_i2c_addr, 0x8047);
-        Serial.printf("Touch: cfg_ver=0x%02X\n", cfg_ver);
-
-        // Full reset sequence: clear -> reset -> init -> start scan
         gt911WriteReg(s_i2c_addr, GT911_CMD, 0x00); // ensure idle
         delay(10);
         gt911WriteReg(s_i2c_addr, GT911_CMD, 0x02); // soft reset
         delay(200);
-
-        // Read and optionally fix MOD_SW1
         uint8_t sw1 = gt911ReadReg(s_i2c_addr, GT911_MOD_SW1);
-        Serial.printf("Touch: MOD_SW1=0x%02X\n", sw1);
-        // Check if refresh rate bits look sane, otherwise set known-good value
         if ((sw1 & 0x0F) == 0 || sw1 == 0xFF) {
             sw1 = (sw1 & 0xF0) | 0x03;
         }
         gt911WriteReg(s_i2c_addr, GT911_MOD_SW1, sw1);
         delay(50);
-
-        // Clear any stale touch data
         uint8_t dummy[40];
         gt911ReadBuf(s_i2c_addr, GT911_TOUCH_INFO, dummy, 40);
         gt911WriteReg(s_i2c_addr, GT911_TOUCH_INFO, 0x00);
         delay(10);
-
-        // Start scan
         gt911WriteReg(s_i2c_addr, GT911_CMD, 0x00);
         delay(50);
-
-        Serial.println("Touch: GT911 init done");
     }
 
     s_initialized = true;
 }
 
 TouchGesture Touch::poll() {
-    static uint32_t last_diag = 0;
-    if (millis() - last_diag > 5000) {
-        Serial.printf("Touch: s_init=%d s_addr=0x%02X s_count=%d\n",
-                      s_initialized, s_i2c_addr, s_count);
-        last_diag = millis();
-    }
-
     if (!s_initialized) {
         init();
         if (!s_initialized) return TouchGesture::NONE;
@@ -146,26 +122,13 @@ TouchGesture Touch::poll() {
 
         uint8_t points = buf[0] & 0x0F;
         s_count = (points > 0) ? 1 : 0;
-        if (points == 0) {
-            static uint32_t last_zero = 0;
-            if (millis() - last_zero > 5000) {
-                Serial.printf("Touch: raw[0]=0x%02X pts=%d buf=",
-                              buf[0], points);
-                for (int i = 1; i <= 8; i++)
-                    Serial.printf("%02X ", buf[i]);
-                Serial.println();
-                last_zero = millis();
-            }
-        }
         if (points > 0) {
-            // GT911 point format: buf[1]=track_id, buf[2..3]=X_le, buf[4..5]=Y_le
             uint16_t rx = (uint16_t)buf[2] | ((uint16_t)buf[3] << 8);
             uint16_t ry = (uint16_t)buf[4] | ((uint16_t)buf[5] << 8);
             s_touch_raw_x = rx;
             s_touch_raw_y = ry;
             x = (uint32_t)rx * 320 / 4096;
             y = (uint32_t)ry * 240 / 4096;
-            Serial.printf("Touch: raw x=%u y=%u -> %u,%u\n", rx, ry, x, y);
             // Swap XY and mirror Y per LilyGo factory calibration
             uint16_t swp = x;
             x = y;

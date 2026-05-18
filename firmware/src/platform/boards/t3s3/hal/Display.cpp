@@ -290,5 +290,8 @@ ui::ScreenId Display::currentScreen()    { return s_current_screen; }
 void Display::markDirty(uint16_t mask)   { s_dirty_mask |= mask; }
 void Display::clearDirty()               { s_dirty_mask = 0; }
 void Display::forceRefresh()             { s_dirty_mask = DISPLAY_DIRTY_ALL; s_last_refresh_ms = 0; }
+void Display::setBrightness(uint8_t)      {}   // OLED: contrast fixed
+void Display::sleep()                     {}   // OLED: auto-off handled by task
+void Display::wake()                      {}
 
 } // namespace airtak

@@ -182,8 +182,8 @@ class ConfigRwCallbacks : public NimBLECharacteristicCallbacks {
         }
 
         enqueueConfigAck(request.group, result == 0, false,
-                         millis() - s_config_apply_started_ms,
-                         result == 0 ? nullptr : configErrorForResult(result));
+                          millis() - s_config_apply_started_ms,
+                          result == 0 ? nullptr : configErrorForResult(result));
     }
 };
 

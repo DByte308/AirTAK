@@ -166,6 +166,7 @@ static size_t encodePowerConfig(uint8_t* buf, size_t buf_len) {
     msg.gps_on_secs = defaults::POWER_GPS_ON_SECS;
     msg.gps_off_secs = defaults::POWER_GPS_OFF_SECS;
     msg.display_off_secs = defaults::POWER_DISPLAY_OFF_SECS;
+    msg.brightness_pct = defaults::POWER_BRIGHTNESS_PCT;
     return encodeMessage(airtak_PowerConfig_fields, &msg, buf, buf_len);
 }
 
@@ -463,6 +464,47 @@ const char* ConfigManager::gameCallsign() {
         }
     }
     return defaults::GAME_CALLSIGN;
+}
+
+uint32_t ConfigManager::powerDisplayOffSecs() {
+    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::POWER);
+    const uint8_t* buf = s_buffers[gidx];
+    size_t n = s_sizes[gidx];
+    size_t pos = 0;
+    while (pos < n) {
+        uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
+        uint8_t wire = tag & 7;
+        uint32_t field = tag >> 3;
+        if (wire == 0) {
+            uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
+            if (field == 4) return v;  // display_off_secs = field 4
+        } else {
+            if (!skipProtoField(buf, n, pos, wire)) break;
+        }
+    }
+    return defaults::POWER_DISPLAY_OFF_SECS;
+}
+
+uint8_t ConfigManager::powerBrightnessPct() {
+    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::POWER);
+    const uint8_t* buf = s_buffers[gidx];
+    size_t n = s_sizes[gidx];
+    size_t pos = 0;
+    while (pos < n) {
+        uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
+        uint8_t wire = tag & 7;
+        uint32_t field = tag >> 3;
+        if (wire == 0) {
+            uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
+            if (field == 5) {  // brightness_pct = field 5
+                if (v > 100) v = 100;
+                return static_cast<uint8_t>(v);
+            }
+        } else {
+            if (!skipProtoField(buf, n, pos, wire)) break;
+        }
+    }
+    return static_cast<uint8_t>(defaults::POWER_BRIGHTNESS_PCT);
 }
 
 static uint32_t readPositionVarintField(uint32_t wanted_field, uint32_t fallback) {

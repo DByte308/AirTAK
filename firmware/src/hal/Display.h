@@ -51,6 +51,16 @@ public:
 
     // Boot recovery mode screen. Bypasses the normal refresh interval.
     static void showRecoveryMode(bool config_erased, bool bonds_cleared);
+
+    // Set TFT/OLED backlight brightness 0–100. No-op on E-Ink.
+    static void setBrightness(uint8_t pct);
+
+    // Put the display into low-power sleep (backlight off, E-Ink deep sleep).
+    // Display reinitializes on next refresh automatically.
+    static void sleep();
+
+    // Wake the display from sleep.
+    static void wake();
 };
 
 } // namespace airtak

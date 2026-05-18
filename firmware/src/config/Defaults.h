@@ -122,6 +122,7 @@ constexpr bool     POWER_GPS_DUTY_CYCLE    = false;  // disabled until Phase 6
 constexpr uint32_t POWER_GPS_ON_SECS       = 30;
 constexpr uint32_t POWER_GPS_OFF_SECS      = 60;
 constexpr uint32_t POWER_DISPLAY_OFF_SECS  = 0;      // 0 = never off
+constexpr uint32_t POWER_BRIGHTNESS_PCT    = 100;    // 0–100; default full brightness
 
 // ── GameConfig ────────────────────────────────────────────────────────────────
 constexpr const char* GAME_CALLSIGN           = "Player";

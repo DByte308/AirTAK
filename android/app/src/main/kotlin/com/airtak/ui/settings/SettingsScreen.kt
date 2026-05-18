@@ -1095,6 +1095,17 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                         ),
                 modifier = Modifier.fillMaxWidth(),
         )
+        Spacer(Modifier.height(8.dp))
+        Text("Brightness: ${power.brightnessPct}%")
+        Slider(
+                value = power.brightnessPct.toFloat(),
+                onValueChange = { v ->
+                    vm.updatePower { copy(brightnessPct = v.toInt()) }
+                },
+                valueRange = 0f..100f,
+                steps = 19,
+                modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(16.dp))
         val busy = vm.busy.collectAsState().value
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1108,8 +1119,8 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
             ) { Text("Read") }
             Button(
                     onClick = {
-                        vm.applyPosition()
                         vm.applyPower()
+                        vm.applyPosition()
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !busy

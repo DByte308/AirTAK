@@ -64,6 +64,10 @@ public:
     // Falls back to the compile-time default ("Player") if not configured.
     static const char* gameCallsign();
 
+    // ── Power parameter accessors (read from POWER config buffer) ──────
+    static uint32_t powerDisplayOffSecs();
+    static uint8_t  powerBrightnessPct();
+
     // ── Position parameter accessors (read from POSITION config buffer) ─────
     static uint32_t positionBroadcastIntervalSecs();
     static uint32_t positionMinTxIntervalSecs();

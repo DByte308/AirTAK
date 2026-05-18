@@ -141,7 +141,9 @@ void setup() {
         airtak::Display::markDirty(airtak::ui::DISPLAY_DIRTY_ALL);
         if (group == airtak::ConfigGroup::POSITION) {
             uint8_t src = airtak::config::ConfigManager::positionGpsSource();
-            airtak::GPS::setExternalSource(src == 1);  // 1 = PHONE_GPS
+            airtak::GPS::setExternalSource(src == 1);
+        } else if (group == airtak::ConfigGroup::POWER) {
+            airtak::Display::setBrightness(airtak::config::ConfigManager::powerBrightnessPct());
         }
     });
     airtak::ChannelManager::init();
@@ -262,15 +264,32 @@ void task_config_apply(void* params) {
 }
 
 void task_display_refresh(void* params) {
-    // Phase 1.4: E-Ink display bring-up | Phase 9.6: refresh management
     airtak::Display::init();
-    // Render immediately after init so the screen is never blank.
+    airtak::Display::setBrightness(airtak::config::ConfigManager::powerBrightnessPct());
     airtak::Display::refresh(g_system_event_group);
     uint32_t last_refresh_check_ms = millis();
+    uint32_t last_interaction_ms    = millis();
     uint32_t last_player_tick_ms   = 0;
     bool     screen_changed        = false;
+    bool     display_asleep        = false;
     for (;;) {
+        uint32_t now = millis();
+
         airtak::ButtonGesture gesture = airtak::Button::poll();
+        bool interaction = (gesture != airtak::ButtonGesture::NONE);
+
+        airtak::TouchGesture touch = airtak::Touch::poll();
+        if (touch != airtak::TouchGesture::NONE) interaction = true;
+
+        if (interaction) {
+            last_interaction_ms = now;
+            if (display_asleep) {
+                airtak::Display::wake();
+                display_asleep = false;
+            }
+        }
+
+        // Handle gestures
         if (gesture == airtak::ButtonGesture::SHORT_PRESS) {
             if (airtak::PlayerState::isCancellable()) {
                 airtak::PlayerState::cancelHit(g_radio_tx_queue);
@@ -282,7 +301,6 @@ void task_display_refresh(void* params) {
             airtak::PlayerState::toggleHit(g_radio_tx_queue);
         }
 
-        airtak::TouchGesture touch = airtak::Touch::poll();
         if (touch == airtak::TouchGesture::SWIPE_LEFT) {
             airtak::Display::previousScreen();
             screen_changed = true;
@@ -291,7 +309,18 @@ void task_display_refresh(void* params) {
             screen_changed = true;
         }
 
-        uint32_t now = millis();
+        // Display sleep timeout
+        uint32_t off_secs = airtak::config::ConfigManager::powerDisplayOffSecs();
+        if (!display_asleep && off_secs > 0 && (now - last_interaction_ms) >= off_secs * 1000) {
+            airtak::Display::sleep();
+            display_asleep = true;
+        }
+
+        if (display_asleep) {
+            vTaskDelay(pdMS_TO_TICKS(250));
+            continue;
+        }
+
         if (screen_changed) {
             airtak::Display::refresh(g_system_event_group);
             last_refresh_check_ms = now;
@@ -300,9 +329,7 @@ void task_display_refresh(void* params) {
             airtak::Display::refresh(g_system_event_group);
             last_refresh_check_ms = now;
         }
-        // PlayerState HIT-cancel-window expiry relies on a 1-second tick.
-        // The display task loop runs at ~20 Hz (50 ms) which is
-        // more than enough granularity (§12.6).
+
         if ((now - last_player_tick_ms) >= 1000) {
             airtak::PlayerState::tick(g_radio_tx_queue);
             last_player_tick_ms = now;

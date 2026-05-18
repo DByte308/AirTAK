@@ -145,12 +145,13 @@ message PositionConfig {
 
 // ── Power ─────────────────────────────────────────────────────────────────────
 
-// Roadmap: 6.2 | GPS duty cycle for battery life target ≥ 8 h (§7.2, §6.3).
+// Roadmap: 6.2 | GPS duty cycle + display brightness/timeout for battery life.
 message PowerConfig {
   bool   gps_duty_cycle   = 1;   // false until Phase 6
   uint32 gps_on_secs      = 2;
   uint32 gps_off_secs     = 3;
-  uint32 display_off_secs = 4;   // 0 = never off
+  uint32 display_off_secs = 4;   // 0 = never off; seconds of idle before screen sleep
+  uint32 brightness_pct   = 5;   // 0–100; 0=backlight off, 100=max; default 100
 }
 
 // ── Game ──────────────────────────────────────────────────────────────────────
