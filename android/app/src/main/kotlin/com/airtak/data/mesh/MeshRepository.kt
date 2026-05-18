@@ -18,11 +18,13 @@ import com.airtak.data.config.ConfigRepository
 import com.airtak.data.db.MessageDao
 import com.airtak.data.db.MessageEntity
 import com.airtak.data.status.DeviceStatusRepository
+import com.airtak.proto.MarkerSnapshotRequest
 import com.airtak.proto.ModerationPacket
 import com.airtak.proto.ChannelConfig
 import com.airtak.proto.ChannelRole
 import com.airtak.proto.ChannelSlot
 import com.airtak.proto.ConfigGroup
+import com.airtak.proto.OverlayAlignment
 import com.airtak.proto.PlayerStatePacket
 import com.airtak.proto.PositionRequestPacket
 import com.airtak.proto.SyncRequest
@@ -340,6 +342,37 @@ class MeshRepository @Inject constructor(
             sendText(channel = msg.channelIndex, text = text)
             delay(SYNC_SPACING_MS)
         }
+    }
+
+    fun sendOverlayAlignment(alignment: OverlayAlignment): SendResult {
+        val requestId = (System.nanoTime() and 0x7FFF_FFFFL) or 1L
+        val data = MeshWire.encodeData(
+            portnum = Portnum.AIRTAK_OVERLAY_ALIGNMENT,
+            payload = alignment.toByteArray(),
+            wantResponse = true,
+            requestId = requestId,
+        )
+        ble.send(BleRepository.OutboundChannel.MeshTx, data)
+        return SendResult.Ok(requestId)
+    }
+
+    fun requestMarkerSnapshot(targetNodeId: Long): SendResult {
+        val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: 0L
+        if (ownId == 0L || targetNodeId == 0L) return SendResult.Ok(0)
+        val request = MarkerSnapshotRequest.newBuilder()
+            .setTargetNodeId((targetNodeId and 0xFFFF_FFFFL).toInt())
+            .setRequesterNodeId(ownId.toInt())
+            .build()
+        val requestId = (System.nanoTime() and 0x7FFF_FFFFL) or 1L
+        val data = MeshWire.encodeData(
+            portnum = Portnum.AIRTAK_MARKER_SNAPSHOT_REQUEST,
+            payload = request.toByteArray(),
+            wantResponse = true,
+            destNodeId = targetNodeId,
+            requestId = requestId,
+        )
+        ble.send(BleRepository.OutboundChannel.MeshTx, data)
+        return SendResult.Ok(requestId)
     }
 
     companion object {

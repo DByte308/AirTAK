@@ -113,6 +113,8 @@ constexpr uint8_t HOP_LIMIT_AIRTAK_ACK         = 7;  // Fallback: ACK built dyna
 constexpr uint8_t HOP_LIMIT_POSITION_REQUEST = 7;
 constexpr uint8_t HOP_LIMIT_AIRTAK_AUDIO       = 1;  // MUST never relay audio — sole exception (§12.7)
 constexpr uint8_t HOP_LIMIT_AIRTAK_SYNC_REQUEST = 7;  // late-joiner sync request
+constexpr uint8_t HOP_LIMIT_OVERLAY_ALIGNMENT   = 7;  // overlay alignment share
+constexpr uint8_t HOP_LIMIT_MARKER_SNAPSHOT     = 7;  // targeted marker snapshot request
 
 // ── PowerConfig ───────────────────────────────────────────────────────────────
 constexpr bool     POWER_GPS_DUTY_CYCLE    = false;  // disabled until Phase 6

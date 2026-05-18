@@ -30,6 +30,8 @@ enum class Portnum : uint32_t {
     AIRTAK_POSITION_REQUEST = 262,  // PositionRequestPacket; hop_limit=7; BEST_EFFORT
     AIRTAK_AUDIO            = 263,  // AudioPacket; hop_limit=1; BEST_EFFORT; MUST NOT relay
     AIRTAK_SYNC_REQUEST     = 264,  // SyncRequest; hop_limit=7; BEST_EFFORT; late-joiner state sync
+    AIRTAK_OVERLAY_ALIGNMENT = 265, // OverlayAlignment; hop_limit=7; ACKNOWLEDGED
+    AIRTAK_MARKER_SNAPSHOT_REQUEST = 266, // MarkerSnapshotRequest; hop_limit=7; ACKNOWLEDGED
 };
 
 // Returns true if portnum is an AirTAK-defined port number.
@@ -38,7 +40,7 @@ enum class Portnum : uint32_t {
 // and must be treated as standard Meshtastic traffic.
 inline bool isAirTAKPortnum(Portnum p) {
     uint32_t v = static_cast<uint32_t>(p);
-    return v >= 256 && v <= 264;
+    return v >= 256 && v <= 266;
 }
 
 // ACKNOWLEDGED delivery eligibility is defined by Router::isAcknowledgedPortnum

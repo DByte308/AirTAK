@@ -117,6 +117,8 @@ public:
             case Portnum::AIRTAK_PLAYER:
             case Portnum::AIRTAK_TACTICAL:
             case Portnum::AIRTAK_MODERATION:
+            case Portnum::AIRTAK_OVERLAY_ALIGNMENT:
+            case Portnum::AIRTAK_MARKER_SNAPSHOT_REQUEST:
                 return true;
             default:
                 return false;

@@ -4,6 +4,8 @@ package com.airtak.data.overlays
 
 import android.content.Context
 import android.net.Uri
+import com.airtak.data.mesh.MeshRepository
+import com.airtak.proto.OverlayAlignment
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,6 +47,7 @@ data class MissionOverlay(
 @Singleton
 class MissionOverlayRepository @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val mesh: MeshRepository,
 ) {
     private val prefs = context.getSharedPreferences("airtak.mission_overlay", Context.MODE_PRIVATE)
     private val overlayDir = File(context.filesDir, "overlays")
@@ -52,6 +56,10 @@ class MissionOverlayRepository @Inject constructor(
 
     private val _overlay = MutableStateFlow(loadOverlay())
     val overlay: StateFlow<MissionOverlay?> = _overlay.asStateFlow()
+
+    /** Whether the user has opted to share their overlay alignment via mesh. */
+    private val _shareEnabled = MutableStateFlow(false)
+    val shareEnabled: StateFlow<Boolean> = _shareEnabled.asStateFlow()
 
     suspend fun importImage(uri: Uri, corners: MissionOverlayCorners) = withContext(Dispatchers.IO) {
         overlayDir.mkdirs()
@@ -99,6 +107,67 @@ class MissionOverlayRepository @Inject constructor(
         deleteCurrentOverlayImage()
         prefs.edit().remove(KEY_OVERLAY).apply()
         _overlay.value = null
+        _shareEnabled.value = false
+    }
+
+    fun setShareEnabled(enabled: Boolean) {
+        _shareEnabled.value = enabled
+        if (enabled) broadcastAlignment()
+    }
+
+    fun broadcastAlignment() {
+        val overlay = _overlay.value ?: return
+        val imageFile = File(overlay.imagePath)
+        if (!imageFile.exists()) return
+        val imageHash = computeFileHash(imageFile)
+        val fileName = imageFile.name
+        val nowUnix = (System.currentTimeMillis() / 1000L).toInt()
+        val alignment = OverlayAlignment.newBuilder()
+            .setSharerNodeId(0) // populated by firmware
+            .setImageHash(imageHash)
+            .setImageFileName(fileName)
+            .setTopLeftLat(overlay.corners.topLeft.latitude)
+            .setTopLeftLng(overlay.corners.topLeft.longitude)
+            .setTopRightLat(overlay.corners.topRight.latitude)
+            .setTopRightLng(overlay.corners.topRight.longitude)
+            .setBottomRightLat(overlay.corners.bottomRight.latitude)
+            .setBottomRightLng(overlay.corners.bottomRight.longitude)
+            .setBottomLeftLat(overlay.corners.bottomLeft.latitude)
+            .setBottomLeftLng(overlay.corners.bottomLeft.longitude)
+            .setOpacity(overlay.opacity)
+            .setTimestampUnix(nowUnix)
+            .build()
+        mesh.sendOverlayAlignment(alignment)
+    }
+
+    suspend fun importFromAlignment(
+        alignment: com.airtak.data.overlays.ReceivedAlignment,
+        imageUri: Uri,
+    ) = withContext(Dispatchers.IO) {
+        overlayDir.mkdirs()
+        val temp = File(overlayDir, "mission-overlay.tmp")
+        context.contentResolver.openInputStream(imageUri)?.use { input ->
+            temp.outputStream().use { output -> input.copyTo(output) }
+        } ?: error("Could not open image for alignment import")
+        if (temp.length() <= 0L) {
+            temp.delete()
+            error("Image is empty")
+        }
+        deleteCurrentOverlayImage()
+        check(temp.renameTo(overlayFile)) { "Could not save overlay image" }
+        val newOverlay = MissionOverlay(
+            imagePath = overlayFile.absolutePath,
+            corners = MissionOverlayCorners(
+                topLeft = MissionOverlayPoint(alignment.topLeftLat, alignment.topLeftLng),
+                topRight = MissionOverlayPoint(alignment.topRightLat, alignment.topRightLng),
+                bottomRight = MissionOverlayPoint(alignment.bottomRightLat, alignment.bottomRightLng),
+                bottomLeft = MissionOverlayPoint(alignment.bottomLeftLat, alignment.bottomLeftLng),
+            ),
+            opacity = alignment.opacity,
+            updatedMs = System.currentTimeMillis(),
+        )
+        saveOverlay(newOverlay)
+        _overlay.value = newOverlay
     }
 
     private fun deleteCurrentOverlayImage() {
@@ -159,6 +228,23 @@ class MissionOverlayRepository @Inject constructor(
         latitude = getDouble("latitude"),
         longitude = getDouble("longitude"),
     )
+
+    private fun computeFileHash(file: File): Long {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buf = ByteArray(8192)
+            var read: Int
+            while (input.read(buf).also { read = it } != -1) {
+                digest.update(buf, 0, read)
+            }
+        }
+        val full = digest.digest()
+        var hash = 0L
+        for (i in 0 until 8) {
+            hash = (hash shl 8) or (full[i].toLong() and 0xFF)
+        }
+        return hash
+    }
 
     private companion object {
         const val KEY_OVERLAY = "overlay"

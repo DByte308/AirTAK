@@ -173,6 +173,10 @@ class PlayersViewModel @Inject constructor(
         mesh.requestPosition(nodeId, statusNodeId()?.toLong()?.and(0xFFFF_FFFFL) ?: 0L)
     }
 
+    fun requestMarkerSnapshot(nodeId: Long) {
+        mesh.requestMarkerSnapshot(nodeId)
+    }
+
     val activeBans: StateFlow<Set<Pair<Long, Int>>> = moderation.activeBans
 
     fun submitVoteKick(targetNodeId: Long, scope: Scope) {

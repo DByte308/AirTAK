@@ -20,6 +20,8 @@ import com.airtak.data.overlays.MissionOverlayCornerId
 import com.airtak.data.overlays.MissionOverlayCorners
 import com.airtak.data.overlays.MissionOverlayPoint
 import com.airtak.data.overlays.MissionOverlayRepository
+import com.airtak.data.overlays.OverlayAlignmentRepository
+import com.airtak.data.overlays.ReceivedAlignment
 import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.data.tiles.TileBounds
 import com.airtak.data.tiles.TileDownloadState
@@ -120,6 +122,7 @@ class MapViewModel @Inject constructor(
     private val geocodingRepository: GeocodingRepository,
     private val markerRepo: TacticalMarkerRepository,
     private val gameRepo: com.airtak.data.game.GameRepository,
+    private val overlayAlignmentRepo: OverlayAlignmentRepository,
 ) : ViewModel() {
     private val showPlayers = MutableStateFlow(true)
     private val showWaypoints = MutableStateFlow(true)
@@ -431,6 +434,23 @@ class MapViewModel @Inject constructor(
     fun removeMissionOverlay() {
         missionOverlayRepository.remove()
     }
+
+    fun setOverlayShareEnabled(enabled: Boolean) {
+        missionOverlayRepository.setShareEnabled(enabled)
+    }
+
+    fun broadcastOverlayAlignment() {
+        missionOverlayRepository.broadcastAlignment()
+    }
+
+    fun importOverlayAlignment(alignment: ReceivedAlignment, imageUri: Uri) {
+        viewModelScope.launch {
+            missionOverlayRepository.importFromAlignment(alignment, imageUri)
+        }
+    }
+
+    val overlayShareEnabled: StateFlow<Boolean> = missionOverlayRepository.shareEnabled
+    val availableAlignments: StateFlow<List<ReceivedAlignment>> = overlayAlignmentRepo.alignments
 
     private fun RemoteNodeEntity.toMapNode(now: Long): MapNode {
         val label = callsign.ifBlank { shortName.ifBlank { nodeId.toString(16).uppercase().takeLast(4) } }

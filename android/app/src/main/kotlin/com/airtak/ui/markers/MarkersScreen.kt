@@ -23,12 +23,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AddLocationAlt
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Router
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,12 +63,40 @@ fun MarkersScreen(
     onLocateMarker: (Long) -> Unit,
 ) {
     val markers by viewModel.markers.collectAsState()
+    val remoteNodeIds by viewModel.remoteNodeIds.collectAsState()
     var pendingDelete by remember { mutableStateOf<TacticalMarkerEntity?>(null) }
+    var showSnapshotPicker by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             SectionLabel("Markers")
             Spacer(Modifier.weight(1f))
+            Box {
+                IconButton(onClick = { showSnapshotPicker = true }) {
+                    Icon(Icons.Outlined.AddLocationAlt, contentDescription = "Request marker snapshot")
+                }
+                DropdownMenu(
+                    expanded = showSnapshotPicker,
+                    onDismissRequest = { showSnapshotPicker = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("All players (broadcast)") },
+                        onClick = {
+                            showSnapshotPicker = false
+                            viewModel.syncNow()
+                        },
+                    )
+                    remoteNodeIds.forEach { (id, name) ->
+                        DropdownMenuItem(
+                            text = { Text("Request from $name") },
+                            onClick = {
+                                showSnapshotPicker = false
+                                viewModel.requestMarkerSnapshot(id)
+                            },
+                        )
+                    }
+                }
+            }
             IconButton(onClick = { viewModel.syncNow() }) {
                 Icon(Icons.Outlined.Refresh, contentDescription = "Sync markers and messages")
             }

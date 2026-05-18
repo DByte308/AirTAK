@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Message
+import androidx.compose.material.icons.outlined.AddLocationAlt
 import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
@@ -105,13 +106,14 @@ fun PlayersScreen(
             if (visible.isEmpty()) return@forEach
             item(key = "unit-${group.label}") { UnitGroupHeader(group.copy(players = visible)) }
             items(visible, key = { it.nodeId }) { player ->
-                PlayerCard(
-                    player = player,
-                    onRequestPosition = { viewModel.requestPosition(player.nodeId) },
-                    onMessage = { onMessagePlayer(player.nodeId) },
-                    onLocate = { onLocatePlayer(player.nodeId) },
-                    onVoteKick = { pendingKick = player }.takeIf { !player.isSelf },
-                )
+                    PlayerCard(
+                        player = player,
+                        onRequestPosition = { viewModel.requestPosition(player.nodeId) },
+                        onRequestMarkers = { viewModel.requestMarkerSnapshot(player.nodeId) },
+                        onMessage = { onMessagePlayer(player.nodeId) },
+                        onLocate = { onLocatePlayer(player.nodeId) },
+                        onVoteKick = { pendingKick = player }.takeIf { !player.isSelf },
+                    )
             }
         }
         if (ui.groups.isEmpty()) {
@@ -289,6 +291,7 @@ private fun UnitGroupHeader(group: UnitGroup) {
 private fun PlayerCard(
     player: PlayerRow,
     onRequestPosition: () -> Unit,
+    onRequestMarkers: () -> Unit,
     onMessage: () -> Unit,
     onLocate: () -> Unit,
     onVoteKick: (() -> Unit)? = null,
@@ -348,6 +351,13 @@ private fun PlayerCard(
                             Icon(Icons.Outlined.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Ping")
+                        }
+                    }
+                    if (!player.isSelf) {
+                        OutlinedButton(onClick = onRequestMarkers, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Outlined.AddLocationAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Get markers")
                         }
                     }
                 }

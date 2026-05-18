@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -35,9 +36,11 @@ import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
@@ -183,9 +186,13 @@ fun MapScreen(
     val markers by viewModel.markers.collectAsState()
     val drawing by viewModel.drawing.collectAsState()
     val gameActive by viewModel.gameActive.collectAsState()
+    val shareEnabled by viewModel.overlayShareEnabled.collectAsState()
+    val availableAlignments by viewModel.availableAlignments.collectAsState()
     var pendingCommit by remember { mutableStateOf<MarkerTool?>(null) }
     var tappedMarker by remember { mutableStateOf<MarkerVisual?>(null) }
     var editingMarker by remember { mutableStateOf<MarkerVisual?>(null) }
+    var showAlignmentPicker by remember { mutableStateOf(false) }
+    var pendingAlignmentImport by remember { mutableStateOf<com.airtak.data.overlays.ReceivedAlignment?>(null) }
 
     fun updateOwnLabelPoint() {
         val pos = ui.ownPosition
@@ -493,8 +500,13 @@ fun MapScreen(
             MissionOverlayControls(
                 selectedCorner = selectedOverlayCorner,
                 opacity = missionOverlay.opacity,
+                shareEnabled = shareEnabled,
+                hasAlignments = availableAlignments.isNotEmpty(),
                 onOpacityChange = viewModel::setMissionOverlayOpacity,
                 onNudge = { dx, dy -> nudgeOverlayCorner(selectedOverlayCorner, dx, dy) },
+                onShareToggle = { viewModel.setOverlayShareEnabled(it) },
+                onRebroadcast = { viewModel.broadcastOverlayAlignment() },
+                onImport = { showAlignmentPicker = true },
                 onReplace = { overlayPicker.launch(MISSION_OVERLAY_IMAGE_MIME) },
                 onRemove = {
                     viewModel.removeMissionOverlay()
@@ -739,6 +751,59 @@ fun MapScreen(
             },
         )
     }
+
+    val alignmentImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val alignment = pendingAlignmentImport ?: return@rememberLauncherForActivityResult
+        pendingAlignmentImport = null
+        if (uri != null) {
+            viewModel.importOverlayAlignment(alignment, uri)
+        }
+    }
+
+    if (showAlignmentPicker) {
+        AlignmentPickerDialog(
+            alignments = availableAlignments,
+            onDismiss = { showAlignmentPicker = false },
+            onSelect = { alignment ->
+                showAlignmentPicker = false
+                pendingAlignmentImport = alignment
+                alignmentImagePicker.launch(MISSION_OVERLAY_IMAGE_MIME)
+            },
+        )
+    }
+}
+
+@Composable
+private fun AlignmentPickerDialog(
+    alignments: List<com.airtak.data.overlays.ReceivedAlignment>,
+    onDismiss: () -> Unit,
+    onSelect: (com.airtak.data.overlays.ReceivedAlignment) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import alignment") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (alignments.isEmpty()) {
+                    Text("No alignments received yet.", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    Text("Pick the alignment to import, then select the matching image file on your device.",
+                         style = MaterialTheme.typography.bodySmall,
+                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    alignments.sortedByDescending { it.timestampUnix }.forEach { a ->
+                        val label = "Node ${a.sharerNodeId.toString(16).uppercase().take(8)} · ${a.imageFileName}"
+                        TextButton(onClick = { onSelect(a) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(label, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable
@@ -1249,8 +1314,13 @@ private fun markerTypeLabel(type: MarkerType): String = when (type) {
 private fun MissionOverlayControls(
     selectedCorner: MissionOverlayCornerId,
     opacity: Float,
+    shareEnabled: Boolean,
+    hasAlignments: Boolean,
     onOpacityChange: (Float) -> Unit,
     onNudge: (Float, Float) -> Unit,
+    onShareToggle: (Boolean) -> Unit,
+    onRebroadcast: () -> Unit,
+    onImport: () -> Unit,
     onReplace: () -> Unit,
     onRemove: () -> Unit,
     onDone: () -> Unit,
@@ -1280,6 +1350,22 @@ private fun MissionOverlayControls(
                     modifier = Modifier.weight(1f),
                 )
                 Text("${(opacity * 100f).roundToInt()}%", style = MaterialTheme.typography.labelSmall)
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Checkbox(checked = shareEnabled, onCheckedChange = onShareToggle)
+                Text("Share alignment", style = MaterialTheme.typography.labelSmall)
+                if (shareEnabled) {
+                    IconButton(onClick = onRebroadcast) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = "Re-broadcast alignment")
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                if (hasAlignments) {
+                    TextButton(onClick = onImport) { Text("Import") }
+                }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,

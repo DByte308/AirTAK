@@ -147,6 +147,39 @@ message SyncRequest {
   uint32 requested_types   = 2;    // bitmask: 1=MARKERS, 2=MESSAGES
 }
 
+// ── Overlay Alignment (portnum 265) ──────────────────────────────────────
+// Roadmap: 5.x | Shares mission-overlay image corner alignment via mesh.
+// The image binary is NOT transmitted — only corner geolocation and a hash
+// so receivers can match against their own local copy of the same image.
+// ACKNOWLEDGED delivery (want_response=true).
+
+message OverlayAlignment {
+  uint32 sharer_node_id   = 1;
+  uint64 image_hash       = 2;    // first 8 bytes of SHA-256(image file)
+  string image_file_name  = 3;    // original filename for human matching
+  double top_left_lat     = 4;
+  double top_left_lng     = 5;
+  double top_right_lat    = 6;
+  double top_right_lng    = 7;
+  double bottom_right_lat = 8;
+  double bottom_right_lng = 9;
+  double bottom_left_lat  = 10;
+  double bottom_left_lng  = 11;
+  float  opacity          = 12;   // 0.1–1.0
+  uint32 timestamp_unix   = 13;
+}
+
+// ── Marker Snapshot Request (portnum 266) ──────────────────────────────────
+// Roadmap: 5.x | Unicast request to a specific node for a full marker dump.
+// Sent ACKNOWLEDGED (want_response=true, 3 retries). The target responds by
+// re-broadcasting all active markers individually via AIRTAK_TACTICAL.
+// Marker-level dedup by (marker_id, updated_at_unix) handles duplicates.
+
+message MarkerSnapshotRequest {
+  uint32 target_node_id    = 1;
+  uint32 requester_node_id = 2;
+}
+
 // ── PTT Audio (portnum 263) — Phase 7 ────────────────────────────────────────
 
 // Roadmap: 7.3, 7.4 | Codec2-encoded PTT audio frame.

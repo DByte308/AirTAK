@@ -23,6 +23,7 @@ import com.airtak.proto.ConfigGroup
 import com.airtak.proto.GameConfig
 import com.airtak.proto.LatLng
 import com.airtak.proto.MarkerType
+import com.airtak.proto.MarkerSnapshotRequest
 import com.airtak.proto.Scope
 import com.airtak.proto.SyncRequest
 import com.airtak.proto.TacticalMarker
@@ -129,6 +130,12 @@ class TacticalMarkerRepository @Inject constructor(
             mesh.packets
                 .filter { it.portnum == Portnum.AIRTAK_SYNC_REQUEST }
                 .collect { handleSyncRequest(it) }
+        }
+        // Respond to targeted marker snapshot requests by re-broadcasting markers.
+        scope.launch {
+            mesh.packets
+                .filter { it.portnum == Portnum.AIRTAK_MARKER_SNAPSHOT_REQUEST }
+                .collect { handleSnapshotRequest(it) }
         }
         // Periodically purge tombstones older than 24 h.
         scope.launch {
@@ -333,6 +340,17 @@ class TacticalMarkerRepository @Inject constructor(
         if (request.requestedTypes and SYNC_TYPE_MARKERS != 0) {
             rebroadcastOwned()
         }
+    }
+
+    // ── Snapshot request handler ──────────────────────────────────────────────
+
+    private suspend fun handleSnapshotRequest(packet: MeshRxPacket) {
+        val payload = packet.payload ?: return
+        val request = runCatching { MarkerSnapshotRequest.parseFrom(payload) }.getOrNull() ?: return
+        val targetId = request.targetNodeId.toLong() and 0xFFFF_FFFFL
+        val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: 0L
+        if (targetId != ownId) return
+        rebroadcastOwned()
     }
 
     private fun entityToProto(entity: TacticalMarkerEntity): TacticalMarker {
