@@ -183,15 +183,17 @@ class MeshRepository @Inject constructor(
     fun observeDm(peerNodeId: Long): Flow<List<MessageEntity>> = messageDao.observeDm(peerNodeId)
     fun observeDmPeers(): Flow<List<MessageEntity>> = messageDao.observeDmPeers()
 
-    fun sendText(channel: Int, text: String): SendResult {
+    fun sendText(channel: Int, text: String, bestEffort: Boolean = false): SendResult {
         val bytes = text.toByteArray(Charsets.UTF_8)
         if (bytes.size > MAX_TEXT_BYTES) return SendResult.TooLong(bytes.size)
-        // Use a non-zero 32-bit request ID so the firmware can ACK this packet (§8.9).
-        val requestId = (System.nanoTime() and 0x7FFF_FFFFL) or 1L
+        val wantResponse = !bestEffort
+        val requestId = if (wantResponse) {
+            (System.nanoTime() and 0x7FFF_FFFFL) or 1L
+        } else null
         val dataProto = MeshWire.encodeData(
             portnum = Portnum.TEXT_MESSAGE_APP,
             payload = bytes,
-            wantResponse = true,
+            wantResponse = wantResponse,
             requestId = requestId,
         )
         // Prepend a 1-byte slot-override prefix so the firmware routes this
@@ -210,10 +212,12 @@ class MeshRepository @Inject constructor(
                     text = text,
                     timestampMs = System.currentTimeMillis(),
                     outgoing = true,
-                    delivered = false,
+                    delivered = bestEffort, // mark as delivered immediately for best-effort
                 ),
             )
-            pendingAcks[requestId] = msgId
+            if (wantResponse && requestId != null) {
+                pendingAcks[requestId] = msgId
+            }
             messageDao.pruneOldest(channel, MESSAGE_WINDOW)
         }
         return SendResult.Ok()
@@ -276,9 +280,16 @@ class MeshRepository @Inject constructor(
             .setTargetNodeId((targetNodeId and 0xFFFF_FFFFL).toInt())
             .setRequesterNodeId((requesterNodeId and 0xFFFF_FFFFL).toInt())
             .build()
-        val data = MeshWire.encodeData(Portnum.AIRTAK_POSREQ, request.toByteArray())
+        val requestId = (System.nanoTime() and 0x7FFF_FFFFL) or 1L
+        val data = MeshWire.encodeData(
+            portnum = Portnum.AIRTAK_POSREQ,
+            payload = request.toByteArray(),
+            wantResponse = true,
+            destNodeId = targetNodeId,
+            requestId = requestId,
+        )
         ble.send(BleRepository.OutboundChannel.MeshTx, data)
-        return SendResult.Ok()
+        return SendResult.Ok(requestId)
     }
 
     fun observeMessages(channel: Int): Flow<List<MessageEntity>> = messageDao.observe(channel)
@@ -361,7 +372,7 @@ class MeshRepository @Inject constructor(
             if (!msg.outgoing) continue
             val text = msg.text
             if (text.length > MAX_TEXT_BYTES) continue
-            sendText(channel = msg.channelIndex, text = text)
+            sendText(channel = msg.channelIndex, text = text, bestEffort = true)
             delay(SYNC_SPACING_MS)
         }
     }
@@ -408,7 +419,7 @@ class MeshRepository @Inject constructor(
         /** Synthetic channelIndex value used internally for DM rows; never shown as a tab index. */
         const val DM_CHANNEL_INDEX = -1
         private const val SYNC_SPACING_MS = 500L
-        private const val SYNC_MESSAGE_COUNT = 50
+        private const val SYNC_MESSAGE_COUNT = 25
         private const val SYNC_TYPE_MARKERS = 1
         private const val SYNC_TYPE_MESSAGES = 2
         private const val SYNC_ID_TTL_MS = 10_000L

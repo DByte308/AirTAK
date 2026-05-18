@@ -119,6 +119,7 @@ public:
             case Portnum::AIRTAK_MODERATION:
             case Portnum::AIRTAK_OVERLAY_ALIGNMENT:
             case Portnum::AIRTAK_MARKER_SNAPSHOT_REQUEST:
+            case Portnum::AIRTAK_POSITION_REQUEST:
                 return true;
             default:
                 return false;
