@@ -8,7 +8,7 @@ package com.airtak.proto;
 /**
  * Protobuf type {@code airtak.PositionConfig}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:PositionConfig.java.pb.meta")
 public  final class PositionConfig extends
     com.google.protobuf.GeneratedMessageLite<
         PositionConfig, PositionConfig.Builder> implements

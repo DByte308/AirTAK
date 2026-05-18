@@ -13,7 +13,7 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.DeviceStatus}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:DeviceStatus.java.pb.meta")
 public  final class DeviceStatus extends
     com.google.protobuf.GeneratedMessageLite<
         DeviceStatus, DeviceStatus.Builder> implements

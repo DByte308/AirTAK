@@ -4,8 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:SyncRequestOrBuilder.java.pb.meta")
 public interface SyncRequestOrBuilder extends
     // @@protoc_insertion_point(interface_extends:airtak.SyncRequest)
     com.google.protobuf.MessageLiteOrBuilder {

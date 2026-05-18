@@ -97,13 +97,25 @@ if (-not $FirmwareOnly) {
 
     & protoc `
         "--proto_path=$ProtoRoot" `
-        --java_out="lite:$AndroidKotlin" `
+        --java_out="lite,annotate_code=false:$AndroidKotlin" `
         --kotlin_out="lite:$AndroidKotlin" `
         $ProtoFiles
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Android protobuf generation failed"
         exit $LASTEXITCODE
     }
+
+    # protoc >= 32.x emits @com.google.protobuf.Generated annotations that do
+    # not exist in the protobuf-kotlin-lite 4.26 runtime. Strip them.
+    $javaDir = Join-Path $AndroidKotlin "com\airtak\proto"
+    Get-ChildItem -Path $javaDir -Filter "*.java" | ForEach-Object {
+        $content = Get-Content $_.FullName -Raw
+        if ($content -match '@com\.google\.protobuf\.Generated') {
+            $content = $content -replace '(?m)^\s*@com\.google\.protobuf\.Generated\s*\r?\n', ''
+            Set-Content -Path $_.FullName -Value $content -NoNewline
+        }
+    }
+    Write-Host "  Stripped @Generated annotations from generated Java sources"
 }
 
 Write-Host "`n[proto_gen.ps1] Done." -ForegroundColor Green

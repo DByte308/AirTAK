@@ -107,9 +107,15 @@ if [ "$FIRMWARE_ONLY" != true ]; then
 
     protoc \
         "--proto_path=$PROTO_ROOT" \
-        --java_out="lite:$ANDROID_KOTLIN" \
+        --java_out="lite,annotate_code=false:$ANDROID_KOTLIN" \
         --kotlin_out="lite:$ANDROID_KOTLIN" \
         "${PROTO_FILES[@]}"
+
+    # protoc ≥ 32.x emits @com.google.protobuf.Generated annotations that do
+    # not exist in the protobuf-kotlin-lite 4.26 runtime. Strip them.
+    find "$ANDROID_KOTLIN/com/airtak/proto" -name '*.java' \
+        -exec sed -i '/^[[:space:]]*@com\.google\.protobuf\.Generated[[:space:]]*$/d' {} \;
+    echo "  Stripped @Generated annotations from generated Java sources"
 fi
 
 echo -e "\n\033[32m[proto_gen.sh] Done.\033[0m"

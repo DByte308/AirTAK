@@ -14,7 +14,7 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.ConfigPayload}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:ConfigPayload.java.pb.meta")
 public  final class ConfigPayload extends
     com.google.protobuf.GeneratedMessageLite<
         ConfigPayload, ConfigPayload.Builder> implements

@@ -4,8 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:Game.java.pb.meta")
 public final class Game {
   private Game() {}
   public static void registerAllExtensions(

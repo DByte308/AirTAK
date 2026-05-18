@@ -8,7 +8,7 @@ package com.airtak.proto;
 /**
  * Protobuf type {@code airtak.MarkerSnapshotRequest}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:MarkerSnapshotRequest.java.pb.meta")
 public  final class MarkerSnapshotRequest extends
     com.google.protobuf.GeneratedMessageLite<
         MarkerSnapshotRequest, MarkerSnapshotRequest.Builder> implements

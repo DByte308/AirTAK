@@ -8,7 +8,7 @@ package com.airtak.proto;
 /**
  * Protobuf type {@code airtak.RadioStatus}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:RadioStatus.java.pb.meta")
 public  final class RadioStatus extends
     com.google.protobuf.GeneratedMessageLite<
         RadioStatus, RadioStatus.Builder> implements

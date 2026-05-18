@@ -8,7 +8,7 @@ package com.airtak.proto;
 /**
  * Protobuf type {@code airtak.OverlayAlignment}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:OverlayAlignment.java.pb.meta")
 public  final class OverlayAlignment extends
     com.google.protobuf.GeneratedMessageLite<
         OverlayAlignment, OverlayAlignment.Builder> implements

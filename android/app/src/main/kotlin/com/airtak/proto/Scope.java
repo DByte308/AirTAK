@@ -8,7 +8,7 @@ package com.airtak.proto;
 /**
  * Protobuf enum {@code airtak.Scope}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:Scope.java.pb.meta")
 public enum Scope
     implements com.google.protobuf.Internal.EnumLite {
   /**

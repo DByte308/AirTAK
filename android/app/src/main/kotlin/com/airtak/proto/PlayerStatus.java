@@ -8,7 +8,7 @@ package com.airtak.proto;
 /**
  * Protobuf enum {@code airtak.PlayerStatus}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:PlayerStatus.java.pb.meta")
 public enum PlayerStatus
     implements com.google.protobuf.Internal.EnumLite {
   /**

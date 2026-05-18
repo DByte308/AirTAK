@@ -134,6 +134,19 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq openjdk-17-jdk-headless
 
+      - name: Install protoc and regenerate proto sources
+        run: |
+          PROTOC_ZIP="protoc-28.4-linux-x86_64.zip"
+          curl -fSL --progress-bar \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v28.4/${PROTOC_ZIP}" \
+            -o "/tmp/${PROTOC_ZIP}"
+          unzip -qo "/tmp/${PROTOC_ZIP}" -d /tmp/protoc
+          sudo cp /tmp/protoc/bin/protoc /usr/local/bin/
+          rm -rf "/tmp/${PROTOC_ZIP}" /tmp/protoc
+          protoc --version
+
+          bash tools/proto_gen.sh --android-only
+
       - name: Setup Android environment
         run: |
           # Pin JAVA_HOME to the installed JDK 17

@@ -12,7 +12,7 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.LoraConfig}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:LoraConfig.java.pb.meta")
 public  final class LoraConfig extends
     com.google.protobuf.GeneratedMessageLite<
         LoraConfig, LoraConfig.Builder> implements

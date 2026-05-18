@@ -16,7 +16,7 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.PlayerStatePacket}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:PlayerStatePacket.java.pb.meta")
 public  final class PlayerStatePacket extends
     com.google.protobuf.GeneratedMessageLite<
         PlayerStatePacket, PlayerStatePacket.Builder> implements

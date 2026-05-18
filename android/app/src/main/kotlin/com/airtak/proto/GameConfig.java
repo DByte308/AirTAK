@@ -13,7 +13,7 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.GameConfig}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:GameConfig.java.pb.meta")
 public  final class GameConfig extends
     com.google.protobuf.GeneratedMessageLite<
         GameConfig, GameConfig.Builder> implements

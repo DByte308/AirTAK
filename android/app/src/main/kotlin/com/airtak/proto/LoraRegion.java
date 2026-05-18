@@ -13,7 +13,7 @@ package com.airtak.proto;
  *
  * Protobuf enum {@code airtak.LoraRegion}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:LoraRegion.java.pb.meta")
 public enum LoraRegion
     implements com.google.protobuf.Internal.EnumLite {
   /**

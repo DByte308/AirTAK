@@ -15,7 +15,7 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.AudioConfig}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:AudioConfig.java.pb.meta")
 public  final class AudioConfig extends
     com.google.protobuf.GeneratedMessageLite<
         AudioConfig, AudioConfig.Builder> implements

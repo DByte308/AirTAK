@@ -14,7 +14,7 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.PhoneGpsPosition}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:PhoneGpsPosition.java.pb.meta")
 public  final class PhoneGpsPosition extends
     com.google.protobuf.GeneratedMessageLite<
         PhoneGpsPosition, PhoneGpsPosition.Builder> implements

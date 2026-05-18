@@ -13,7 +13,7 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.ConfigAck}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:ConfigAck.java.pb.meta")
 public  final class ConfigAck extends
     com.google.protobuf.GeneratedMessageLite<
         ConfigAck, ConfigAck.Builder> implements

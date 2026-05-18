@@ -13,7 +13,7 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.ChannelSlot}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:ChannelSlot.java.pb.meta")
 public  final class ChannelSlot extends
     com.google.protobuf.GeneratedMessageLite<
         ChannelSlot, ChannelSlot.Builder> implements

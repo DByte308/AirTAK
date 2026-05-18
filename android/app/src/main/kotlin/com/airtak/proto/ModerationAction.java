@@ -8,7 +8,7 @@ package com.airtak.proto;
 /**
  * Protobuf enum {@code airtak.ModerationAction}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:ModerationAction.java.pb.meta")
 public enum ModerationAction
     implements com.google.protobuf.Internal.EnumLite {
   /**

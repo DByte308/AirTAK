@@ -4,8 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:ConfigPayloadOrBuilder.java.pb.meta")
 public interface ConfigPayloadOrBuilder extends
     // @@protoc_insertion_point(interface_extends:airtak.ConfigPayload)
     com.google.protobuf.MessageLiteOrBuilder {

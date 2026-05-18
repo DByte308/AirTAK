@@ -4,8 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:OverlayAlignmentOrBuilder.java.pb.meta")
 public interface OverlayAlignmentOrBuilder extends
     // @@protoc_insertion_point(interface_extends:airtak.OverlayAlignment)
     com.google.protobuf.MessageLiteOrBuilder {

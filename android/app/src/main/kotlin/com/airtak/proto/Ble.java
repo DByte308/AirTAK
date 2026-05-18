@@ -4,8 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:Ble.java.pb.meta")
 public final class Ble {
   private Ble() {}
   public static void registerAllExtensions(

@@ -8,7 +8,7 @@ package com.airtak.proto;
 /**
  * Protobuf type {@code airtak.ChannelConfig}
  */
-@com.google.protobuf.Generated
+@javax.annotation.Generated(value="protoc", comments="annotations:ChannelConfig.java.pb.meta")
 public  final class ChannelConfig extends
     com.google.protobuf.GeneratedMessageLite<
         ChannelConfig, ChannelConfig.Builder> implements
