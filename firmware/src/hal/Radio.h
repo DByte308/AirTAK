@@ -1,14 +1,16 @@
 // AirTAK — Airsoft Team Awareness Kit
-// firmware/src/hal/Radio.h — SX1262 radio HAL (thin wrapper over RadioLib)
+// firmware/src/hal/Radio.h — LoRa radio HAL (thin wrapper over RadioLib)
 // Planning: §8.1, §9.2 | Roadmap: 1.2
+//
+// Supports SX1262 (default on all currently shipping boards) and SX1276
+// (T3 S3 multi-radio board).  At init(), both radios are probed on the shared
+// SPI bus; the first to respond becomes the active radio for the session.
+// SX1280 and LR1121 pins are defined in multi-radio BoardConfig.h files but
+// drivers are pending — contributions welcome.
 //
 // Provides: init(), reinit(), process(), transmit(), and radio restart support.
 // The radio restart procedure (§9.4.2) is exposed here and invoked by ConfigManager
 // when CHANNELS or LORA config groups change.
-//
-// All SX1262 register values must match Meshtastic's configuration for channel 0
-// interoperability (§8.1, §2.1). Do not change global PHY parameters without a
-// corresponding interop validation against stock Meshtastic devices.
 
 #pragma once
 

@@ -1,9 +1,13 @@
 // AirTAK — Airsoft Team Awareness Kit
-// firmware/src/hal/Radio.cpp — SX1262 radio HAL implementation
+// firmware/src/hal/Radio.cpp — SX1262 / SX1276 radio HAL implementation
 // Planning: §8.1, §9.2 | Roadmap: 1.2
 //
-// Uses RadioLib ≥ 6.4.0. All SX1262 parameters must match §8.1 global PHY parameters
-// and the active LoraConfig PHY profile. PHY profiles are loaded from ConfigManager.
+// Uses RadioLib ≥ 6.4.0. Supports SX1262 (default, all currently supported boards)
+// and SX1276 (T3 S3 multi-radio board).  At init(), both radios are probed on the
+// shared SPI bus; the first to respond becomes the active radio for the session.
+//
+// All SX1262 parameters must match §8.1 global PHY parameters and the active
+// LoraConfig PHY profile.  PHY profiles are loaded from ConfigManager.
 
 #include "hal/Radio.h"
 #include "config/ConfigManager.h"
@@ -13,7 +17,6 @@
 #include "ble/BLEQueue.h"
 #include "config.h"
 
-// RadioLib include — provided via lib/RadioLib/ (platformio.ini dependency)
 #include <RadioLib.h>
 #include <SPI.h>
 #include <cstring>
@@ -24,13 +27,34 @@
 
 namespace airtak {
 
-// ── Static state ──────────────────────────────────────────────────────────────
-// Module is a plain struct (RadioLib 6.x); allocate it statically to avoid
-// heap reliance at static-init time (A2 fix — see audit.md).
-static Module        s_module(AIRTAK_PIN_SX1262_NSS, AIRTAK_PIN_SX1262_DIO1,
-                              AIRTAK_PIN_SX1262_RESET, AIRTAK_PIN_SX1262_BUSY);
-static SX1262        s_radio(&s_module);
-static volatile bool s_radio_failed = false;  // set when init/reinit fails (A3 fix)
+// ── Radio type ─────────────────────────────────────────────────────────────────
+enum class RadioType : uint8_t {
+    NONE     = 0,
+    SX1262   = 1,
+    SX1276   = 2,
+    SX1280   = 3,   // reserved — pins defined, driver pending
+    LR1121   = 4,   // reserved — pins defined, driver pending
+};
+
+// ── SX1262 state ───────────────────────────────────────────────────────────────
+// Module and radio objects for the SX1262 variant.  These are used when the probe
+// detects an SX1262 (or when the board only defines SX1262 pins).
+static Module        s_mod_sx1262(AIRTAK_PIN_SX1262_NSS, AIRTAK_PIN_SX1262_DIO1,
+                                  AIRTAK_PIN_SX1262_RESET, AIRTAK_PIN_SX1262_BUSY);
+static SX1262        s_radio_sx1262(&s_mod_sx1262);
+
+// ── SX1276 state (T3 S3 multi-radio board) ────────────────────────────────────
+// Only compiled when SX1276 pins are defined (e.g. T3 S3 BoardConfig.h).
+#if defined(AIRTAK_PIN_SX1276_DIO0)
+static Module        s_mod_sx1276(AIRTAK_PIN_LORA_CS, AIRTAK_PIN_SX1276_DIO0,
+                                  AIRTAK_PIN_LORA_RESET, AIRTAK_PIN_SX1276_DIO2);
+static SX1276        s_radio_sx1276(&s_mod_sx1276);
+#endif
+
+// ── Runtime-selected active radio ──────────────────────────────────────────────
+static RadioType     s_radio_type    = RadioType::NONE;
+static PhysicalLayer* s_active_radio  = nullptr;     // polymorphic access
+static volatile bool s_radio_failed   = false;
 static volatile float    s_last_rssi    = 0.0f;
 static volatile float    s_last_snr     = 0.0f;
 static volatile uint32_t s_packets_rx   = 0;
@@ -94,8 +118,12 @@ static bool resolvePhyProfile(uint8_t& profile_idx,
 
 // ── Radio::init() ─────────────────────────────────────────────────────────────
 void Radio::init() {
-    // Phase 1.2: Configure SX1262 with global PHY parameters from §8.1.
+    // Phase 1.2: Configure the radio with global PHY parameters from §8.1.
     // Default to profile 0 (Long/Mesh); overridden from config if available.
+    //
+    // Multi-radio boards (e.g. T3 S3) ship with different radio modules soldered
+    // to the same PCB.  We probe SX1262 first (most common), then SX1276.
+    // The first radio that responds to begin() becomes the active radio.
 
     uint8_t  initial_phy = config::ConfigManager::primarySlotPhyProfileIndex();
     if (initial_phy >= 5) initial_phy = 0;
@@ -104,68 +132,72 @@ void Radio::init() {
     uint32_t bw_hz = 0;
     uint8_t  cr    = 0;
     if (!resolvePhyProfile(initial_phy, sf, bw_hz, cr)) {
-        // Even the fallback failed — radio is non-functional.
-        // The display will show an error state.  Set the failure flag so
-        // process() does not attempt hardware operations on a dead radio (A3).
         s_radio_failed = true;
         return;
     }
 
     float freq_mhz = config::ConfigManager::loraFrequencyMhz();
     if (freq_mhz < 100.0f) freq_mhz = (float)LORA_FREQ_EU868;
+    uint8_t tx_power = config::ConfigManager::loraTxPowerDbm();
 
-    // RadioLib begin(freq, bw, sf, cr, syncWord, txPower, preamble).
-    // Use validated freq_mhz with fallback — NOT a fresh ConfigManager call
-    // that could return 0 for a corrupt/missing LORA config.
-    int16_t result = s_radio.begin(
-        freq_mhz,
-        bw_hz / 1000.0f,
-        sf,
-        cr,
-        LORA_SYNC_WORD,
-        config::ConfigManager::loraTxPowerDbm(),
-        LORA_PREAMBLE_LENGTH,
-        AIRTAK_SX1262_TCXO_VOLTAGE
-    );
+    // ── Probe SX1262 ──────────────────────────────────────────────────────────
+    {
+        int16_t result = s_radio_sx1262.begin(
+            freq_mhz, bw_hz / 1000.0f, sf, cr,
+            LORA_SYNC_WORD, tx_power, LORA_PREAMBLE_LENGTH,
+            AIRTAK_SX1262_TCXO_VOLTAGE);
 
-    if (result != RADIOLIB_ERR_NONE) {
-        // Log and continue — device is non-functional without radio, but do not
-        // assert/reboot here; the display will show an error state.
+        if (result == RADIOLIB_ERR_NONE) {
+            s_radio_type   = RadioType::SX1262;
+            s_active_radio = &s_radio_sx1262;
+            s_radio_sx1262.setCRC(true);
+            s_radio_sx1262.explicitHeader();
+            s_radio_sx1262.setDio2AsRfSwitch(true);
+        }
+    }
+
+    // ── Probe SX1276 (fallback for T3 S3 multi-radio boards) ──────────────────
+#if defined(AIRTAK_PIN_SX1276_DIO0)
+    if (s_radio_type == RadioType::NONE) {
+        int16_t result = s_radio_sx1276.begin(
+            freq_mhz, bw_hz / 1000.0f, sf, cr,
+            LORA_SYNC_WORD, tx_power, LORA_PREAMBLE_LENGTH);
+
+        if (result == RADIOLIB_ERR_NONE) {
+            s_radio_type   = RadioType::SX1276;
+            s_active_radio = &s_radio_sx1276;
+            // SX1276 uses implicit header by default; explicit is set in begin().
+            // No DIO2-as-rf-switch — TX/RX switching is done via TXEN/RXEN pins
+            // (defined in BoardConfig.h as AIRTAK_PIN_SX1276_RXEN/TXEN but
+            //  RadioLib's SX1276 module handles this automatically when those
+            //  pins are wired to DIO1/DIO2 as defined in the Module constructor).
+        }
+    }
+#endif
+
+    if (s_radio_type == RadioType::NONE) {
         s_radio_failed = true;
         return;
     }
 
-    // Global PHY parameters (§8.1) — same across all profiles.
-    s_radio.setCRC(true);         // CRC enabled
-    s_radio.explicitHeader();
-
-    s_radio.setDio2AsRfSwitch(true);
-
-    // Register interrupt callbacks (RadioLib 6.x API).
-    s_radio.setPacketReceivedAction(on_packet_received);
-    s_radio.setPacketSentAction(on_packet_sent);
-
-    // Enter continuous receive mode.
-    s_radio.startReceive();
+    // Register interrupt callbacks and enter continuous receive.
+    s_active_radio->setPacketReceivedAction(on_packet_received);
+    s_active_radio->setPacketSentAction(on_packet_sent);
+    s_active_radio->startReceive();
 }
 
 // ── Radio::reinit() ───────────────────────────────────────────────────────────
 void Radio::reinit() {
     // Phase 2.8: Called by ConfigManager::radioRestartProcedure() (§9.4.2).
     // Re-apply LoRa parameters from the committed ConfigManager buffers.
-    // Reads frequency and TX power from the LORA config group; reads the active
-    // PHY profile index from the PRIMARY channel slot via ChannelManager so that
-    // a CHANNELS config commit that changes phy_profile_index takes effect here.
-    // Target: ≤ 300 ms. Does not restart MCU. Does not disconnect BLE.
+    // Reinitialises whichever radio type was detected at init().
 
-    // Reset SX1262 hardware via RESET pin.
+    // Reset the radio hardware via RESET pin.
     digitalWrite(AIRTAK_PIN_SX1262_RESET, LOW);
     delay(2);
     digitalWrite(AIRTAK_PIN_SX1262_RESET, HIGH);
     delay(10);
 
-    // Resolve PHY profile: prefer the PRIMARY channel slot's committed value.
-    // Falls back to profile 0 Long/Mesh via resolvePhyProfile if unusable.
     uint8_t  new_phy = config::ConfigManager::primarySlotPhyProfileIndex();
     if (new_phy >= 5) new_phy = 0;
     uint8_t  sf    = 0;
@@ -177,40 +209,41 @@ void Radio::reinit() {
         return;
     }
 
-    // Read live parameters from ConfigManager (committed config buffers).
     float   freq_mhz = config::ConfigManager::loraFrequencyMhz();
     if (freq_mhz < 100.0f) freq_mhz = (float)LORA_FREQ_EU868;
     uint8_t tx_power = config::ConfigManager::loraTxPowerDbm();
 
-    int16_t result = s_radio.begin(
-        freq_mhz,
-        bw_hz / 1000.0f,
-        sf,
-        cr,
-        LORA_SYNC_WORD,
-        tx_power,
-        LORA_PREAMBLE_LENGTH,
-        AIRTAK_SX1262_TCXO_VOLTAGE
-    );
+    int16_t result = RADIOLIB_ERR_UNKNOWN;
+
+    if (s_radio_type == RadioType::SX1262) {
+        result = s_radio_sx1262.begin(
+            freq_mhz, bw_hz / 1000.0f, sf, cr,
+            LORA_SYNC_WORD, tx_power, LORA_PREAMBLE_LENGTH,
+            AIRTAK_SX1262_TCXO_VOLTAGE);
+        if (result == RADIOLIB_ERR_NONE) {
+            s_radio_sx1262.setCRC(true);
+            s_radio_sx1262.explicitHeader();
+            s_radio_sx1262.setDio2AsRfSwitch(true);
+        }
+    }
+#if defined(AIRTAK_PIN_SX1276_DIO0)
+    else if (s_radio_type == RadioType::SX1276) {
+        result = s_radio_sx1276.begin(
+            freq_mhz, bw_hz / 1000.0f, sf, cr,
+            LORA_SYNC_WORD, tx_power, LORA_PREAMBLE_LENGTH);
+    }
+#endif
 
     if (result != RADIOLIB_ERR_NONE) {
-        // Radio hardware is unresponsive after reset — notify BLE client.
-        // The firmware will continue operating without radio; the display
-        // and BLE remain functional for diagnostics.
         ble::queueAdminError("radio_reinit_begin_failed");
         s_radio_failed = true;
         return;
     }
 
-    // Radio reinitialized successfully — clear failure flag.
     s_radio_failed = false;
-
-    s_radio.setCRC(true);
-    s_radio.explicitHeader();
-    s_radio.setDio2AsRfSwitch(true);
-    s_radio.setPacketReceivedAction(on_packet_received);
-    s_radio.setPacketSentAction(on_packet_sent);
-    s_radio.startReceive();
+    s_active_radio->setPacketReceivedAction(on_packet_received);
+    s_active_radio->setPacketSentAction(on_packet_sent);
+    s_active_radio->startReceive();
 }
 
 // ── Radio::pause() / Radio::resume() ─────────────────────────────────────────
@@ -280,25 +313,21 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
         if (s_rx_flag) {
             s_rx_flag = false;
 
-            // Determine received packet length.
-            size_t pkt_len = s_radio.getPacketLength();
+            size_t pkt_len = s_active_radio->getPacketLength();
             if (pkt_len == 0 || pkt_len > LORA_MAX_PAYLOAD_BYTES) {
-                // Malformed; restart receive and discard.
-                s_radio.startReceive();
+                s_active_radio->startReceive();
             } else {
                 PooledPacket* pkt = PacketPool::alloc();
                 if (pkt) {
-                    int16_t err = s_radio.readData(pkt->data, (uint8_t)pkt_len);
+                    int16_t err = s_active_radio->readData(pkt->data, (uint8_t)pkt_len);
                     if (err == RADIOLIB_ERR_NONE) {
                         pkt->length = (uint16_t)pkt_len;
-                        pkt->rssi   = s_radio.getRSSI();
-                        pkt->snr    = s_radio.getSNR();
+                        pkt->rssi   = s_active_radio->getRSSI();
+                        pkt->snr    = s_active_radio->getSNR();
                         pkt->phy_profile_index = s_active_phy;
                         s_last_rssi = pkt->rssi;
                         s_last_snr  = pkt->snr;
                         s_packets_rx++;
-
-                        // Enqueue for Router processing. Drop if queue full.
                         if (xQueueSendToBack(rx_queue, &pkt, 0) != pdTRUE) {
                             PacketPool::free(pkt);
                         }
@@ -306,12 +335,10 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
                         PacketPool::free(pkt);
                     }
                 }
-                // Restart receive regardless of allocation success.
-                s_radio.startReceive();
+                s_active_radio->startReceive();
             }
         } else {
-            // Spurious interrupt (TX done DIO1 edge during receive window).
-            s_radio.startReceive();
+            s_active_radio->startReceive();
         }
     }
 
@@ -329,7 +356,7 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
 // ── Radio::transmit() ────────────────────────────────────────────────────────
 bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_idx) {
     // Phase 7 multi-PHY: if the requested profile differs from the active one,
-    // reconfigure the SX1262. This is only expected during Phase 7 audio bursts.
+    // reconfigure the radio. This is only expected during Phase 7 audio bursts.
     if (phy_profile_idx != s_active_phy) {
         uint8_t  idx   = phy_profile_idx;
         uint8_t  sf    = 0;
@@ -337,21 +364,16 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
         uint8_t  cr    = 0;
         if (!resolvePhyProfile(idx, sf, bw_hz, cr)) return false;
 
-        // Apply the resolved SF/BW/CR to the live SX1262 (frequency unchanged).
-        int16_t err = s_radio.setBandwidth(bw_hz / 1000.0f);
+        int16_t err = s_active_radio->setBandwidth(bw_hz / 1000.0f);
         if (err != RADIOLIB_ERR_NONE) return false;
-        err = s_radio.setSpreadingFactor(sf);
+        err = s_active_radio->setSpreadingFactor(sf);
         if (err != RADIOLIB_ERR_NONE) return false;
-        err = s_radio.setCodingRate(cr);
+        err = s_active_radio->setCodingRate(cr);
         if (err != RADIOLIB_ERR_NONE) return false;
     }
 
-    // Synchronous transmit.  const_cast is safe here — RadioLib's SX1262::transmit
-    // does not modify the buffer (it DMA-copies to the radio FIFO).
-    int16_t err = s_radio.transmit(const_cast<uint8_t*>(data), length);
-
-    // Return to continuous receive immediately after TX.
-    s_radio.startReceive();
+    int16_t err = s_active_radio->transmit(const_cast<uint8_t*>(data), length);
+    s_active_radio->startReceive();
 
     if (err == RADIOLIB_ERR_NONE) {
         s_packets_tx++;

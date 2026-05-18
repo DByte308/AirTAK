@@ -1,0 +1,82 @@
+{
+  "_comment": "AirTAK — Airsoft Team Awareness Kit | firmware/boards/heltec_t114.json",
+  "_pin_reference": "Pin mapping derived from meshtastic/firmware variants/nrf52840/heltec_mesh_node_t114/variant.h, verified 2026-05-18.",
+
+  "build": {
+    "arduino": {
+      "ldscript": "nrf52840_s140_v6.ld"
+    },
+    "core": "nRF5",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DNRF52840_XXAA -DARDUINO_NRF52840_HELTEC_T114",
+    "f_cpu": "64000000L",
+    "hwids": [["0x239A", "0x802B"]],
+    "mcu": "nrf52840",
+    "variant": "heltec_t114",
+    "variants_dir": "variants",
+    "bsp": {
+      "name": "adafruit"
+    },
+    "softdevice": {
+      "sd_flags": "-DS140",
+      "sd_name": "s140",
+      "sd_version": "6.1.1",
+      "sd_fwid": "0x00B6"
+    },
+    "bootloader": {
+      "settings_addr": "0xFF000"
+    }
+  },
+  "connectivity": ["bluetooth"],
+  "debug": {
+    "jlink_device": "nRF52840_xxAA",
+    "openocd_target": "nrf52840",
+    "svd_path": "nRF52840_xxAA.svd"
+  },
+  "frameworks": ["arduino"],
+  "name": "Heltec Mesh Node T114",
+  "upload": {
+    "maximum_ram_size": 262144,
+    "maximum_size": 815104,
+    "protocol": "nrfjprog",
+    "protocols": ["nrfjprog", "jlink"]
+  },
+  "url": "https://heltec.org/project/mesh-node-t114/",
+  "vendor": "Heltec Automation",
+
+  "_pin_mapping": {
+    "_note": "Pin mapping per upstream Meshtastic Heltec T114 variant. nRF52840 with ST7789 TFT (240x135) on separate SPI1, SX1262 on SPI0, L76K GPS on Serial1.",
+    "SX1262_SCK":     "P0.19",
+    "SX1262_MISO":    "P0.23",
+    "SX1262_MOSI":    "P0.22",
+    "SX1262_NSS":     "P0.24",
+    "SX1262_RESET":   "P0.25",
+    "SX1262_DIO1":    "P0.20",
+    "SX1262_BUSY":    "P0.17",
+    "SX1262_DIO2":    "internal RF switch",
+    "SX1262_DIO3":    "1.8V TCXO control",
+    "TFT_SCK":        "P1.08",
+    "TFT_MOSI":       "P1.09",
+    "TFT_CS":         "P0.11",
+    "TFT_DC":         "P0.12",
+    "TFT_RST":        "P0.02",
+    "TFT_BL":         "P0.15",
+    "GPS_RX_MCU":     "P1.07",
+    "GPS_TX_MCU":     "P1.05",
+    "GPS_PPS":        "P1.04",
+    "GPS_STANDBY":    "P1.02",
+    "VEXT_ENABLE":    "P0.21",
+    "ADC_CTRL":       "P0.06",
+    "VBAT_SENSE":     "P0.04",
+    "USER_BUTTON":    "P1.10",
+    "LED_GREEN":      "P1.03",
+    "NEOPIXEL_DATA":  "P0.14",
+    "QSPI_SCK":       "P1.14",
+    "QSPI_CS":        "P1.15",
+    "QSPI_IO0":       "P1.12",
+    "QSPI_IO1":       "P1.13",
+    "QSPI_IO2":       "P0.07",
+    "QSPI_IO3":       "P0.05",
+    "QSPI_FLASH":     "MX25R1635F"
+  }
+}

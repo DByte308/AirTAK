@@ -1,6 +1,13 @@
 # AirTAK CI — Forgejo Actions
-# Builds firmware (t_deck) + native tests, and Android debug APK + unit tests.
+# Builds all firmware targets + native tests, and Android debug APK + unit tests.
 # Both jobs run in parallel. Artifacts are published for every push.
+#
+# Firmware targets:
+#   t_echo_plus  — nRF52840 (Adafruit BSP) → firmware.hex
+#   heltec_t114  — nRF52840 (Adafruit BSP) → firmware.hex
+#   t_deck       — ESP32-S3  (ESP-IDF)     → firmware.bin
+#   t3s3         — ESP32-S3  (ESP-IDF)     → firmware.bin
+#   native       — host unit tests (Unity)
 #
 # Runner requirements:
 #   - `runs-on` label must match your Forgejo runner. Default labels:
@@ -18,9 +25,9 @@ on:
     branches: [main, master]
 
 jobs:
-  # ── Firmware: build firmware image + run native unit tests ──────────────────
+  # ── Firmware: build all targets + run native unit tests ────────────────────
   firmware:
-    name: Firmware (t_deck + native tests)
+    name: Firmware (all targets + native tests)
     runs-on: docker
     steps:
       - name: Checkout
@@ -46,20 +53,56 @@ jobs:
       - name: Run native unit tests
         run: bash ./tools/pio_firmware.sh test -e native
 
-      - name: Build t_deck firmware
+      - name: Build t_echo_plus (nRF52840)
+        run: bash ./tools/pio_firmware.sh run -e t_echo_plus
+
+      - name: Build heltec_t114 (nRF52840)
+        run: bash ./tools/pio_firmware.sh run -e heltec_t114
+
+      - name: Build t_deck (ESP32-S3)
         run: bash ./tools/pio_firmware.sh run -e t_deck
+
+      - name: Build t3s3 (ESP32-S3)
+        run: bash ./tools/pio_firmware.sh run -e t3s3
 
       - name: Collect firmware artifacts
         run: |
-          mkdir -p artifacts/firmware
-          cp firmware/.pio/build/t_deck/firmware.hex artifacts/firmware/ 2>/dev/null || true
-          cp firmware/.pio/build/t_deck/firmware.bin artifacts/firmware/ 2>/dev/null || true
+          for board in t_echo_plus heltec_t114 t_deck t3s3; do
+            mkdir -p "artifacts/${board}"
+            src="firmware/.pio/build/${board}"
+            [ -f "${src}/firmware.hex" ] && cp "${src}/firmware.hex" "artifacts/${board}/"
+            [ -f "${src}/firmware.bin" ] && cp "${src}/firmware.bin" "artifacts/${board}/"
+            [ -f "${src}/firmware.elf" ] && cp "${src}/firmware.elf" "artifacts/${board}/"
+          done
+          echo "Firmware artifacts:"
+          find artifacts -type f -exec ls -lh {} \;
 
-      - name: Upload firmware artifacts
+      - name: Upload t_echo_plus
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware-t_echo_plus
+          path: artifacts/t_echo_plus/
+          retention-days: 30
+
+      - name: Upload heltec_t114
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware-heltec_t114
+          path: artifacts/heltec_t114/
+          retention-days: 30
+
+      - name: Upload t_deck
         uses: actions/upload-artifact@v3
         with:
           name: firmware-t_deck
-          path: artifacts/firmware/
+          path: artifacts/t_deck/
+          retention-days: 30
+
+      - name: Upload t3s3
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware-t3s3
+          path: artifacts/t3s3/
           retention-days: 30
 
   # ── Android: build debug APK + run unit tests ──────────────────────────────

@@ -6,13 +6,36 @@ The firmware keeps mesh, config, game, BLE framing, and public HAL APIs in the s
 
 - `BoardConfig.h` selects the active board from PlatformIO build flags.
 - `boards/<board>/BoardConfig.h` owns board pins and feature flags.
+- `boards/<board>/hal/Display.cpp` implements the board-specific display driver.
 - `Platform.h` exposes board identity, MCU family name, boot init, node ID, and MAC address helpers.
 - `nrf52/` contains implementations tied to the Adafruit nRF52 Arduino BSP and Bluefruit stack.
+- `esp32/` contains implementations tied to the Arduino-ESP32 framework and NimBLE stack.
 - `native/` contains host-side implementations used by unit tests.
 
 ## Adding A Board
 
-1. Add `src/platform/boards/<board>/BoardConfig.h` with pins, feature flags, and module selections.
-2. Add a PlatformIO environment that defines `AIRTAK_BOARD_<BOARD_NAME>` and excludes unrelated platform implementation folders.
-3. If the board uses a new MCU family, add platform implementations for identity, BLE, DFU/recovery, and config storage before enabling the full firmware build.
-4. Keep public interfaces in `src/hal/`, `src/ble/`, and `src/config/` stable so mesh and application code do not need target-specific branches.
+1. Create `firmware/boards/<board>.json` — PlatformIO custom board definition with MCU, framework, upload, and pin mapping metadata.
+2. Create `firmware/variants/<board>/variant.h` + `variant.cpp` — Arduino framework variant pin defines (required for new nRF52 boards; ESP32 boards use a standard variant).
+3. Add `src/platform/boards/<board>/BoardConfig.h` with `AIRTAK_BOARD_ID`, feature flags (`AIRTAK_BOARD_HAS_*`), and all `AIRTAK_PIN_*` pin defines.
+4. Add `src/platform/boards/<board>/hal/Display.cpp` — board-specific display driver implementing `hal/Display.h`.
+5. Add a PlatformIO environment in `platformio.ini` that defines `AIRTAK_BOARD_<NAME>` and excludes unrelated platform/board folders.
+6. Add a selector in `src/platform/BoardConfig.h` for `AIRTAK_BOARD_<NAME>`.
+7. If the board uses a new MCU family, add platform implementations for identity, BLE, DFU/recovery, and config storage under `src/platform/<arch>/`.
+8. Keep public interfaces in `src/hal/`, `src/ble/`, and `src/config/` stable so mesh and application code do not need target-specific branches.
+
+## Device Variants (same board, different radio / peripheral)
+
+Some boards ship with multiple hardware variants that differ only in the radio module (e.g. LilyGo T3 S3: SX1262 / SX1276 / SX1280 / LR1121). AirTAK handles these via a **single BoardConfig.h with multi-radio pin defines** and **runtime radio detection** in `Radio.cpp`:
+
+1. Define all possible radio pins in the single `BoardConfig.h` (SX1262, SX1276, SX1280, etc.).
+2. `Radio::init()` probes each supported radio type on the shared SPI bus in order; the first to respond becomes the active radio.
+3. One build target serves all variants — no need for separate PlatformIO environments per radio.
+
+When frequency differs between variants (e.g. SX1262 sub-GHz vs SX1280 2.4 GHz), the frequency band is determined by which radio was detected and LoraConfig.
+
+This is preferred over per-radio-variant build targets because:
+- Users flash one firmware binary regardless of which T3 S3 variant they received.
+- Board pins (display, battery, buttons, SD card) are identical across variants — only radio DIO/BUSY pins differ.
+- RadioLib supports runtime probing via SPI chip-ID registers.
+
+Contrast with Meshtastic's approach: all radio defines in one `variant.h`, with runtime probing in `RadioInterface.cpp`. AirTAK follows the same strategy but keeps the radio abstraction inside `Radio.cpp` rather than scattered through `NodeDB.cpp` and `configuration.h`.
