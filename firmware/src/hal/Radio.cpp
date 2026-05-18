@@ -364,11 +364,23 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
         uint8_t  cr    = 0;
         if (!resolvePhyProfile(idx, sf, bw_hz, cr)) return false;
 
-        int16_t err = s_active_radio->setBandwidth(bw_hz / 1000.0f);
-        if (err != RADIOLIB_ERR_NONE) return false;
-        err = s_active_radio->setSpreadingFactor(sf);
-        if (err != RADIOLIB_ERR_NONE) return false;
-        err = s_active_radio->setCodingRate(cr);
+        int16_t err = RADIOLIB_ERR_NONE;
+        if (s_radio_type == RadioType::SX1262) {
+            err = s_radio_sx1262.setBandwidth(bw_hz / 1000.0f);
+            if (err == RADIOLIB_ERR_NONE)
+                err = s_radio_sx1262.setSpreadingFactor(sf);
+            if (err == RADIOLIB_ERR_NONE)
+                err = s_radio_sx1262.setCodingRate(cr);
+        }
+#if defined(AIRTAK_PIN_SX1276_DIO0)
+        else if (s_radio_type == RadioType::SX1276) {
+            err = s_radio_sx1276.setBandwidth(bw_hz / 1000.0f);
+            if (err == RADIOLIB_ERR_NONE)
+                err = s_radio_sx1276.setSpreadingFactor(sf);
+            if (err == RADIOLIB_ERR_NONE)
+                err = s_radio_sx1276.setCodingRate(cr);
+        }
+#endif
         if (err != RADIOLIB_ERR_NONE) return false;
     }
 
