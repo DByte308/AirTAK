@@ -251,7 +251,7 @@ private fun HudBar(
                     color = if (phoneGpsFix) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
+            } else null
             rssi?.let {
                 Text(
                     "${it.toInt()} dBm",
