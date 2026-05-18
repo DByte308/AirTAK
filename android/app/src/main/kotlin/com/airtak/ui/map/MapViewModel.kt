@@ -12,6 +12,7 @@ import com.airtak.data.db.WaypointDao
 import com.airtak.data.db.WaypointEntity
 import com.airtak.data.geocoding.GeocodingRepository
 import com.airtak.data.geocoding.GeocodingResult
+import com.airtak.data.gps.PhoneGpsProvider
 import com.airtak.data.marker.TacticalMarkerRepository
 import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.mesh.RemoteNodeRepository
@@ -120,6 +121,7 @@ class MapViewModel @Inject constructor(
     private val tileRepository: TileRepository,
     private val missionOverlayRepository: MissionOverlayRepository,
     private val config: ConfigRepository,
+    private val phoneGps: PhoneGpsProvider,
     private val geocodingRepository: GeocodingRepository,
     private val markerRepo: TacticalMarkerRepository,
     private val gameRepo: com.airtak.data.game.GameRepository,
@@ -182,9 +184,10 @@ class MapViewModel @Inject constructor(
         SourceState(status, nodes, waypoints, gameConfig)
     }
 
-    private val mapCore = combine(sourceState, layerState, clock) { source, layers, now ->
+    private val mapCore = combine(sourceState, layerState, clock, phoneGps.location) { source, layers, now, phoneLoc ->
         val ownLabel = source.gameConfig.callsign.ifBlank { source.status?.nodeName.orEmpty().ifBlank { "You" } }
         val own = source.status?.gps?.takeIf { it.fix }?.let { OwnPosition(it.latitude, it.longitude, ownLabel) }
+            ?: phoneLoc?.let { OwnPosition(it.latitude, it.longitude, ownLabel) }
         val ownNodeId = source.status?.nodeId?.toLong()?.and(0xFFFF_FFFFL)
         MapUiState(
             ownPosition = own,

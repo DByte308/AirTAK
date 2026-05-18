@@ -6,11 +6,12 @@
 // who prefer phone GPS over the device's L76K module.
 //
 // Lifecycle:
-//   - When gps_source transitions to PHONE_GPS, Android LocationManager
-//     location updates begin.
-//   - Each update is sent to the firmware as AdminRequest{SET_PHONE_GPS}.
-//   - When gps_source transitions to DEVICE_GPS (or the BLE link drops),
-//     location updates stop.
+//   - When gps_source transitions to PHONE_GPS (device connected), Android
+//     LocationManager location updates begin and are sent to firmware.
+//   - When gps_source transitions to DEVICE_GPS (device connected), updates stop.
+//   - When NO device is connected, phone GPS starts automatically and exposes
+//     location via the `location` StateFlow for direct map consumption. This
+//     covers the standalone-app case (no LoRa device). No BLE send occurs.
 //
 // Throttling: position is sent to firmware at most once every 10 seconds
 // and only when displacement exceeds 5 metres, matching the smart beaconing
@@ -26,6 +27,7 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
 import com.airtak.data.ble.BleRepository
+import com.airtak.data.ble.LinkState
 import com.airtak.data.config.ConfigRepository
 import com.airtak.proto.AdminCommand
 import com.airtak.proto.AdminRequest
@@ -37,9 +39,20 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
+
+data class PhoneLocation(
+    val latitude: Double,
+    val longitude: Double,
+    val altitudeM: Float,
+    val accuracyM: Float,
+)
 
 @Singleton
 class PhoneGpsProvider @Inject constructor(
@@ -49,19 +62,38 @@ class PhoneGpsProvider @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var active = false
+    private var sendToBle = false
+
+    private val _location = MutableStateFlow<PhoneLocation?>(null)
+    val location: StateFlow<PhoneLocation?> = _location.asStateFlow()
 
     init {
         scope.launch {
-            config.groupBytes.collect { map ->
+            combine(ble.linkState, config.groupBytes) { linkState, map ->
+                linkState to map
+            }.collect { (linkState, map) ->
+                val isConnected = linkState is LinkState.Connected
                 val bytes = map[ConfigGroup.POSITION]
                 val cfg = bytes?.let { runCatching { PositionConfig.parseFrom(it) }.getOrNull() }
-                val wantPhoneGps = cfg?.gpsSource == GpsSource.PHONE_GPS
-                if (wantPhoneGps != active) {
-                    active = wantPhoneGps
-                    if (wantPhoneGps) start() else stop()
+                val deviceWantsPhoneGps = cfg?.gpsSource == GpsSource.PHONE_GPS
+
+                if (!isConnected) {
+                    applyState(true, targetBle = false)
+                } else if (deviceWantsPhoneGps) {
+                    applyState(true, targetBle = true)
+                } else {
+                    applyState(false, targetBle = false)
                 }
             }
         }
+    }
+
+    private fun applyState(wantActive: Boolean, targetBle: Boolean) {
+        val wasActive = active
+        active = wantActive
+        sendToBle = targetBle
+        if (wantActive && !wasActive) start()
+        else if (!wantActive && wasActive) stop()
     }
 
     @SuppressLint("MissingPermission")
@@ -85,18 +117,26 @@ class PhoneGpsProvider @Inject constructor(
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(loc: Location) {
-            val req = AdminRequest.newBuilder()
-                .setCommand(AdminCommand.SET_PHONE_GPS)
-                .setPhoneGps(
-                    PhoneGpsPosition.newBuilder()
-                        .setLatitude(loc.latitude)
-                        .setLongitude(loc.longitude)
-                        .setAltitudeM(loc.altitude.toFloat())
-                        .setAccuracyM(loc.accuracy)
-                        .build(),
-                )
-                .build()
-            ble.send(BleRepository.OutboundChannel.Admin, req.toByteArray())
+            _location.value = PhoneLocation(
+                latitude = loc.latitude,
+                longitude = loc.longitude,
+                altitudeM = loc.altitude.toFloat(),
+                accuracyM = loc.accuracy,
+            )
+            if (sendToBle) {
+                val req = AdminRequest.newBuilder()
+                    .setCommand(AdminCommand.SET_PHONE_GPS)
+                    .setPhoneGps(
+                        PhoneGpsPosition.newBuilder()
+                            .setLatitude(loc.latitude)
+                            .setLongitude(loc.longitude)
+                            .setAltitudeM(loc.altitude.toFloat())
+                            .setAccuracyM(loc.accuracy)
+                            .build(),
+                    )
+                    .build()
+                ble.send(BleRepository.OutboundChannel.Admin, req.toByteArray())
+            }
         }
 
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
