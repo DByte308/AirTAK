@@ -29,9 +29,9 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.SportsEsports
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,10 +71,10 @@ import java.util.Locale
 
 @Composable
 fun MessagesScreen(
-    viewModel: MessagesViewModel = hiltViewModel(),
-    dmViewModel: DirectMessagesViewModel = hiltViewModel(),
-    pendingDmNodeId: Long? = null,
-    onDmOpened: () -> Unit = {},
+        viewModel: MessagesViewModel = hiltViewModel(),
+        dmViewModel: DirectMessagesViewModel = hiltViewModel(),
+        pendingDmNodeId: Long? = null,
+        onDmOpened: () -> Unit = {},
 ) {
     val slots by viewModel.activeSlots.collectAsState()
     // DM tab is always the last tab, at index slots.size.
@@ -108,35 +108,40 @@ fun MessagesScreen(
             }
         }
         ScrollableTabRow(
-            selectedTabIndex = tab,
-            containerColor = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.primary,
-            edgePadding = 0.dp,
+                selectedTabIndex = tab,
+                containerColor = MaterialTheme.colorScheme.background,
+                contentColor = MaterialTheme.colorScheme.primary,
+                edgePadding = 0.dp,
         ) {
             slots.forEachIndexed { i, slot ->
                 Tab(
-                    selected = tab == i,
-                    onClick = { tab = i },
-                    icon = { Icon(slotIcon(slot), contentDescription = null) },
-                    text = {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(slot.name.ifBlank { "Slot ${slot.index}" }.uppercase(),
-                                 style = MaterialTheme.typography.labelLarge)
-                            Text(slot.role.shortLabel(), style = MaterialTheme.typography.labelSmall)
-                        }
-                    },
+                        selected = tab == i,
+                        onClick = { tab = i },
+                        icon = { Icon(slotIcon(slot), contentDescription = null) },
+                        text = {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                        slot.name.ifBlank { "Slot ${slot.index}" }.uppercase(),
+                                        style = MaterialTheme.typography.labelLarge
+                                )
+                                Text(
+                                        slot.role.shortLabel(),
+                                        style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        },
                 )
             }
             Tab(
-                selected = tab == dmTabIndex,
-                onClick = { tab = dmTabIndex },
-                icon = { Icon(Icons.Outlined.Person, contentDescription = null) },
-                text = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("DIRECT", style = MaterialTheme.typography.labelLarge)
-                        Text("private", style = MaterialTheme.typography.labelSmall)
-                    }
-                },
+                    selected = tab == dmTabIndex,
+                    onClick = { tab = dmTabIndex },
+                    icon = { Icon(Icons.Outlined.Person, contentDescription = null) },
+                    text = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("DIRECT", style = MaterialTheme.typography.labelLarge)
+                            Text("private", style = MaterialTheme.typography.labelSmall)
+                        }
+                    },
             )
         }
         Spacer(Modifier.height(12.dp))
@@ -152,116 +157,117 @@ fun MessagesScreen(
                 if (messages.isEmpty()) {
                     HudCard(Modifier.fillMaxWidth()) {
                         Text(
-                            "No traffic yet. Messages from your mesh will appear here as they arrive.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                "No traffic yet. Messages from your mesh will appear here as they arrive.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 } else {
                     LazyColumn(
-                        state = listState,
-                        reverseLayout = true,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = 8.dp),
-                    ) {
-                        items(messages, key = { it.id }) { MessageRow(it) }
-                    }
+                            state = listState,
+                            reverseLayout = true,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(bottom = 8.dp),
+                    ) { items(messages, key = { it.id }) { MessageRow(it) } }
                 }
             }
 
             // Composer
             Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(10.dp),
+                    Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(10.dp),
             ) {
                 // Scope selector row
                 if (scope != com.airtak.proto.Scope.SCOPE_ALL) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
-                            Icons.Outlined.Groups,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary,
+                                Icons.Outlined.Groups,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary,
                         )
                         Spacer(Modifier.size(4.dp))
                         Text(
-                            "Visible to: ${scopeLabel(scope)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                                "Visible to: ${scopeLabel(scope)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
-                        value = draft,
-                        onValueChange = viewModel::setDraft,
-                        placeholder = { Text("Message ${activeSlot.name.ifBlank { "Slot ${activeSlot.index}" }}…",
-                                            style = MaterialTheme.typography.bodyMedium) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = false,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = { viewModel.send() }),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                        ),
+                            value = draft,
+                            onValueChange = viewModel::setDraft,
+                            placeholder = {
+                                Text(
+                                        "Message ${activeSlot.name.ifBlank { "Slot ${activeSlot.index}" }}…",
+                                        style = MaterialTheme.typography.bodyMedium
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            singleLine = false,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = { viewModel.send() }),
+                            colors =
+                                    TextFieldDefaults.colors(
+                                            focusedContainerColor =
+                                                    MaterialTheme.colorScheme.surfaceVariant,
+                                            unfocusedContainerColor =
+                                                    MaterialTheme.colorScheme.surfaceVariant,
+                                            focusedIndicatorColor =
+                                                    MaterialTheme.colorScheme.primary,
+                                    ),
                     )
                     // Scope picker dropdown
                     var scopeMenuExpanded by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { scopeMenuExpanded = true }) {
                             Icon(
-                                Icons.Outlined.Groups,
-                                contentDescription = "Set message scope",
-                                modifier = Modifier.size(20.dp),
-                                tint = if (scope != com.airtak.proto.Scope.SCOPE_ALL)
-                                    MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    Icons.Outlined.Groups,
+                                    contentDescription = "Set message scope",
+                                    modifier = Modifier.size(20.dp),
+                                    tint =
+                                            if (scope != com.airtak.proto.Scope.SCOPE_ALL)
+                                                    MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         androidx.compose.material3.DropdownMenu(
-                            expanded = scopeMenuExpanded,
-                            onDismissRequest = { scopeMenuExpanded = false },
+                                expanded = scopeMenuExpanded,
+                                onDismissRequest = { scopeMenuExpanded = false },
                         ) {
                             listOf(
-                                com.airtak.proto.Scope.SCOPE_ALL,
-                                com.airtak.proto.Scope.SCOPE_COMPANY,
-                                com.airtak.proto.Scope.SCOPE_PLATOON,
-                                com.airtak.proto.Scope.SCOPE_SQUAD,
-                                com.airtak.proto.Scope.SCOPE_FIRE_TEAM,
-                            ).forEach { s ->
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(scopeLabel(s)) },
-                                    onClick = {
-                                        viewModel.setScope(s)
-                                        scopeMenuExpanded = false
-                                    },
-                                )
-        }
-    }
-}
-
-private fun scopeLabel(scope: com.airtak.proto.Scope): String = when (scope) {
-    com.airtak.proto.Scope.SCOPE_ALL -> "All players"
-    com.airtak.proto.Scope.SCOPE_COMPANY -> "Company"
-    com.airtak.proto.Scope.SCOPE_PLATOON -> "Platoon"
-    com.airtak.proto.Scope.SCOPE_SQUAD -> "Squad"
-    com.airtak.proto.Scope.SCOPE_FIRE_TEAM -> "Fireteam"
-    else -> "All players"
-}
+                                            com.airtak.proto.Scope.SCOPE_ALL,
+                                            com.airtak.proto.Scope.SCOPE_COMPANY,
+                                            com.airtak.proto.Scope.SCOPE_PLATOON,
+                                            com.airtak.proto.Scope.SCOPE_SQUAD,
+                                            com.airtak.proto.Scope.SCOPE_FIRE_TEAM,
+                                    )
+                                    .forEach { s ->
+                                        androidx.compose.material3.DropdownMenuItem(
+                                                text = { Text(scopeLabel(s)) },
+                                                onClick = {
+                                                    viewModel.setScope(s)
+                                                    scopeMenuExpanded = false
+                                                },
+                                        )
+                                    }
+                        }
+                    }
+                    // Send button
                     IconButton(onClick = { viewModel.send() }, enabled = draft.isNotBlank()) {
                         Icon(
-                            Icons.AutoMirrored.Outlined.Send,
-                            contentDescription = "Send",
-                            tint = if (draft.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
-                                   else MaterialTheme.colorScheme.primary,
+                                Icons.AutoMirrored.Outlined.Send,
+                                contentDescription = "Send",
+                                tint =
+                                        if (draft.isBlank())
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                        else MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
@@ -269,8 +275,10 @@ private fun scopeLabel(scope: com.airtak.proto.Scope): String = when (scope) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val warn = byteCount > 237
                     TacticalText(
-                        "$byteCount / 237 B",
-                        color = if (warn) StatusHit else MaterialTheme.colorScheme.onSurfaceVariant,
+                            "$byteCount / 237 B",
+                            color =
+                                    if (warn) StatusHit
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (error != null) {
                         Spacer(Modifier.size(12.dp))
@@ -282,85 +290,108 @@ private fun scopeLabel(scope: com.airtak.proto.Scope): String = when (scope) {
     }
 }
 
+private fun scopeLabel(scope: com.airtak.proto.Scope): String =
+        when (scope) {
+            com.airtak.proto.Scope.SCOPE_ALL -> "All players"
+            com.airtak.proto.Scope.SCOPE_COMPANY -> "Company"
+            com.airtak.proto.Scope.SCOPE_PLATOON -> "Platoon"
+            com.airtak.proto.Scope.SCOPE_SQUAD -> "Squad"
+            com.airtak.proto.Scope.SCOPE_FIRE_TEAM -> "Fireteam"
+            else -> "All players"
+        }
+
 @Composable
 private fun SlotHint(slot: ChannelSlot) {
-    val accent = when (slot.role) {
-        ChannelRole.PRIMARY   -> MaterialTheme.colorScheme.primary
-        ChannelRole.SECONDARY -> AccentAmber
-        else                  -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val accent =
+            when (slot.role) {
+                ChannelRole.PRIMARY -> MaterialTheme.colorScheme.primary
+                ChannelRole.SECONDARY -> AccentAmber
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
     HudCard(Modifier.fillMaxWidth(), accent = accent) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(slotIcon(slot), contentDescription = null, tint = accent)
             Spacer(Modifier.size(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(slot.name.ifBlank { "Slot ${slot.index}" },
-                     style = MaterialTheme.typography.titleSmall,
-                     color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                        slot.name.ifBlank { "Slot ${slot.index}" },
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                )
                 TacticalText(
-                    buildString {
-                        append(if (slot.psk.size() == 0) "Open" else "Encrypted")
-                        append(" · ")
-                        append(slot.role.shortLabel())
-                        if (slot.index == 0) append(" · Meshtastic interop")
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        buildString {
+                            append(if (slot.psk.size() == 0) "Open" else "Encrypted")
+                            append(" · ")
+                            append(slot.role.shortLabel())
+                            if (slot.index == 0) append(" · Meshtastic interop")
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     }
 }
 
-private fun slotIcon(slot: ChannelSlot) = when {
-    slot.index == 0              -> Icons.Outlined.Groups
-    slot.role == ChannelRole.PRIMARY -> Icons.Outlined.Groups
-    else                         -> Icons.Outlined.SportsEsports
-}
+private fun slotIcon(slot: ChannelSlot) =
+        when {
+            slot.index == 0 -> Icons.Outlined.Groups
+            slot.role == ChannelRole.PRIMARY -> Icons.Outlined.Groups
+            else -> Icons.Outlined.SportsEsports
+        }
 
-private fun ChannelRole.shortLabel(): String = when (this) {
-    ChannelRole.PRIMARY   -> "primary"
-    ChannelRole.SECONDARY -> "secondary"
-    else                  -> "disabled"
-}
+private fun ChannelRole.shortLabel(): String =
+        when (this) {
+            ChannelRole.PRIMARY -> "primary"
+            ChannelRole.SECONDARY -> "secondary"
+            else -> "disabled"
+        }
 
 @Composable
 private fun MessageRow(m: MessageEntity) {
-    val time = remember(m.timestampMs) {
-        SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(m.timestampMs))
-    }
+    val time =
+            remember(m.timestampMs) {
+                SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(m.timestampMs))
+            }
     val accent = if (m.outgoing) AccentCyan else StatusActive
     HudCard(accent = accent) {
         Row {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        if (m.outgoing) "You" else m.sourceCallsign.ifBlank {
-                            "Node ${m.sourceNodeId.toString(16).uppercase().padStart(8, '0')}"
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                        color = accent,
+                            if (m.outgoing) "You"
+                            else
+                                    m.sourceCallsign.ifBlank {
+                                        "Node ${m.sourceNodeId.toString(16).uppercase().padStart(8, '0')}"
+                                    },
+                            style = MaterialTheme.typography.labelLarge,
+                            color = accent,
                     )
                     Spacer(Modifier.size(8.dp))
                     TacticalText(time, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (m.outgoing) {
                         Spacer(Modifier.size(4.dp))
                         Icon(
-                            imageVector = if (m.delivered) Icons.Outlined.Done else Icons.Outlined.Schedule,
-                            contentDescription = if (m.delivered) "Delivered" else "Pending",
-                            tint = if (m.delivered) StatusActive else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(13.dp),
+                                imageVector =
+                                        if (m.delivered) Icons.Outlined.Done
+                                        else Icons.Outlined.Schedule,
+                                contentDescription = if (m.delivered) "Delivered" else "Pending",
+                                tint =
+                                        if (m.delivered) StatusActive
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(13.dp),
                         )
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(m.text, style = MaterialTheme.typography.bodyMedium,
-                     color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                        m.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }
 }
-
-
 
 // ── Direct Messages pane ─────────────────────────────────────────────────────
 
@@ -379,9 +410,9 @@ private fun DirectMessagesPane(vm: DirectMessagesViewModel) {
 
 @Composable
 private fun DmPeerList(
-    peers: List<RemoteNodeEntity>,
-    recentPeers: List<MessageEntity>,
-    onOpen: (RemoteNodeEntity) -> Unit,
+        peers: List<RemoteNodeEntity>,
+        recentPeers: List<MessageEntity>,
+        onOpen: (RemoteNodeEntity) -> Unit,
 ) {
     val recentPeerIds = recentPeers.map { it.peerNodeId }.toSet()
     val recent = peers.filter { it.nodeId in recentPeerIds }
@@ -405,9 +436,9 @@ private fun DmPeerList(
             item {
                 HudCard(Modifier.fillMaxWidth()) {
                     Text(
-                        "No nodes seen yet. Direct messages can be sent to any node that has been heard on the mesh.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            "No nodes seen yet. Direct messages can be sent to any node that has been heard on the mesh.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -416,31 +447,37 @@ private fun DmPeerList(
 }
 
 @Composable
-private fun DmPeerRow(node: RemoteNodeEntity, preview: String?, onOpen: (RemoteNodeEntity) -> Unit) {
+private fun DmPeerRow(
+        node: RemoteNodeEntity,
+        preview: String?,
+        onOpen: (RemoteNodeEntity) -> Unit
+) {
     HudCard(
-        modifier = Modifier.fillMaxWidth().clickable { onOpen(node) },
-        accent = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.fillMaxWidth().clickable { onOpen(node) },
+            accent = MaterialTheme.colorScheme.primary,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                Icons.Outlined.Person,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
+                    Icons.Outlined.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
             )
             Spacer(Modifier.size(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    node.callsign.ifBlank { node.shortName.ifBlank {
-                        "Node ${node.nodeId.toString(16).uppercase().padStart(8, '0')}"
-                    }},
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                        node.callsign.ifBlank {
+                            node.shortName.ifBlank {
+                                "Node ${node.nodeId.toString(16).uppercase().padStart(8, '0')}"
+                            }
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
                 )
                 if (!preview.isNullOrBlank()) {
                     TacticalText(
-                        preview.take(60) + if (preview.length > 60) "…" else "",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            preview.take(60) + if (preview.length > 60) "…" else "",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -454,26 +491,32 @@ private fun DmConversation(vm: DirectMessagesViewModel, peer: RemoteNodeEntity) 
     val draft by vm.draft.collectAsState()
     val error by vm.error.collectAsState()
     val byteCount = draft.toByteArray(Charsets.UTF_8).size
-    val peerLabel = peer.callsign.ifBlank { peer.shortName.ifBlank {
-        "Node ${peer.nodeId.toString(16).uppercase().padStart(8, '0')}"
-    }}
+    val peerLabel =
+            peer.callsign.ifBlank {
+                peer.shortName.ifBlank {
+                    "Node ${peer.nodeId.toString(16).uppercase().padStart(8, '0')}"
+                }
+            }
 
     Column(Modifier.fillMaxSize()) {
         // Header with back button
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = vm::closeConversation) {
                 Icon(
-                    Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = "Back to peer list",
-                    tint = MaterialTheme.colorScheme.primary,
+                        Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "Back to peer list",
+                        tint = MaterialTheme.colorScheme.primary,
                 )
             }
             Column {
-                Text(peerLabel, style = MaterialTheme.typography.titleSmall,
-                     color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                        peerLabel,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                )
                 TacticalText(
-                    "Direct · unicast · ✓ = received by device",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        "Direct · unicast · ✓ = received by device",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -484,59 +527,64 @@ private fun DmConversation(vm: DirectMessagesViewModel, peer: RemoteNodeEntity) 
             if (messages.isEmpty()) {
                 HudCard(Modifier.fillMaxWidth()) {
                     Text(
-                        "No messages yet. Your message will be routed through the mesh to $peerLabel.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            "No messages yet. Your message will be routed through the mesh to $peerLabel.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             } else {
                 LazyColumn(
-                    state = listState,
-                    reverseLayout = true,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 8.dp),
-                ) {
-                    items(messages, key = { it.id }) { MessageRow(it) }
-                }
+                        state = listState,
+                        reverseLayout = true,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp),
+                ) { items(messages, key = { it.id }) { MessageRow(it) } }
             }
         }
 
         Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(10.dp),
+                Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
-                    value = draft,
-                    onValueChange = vm::setDraft,
-                    placeholder = { Text("Message $peerLabel…", style = MaterialTheme.typography.bodyMedium) },
-                    modifier = Modifier.weight(1f),
-                    singleLine = false,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { vm.send() }),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                    ),
+                        value = draft,
+                        onValueChange = vm::setDraft,
+                        placeholder = {
+                            Text("Message $peerLabel…", style = MaterialTheme.typography.bodyMedium)
+                        },
+                        modifier = Modifier.weight(1f),
+                        singleLine = false,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { vm.send() }),
+                        colors =
+                                TextFieldDefaults.colors(
+                                        focusedContainerColor =
+                                                MaterialTheme.colorScheme.surfaceVariant,
+                                        unfocusedContainerColor =
+                                                MaterialTheme.colorScheme.surfaceVariant,
+                                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                                ),
                 )
                 IconButton(onClick = vm::send, enabled = draft.isNotBlank()) {
                     Icon(
-                        Icons.AutoMirrored.Outlined.Send,
-                        contentDescription = "Send",
-                        tint = if (draft.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
-                               else MaterialTheme.colorScheme.primary,
+                            Icons.AutoMirrored.Outlined.Send,
+                            contentDescription = "Send",
+                            tint =
+                                    if (draft.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
+                                    else MaterialTheme.colorScheme.primary,
                     )
                 }
             }
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TacticalText(
-                    "$byteCount / 237 B",
-                    color = if (byteCount > 237) StatusHit else MaterialTheme.colorScheme.onSurfaceVariant,
+                        "$byteCount / 237 B",
+                        color =
+                                if (byteCount > 237) StatusHit
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (error != null) {
                     Spacer(Modifier.size(12.dp))
