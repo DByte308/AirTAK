@@ -136,12 +136,13 @@ jobs:
 
       - name: Install protoc and regenerate proto sources
         run: |
-          PROTOC_ZIP="protoc-28.4-linux-x86_64.zip"
+          PROTOC_VER="34.1"
+          PROTOC_ZIP="protoc-${PROTOC_VER}-linux-x86_64.zip"
           curl -fSL --progress-bar \
-            "https://github.com/protocolbuffers/protobuf/releases/download/v28.4/${PROTOC_ZIP}" \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VER}/${PROTOC_ZIP}" \
             -o "/tmp/${PROTOC_ZIP}"
           unzip -qo "/tmp/${PROTOC_ZIP}" -d /tmp/protoc
-          sudo cp /tmp/protoc/bin/protoc /usr/local/bin/
+          cp /tmp/protoc/bin/protoc /usr/local/bin/
           rm -rf "/tmp/${PROTOC_ZIP}" /tmp/protoc
           protoc --version
 
