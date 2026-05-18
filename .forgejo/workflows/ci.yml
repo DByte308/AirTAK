@@ -1,5 +1,5 @@
 # AirTAK CI — Forgejo Actions
-# Builds firmware (t_echo_plus) + native tests, and Android debug APK + unit tests.
+# Builds firmware (t_deck) + native tests, and Android debug APK + unit tests.
 # Both jobs run in parallel. Artifacts are published for every push.
 #
 # Runner requirements:
@@ -20,7 +20,7 @@ on:
 jobs:
   # ── Firmware: build firmware image + run native unit tests ──────────────────
   firmware:
-    name: Firmware (t_echo_plus + native tests)
+    name: Firmware (t_deck + native tests)
     runs-on: docker
     steps:
       - name: Checkout
@@ -35,6 +35,9 @@ jobs:
           key: firmware-venv-${{ hashFiles('firmware/requirements-dev.txt') }}
           restore-keys: firmware-venv-
 
+      - name: Install Python venv
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-venv python3-pip
+
       - name: Setup firmware environment
         run: |
           bash ./tools/setup_firmware_env.sh
@@ -43,20 +46,20 @@ jobs:
       - name: Run native unit tests
         run: bash ./tools/pio_firmware.sh test -e native
 
-      - name: Build t_echo_plus firmware
-        run: bash ./tools/pio_firmware.sh run -e t_echo_plus
+      - name: Build t_deck firmware
+        run: bash ./tools/pio_firmware.sh run -e t_deck
 
       - name: Collect firmware artifacts
         run: |
           mkdir -p artifacts/firmware
-          cp firmware/.pio/build/t_echo_plus/firmware.elf artifacts/firmware/ 2>/dev/null || true
-          cp firmware/.pio/build/t_echo_plus/firmware.hex artifacts/firmware/ 2>/dev/null || true
-          cp firmware/.pio/build/t_echo_plus/firmware.bin artifacts/firmware/ 2>/dev/null || true
+          cp firmware/.pio/build/t_deck/firmware.elf artifacts/firmware/ 2>/dev/null || true
+          cp firmware/.pio/build/t_deck/firmware.hex artifacts/firmware/ 2>/dev/null || true
+          cp firmware/.pio/build/t_deck/firmware.bin artifacts/firmware/ 2>/dev/null || true
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-t_echo_plus
+          name: firmware-t_deck
           path: artifacts/firmware/
           retention-days: 30
 
