@@ -1,5 +1,5 @@
 // AirTAK - Airsoft Team Awareness Kit
-// firmware/src/platform/nrf52/config/FlashStore.cpp - Adafruit LittleFS QSPI storage
+// firmware/src/platform/nrf52/config/FlashStore.cpp - LittleFS on external QSPI flash
 
 #include "config/FlashStore.h"
 #include "config.h"
@@ -9,6 +9,8 @@
 #include <Adafruit_SPIFlashBase.h>
 #include <cstdio>
 #include <cstring>
+
+#include "nrfx_qspi.h"
 
 namespace airtak {
 namespace config {
@@ -91,6 +93,10 @@ static int countUsedBlock(void* context, lfs_block_t) {
 }
 
 bool FlashStore::init() {
+    // If the bootloader used QSPI in XIP mode, the peripheral is left active
+    // and must be explicitly deinitialized before the app can re-own it.
+    nrfx_qspi_uninit();
+
     if (!s_flash.begin(s_supported_flash, sizeof(s_supported_flash) / sizeof(s_supported_flash[0]))) {
         return false;
     }

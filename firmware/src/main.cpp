@@ -119,31 +119,21 @@ void setup() {
 
     wdtFeed();
     airtak::platform::initBoard();
+    delay(50);
 
     airtak::PacketPool::init();
 
-    bool flash_ok = false;
-
-#ifdef NRF52840_XXAA
-    if (readResetReason() & 0x02) {
-        Serial.println("AirTAK: watchdog recovery, flash skipped");
-        Serial.flush();
-    } else
-#endif
-    {
-        wdtFeed();
-        ledOff();
-        Serial.println("AirTAK: FlashStore init...");
-        Serial.flush();
-        flash_ok = airtak::config::FlashStore::init();
-        if (flash_ok) {
-            Serial.println("AirTAK: FlashStore OK");
-        } else {
-            Serial.println("AirTAK: FlashStore init failed; using volatile defaults");
-        }
-        Serial.flush();
-        ledOn();
+    wdtFeed();
+    ledOff();
+    Serial.println("AirTAK: FlashStore init...");
+    Serial.flush();
+    if (!airtak::config::FlashStore::init()) {
+        Serial.println("AirTAK: FlashStore init failed; using volatile defaults");
+    } else {
+        Serial.println("AirTAK: FlashStore OK");
     }
+    Serial.flush();
+    ledOn();
     wdtFeed();
     airtak::config::ConfigManager::init();
     airtak::config::ConfigManager::registerCallback([](airtak::ConfigGroup group) {
