@@ -4,6 +4,7 @@
 package com.airtak.ui.players
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -98,25 +100,74 @@ fun PlayersScreen(
                 onOnlineOnly = viewModel::setShowOnlineOnly,
             )
         }
-        ui.groups.forEach { group ->
-            val visible = group.players.filter { p ->
-                // Hide players banned at any scope (shadowban).
-                bans.none { (target, _) -> target == p.nodeId } || p.isSelf
+        // Collapsible hierarchy: track which groups are expanded
+        val collapsedKeys = remember { mutableStateMapOf<String, Boolean>() }
+        fun groupKey(group: UnitGroup): String = "${group.hierarchyLevel}:${group.label}"
+
+        fun flatten(group: UnitGroup, depth: Int): List<Any> {
+            val key = groupKey(group)
+            val isCollapsed = collapsedKeys[key] == true
+            val result = mutableListOf<Any>(group to depth)
+            if (!isCollapsed) {
+                group.children.forEach { child -> result.addAll(flatten(child, depth + 1)) }
+                group.players.forEach { player ->
+                    val banned = bans.any { (target, _) -> target == player.nodeId } && !player.isSelf
+                    if (!banned) result.add(player)
+                }
             }
-            if (visible.isEmpty()) return@forEach
-            item(key = "unit-${group.label}") { UnitGroupHeader(group.copy(players = visible)) }
-            items(visible, key = { it.nodeId }) { player ->
-                    PlayerCard(
-                        player = player,
-                        onRequestPosition = { viewModel.requestPosition(player.nodeId) },
-                        onRequestMarkers = { viewModel.requestMarkerSnapshot(player.nodeId) },
-                        onMessage = { onMessagePlayer(player.nodeId) },
-                        onLocate = { onLocatePlayer(player.nodeId) },
-                        onVoteKick = { pendingKick = player }.takeIf { !player.isSelf },
+            return result
+        }
+
+        val flat = remember(ui.hierarchy, bans, collapsedKeys) {
+            val list = mutableListOf<Any>()
+            ui.hierarchy.groups.forEach { list.addAll(flatten(it, 0)) }
+            ui.hierarchy.ungrouped.forEach { player ->
+                val banned = bans.any { (target, _) -> target == player.nodeId } && !player.isSelf
+                if (!banned) list.add(player)
+            }
+            list
+        }
+
+        items(flat.size, key = {
+            val item = flat[it]
+            when (item) {
+                is Pair<*, *> -> "hdr-${groupKey(item.first as UnitGroup)}"
+                is PlayerRow -> "p-${item.nodeId}"
+                else -> "item-$it"
+            }
+        }) { idx ->
+            when (val item = flat[idx]) {
+                is Pair<*, *> -> {
+                    val grp = item.first as UnitGroup
+                    val depth = item.second as Int
+                    val key = groupKey(grp)
+                    val isCollapsed = collapsedKeys[key] == true
+                    val totalCount = grp.players.size + grp.children.sumOf { countAll(it) }
+                    val canExpand = grp.children.isNotEmpty() || grp.players.isNotEmpty()
+                    HierarchyHeader(
+                        group = grp,
+                        depth = depth,
+                        totalCount = totalCount,
+                        canExpand = canExpand,
+                        expanded = !isCollapsed,
+                        onToggle = {
+                            collapsedKeys[key] = !isCollapsed
+                        },
                     )
+                }
+                is PlayerRow -> {
+                    PlayerCard(
+                        player = item,
+                        onRequestPosition = { viewModel.requestPosition(item.nodeId) },
+                        onRequestMarkers = { viewModel.requestMarkerSnapshot(item.nodeId) },
+                        onMessage = { onMessagePlayer(item.nodeId) },
+                        onLocate = { onLocatePlayer(item.nodeId) },
+                        onVoteKick = {{ pendingKick = item }},
+                    )
+                }
             }
         }
-        if (ui.groups.isEmpty()) {
+        if (flat.isEmpty()) {
             item {
                 HudCard(Modifier.fillMaxWidth()) {
                     Text(
@@ -278,9 +329,64 @@ private fun UnitGroupHeader(group: UnitGroup) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
         )
+        val totalCount = group.players.size + group.children.sumOf { countAll(it) }
         Spacer(Modifier.width(8.dp))
         Text(
-            group.players.size.toString(),
+            totalCount.toString(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+private fun countAll(group: UnitGroup): Int = group.players.size + group.children.sumOf { countAll(it) }
+
+@Composable
+private fun HierarchyHeader(
+    group: UnitGroup,
+    depth: Int,
+    totalCount: Int,
+    canExpand: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = canExpand) { onToggle() }
+            .padding(vertical = 4.dp, horizontal = (depth * 16).dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (canExpand) {
+            Text(
+                if (expanded) "▼" else "▶",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(6.dp))
+        } else {
+            Spacer(Modifier.width(18.dp))
+        }
+        Text(
+            group.label.uppercase(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(8.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            shape = RoundedCornerShape(4.dp),
+        ) {
+            Text(
+                group.hierarchyLevel.takeIf { it.isNotBlank() } ?: "—",
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            totalCount.toString(),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
         )

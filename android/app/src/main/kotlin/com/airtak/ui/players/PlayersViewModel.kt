@@ -52,12 +52,18 @@ data class UnitGroup(
     val label: String,
     val hierarchyLevel: String,
     val players: List<PlayerRow>,
+    val children: List<UnitGroup> = emptyList(),
+)
+
+data class HierarchyRoot(
+    val groups: List<UnitGroup>,
+    val ungrouped: List<PlayerRow>,
 )
 
 data class PlayersUiState(
     val showOnlineOnly: Boolean = false,
     val ownStatus: PlayerStatus = PlayerStatus.PLAYER_STATUS_ACTIVE,
-    val groups: List<UnitGroup> = emptyList(),
+    val hierarchy: HierarchyRoot = HierarchyRoot(emptyList(), emptyList()),
     val onlineCount: Int = 0,
     val totalCount: Int = 0,
     val query: String = "",
@@ -129,11 +135,11 @@ class PlayersViewModel @Inject constructor(
             } else null
             val rows = (listOfNotNull(ownRow) + remoteRows)
                 .filter { !onlineOnly || it.online }
-            val groups = groupByHierarchy(rows)
+            val hierarchy = groupByHierarchy(rows)
             PlayersUiState(
                 showOnlineOnly = onlineOnly,
                 ownStatus = own,
-                groups = groups,
+                hierarchy = hierarchy,
                 onlineCount = (listOfNotNull(ownRow) + remoteRows).count { it.online },
                 totalCount = (listOfNotNull(ownRow) + remoteRows).size,
             )
@@ -143,17 +149,16 @@ class PlayersViewModel @Inject constructor(
         if (q.isBlank()) state.copy(query = q)
         else state.copy(
             query = q,
-            groups = state.groups.mapNotNull { grp ->
-                val filtered = grp.players.filter {
-                    it.callsign.contains(q, ignoreCase = true) ||
-                        grp.label.contains(q, ignoreCase = true) ||
-                        it.companyId.contains(q, ignoreCase = true) ||
-                        it.platoonId.contains(q, ignoreCase = true) ||
-                        it.squadId.contains(q, ignoreCase = true) ||
-                        it.fireteamId.contains(q, ignoreCase = true)
-                }
-                if (filtered.isEmpty()) null else grp.copy(players = filtered)
-            },
+            hierarchy = state.hierarchy.copy(
+                groups = state.hierarchy.groups.mapNotNull { grp -> filterHierarchy(grp, q) },
+                ungrouped = state.hierarchy.ungrouped.filter { player ->
+                    player.callsign.contains(q, ignoreCase = true) ||
+                        player.companyId.contains(q, ignoreCase = true) ||
+                        player.platoonId.contains(q, ignoreCase = true) ||
+                        player.squadId.contains(q, ignoreCase = true) ||
+                        player.fireteamId.contains(q, ignoreCase = true)
+                },
+            ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlayersUiState())
 
@@ -194,7 +199,8 @@ class PlayersViewModel @Inject constructor(
     private fun broadcastOwnStatus(statusValue: PlayerStatus, transition: Boolean) {
         val currentStatus = status.value ?: return
         val cfg = runCatching { uiState.value }.getOrNull()
-        val row = cfg?.groups?.flatMap { it.players }?.firstOrNull { it.isSelf }
+        val allPlayers = (cfg?.hierarchy?.groups?.flatMap { allPlayers(it) } ?: emptyList()) + (cfg?.hierarchy?.ungrouped ?: emptyList())
+        val row = allPlayers.firstOrNull { it.isSelf }
         val callsign = row?.callsign?.takeIf { it.isNotBlank() } ?: currentStatus.nodeName.ifBlank { "AirTAK" }
         val packet = PlayerStatePacket.newBuilder()
             .setNodeId(currentStatus.nodeId)
@@ -254,45 +260,95 @@ class PlayersViewModel @Inject constructor(
     }
 }
 
-private fun groupByHierarchy(rows: List<PlayerRow>): List<UnitGroup> {
-    val sorted = rows.sortedBy { it.callsign.lowercase() }
+private fun allPlayers(group: UnitGroup): List<PlayerRow> =
+    group.players + group.children.flatMap { allPlayers(it) }
 
-    // Group by the most specific hierarchy level available.
-    // Priority: company → platoon → squad → fireteam
-    val groups = mutableMapOf<String, MutableList<PlayerRow>>()
+private fun filterHierarchy(group: UnitGroup, q: String): UnitGroup? {
+    val filteredChildren = group.children.mapNotNull { filterHierarchy(it, q) }
+    val filteredPlayers = group.players.filter { player ->
+        player.callsign.contains(q, ignoreCase = true) ||
+            group.label.contains(q, ignoreCase = true)
+    }
+    if (filteredChildren.isEmpty() && filteredPlayers.isEmpty()) return null
+    return group.copy(children = filteredChildren, players = filteredPlayers)
+}
+
+private fun groupByHierarchy(rows: List<PlayerRow>): HierarchyRoot {
+    val sorted = rows.sortedBy { it.callsign.lowercase() }
     val ungrouped = mutableListOf<PlayerRow>()
 
+    // Build Company → Platoon → Squad → Fireteam → Players tree
+    val companies = linkedMapOf<String, MutableMap<String, MutableMap<String, MutableMap<String, MutableList<PlayerRow>>>>>()
+
     for (row in sorted) {
-        val key = when {
-            row.companyId.isNotBlank() -> "company:${row.companyId}"
-            row.platoonId.isNotBlank() -> "platoon:${row.platoonId}"
-            row.squadId.isNotBlank() -> "squad:${row.squadId}"
-            row.fireteamId.isNotBlank() -> "fireteam:${row.fireteamId}"
-            else -> null
-        }
-        if (key != null) {
-            groups.getOrPut(key) { mutableListOf() }.add(row)
-        } else {
+        val co = row.companyId
+        val pl = row.platoonId
+        val sq = row.squadId
+        val ft = row.fireteamId
+
+        if (co.isBlank() && pl.isBlank() && sq.isBlank() && ft.isBlank()) {
             ungrouped.add(row)
+            continue
         }
+
+        val companyKey = co.ifBlank { "—" }
+        val platoonKey = pl.ifBlank { "—" }
+        val squadKey = sq.ifBlank { "—" }
+        val fireteamKey = ft.ifBlank { "—" }
+
+        companies
+            .getOrPut(companyKey) { linkedMapOf() }
+            .getOrPut(platoonKey) { linkedMapOf() }
+            .getOrPut(squadKey) { linkedMapOf() }
+            .getOrPut(fireteamKey) { mutableListOf() }
+            .add(row)
     }
 
-    val result = mutableListOf<UnitGroup>()
-    for ((key, players) in groups.entries.sortedBy { it.key }) {
-        val parts = key.split(":", limit = 2)
-        val level = parts[0]
-        val id = parts.getOrElse(1) { "" }
-        val label = when (level) {
-            "company" -> id
-            "platoon" -> id
-            "squad" -> id
-            "fireteam" -> id
-            else -> id
+    fun buildPlatoonNode(platoonId: String, regiment: Map<String, Map<String, MutableList<PlayerRow>>>): UnitGroup {
+        val children = regiment.map { (squadId, regiment) ->
+            buildSquadNode(squadId, regiment)
+        }.sortedBy { it.label }
+        return UnitGroup(label = platoonId, hierarchyLevel = "platoon", players = emptyList(), children = children)
+    }
+
+    fun buildSquadNode(squadId: String, regiment: Map<String, MutableList<PlayerRow>>): UnitGroup {
+        val children = regiment.map { (fireteamId, players) ->
+            UnitGroup(label = fireteamId, hierarchyLevel = "fireteam", players = players.sortedBy { it.callsign.lowercase() })
+        }.sortedBy { it.label }
+        return UnitGroup(label = squadId, hierarchyLevel = "squad", players = emptyList(), children = children)
+    }
+
+    val topGroups = companies.map { (companyId, company) ->
+        // The company may have direct platoons, or squads nested under platoons
+        // But in our tree structure, company always wraps a plat-level map
+        // which wraps squad-level maps, which wrap fireteam-level player lists.
+        // Flattening: if company has exactly one platoon with exactly one squad,
+        // we just skip the intermediate empty levels.
+        val platoonNodes = company.map { (platoonId, squads) ->
+            val squadNodes = squads.map { (squadId, fireteams) ->
+                buildSquadNode(squadId, fireteams)
+            }.sortedBy { it.label }
+            UnitGroup(label = platoonId, hierarchyLevel = "platoon", players = emptyList(), children = squadNodes)
+        }.sortedBy { it.label }
+
+        // If the company has a single platoon node "—" with a single squad "—",
+        // collapse to just fireteams at company level
+        val effectiveChildren = if (platoonNodes.size == 1 && platoonNodes[0].label == "—" && platoonNodes[0].children.size == 1 && platoonNodes[0].children[0].label == "—") {
+            platoonNodes[0].children[0].children
+        } else {
+            platoonNodes
         }
-        result.add(UnitGroup(label = label, hierarchyLevel = level, players = players))
+        UnitGroup(label = companyId, hierarchyLevel = "company", players = emptyList(), children = effectiveChildren)
+    }.sortedBy { it.label }
+
+    // Collapse single-child root levels for cleanliness
+    fun collapseSingle(group: UnitGroup): UnitGroup {
+        if (group.children.size == 1 && group.players.isEmpty() && group.label == "—") {
+            return collapseSingle(group.children[0])
+        }
+        return group.copy(children = group.children.map { collapseSingle(it) })
     }
-    if (ungrouped.isNotEmpty()) {
-        result.add(UnitGroup(label = "Ungrouped", hierarchyLevel = "", players = ungrouped))
-    }
-    return result
+
+    val collapsed = topGroups.map { collapseSingle(it) }
+    return HierarchyRoot(groups = collapsed, ungrouped = ungrouped)
 }

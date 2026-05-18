@@ -87,6 +87,7 @@ private enum class Section(val title: String, val subtitle: String) {
     Channels("Channels",    "8 channel slots with PSK"),
     PositionPower("Position & Power", "GPS broadcast, smart-beacon, battery saving"),
     Security("Security",    "BLE bond count"),
+    Moderation("Moderation","Vote-kick bans, ban list, unban"),
     App("Application",      "Theme, tile server, defaults"),
     About("About",          "Diagnostics, factory reset"),
 }
@@ -117,6 +118,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     Section.Channels       -> ChannelsSection(viewModel, initialFocusSlot = focusChannelSlot)
                     Section.PositionPower  -> PositionPowerSection(viewModel)
                     Section.Security       -> SecuritySection(viewModel)
+                    Section.Moderation     -> ModerationSection(viewModel)
                     Section.App            -> AppSection(viewModel)
                     Section.About          -> AboutSection(viewModel)
                 }
@@ -961,6 +963,89 @@ private fun SecuritySection(vm: SettingsViewModel) {
         ApplyRow(onRead = vm::readSecurity, onApply = vm::applySecurity,
                  busy = vm.busy.collectAsState().value)
     }
+}
+
+// ── MODERATION ────────────────────────────────────────────────────────────────
+
+@Composable
+private fun ModerationSection(vm: SettingsViewModel) {
+    val bans by vm.moderation.bans.collectAsState()
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+        SectionLabel("Active vote-kick bans")
+        Spacer(Modifier.height(4.dp))
+        if (bans.isEmpty()) {
+            Text(
+                "No active bans. When 3 distinct players vote to kick someone, they appear here.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
+        } else {
+            bans.filter { it.isBanned || it.voteCount > 0 }.forEach { ban ->
+                HudCard(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Node ${ban.targetNodeId.toString(16).uppercase().take(8)}",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (ban.isBanned) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(4.dp),
+                                ) {
+                                    Text(
+                                        "BANNED",
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            "Scope: ${scopeLabel(ban.scope)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "${ban.voteCount} / 3 votes · ${ban.voters.size} distinct voters",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        val banTtl = (ban.lastVoteUnix + 86400) - (System.currentTimeMillis() / 1000L)
+                        if (banTtl > 0) {
+                            Text(
+                                "Expires in ${banTtl / 3600}h ${(banTtl % 3600) / 60}m",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedButton(
+                            onClick = {
+                                vm.unbanNode(ban.targetNodeId, ban.scope)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Unban")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun scopeLabel(scope: com.airtak.proto.Scope): String = when (scope) {
+    com.airtak.proto.Scope.SCOPE_ALL -> "All players"
+    com.airtak.proto.Scope.SCOPE_COMPANY -> "Company"
+    com.airtak.proto.Scope.SCOPE_PLATOON -> "Platoon"
+    com.airtak.proto.Scope.SCOPE_SQUAD -> "Squad"
+    com.airtak.proto.Scope.SCOPE_FIRE_TEAM -> "Fireteam"
+    else -> "All players"
 }
 
 // ── APP (local prefs) ─────────────────────────────────────────────────────────

@@ -29,6 +29,7 @@ import com.airtak.data.tiles.TileRepository
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.GameConfig
 import com.airtak.proto.MarkerType
+import com.airtak.proto.PlayerStatePacket
 import com.airtak.proto.PlayerStatus
 import com.airtak.proto.Scope
 import com.airtak.proto.TeamControl
@@ -215,6 +216,30 @@ class MapViewModel @Inject constructor(
     fun setShowPlayers(show: Boolean) { showPlayers.value = show }
     fun setShowWaypoints(show: Boolean) { showWaypoints.value = show }
 
+    private fun broadcastOwnStatus(statusValue: PlayerStatus, transition: Boolean) {
+        val device = status.value ?: return
+        val cfg = runCatching { uiState.value }.getOrNull()
+        val callsign = cfg?.ownPosition?.label?.takeIf { it.isNotBlank() }
+            ?: device.nodeName.ifBlank { "AirTAK" }
+        val gameConfig = runCatching {
+            config.groupBytes.value[ConfigGroup.GAME]?.let {
+                GameConfig.parseFrom(it)
+            }
+        }.getOrNull() ?: GameConfig.getDefaultInstance()
+        val packet = PlayerStatePacket.newBuilder()
+            .setNodeId(device.nodeId)
+            .setCallsign(callsign)
+            .setStatus(statusValue)
+            .setColorRgb(gameConfig.playerColorRgb.takeIf { it != 0 } ?: 0xFFFFFF)
+            .setIsStateTransition(transition)
+            .setFireteamId(gameConfig.fireteamId)
+            .setSquadId(gameConfig.squadId)
+            .setPlatoonId(gameConfig.platoonId)
+            .setCompanyId(gameConfig.companyId)
+            .build()
+        mesh.sendPlayerState(packet)
+    }
+
     fun addWaypoint(latitude: Double, longitude: Double, label: String, icon: String = "flag") {
         val safeLabel = label.trim().ifBlank { "WP" }.take(24)
         viewModelScope.launch {
@@ -365,6 +390,18 @@ class MapViewModel @Inject constructor(
         val first = m.points.firstOrNull() ?: return
         _focusTarget.value = OwnPosition(first.first, first.second)
     }
+
+    // --- Player status (§5.2) ---
+    private val _playerStatus = MutableStateFlow(PlayerStatus.PLAYER_STATUS_ACTIVE)
+    val playerStatus: StateFlow<PlayerStatus> = _playerStatus
+
+    fun setPlayerStatus(status: PlayerStatus) {
+        val transition = _playerStatus.value != status
+        _playerStatus.value = status
+        broadcastOwnStatus(status, transition)
+    }
+
+    fun refreshPlayerStatus() = broadcastOwnStatus(_playerStatus.value, false)
 
     // --- Game Active/Ended toggle (§5.8) ---
     val gameActive: StateFlow<Boolean> =

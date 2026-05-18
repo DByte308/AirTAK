@@ -98,6 +98,7 @@ fun MessagesScreen(
     val error by viewModel.error.collectAsState()
     val byteCount = draft.toByteArray(Charsets.UTF_8).size
     val activeSlot = slots.getOrNull(tab)
+    val scope by viewModel.scope.collectAsState()
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -176,6 +177,26 @@ fun MessagesScreen(
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(10.dp),
             ) {
+                // Scope selector row
+                if (scope != com.airtak.proto.Scope.SCOPE_ALL) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Outlined.Groups,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.size(4.dp))
+                        Text(
+                            "Visible to: ${scopeLabel(scope)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = draft,
@@ -192,6 +213,49 @@ fun MessagesScreen(
                             focusedIndicatorColor = MaterialTheme.colorScheme.primary,
                         ),
                     )
+                    // Scope picker dropdown
+                    var scopeMenuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { scopeMenuExpanded = true }) {
+                            Icon(
+                                Icons.Outlined.Groups,
+                                contentDescription = "Set message scope",
+                                modifier = Modifier.size(20.dp),
+                                tint = if (scope != com.airtak.proto.Scope.SCOPE_ALL)
+                                    MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = scopeMenuExpanded,
+                            onDismissRequest = { scopeMenuExpanded = false },
+                        ) {
+                            listOf(
+                                com.airtak.proto.Scope.SCOPE_ALL,
+                                com.airtak.proto.Scope.SCOPE_COMPANY,
+                                com.airtak.proto.Scope.SCOPE_PLATOON,
+                                com.airtak.proto.Scope.SCOPE_SQUAD,
+                                com.airtak.proto.Scope.SCOPE_FIRE_TEAM,
+                            ).forEach { s ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(scopeLabel(s)) },
+                                    onClick = {
+                                        viewModel.setScope(s)
+                                        scopeMenuExpanded = false
+                                    },
+                                )
+        }
+    }
+}
+
+private fun scopeLabel(scope: com.airtak.proto.Scope): String = when (scope) {
+    com.airtak.proto.Scope.SCOPE_ALL -> "All players"
+    com.airtak.proto.Scope.SCOPE_COMPANY -> "Company"
+    com.airtak.proto.Scope.SCOPE_PLATOON -> "Platoon"
+    com.airtak.proto.Scope.SCOPE_SQUAD -> "Squad"
+    com.airtak.proto.Scope.SCOPE_FIRE_TEAM -> "Fireteam"
+    else -> "All players"
+}
                     IconButton(onClick = { viewModel.send() }, enabled = draft.isNotBlank()) {
                         Icon(
                             Icons.AutoMirrored.Outlined.Send,

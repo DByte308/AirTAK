@@ -1,0 +1,153 @@
+# AirTAK CI — Forgejo Actions
+# Builds firmware (t_echo_plus) + native tests, and Android debug APK + unit tests.
+# Both jobs run in parallel. Artifacts are published for every push.
+#
+# Runner requirements:
+#   - `runs-on` label must match your Forgejo runner. Default labels:
+#       * Docker executor:  ubuntu-22.04, ubuntu-latest, docker
+#       * Self-hosted:      use the label(s) you registered (e.g. linux, ci)
+#   - Minimum resources: 4 vCPU, 8 GB RAM, 20 GB disk (Android SDK ~2 GB)
+#   - The runner must have python3, bash, curl, unzip, and sudo in the image.
+
+name: AirTAK CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ── Firmware: build firmware image + run native unit tests ──────────────────
+  firmware:
+    name: Firmware (t_echo_plus + native tests)
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache firmware venv
+        uses: actions/cache@v4
+        with:
+          path: |
+            firmware/.venv
+            ~/.platformio
+          key: firmware-venv-${{ hashFiles('firmware/requirements-dev.txt') }}
+          restore-keys: firmware-venv-
+
+      - name: Setup firmware environment
+        run: |
+          bash ./tools/setup_firmware_env.sh
+          echo "$(pwd)/firmware/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run native unit tests
+        run: bash ./tools/pio_firmware.sh test -e native
+
+      - name: Build t_echo_plus firmware
+        run: bash ./tools/pio_firmware.sh run -e t_echo_plus
+
+      - name: Collect firmware artifacts
+        run: |
+          mkdir -p artifacts/firmware
+          cp firmware/.pio/build/t_echo_plus/firmware.elf artifacts/firmware/ 2>/dev/null || true
+          cp firmware/.pio/build/t_echo_plus/firmware.hex artifacts/firmware/ 2>/dev/null || true
+          cp firmware/.pio/build/t_echo_plus/firmware.bin artifacts/firmware/ 2>/dev/null || true
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-t_echo_plus
+          path: artifacts/firmware/
+          retention-days: 30
+
+  # ── Android: build debug APK + run unit tests ──────────────────────────────
+  android:
+    name: Android (debug APK + unit tests)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: ~/Android/Sdk
+          key: android-sdk-${{ hashFiles('tools/setup_android_env.sh') }}
+          restore-keys: android-sdk-
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            android/.gradle-home
+            android/.gradle
+          key: gradle-${{ hashFiles('android/gradle/libs.versions.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/app/build.gradle.kts') }}
+          restore-keys: gradle-
+
+      - name: Install JDK 17
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq openjdk-17-jdk-headless
+
+      - name: Setup Android environment
+        run: |
+          # Pin JAVA_HOME to the installed JDK 17
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+
+          # Install Android command-line tools if not present
+          if [ ! -f "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+            curl -fSL --progress-bar \
+              "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
+              -o /tmp/cmdline-tools.zip
+            unzip -qo /tmp/cmdline-tools.zip -d /tmp/cmdline-tools-tmp
+            mv /tmp/cmdline-tools-tmp/cmdline-tools "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+            rm -rf /tmp/cmdline-tools.zip /tmp/cmdline-tools-tmp
+          fi
+
+          # Accept licenses
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses > /dev/null 2>&1
+
+          # Install SDK packages (skip what is already present)
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            > /dev/null 2>&1
+
+          # Write the env file so gradle_android.sh can pick it up
+          printf 'JAVA_HOME=%s\nANDROID_SDK_ROOT=%s\n' "$JAVA_HOME" "$ANDROID_SDK_ROOT" > android/.android-env
+
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+      - name: Run Android unit tests
+        run: |
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          export GRADLE_USER_HOME="$(pwd)/android/.gradle-home"
+          cd android
+          ./gradlew test --no-daemon
+
+      - name: Build debug APK
+        run: |
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          export GRADLE_USER_HOME="$(pwd)/android/.gradle-home"
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Collect APK artifacts
+        run: |
+          mkdir -p artifacts/android
+          find android/app/build/outputs/apk -name '*.apk' -exec cp {} artifacts/android/ \;
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: artifacts/android/
+          retention-days: 30

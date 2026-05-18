@@ -186,6 +186,7 @@ fun MapScreen(
     val markers by viewModel.markers.collectAsState()
     val drawing by viewModel.drawing.collectAsState()
     val gameActive by viewModel.gameActive.collectAsState()
+    val playerStatus by viewModel.playerStatus.collectAsState()
     val shareEnabled by viewModel.overlayShareEnabled.collectAsState()
     val availableAlignments by viewModel.availableAlignments.collectAsState()
     var pendingCommit by remember { mutableStateOf<MarkerTool?>(null) }
@@ -193,6 +194,7 @@ fun MapScreen(
     var editingMarker by remember { mutableStateOf<MarkerVisual?>(null) }
     var showAlignmentPicker by remember { mutableStateOf(false) }
     var pendingAlignmentImport by remember { mutableStateOf<com.airtak.data.overlays.ReceivedAlignment?>(null) }
+    var showStatusPicker by remember { mutableStateOf(false) }
 
     fun updateOwnLabelPoint() {
         val pos = ui.ownPosition
@@ -471,11 +473,13 @@ fun MapScreen(
             selectingTiles = tileSelectMode,
             gameActive = gameActive,
             drawingActive = drawing is DrawingState.Active,
+            playerStatus = playerStatus,
             onPickMarkerTool = { tool -> viewModel.startDrawing(tool) },
             onToggleGameActive = { viewModel.setGameActive(!gameActive) },
             onTogglePlayers = { viewModel.setShowPlayers(!ui.showPlayers) },
             onToggleWaypoints = { viewModel.setShowWaypoints(!ui.showWaypoints) },
             onSearch = { showSearch = true },
+            onToggleStatusPicker = { showStatusPicker = true },
             hasMissionOverlay = ui.missionOverlay != null,
             editingMissionOverlay = missionOverlayEditMode,
             onMissionOverlay = {
@@ -734,6 +738,17 @@ fun MapScreen(
         )
     }
 
+    if (showStatusPicker) {
+        StatusPickerDialog(
+            selected = playerStatus,
+            onSelect = { status ->
+                viewModel.setPlayerStatus(status)
+                showStatusPicker = false
+            },
+            onDismiss = { showStatusPicker = false },
+        )
+    }
+
     if (showSearch) {
         SearchDialog(
             query = searchQuery,
@@ -873,17 +888,74 @@ private fun SearchDialog(
 }
 
 @Composable
+private fun StatusPickerDialog(
+    selected: PlayerStatus,
+    onSelect: (PlayerStatus) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Player Status") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Changes are broadcast to the mesh and visible to other players.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                listOf(
+                    PlayerStatus.PLAYER_STATUS_ACTIVE,
+                    PlayerStatus.PLAYER_STATUS_INACTIVE,
+                    PlayerStatus.PLAYER_STATUS_HIT,
+                    PlayerStatus.PLAYER_STATUS_RESPAWNING,
+                    PlayerStatus.PLAYER_STATUS_ELIMINATED,
+                ).forEach { status ->
+                    val isSelected = selected == status
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { onSelect(status) }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(
+                            color = statusColor(status).copy(alpha = if (isSelected) 0.30f else 0.10f),
+                            shape = RoundedCornerShape(6.dp),
+                        ) {
+                            Text(
+                                statusShortLabel(status),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = statusColor(status),
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            statusDescription(status),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
+
+@Composable
 private fun MapToolbar(
     showPlayers: Boolean,
     showWaypoints: Boolean,
     selectingTiles: Boolean,
     gameActive: Boolean,
     drawingActive: Boolean,
+    playerStatus: PlayerStatus,
     onPickMarkerTool: (MarkerTool) -> Unit,
     onToggleGameActive: () -> Unit,
     onTogglePlayers: () -> Unit,
     onToggleWaypoints: () -> Unit,
     onSearch: () -> Unit,
+    onToggleStatusPicker: () -> Unit,
     hasMissionOverlay: Boolean,
     editingMissionOverlay: Boolean,
     onMissionOverlay: () -> Unit,
@@ -942,6 +1014,18 @@ private fun MapToolbar(
                 } else {
                     Icon(Icons.Outlined.PlayArrow, contentDescription = "Resume game")
                 }
+            }
+            Surface(
+                modifier = Modifier.clickable { onToggleStatusPicker() },
+                color = statusColor(playerStatus).copy(alpha = 0.16f),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(
+                    statusShortLabel(playerStatus),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = statusColor(playerStatus),
+                )
             }
             IconButton(
                 onClick = onTogglePlayers,
@@ -1973,17 +2057,30 @@ private fun MapNode.toFeature(): Feature {
         stale -> 0.26
         status == PlayerStatus.PLAYER_STATUS_HIT -> 0.10
         status == PlayerStatus.PLAYER_STATUS_ELIMINATED -> 0.20
+        status == PlayerStatus.PLAYER_STATUS_RESPAWNING -> 0.60
         else -> 0.92
     }
     val strokeWidth = when (status) {
         PlayerStatus.PLAYER_STATUS_HIT -> 3.5
         PlayerStatus.PLAYER_STATUS_ELIMINATED -> 2.8
+        PlayerStatus.PLAYER_STATUS_RESPAWNING -> 2.2
         else -> 1.6
+    }
+    val strokeColor = when (status) {
+        PlayerStatus.PLAYER_STATUS_HIT -> "#FF4D5E"
+        PlayerStatus.PLAYER_STATUS_ELIMINATED -> "#80CBC4"
+        PlayerStatus.PLAYER_STATUS_RESPAWNING -> "#FFB300"
+        else -> "#E6F1F7"
+    }
+    val pinColor = when {
+        stale -> "#6E7681"
+        status == PlayerStatus.PLAYER_STATUS_ELIMINATED -> "#B0BEC5"
+        else -> "#%06X".format(colorRgb and 0xFFFFFF)
     }
     return Feature.fromGeometry(Point.fromLngLat(longitude, latitude)).apply {
         addStringProperty("label", label)
-        addStringProperty("pinColor", if (stale) "#6E7681" else "#%06X".format(colorRgb and 0xFFFFFF))
-        addStringProperty("strokeColor", if (status == PlayerStatus.PLAYER_STATUS_HIT) "#FF4D5E" else "#E6F1F7")
+        addStringProperty("pinColor", pinColor)
+        addStringProperty("strokeColor", strokeColor)
         addNumberProperty("pinOpacity", fillOpacity)
         addNumberProperty("strokeWidth", strokeWidth)
     }
@@ -2137,4 +2234,31 @@ private const val DRAFT_LINE_LAYER = "draft-marker-line-layer"
 private const val DRAFT_FILL_LAYER = "draft-marker-fill-layer"
 private const val MAX_TILES_PER_DOWNLOAD = 15_000
 private const val NUDGE_PX = 2f
+
+private fun statusShortLabel(status: PlayerStatus): String = when (status) {
+    PlayerStatus.PLAYER_STATUS_ACTIVE -> "ACTIVE"
+    PlayerStatus.PLAYER_STATUS_INACTIVE -> "INACT"
+    PlayerStatus.PLAYER_STATUS_HIT -> "HIT"
+    PlayerStatus.PLAYER_STATUS_RESPAWNING -> "RESPAWN"
+    PlayerStatus.PLAYER_STATUS_ELIMINATED -> "ELIM"
+    else -> "UNKNOWN"
+}
+
+private fun statusColor(status: PlayerStatus): Color = when (status) {
+    PlayerStatus.PLAYER_STATUS_ACTIVE -> Color(0xFF00E676)
+    PlayerStatus.PLAYER_STATUS_INACTIVE -> Color(0xFF6E7681)
+    PlayerStatus.PLAYER_STATUS_HIT -> Color(0xFFFF4D5E)
+    PlayerStatus.PLAYER_STATUS_RESPAWNING -> Color(0xFFFFB300)
+    PlayerStatus.PLAYER_STATUS_ELIMINATED -> Color(0xFF80CBC4)
+    else -> Color(0xFF6E7681)
+}
+
+private fun statusDescription(status: PlayerStatus): String = when (status) {
+    PlayerStatus.PLAYER_STATUS_ACTIVE -> "In play, full position broadcasting"
+    PlayerStatus.PLAYER_STATUS_INACTIVE -> "Paused, reduced broadcasting"
+    PlayerStatus.PLAYER_STATUS_HIT -> "Hit — waiting to respawn"
+    PlayerStatus.PLAYER_STATUS_RESPAWNING -> "Returning to play"
+    PlayerStatus.PLAYER_STATUS_ELIMINATED -> "Out for the remainder"
+    else -> ""
+}
 private const val MISSION_OVERLAY_IMAGE_MIME = "image/*"

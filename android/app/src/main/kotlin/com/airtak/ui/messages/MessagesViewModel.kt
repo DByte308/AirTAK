@@ -11,6 +11,7 @@ import com.airtak.proto.ChannelConfig
 import com.airtak.proto.ChannelRole
 import com.airtak.proto.ChannelSlot
 import com.airtak.proto.ConfigGroup
+import com.airtak.proto.Scope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,6 +64,11 @@ class MessagesViewModel @Inject constructor(
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    private val _scope = MutableStateFlow(Scope.SCOPE_ALL)
+    val scope: StateFlow<Scope> = _scope.asStateFlow()
+
+    fun setScope(s: Scope) { _scope.value = s }
 
     /** Called when the user selects tab [tabIndex] in the channel list. */
     fun selectChannel(tabIndex: Int) {

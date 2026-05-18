@@ -10,6 +10,7 @@ package com.airtak.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.airtak.data.config.ConfigRepository
+import com.airtak.data.moderation.ModerationRepository
 import com.airtak.data.prefs.AppPreferences
 import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.proto.AdminCommand
@@ -18,6 +19,8 @@ import com.airtak.proto.ChannelConfig
 import com.airtak.proto.ChannelRole
 import com.airtak.proto.ChannelSlot
 import com.airtak.proto.ConfigGroup
+import com.airtak.proto.ModerationAction
+import com.airtak.proto.Scope
 import com.airtak.proto.DeviceConfig
 import com.airtak.proto.DeviceStatus
 import com.airtak.proto.GameConfig
@@ -41,6 +44,7 @@ class SettingsViewModel @Inject constructor(
     private val config: ConfigRepository,
     private val prefs: AppPreferences,
     statusRepo: DeviceStatusRepository,
+    val moderation: ModerationRepository,
 ) : ViewModel() {
 
     val deviceStatus: StateFlow<DeviceStatus?> = statusRepo.status
@@ -349,6 +353,12 @@ class SettingsViewModel @Inject constructor(
     private fun ByteString.toPskText(): String {
         if (isEmpty) return ""
         return "0x" + toByteArray().joinToString("") { "%02X".format(it) }
+    }
+
+    fun unbanNode(targetNodeId: Long, scope: com.airtak.proto.Scope) {
+        viewModelScope.launch {
+            moderation.submitVote(targetNodeId, scope, com.airtak.proto.ModerationAction.MODERATION_ACTION_UNBAN)
+        }
     }
 
     private data class PskParseResult(val bytes: ByteArray, val error: String?)
