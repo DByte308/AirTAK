@@ -119,6 +119,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
                     satellites = status?.gps?.satellites,
                     rssi = status?.radio?.lastRssi,
                     hasDeviceStatus = status != null,
+                    deviceGpsFix = status?.gps?.fix == true,
                     phoneGpsActive = phoneGpsActive,
                     phoneGpsFix = phoneGpsFix,
                     onLinkClick = { navController.navigateTopLevel("pair") },
@@ -160,6 +161,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
                 satellites = status?.gps?.satellites,
                 rssi = status?.radio?.lastRssi,
                 hasDeviceStatus = status != null,
+                deviceGpsFix = status?.gps?.fix == true,
                 phoneGpsActive = phoneGpsActive,
                 phoneGpsFix = phoneGpsFix,
                 onLinkClick = { navController.navigateTopLevel("pair") },
@@ -209,6 +211,7 @@ private fun HudBar(
     satellites: Int?,
     rssi: Float?,
     hasDeviceStatus: Boolean,
+    deviceGpsFix: Boolean,
     phoneGpsActive: Boolean,
     phoneGpsFix: Boolean,
     onLinkClick: () -> Unit,
@@ -238,13 +241,14 @@ private fun HudBar(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            satellites?.let {
+            satellites?.takeIf { it > 0 }?.let {
                 Text(
                     "$it sat",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (deviceGpsFix) MaterialTheme.colorScheme.primary
+                           else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            } ?: if (!hasDeviceStatus && phoneGpsActive) {
+            } ?: if (phoneGpsActive) {
                 Text(
                     if (phoneGpsFix) "GPS fix" else "GPS...",
                     style = MaterialTheme.typography.labelSmall,
@@ -291,8 +295,8 @@ private fun HudBar(
                 )
                 MetricTile(
                     label = "GPS",
-                    value = satellites?.let { "$it sat" }
-                        ?: if (!hasDeviceStatus && phoneGpsActive) {
+                    value = if (satellites != null && satellites > 0) "$satellites sat"
+                        else if (phoneGpsActive) {
                             if (phoneGpsFix) "Fix" else "..."
                         } else "—",
                     modifier = Modifier.weight(1f),

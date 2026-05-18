@@ -8,7 +8,9 @@
 // Lifecycle:
 //   - When gps_source transitions to PHONE_GPS (device connected), Android
 //     LocationManager location updates begin and are sent to firmware.
-//   - When gps_source transitions to DEVICE_GPS (device connected), updates stop.
+//   - When gps_source is DEVICE_GPS (device connected), phone GPS keeps
+//     tracking for map fallback (location StateFlow) but does NOT forward
+//     to firmware — the device uses its own GPS module.
 //   - When NO device is connected, phone GPS starts automatically and exposes
 //     location via the `location` StateFlow for direct map consumption. This
 //     covers the standalone-app case (no LoRa device). No BLE send occurs.
@@ -112,6 +114,10 @@ class PhoneGpsProvider @Inject constructor(
             val gpsStillOn = runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
             val netStillOn = runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)
             _isActive.value = gpsStillOn || netStillOn
+            if (!gpsStillOn && !netStillOn) {
+                _hasFix.value = false
+                _location.value = null
+            }
         }
     }
 
@@ -140,7 +146,7 @@ class PhoneGpsProvider @Inject constructor(
                 } else if (deviceWantsPhoneGps) {
                     applyState(true, targetBle = true)
                 } else {
-                    applyState(false, targetBle = false)
+                    applyState(true, targetBle = false)
                 }
             }
         }
@@ -159,30 +165,28 @@ class PhoneGpsProvider @Inject constructor(
         val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
         var anyProvider = false
         try {
-            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                lm.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    MIN_TIME_MS,
-                    MIN_DISTANCE_M,
-                    locationListener,
-                    Looper.getMainLooper(),
-                )
-                anyProvider = true
-            }
+            lm.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                MIN_TIME_MS,
+                MIN_DISTANCE_M,
+                locationListener,
+                Looper.getMainLooper(),
+            )
+            anyProvider = true
         } catch (_: SecurityException) { }
+          catch (_: IllegalArgumentException) { }
 
         try {
-            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                lm.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    MIN_TIME_MS,
-                    MIN_DISTANCE_M,
-                    locationListener,
-                    Looper.getMainLooper(),
-                )
-                anyProvider = true
-            }
+            lm.requestLocationUpdates(
+                LocationManager.NETWORK_PROVIDER,
+                MIN_TIME_MS,
+                MIN_DISTANCE_M,
+                locationListener,
+                Looper.getMainLooper(),
+            )
+            anyProvider = true
         } catch (_: SecurityException) { }
+          catch (_: IllegalArgumentException) { }
 
         _isActive.value = anyProvider
     }
@@ -192,6 +196,7 @@ class PhoneGpsProvider @Inject constructor(
         lm.removeUpdates(locationListener)
         _isActive.value = false
         _hasFix.value = false
+        _location.value = null
     }
 
     companion object {
