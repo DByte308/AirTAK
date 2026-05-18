@@ -1695,7 +1695,7 @@ private fun ensureMarkerLayers(style: Style, textColor: Int) {
                 textHaloColor(haloColor),
                 textHaloWidth(1.2f),
                 symbolPlacement(Property.SYMBOL_PLACEMENT_LINE_CENTER),
-                textMaxAngle(180f),
+                textMaxAngle(0f),
                 textKeepUpright(true),
                 textAllowOverlap(true),
                 textIgnorePlacement(true),
