@@ -32,7 +32,7 @@ jobs:
           path: |
             firmware/.venv
             ~/.platformio
-          key: firmware-venv-${{ hashFiles('firmware/requirements-dev.txt') }}
+          key: firmware-venv-${{ hashFiles('firmware/requirements-dev.txt', 'firmware/platformio.ini') }}
           restore-keys: firmware-venv-
 
       - name: Install Python venv
@@ -52,7 +52,6 @@ jobs:
       - name: Collect firmware artifacts
         run: |
           mkdir -p artifacts/firmware
-          cp firmware/.pio/build/t_deck/firmware.elf artifacts/firmware/ 2>/dev/null || true
           cp firmware/.pio/build/t_deck/firmware.hex artifacts/firmware/ 2>/dev/null || true
           cp firmware/.pio/build/t_deck/firmware.bin artifacts/firmware/ 2>/dev/null || true
 
@@ -109,15 +108,11 @@ jobs:
             rm -rf /tmp/cmdline-tools.zip /tmp/cmdline-tools-tmp
           fi
 
-          # Accept licenses
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses > /dev/null 2>&1
+          # Accept licenses (suppress SIGPIPE from `yes` when sdkmanager exits)
+          bash -c 'set +o pipefail; yes | "$1" --sdk_root="$2" --licenses > /dev/null 2>&1' _ "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_SDK_ROOT"
 
           # Install SDK packages (skip what is already present)
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            > /dev/null 2>&1
+          bash -c 'set +o pipefail; yes | "$1" --sdk_root="$2" platform-tools "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1' _ "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_SDK_ROOT"
 
           # Write the env file so gradle_android.sh can pick it up
           printf 'JAVA_HOME=%s\nANDROID_SDK_ROOT=%s\n' "$JAVA_HOME" "$ANDROID_SDK_ROOT" > android/.android-env
