@@ -76,6 +76,45 @@ class PhoneGpsProvider @Inject constructor(
     private val _hasFix = MutableStateFlow(false)
     val hasFix: StateFlow<Boolean> = _hasFix.asStateFlow()
 
+    private val locationListener = object : LocationListener {
+        override fun onLocationChanged(loc: Location) {
+            _hasFix.value = true
+            val phoneLoc = PhoneLocation(
+                latitude = loc.latitude,
+                longitude = loc.longitude,
+                altitudeM = loc.altitude.toFloat(),
+                accuracyM = loc.accuracy,
+            )
+            val current = _location.value
+            if (current == null || loc.accuracy < current.accuracyM) {
+                _location.value = phoneLoc
+            }
+            if (sendToBle) {
+                val req = AdminRequest.newBuilder()
+                    .setCommand(AdminCommand.SET_PHONE_GPS)
+                    .setPhoneGps(
+                        PhoneGpsPosition.newBuilder()
+                            .setLatitude(loc.latitude)
+                            .setLongitude(loc.longitude)
+                            .setAltitudeM(loc.altitude.toFloat())
+                            .setAccuracyM(loc.accuracy)
+                            .build(),
+                    )
+                    .build()
+                ble.send(BleRepository.OutboundChannel.Admin, req.toByteArray())
+            }
+        }
+
+        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+        override fun onProviderEnabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {
+            val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
+            val gpsStillOn = runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
+            val netStillOn = runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)
+            _isActive.value = gpsStillOn || netStillOn
+        }
+    }
+
     init {
         // Synchronous initial check: start GPS immediately if no device is
         // connected, without waiting for the coroutine to process. This
@@ -153,45 +192,6 @@ class PhoneGpsProvider @Inject constructor(
         lm.removeUpdates(locationListener)
         _isActive.value = false
         _hasFix.value = false
-    }
-
-    private val locationListener = object : LocationListener {
-        override fun onLocationChanged(loc: Location) {
-            _hasFix.value = true
-            val phoneLoc = PhoneLocation(
-                latitude = loc.latitude,
-                longitude = loc.longitude,
-                altitudeM = loc.altitude.toFloat(),
-                accuracyM = loc.accuracy,
-            )
-            val current = _location.value
-            if (current == null || loc.accuracy < current.accuracyM) {
-                _location.value = phoneLoc
-            }
-            if (sendToBle) {
-                val req = AdminRequest.newBuilder()
-                    .setCommand(AdminCommand.SET_PHONE_GPS)
-                    .setPhoneGps(
-                        PhoneGpsPosition.newBuilder()
-                            .setLatitude(loc.latitude)
-                            .setLongitude(loc.longitude)
-                            .setAltitudeM(loc.altitude.toFloat())
-                            .setAccuracyM(loc.accuracy)
-                            .build(),
-                    )
-                    .build()
-                ble.send(BleRepository.OutboundChannel.Admin, req.toByteArray())
-            }
-        }
-
-        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-        override fun onProviderEnabled(provider: String) {}
-        override fun onProviderDisabled(provider: String) {
-            val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
-            val gpsStillOn = runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
-            val netStillOn = runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)
-            _isActive.value = gpsStillOn || netStillOn
-        }
     }
 
     companion object {
