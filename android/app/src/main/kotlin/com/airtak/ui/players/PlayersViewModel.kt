@@ -356,13 +356,16 @@ private fun groupByHierarchy(rows: List<PlayerRow>): HierarchyRoot {
     val sorted = rows.sortedBy { it.callsign.lowercase() }
     val ungrouped = mutableListOf<PlayerRow>()
 
-    // Build Company → Platoon → Squad → Fireteam → Players tree
-    val companies =
-            linkedMapOf<
-                    String,
-                    MutableMap<
-                            String,
-                            MutableMap<String, MutableMap<String, MutableList<PlayerRow>>>>>()
+    // Build nested grouping: company → platoon → squad → fireteam → players
+    // Use a simple linked map tree keyed by unit ID strings
+    data class Node(
+        val label: String,
+        val level: String,
+        val children: LinkedHashMap<String, Node> = linkedMapOf(),
+        val players: MutableList<PlayerRow> = mutableListOf(),
+    )
+
+    val root = Node(label = "", level = "", children = linkedMapOf())
 
     for (row in sorted) {
         val co = row.companyId
@@ -380,107 +383,40 @@ private fun groupByHierarchy(rows: List<PlayerRow>): HierarchyRoot {
         val squadKey = sq.ifBlank { "—" }
         val fireteamKey = ft.ifBlank { "—" }
 
-        companies
-                .getOrPut(companyKey) { linkedMapOf() }
-                .getOrPut(platoonKey) { linkedMapOf() }
-                .getOrPut(squadKey) { linkedMapOf() }
-                .getOrPut(fireteamKey) { mutableListOf() }
-                .add(row)
+        val companyNode = root.children.getOrPut(companyKey) { Node(companyKey, "company") }
+        val platoonNode = companyNode.children.getOrPut(platoonKey) { Node(platoonKey, "platoon") }
+        val squadNode = platoonNode.children.getOrPut(squadKey) { Node(squadKey, "squad") }
+        val fireteamNode = squadNode.children.getOrPut(fireteamKey) { Node(fireteamKey, "fireteam") }
+        fireteamNode.players.add(row)
     }
 
-    fun buildPlatoonNode(
-            platoonId: String,
-            squadsMap: Map<String, Map<String, MutableList<PlayerRow>>>
-    ): UnitGroup {
-        val children =
-                squadsMap
-                        .map { (squadId, fireteamsMap) -> buildSquadNode(squadId, fireteamsMap) }
-                        .sortedBy { it.label }
-        return UnitGroup(
-                label = platoonId,
-                hierarchyLevel = "platoon",
-                players = emptyList(),
-                children = children
-        )
-    }
-
-    fun buildSquadNode(
-            squadId: String,
-            fireteamsMap: Map<String, MutableList<PlayerRow>>
-    ): UnitGroup {
-        val children =
-                fireteamsMap
-                        .map { (fireteamId, players) ->
-                            UnitGroup(
-                                    label = fireteamId,
-                                    hierarchyLevel = "fireteam",
-                                    players = players.sortedBy { it.callsign.lowercase() }
-                            )
-                        }
-                        .sortedBy { it.label }
-        return UnitGroup(
-                label = squadId,
-                hierarchyLevel = "squad",
-                players = emptyList(),
-                children = children
-        )
-    }
-
-    val topGroups =
-            companies
-                    .map { (companyId, company) ->
-                        // The company may have direct platoons, or squads nested under platoons
-                        // But in our tree structure, company always wraps a plat-level map
-                        // which wraps squad-level maps, which wrap fireteam-level player lists.
-                        // Flattening: if company has exactly one platoon with exactly one squad,
-                        // we just skip the intermediate empty levels.
-                        val platoonNodes =
-                                company
-                                        .map { (platoonId, squads) ->
-                                            val squadNodes =
-                                                    squads
-                                                            .map { (squadId, fireteams) ->
-                                                                buildSquadNode(squadId, fireteams)
-                                                            }
-                                                            .sortedBy { it.label }
-                                            UnitGroup(
-                                                    label = platoonId,
-                                                    hierarchyLevel = "platoon",
-                                                    players = emptyList(),
-                                                    children = squadNodes
-                                            )
-                                        }
-                                        .sortedBy { it.label }
-
-                        // If the company has a single platoon node "—" with a single squad "—",
-                        // collapse to just fireteams at company level
-                        val effectiveChildren =
-                                if (platoonNodes.size == 1 &&
-                                                platoonNodes[0].label == "—" &&
-                                                platoonNodes[0].children.size == 1 &&
-                                                platoonNodes[0].children[0].label == "—"
-                                ) {
-                                    platoonNodes[0].children[0].children
-                                } else {
-                                    platoonNodes
-                                }
-                        UnitGroup(
-                                label = companyId,
-                                hierarchyLevel = "company",
-                                players = emptyList(),
-                                children = effectiveChildren
-                        )
-                    }
-                    .sortedBy { it.label }
-
-    // Collapse single-child root levels for cleanliness
-    fun collapseSingle(group: UnitGroup): UnitGroup {
-        if (group.children.size == 1 && group.players.isEmpty() && group.label == "—") {
-            return collapseSingle(group.children[0])
+    fun toUnitGroup(node: Node): UnitGroup {
+        val children = node.children.values.map { toUnitGroup(it) }.sortedBy { it.label }
+        // Collapse a node with a single "—" child that has no players
+        val effectiveChildren: List<UnitGroup>
+        val effectivePlayers: List<PlayerRow>
+        if (node.level == "company" && children.size == 1 && children[0].label == "—"
+            && children[0].children.size == 1 && children[0].children.all { it.players.isEmpty() }) {
+            // Collapse through — platoon → — squad → fireteams
+            effectiveChildren = children[0].children.flatMap { it.children }
+            effectivePlayers = emptyList()
+        } else if (node.level == "platoon" && children.size == 1 && children[0].label == "—"
+            && children[0].players.isEmpty()) {
+            // Collapse through — squad → fireteams
+            effectiveChildren = children[0].children
+            effectivePlayers = emptyList()
+        } else {
+            effectiveChildren = children
+            effectivePlayers = node.players
         }
-        return group.copy(children = group.children.map { collapseSingle(it) })
+        return UnitGroup(
+            label = node.label,
+            hierarchyLevel = node.level,
+            players = effectivePlayers.sortedBy { it.callsign.lowercase() },
+            children = effectiveChildren,
+        )
     }
 
-    val collapsed = topGroups.map { collapseSingle(it) }
-    return HierarchyRoot(groups = collapsed, ungrouped = ungrouped)
+    val groups = root.children.values.map { toUnitGroup(it) }.sortedBy { it.label }
+    return HierarchyRoot(groups = groups, ungrouped = ungrouped)
 }
