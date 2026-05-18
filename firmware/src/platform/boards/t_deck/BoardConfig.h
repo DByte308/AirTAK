@@ -70,6 +70,7 @@
 // Battery ADC
 #define AIRTAK_PIN_VBAT_SENSE               4   // voltage divider output, 12-bit ADC
 #define AIRTAK_PIN_CHG_STAT                -1   // charge status not broken out
+#define AIRTAK_ADC_MULTIPLIER               1.10f  // calibration: actual V / reported V at 4.2 V
 
 // User button (BOOT button, active low)
 #define AIRTAK_PIN_USER_BUTTON              0

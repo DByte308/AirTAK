@@ -13,14 +13,21 @@ static float    s_level        = 0.0f;
 static bool     s_is_charging  = false;
 static uint32_t s_voltage_mv   = 0;
 
-constexpr uint32_t ADC_REFERENCE_MV = 3000;
+constexpr uint32_t ADC_REFERENCE_MV = 3300;
 constexpr uint32_t ADC_MAX_COUNTS   = 4095;
-constexpr uint32_t VBAT_DIVIDER_NUM = 2;
-constexpr uint32_t VBAT_DIVIDER_DEN = 1;
+
+// Per-board calibration override (default 1.0 = no adjustment).
+// Some boards need a correction for trace resistance, diode/MOSFET drop,
+// or ESP32 ADC non-linearity (e.g. T-Deck: 1.08, T-Echo: 1.0).
+#ifndef AIRTAK_ADC_MULTIPLIER
+#define AIRTAK_ADC_MULTIPLIER 1.0f
+#endif
 
 void Battery::init() {
-    // Configure ADC input for VBAT_SENSE (P0.04 / AIN2)
     analogReadResolution(12);
+#ifdef AIRTAK_PLATFORM_ESP32
+    analogSetAttenuation(ADC_11db);
+#endif
     pinMode(AIRTAK_PIN_VBAT_SENSE, INPUT);
 #if AIRTAK_PIN_CHG_STAT >= 0
     pinMode(AIRTAK_PIN_CHG_STAT,   INPUT_PULLUP);
@@ -28,9 +35,15 @@ void Battery::init() {
 }
 
 void Battery::sample(EventGroupHandle_t system_event_group) {
-    uint32_t raw_adc = analogRead(AIRTAK_PIN_VBAT_SENSE);
-    s_voltage_mv = (raw_adc * ADC_REFERENCE_MV * VBAT_DIVIDER_NUM)
-                 / (ADC_MAX_COUNTS * VBAT_DIVIDER_DEN);
+    // Oversample 8× to suppress ESP32 ADC noise (~3 bits).
+    uint32_t raw_acc = 0;
+    for (int i = 0; i < 8; i++) {
+        raw_acc += analogRead(AIRTAK_PIN_VBAT_SENSE);
+        delay(1);
+    }
+    uint32_t raw_adc = raw_acc / 8;
+    s_voltage_mv = (uint32_t)(raw_adc * ADC_REFERENCE_MV * 2.0f * AIRTAK_ADC_MULTIPLIER
+                 / ADC_MAX_COUNTS);
 
     // Clamp and normalise
     if (s_voltage_mv >= 4200) s_level = 1.0f;
