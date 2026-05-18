@@ -20,7 +20,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.SyncRequest}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:SyncRequest.java.pb.meta")
 public  final class SyncRequest extends
     com.google.protobuf.GeneratedMessageLite<
         SyncRequest, SyncRequest.Builder> implements

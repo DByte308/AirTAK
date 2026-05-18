@@ -4,7 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-@javax.annotation.Generated(value="protoc", comments="annotations:LoraConfigOrBuilder.java.pb.meta")
+
 public interface LoraConfigOrBuilder extends
     // @@protoc_insertion_point(interface_extends:airtak.LoraConfig)
     com.google.protobuf.MessageLiteOrBuilder {

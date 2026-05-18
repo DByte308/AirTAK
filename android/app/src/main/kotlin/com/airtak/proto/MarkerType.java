@@ -8,7 +8,6 @@ package com.airtak.proto;
 /**
  * Protobuf enum {@code airtak.MarkerType}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:MarkerType.java.pb.meta")
 public enum MarkerType
     implements com.google.protobuf.Internal.EnumLite {
   /**

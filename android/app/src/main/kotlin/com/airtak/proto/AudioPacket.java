@@ -16,7 +16,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.AudioPacket}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:AudioPacket.java.pb.meta")
 public  final class AudioPacket extends
     com.google.protobuf.GeneratedMessageLite<
         AudioPacket, AudioPacket.Builder> implements

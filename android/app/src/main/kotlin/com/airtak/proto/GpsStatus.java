@@ -8,7 +8,6 @@ package com.airtak.proto;
 /**
  * Protobuf type {@code airtak.GpsStatus}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:GpsStatus.java.pb.meta")
 public  final class GpsStatus extends
     com.google.protobuf.GeneratedMessageLite<
         GpsStatus, GpsStatus.Builder> implements

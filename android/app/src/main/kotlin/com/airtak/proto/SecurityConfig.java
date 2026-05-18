@@ -12,7 +12,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.SecurityConfig}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:SecurityConfig.java.pb.meta")
 public  final class SecurityConfig extends
     com.google.protobuf.GeneratedMessageLite<
         SecurityConfig, SecurityConfig.Builder> implements

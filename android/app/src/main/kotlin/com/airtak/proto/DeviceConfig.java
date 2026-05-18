@@ -12,7 +12,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.DeviceConfig}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:DeviceConfig.java.pb.meta")
 public  final class DeviceConfig extends
     com.google.protobuf.GeneratedMessageLite<
         DeviceConfig, DeviceConfig.Builder> implements

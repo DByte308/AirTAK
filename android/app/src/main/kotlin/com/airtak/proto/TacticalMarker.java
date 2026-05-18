@@ -14,7 +14,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.TacticalMarker}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:TacticalMarker.java.pb.meta")
 public  final class TacticalMarker extends
     com.google.protobuf.GeneratedMessageLite<
         TacticalMarker, TacticalMarker.Builder> implements

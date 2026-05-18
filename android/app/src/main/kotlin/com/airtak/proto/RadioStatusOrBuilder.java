@@ -4,7 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-@javax.annotation.Generated(value="protoc", comments="annotations:RadioStatusOrBuilder.java.pb.meta")
+
 public interface RadioStatusOrBuilder extends
     // @@protoc_insertion_point(interface_extends:airtak.RadioStatus)
     com.google.protobuf.MessageLiteOrBuilder {

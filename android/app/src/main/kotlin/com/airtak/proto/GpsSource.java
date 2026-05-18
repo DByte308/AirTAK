@@ -16,7 +16,6 @@ package com.airtak.proto;
  *
  * Protobuf enum {@code airtak.GpsSource}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:GpsSource.java.pb.meta")
 public enum GpsSource
     implements com.google.protobuf.Internal.EnumLite {
   /**

@@ -16,7 +16,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.ModerationPacket}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:ModerationPacket.java.pb.meta")
 public  final class ModerationPacket extends
     com.google.protobuf.GeneratedMessageLite<
         ModerationPacket, ModerationPacket.Builder> implements

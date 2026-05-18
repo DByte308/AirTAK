@@ -13,7 +13,6 @@ package com.airtak.proto;
  *
  * Protobuf enum {@code airtak.AdminCommand}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:AdminCommand.java.pb.meta")
 public enum AdminCommand
     implements com.google.protobuf.Internal.EnumLite {
   /**

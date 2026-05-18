@@ -12,7 +12,6 @@ package com.airtak.proto;
  *
  * Protobuf enum {@code airtak.ConfigGroup}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:ConfigGroup.java.pb.meta")
 public enum ConfigGroup
     implements com.google.protobuf.Internal.EnumLite {
   /**

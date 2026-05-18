@@ -4,7 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-@javax.annotation.Generated(value="protoc", comments="annotations:ChannelSlotOrBuilder.java.pb.meta")
+
 public interface ChannelSlotOrBuilder extends
     // @@protoc_insertion_point(interface_extends:airtak.ChannelSlot)
     com.google.protobuf.MessageLiteOrBuilder {

@@ -4,7 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-@javax.annotation.Generated(value="protoc", comments="annotations:AdminRequestOrBuilder.java.pb.meta")
+
 public interface AdminRequestOrBuilder extends
     // @@protoc_insertion_point(interface_extends:airtak.AdminRequest)
     com.google.protobuf.MessageLiteOrBuilder {

@@ -111,11 +111,19 @@ if [ "$FIRMWARE_ONLY" != true ]; then
         --kotlin_out="lite:$ANDROID_KOTLIN" \
         "${PROTO_FILES[@]}"
 
-    # protoc ≥ 32.x emits @com.google.protobuf.Generated annotations that do
-    # not exist in the protobuf-kotlin-lite 4.26 runtime. Strip them.
-    find "$ANDROID_KOTLIN/com/airtak/proto" -name '*.java' \
-        -exec sed -i '/^[[:space:]]*@com\.google\.protobuf\.Generated[[:space:]]*$/d' {} \;
-    echo "  Stripped @Generated annotations from generated Java sources"
+    # protoc ≥ 32.x emits @com.google.protobuf.Generated (and @javax.annotation.Generated)
+    # annotations that do not exist in the protobuf-kotlin-lite 4.26 runtime / Android
+    # classpath. Strip them from both Java and Kotlin generated sources.
+    for ext in java kt; do
+        find "$ANDROID_KOTLIN/com/airtak/proto" -name "*.${ext}" \
+            -exec sed -i \
+                -e '/^[[:space:]]*@com\.google\.protobuf\.Generated[[:space:]]*$/d' \
+                -e '/^@javax\.annotation\.Generated(/d' \
+                -e '/^@file:com\.google\.protobuf\.Generated[[:space:]]*$/d' \
+                -e '/^@file:javax\.annotation\.Generated(/d' \
+            {} \;
+    done
+    echo "  Stripped @Generated annotations from generated Java/Kotlin sources"
 fi
 
 echo -e "\n\033[32m[proto_gen.sh] Done.\033[0m"

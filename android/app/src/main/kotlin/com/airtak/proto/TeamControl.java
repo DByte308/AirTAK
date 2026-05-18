@@ -8,7 +8,6 @@ package com.airtak.proto;
 /**
  * Protobuf enum {@code airtak.TeamControl}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:TeamControl.java.pb.meta")
 public enum TeamControl
     implements com.google.protobuf.Internal.EnumLite {
   /**

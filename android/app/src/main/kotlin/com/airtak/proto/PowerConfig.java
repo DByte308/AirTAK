@@ -12,7 +12,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.PowerConfig}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:PowerConfig.java.pb.meta")
 public  final class PowerConfig extends
     com.google.protobuf.GeneratedMessageLite<
         PowerConfig, PowerConfig.Builder> implements

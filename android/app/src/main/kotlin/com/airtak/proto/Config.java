@@ -4,7 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-@javax.annotation.Generated(value="protoc", comments="annotations:Config.java.pb.meta")
+
 public final class Config {
   private Config() {}
   public static void registerAllExtensions(

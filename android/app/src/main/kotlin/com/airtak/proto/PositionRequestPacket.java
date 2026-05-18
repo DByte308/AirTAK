@@ -13,7 +13,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.PositionRequestPacket}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:PositionRequestPacket.java.pb.meta")
 public  final class PositionRequestPacket extends
     com.google.protobuf.GeneratedMessageLite<
         PositionRequestPacket, PositionRequestPacket.Builder> implements

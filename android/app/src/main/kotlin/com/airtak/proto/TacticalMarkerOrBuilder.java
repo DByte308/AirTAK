@@ -4,7 +4,7 @@
 // Protobuf Java Version: 4.32.1
 
 package com.airtak.proto;
-@javax.annotation.Generated(value="protoc", comments="annotations:TacticalMarkerOrBuilder.java.pb.meta")
+
 public interface TacticalMarkerOrBuilder extends
     // @@protoc_insertion_point(interface_extends:airtak.TacticalMarker)
     com.google.protobuf.MessageLiteOrBuilder {

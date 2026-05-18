@@ -8,7 +8,6 @@ package com.airtak.proto;
 /**
  * Protobuf type {@code airtak.AdminResponse}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:AdminResponse.java.pb.meta")
 public  final class AdminResponse extends
     com.google.protobuf.GeneratedMessageLite<
         AdminResponse, AdminResponse.Builder> implements

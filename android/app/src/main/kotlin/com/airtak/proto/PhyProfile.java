@@ -14,7 +14,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.PhyProfile}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:PhyProfile.java.pb.meta")
 public  final class PhyProfile extends
     com.google.protobuf.GeneratedMessageLite<
         PhyProfile, PhyProfile.Builder> implements

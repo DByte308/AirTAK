@@ -15,7 +15,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.AirTAKAck}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:AirTAKAck.java.pb.meta")
 public  final class AirTAKAck extends
     com.google.protobuf.GeneratedMessageLite<
         AirTAKAck, AirTAKAck.Builder> implements

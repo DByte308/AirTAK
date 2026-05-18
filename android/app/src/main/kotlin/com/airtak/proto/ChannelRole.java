@@ -8,7 +8,6 @@ package com.airtak.proto;
 /**
  * Protobuf enum {@code airtak.ChannelRole}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:ChannelRole.java.pb.meta")
 public enum ChannelRole
     implements com.google.protobuf.Internal.EnumLite {
   /**

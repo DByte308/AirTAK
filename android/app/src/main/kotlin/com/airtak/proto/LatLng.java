@@ -12,7 +12,6 @@ package com.airtak.proto;
  *
  * Protobuf type {@code airtak.LatLng}
  */
-@javax.annotation.Generated(value="protoc", comments="annotations:LatLng.java.pb.meta")
 public  final class LatLng extends
     com.google.protobuf.GeneratedMessageLite<
         LatLng, LatLng.Builder> implements
