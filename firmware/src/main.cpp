@@ -67,22 +67,84 @@ void task_battery_monitor(void* params);
 void task_audio_codec(void* params);
 #endif
 
+#ifndef LED_STATE_ON
+#define LED_STATE_ON LOW
+#endif
+#ifndef LED_BUILTIN
+#define LED_BUILTIN (-1)
+#endif
+
+#ifdef NRF52840_XXAA
+static inline void wdtInit() {
+    NRF_WDT->CONFIG = 3;           // SLEEP=Run(1) | HALT=Run(2)
+    NRF_WDT->CRV = 32768 * 8;      // 8 seconds @ 32.768 kHz
+    NRF_WDT->RREN = 0x01;          // Enable reload channel 0
+    NRF_WDT->TASKS_START = 1;
+}
+static inline void wdtFeed() {
+    NRF_WDT->RR[0] = 0x6E524635UL;
+}
+#else
+static inline void wdtInit() {}
+static inline void wdtFeed() {}
+#endif
+
+static inline void ledOn() {
+#ifdef LED_BUILTIN
+    if (LED_BUILTIN >= 0) { pinMode(LED_BUILTIN, OUTPUT); digitalWrite(LED_BUILTIN, LED_STATE_ON); }
+#endif
+}
+static inline void ledOff() {
+#ifdef LED_BUILTIN
+    if (LED_BUILTIN >= 0) { pinMode(LED_BUILTIN, OUTPUT); digitalWrite(LED_BUILTIN, !LED_STATE_ON); }
+#endif
+}
+
 // ── setup() ──────────────────────────────────────────────────────────────────
 void setup() {
+    ledOn();
+
+    wdtInit();
+
     Serial.begin(115200);
+    delay(1000);
+    Serial.println("AirTAK boot");
+    Serial.flush();
+
+    wdtFeed();
 
     if (airtak::RecoveryMode::requestedAtBoot()) {
         airtak::RecoveryMode::run();
     }
 
+    wdtFeed();
     airtak::platform::initBoard();
 
-    // Initialize LittleFS config store and load all config groups from flash.
-    // On first boot (no config files), defaults from Defaults.h are used.
     airtak::PacketPool::init();
-    if (!airtak::config::FlashStore::init()) {
-        Serial.println("AirTAK: FlashStore init failed; using volatile defaults");
+
+    bool flash_ok = false;
+
+#ifdef NRF52840_XXAA
+    if (readResetReason() & 0x02) {
+        Serial.println("AirTAK: watchdog recovery, flash skipped");
+        Serial.flush();
+    } else
+#endif
+    {
+        wdtFeed();
+        ledOff();
+        Serial.println("AirTAK: FlashStore init...");
+        Serial.flush();
+        flash_ok = airtak::config::FlashStore::init();
+        if (flash_ok) {
+            Serial.println("AirTAK: FlashStore OK");
+        } else {
+            Serial.println("AirTAK: FlashStore init failed; using volatile defaults");
+        }
+        Serial.flush();
+        ledOn();
     }
+    wdtFeed();
     airtak::config::ConfigManager::init();
     airtak::config::ConfigManager::registerCallback([](airtak::ConfigGroup group) {
         airtak::Display::markDirty(airtak::ui::DISPLAY_DIRTY_ALL);
