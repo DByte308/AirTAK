@@ -65,6 +65,32 @@ public  final class MarkerSnapshotRequest extends
     requesterNodeId_ = 0;
   }
 
+  public static final int SYNC_ID_FIELD_NUMBER = 3;
+  private int syncId_;
+  /**
+   * <code>uint32 sync_id = 3;</code>
+   * @return The syncId.
+   */
+  @java.lang.Override
+  public int getSyncId() {
+    return syncId_;
+  }
+  /**
+   * <code>uint32 sync_id = 3;</code>
+   * @param value The syncId to set.
+   */
+  private void setSyncId(int value) {
+    
+    syncId_ = value;
+  }
+  /**
+   * <code>uint32 sync_id = 3;</code>
+   */
+  private void clearSyncId() {
+    
+    syncId_ = 0;
+  }
+
   public static com.airtak.proto.MarkerSnapshotRequest parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -216,6 +242,34 @@ public  final class MarkerSnapshotRequest extends
       return this;
     }
 
+    /**
+     * <code>uint32 sync_id = 3;</code>
+     * @return The syncId.
+     */
+    @java.lang.Override
+    public int getSyncId() {
+      return instance.getSyncId();
+    }
+    /**
+     * <code>uint32 sync_id = 3;</code>
+     * @param value The syncId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setSyncId(int value) {
+      copyOnWrite();
+      instance.setSyncId(value);
+      return this;
+    }
+    /**
+     * <code>uint32 sync_id = 3;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearSyncId() {
+      copyOnWrite();
+      instance.clearSyncId();
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:airtak.MarkerSnapshotRequest)
   }
   @java.lang.Override
@@ -234,10 +288,11 @@ public  final class MarkerSnapshotRequest extends
           java.lang.Object[] objects = new java.lang.Object[] {
             "targetNodeId_",
             "requesterNodeId_",
+            "syncId_",
           };
           java.lang.String info =
-              "\u0000\u0002\u0000\u0000\u0001\u0002\u0002\u0000\u0000\u0000\u0001\u000b\u0002\u000b" +
-              "";
+              "\u0000\u0003\u0000\u0000\u0001\u0003\u0003\u0000\u0000\u0000\u0001\u000b\u0002\u000b" +
+              "\u0003\u000b";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       // fall through

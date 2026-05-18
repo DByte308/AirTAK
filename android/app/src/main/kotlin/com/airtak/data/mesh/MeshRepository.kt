@@ -88,6 +88,13 @@ class MeshRepository @Inject constructor(
     /** requestId → DB message row id; populated on send, removed when ACK arrives. */
     private val pendingAcks = ConcurrentHashMap<Long, Long>()
 
+    /** MRU cache of recently-handled sync_ids for message rebroadcast
+     *  dedup. Same policy as TacticalMarkerRepository's cache. */
+    private val handledSyncIds = object : LinkedHashMap<Long, Long>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Long>?): Boolean =
+            size > 8 || (eldest != null && System.currentTimeMillis() > eldest.value)
+    }
+
     init {
         // Keep channelHashIndex in sync with the device config.
         scope.launch {
@@ -310,9 +317,11 @@ class MeshRepository @Inject constructor(
     fun triggerSync() {
         val nodeId = ownNodeId()
         if (nodeId == 0L) return
+        val syncId = (System.nanoTime() and 0x7FFF_FFFFL) or 1L
         val request = SyncRequest.newBuilder()
             .setRequesterNodeId(nodeId.toInt())
             .setRequestedTypes(SYNC_TYPE_MARKERS or SYNC_TYPE_MESSAGES)
+            .setSyncId(syncId.toInt())
             .build()
         val data = MeshWire.encodeData(
             portnum = Portnum.AIRTAK_SYNC_REQUEST,
@@ -324,12 +333,25 @@ class MeshRepository @Inject constructor(
     private suspend fun handleSyncRequest(packet: MeshRxPacket) {
         val payload = packet.payload ?: return
         val request = runCatching { SyncRequest.parseFrom(payload) }.getOrNull() ?: return
+        val syncId = request.syncId.toLong() and 0xFFFF_FFFFL
+        if (syncId != 0L && isSyncIdHandled(syncId)) return
         val requesterId = request.requesterNodeId.toLong() and 0xFFFF_FFFFL
         if (requesterId == ownNodeId()) return
 
         val types = request.requestedTypes
         if (types and SYNC_TYPE_MESSAGES != 0) {
+            markSyncIdHandled(syncId)
             rebroadcastRecentMessages()
+        }
+    }
+
+    private fun isSyncIdHandled(syncId: Long): Boolean =
+        synchronized(handledSyncIds) { handledSyncIds.containsKey(syncId) }
+
+    private fun markSyncIdHandled(syncId: Long) {
+        if (syncId == 0L) return
+        synchronized(handledSyncIds) {
+            handledSyncIds[syncId] = System.currentTimeMillis() + SYNC_ID_TTL_MS
         }
     }
 
@@ -359,9 +381,11 @@ class MeshRepository @Inject constructor(
     fun requestMarkerSnapshot(targetNodeId: Long): SendResult {
         val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: 0L
         if (ownId == 0L || targetNodeId == 0L) return SendResult.Ok(0)
+        val syncId = (System.nanoTime() and 0x7FFF_FFFFL) or 1L
         val request = MarkerSnapshotRequest.newBuilder()
             .setTargetNodeId((targetNodeId and 0xFFFF_FFFFL).toInt())
             .setRequesterNodeId(ownId.toInt())
+            .setSyncId(syncId.toInt())
             .build()
         val requestId = (System.nanoTime() and 0x7FFF_FFFFL) or 1L
         val data = MeshWire.encodeData(
@@ -387,5 +411,6 @@ class MeshRepository @Inject constructor(
         private const val SYNC_MESSAGE_COUNT = 50
         private const val SYNC_TYPE_MARKERS = 1
         private const val SYNC_TYPE_MESSAGES = 2
+        private const val SYNC_ID_TTL_MS = 10_000L
     }
 }

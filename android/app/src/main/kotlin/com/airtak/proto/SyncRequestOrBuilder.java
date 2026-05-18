@@ -22,4 +22,14 @@ public interface SyncRequestOrBuilder extends
    * @return The requestedTypes.
    */
   int getRequestedTypes();
+
+  /**
+   * <pre>
+   * unique per request; responders skip duplicates
+   * </pre>
+   *
+   * <code>uint32 sync_id = 3;</code>
+   * @return The syncId.
+   */
+  int getSyncId();
 }

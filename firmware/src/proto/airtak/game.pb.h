@@ -128,11 +128,20 @@ typedef struct _airtak_PositionRequestPacket {
  and recent text messages from already-connected nodes.
  Responders re-broadcast their markers and recent messages with jittered delay
  (200–800 ms per item) to prevent mesh flood.
+ sync_id prevents duplicate responses when the same request is relayed
+ through multiple paths — responders track recently-handled sync_ids (MRU 8).
  Hop_limit=7; BEST_EFFORT (no ACK — response is the implicit acknowledgment). */
 typedef struct _airtak_SyncRequest {
     uint32_t requester_node_id;
     uint32_t requested_types; /* bitmask: 1=MARKERS, 2=MESSAGES */
+    uint32_t sync_id; /* unique per request; responders skip duplicates */
 } airtak_SyncRequest;
+
+typedef struct _airtak_MarkerSnapshotRequest {
+    uint32_t target_node_id;
+    uint32_t requester_node_id;
+    uint32_t sync_id;
+} airtak_MarkerSnapshotRequest;
 
 typedef struct _airtak_OverlayAlignment {
     uint32_t sharer_node_id;
@@ -149,11 +158,6 @@ typedef struct _airtak_OverlayAlignment {
     float opacity; /* 0.1–1.0 */
     uint32_t timestamp_unix;
 } airtak_OverlayAlignment;
-
-typedef struct _airtak_MarkerSnapshotRequest {
-    uint32_t target_node_id;
-    uint32_t requester_node_id;
-} airtak_MarkerSnapshotRequest;
 
 typedef PB_BYTES_ARRAY_T(200) airtak_AudioPacket_audio_data_t;
 typedef PB_BYTES_ARRAY_T(200) airtak_AudioPacket_fec_prev_audio_data_t;
@@ -223,9 +227,9 @@ extern "C" {
 #define airtak_ModerationPacket_init_default     {_airtak_ModerationAction_MIN, 0, _airtak_Scope_MIN, 0, 0}
 #define airtak_AirTAKAck_init_default            {0, 0, 0}
 #define airtak_PositionRequestPacket_init_default {0, 0}
-#define airtak_SyncRequest_init_default          {0, 0}
+#define airtak_SyncRequest_init_default          {0, 0, 0}
+#define airtak_MarkerSnapshotRequest_init_default {0, 0, 0}
 #define airtak_OverlayAlignment_init_default     {0, 0, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define airtak_MarkerSnapshotRequest_init_default {0, 0}
 #define airtak_AudioPacket_init_default          {0, 0, 0, {0, {0}}, 0, {0, {0}}, 0, 0}
 #define airtak_PlayerStatePacket_init_zero       {0, "", _airtak_PlayerStatus_MIN, 0, 0, "", "", "", ""}
 #define airtak_LatLng_init_zero                  {0, 0}
@@ -233,9 +237,9 @@ extern "C" {
 #define airtak_ModerationPacket_init_zero        {_airtak_ModerationAction_MIN, 0, _airtak_Scope_MIN, 0, 0}
 #define airtak_AirTAKAck_init_zero               {0, 0, 0}
 #define airtak_PositionRequestPacket_init_zero   {0, 0}
-#define airtak_SyncRequest_init_zero             {0, 0}
+#define airtak_SyncRequest_init_zero             {0, 0, 0}
+#define airtak_MarkerSnapshotRequest_init_zero   {0, 0, 0}
 #define airtak_OverlayAlignment_init_zero        {0, 0, {{NULL}, NULL}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define airtak_MarkerSnapshotRequest_init_zero   {0, 0}
 #define airtak_AudioPacket_init_zero             {0, 0, 0, {0, {0}}, 0, {0, {0}}, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -275,6 +279,10 @@ extern "C" {
 #define airtak_PositionRequestPacket_requester_node_id_tag 2
 #define airtak_SyncRequest_requester_node_id_tag 1
 #define airtak_SyncRequest_requested_types_tag   2
+#define airtak_SyncRequest_sync_id_tag           3
+#define airtak_MarkerSnapshotRequest_target_node_id_tag 1
+#define airtak_MarkerSnapshotRequest_requester_node_id_tag 2
+#define airtak_MarkerSnapshotRequest_sync_id_tag 3
 #define airtak_OverlayAlignment_sharer_node_id_tag 1
 #define airtak_OverlayAlignment_image_hash_tag   2
 #define airtak_OverlayAlignment_image_file_name_tag 3
@@ -288,8 +296,6 @@ extern "C" {
 #define airtak_OverlayAlignment_bottom_left_lng_tag 11
 #define airtak_OverlayAlignment_opacity_tag      12
 #define airtak_OverlayAlignment_timestamp_unix_tag 13
-#define airtak_MarkerSnapshotRequest_target_node_id_tag 1
-#define airtak_MarkerSnapshotRequest_requester_node_id_tag 2
 #define airtak_AudioPacket_from_node_id_tag      1
 #define airtak_AudioPacket_sequence_num_tag      2
 #define airtak_AudioPacket_codec2_mode_bps_tag   3
@@ -361,9 +367,17 @@ X(a, STATIC,   SINGULAR, UINT32,   requester_node_id,   2)
 
 #define airtak_SyncRequest_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   requester_node_id,   1) \
-X(a, STATIC,   SINGULAR, UINT32,   requested_types,   2)
+X(a, STATIC,   SINGULAR, UINT32,   requested_types,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   sync_id,           3)
 #define airtak_SyncRequest_CALLBACK NULL
 #define airtak_SyncRequest_DEFAULT NULL
+
+#define airtak_MarkerSnapshotRequest_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   target_node_id,    1) \
+X(a, STATIC,   SINGULAR, UINT32,   requester_node_id,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   sync_id,           3)
+#define airtak_MarkerSnapshotRequest_CALLBACK NULL
+#define airtak_MarkerSnapshotRequest_DEFAULT NULL
 
 #define airtak_OverlayAlignment_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   sharer_node_id,    1) \
@@ -381,12 +395,6 @@ X(a, STATIC,   SINGULAR, FLOAT,    opacity,          12) \
 X(a, STATIC,   SINGULAR, UINT32,   timestamp_unix,   13)
 #define airtak_OverlayAlignment_CALLBACK pb_default_field_callback
 #define airtak_OverlayAlignment_DEFAULT NULL
-
-#define airtak_MarkerSnapshotRequest_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   target_node_id,    1) \
-X(a, STATIC,   SINGULAR, UINT32,   requester_node_id,   2)
-#define airtak_MarkerSnapshotRequest_CALLBACK NULL
-#define airtak_MarkerSnapshotRequest_DEFAULT NULL
 
 #define airtak_AudioPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   from_node_id,      1) \
@@ -407,8 +415,8 @@ extern const pb_msgdesc_t airtak_ModerationPacket_msg;
 extern const pb_msgdesc_t airtak_AirTAKAck_msg;
 extern const pb_msgdesc_t airtak_PositionRequestPacket_msg;
 extern const pb_msgdesc_t airtak_SyncRequest_msg;
-extern const pb_msgdesc_t airtak_OverlayAlignment_msg;
 extern const pb_msgdesc_t airtak_MarkerSnapshotRequest_msg;
+extern const pb_msgdesc_t airtak_OverlayAlignment_msg;
 extern const pb_msgdesc_t airtak_AudioPacket_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -419,8 +427,8 @@ extern const pb_msgdesc_t airtak_AudioPacket_msg;
 #define airtak_AirTAKAck_fields &airtak_AirTAKAck_msg
 #define airtak_PositionRequestPacket_fields &airtak_PositionRequestPacket_msg
 #define airtak_SyncRequest_fields &airtak_SyncRequest_msg
-#define airtak_OverlayAlignment_fields &airtak_OverlayAlignment_msg
 #define airtak_MarkerSnapshotRequest_fields &airtak_MarkerSnapshotRequest_msg
+#define airtak_OverlayAlignment_fields &airtak_OverlayAlignment_msg
 #define airtak_AudioPacket_fields &airtak_AudioPacket_msg
 
 /* Maximum encoded size of messages (where known) */
@@ -429,11 +437,11 @@ extern const pb_msgdesc_t airtak_AudioPacket_msg;
 #define airtak_AirTAKAck_size                    18
 #define airtak_AudioPacket_size                  438
 #define airtak_LatLng_size                       18
-#define airtak_MarkerSnapshotRequest_size        12
+#define airtak_MarkerSnapshotRequest_size        18
 #define airtak_ModerationPacket_size             22
 #define airtak_PlayerStatePacket_size            170
 #define airtak_PositionRequestPacket_size        12
-#define airtak_SyncRequest_size                  12
+#define airtak_SyncRequest_size                  18
 #define airtak_TacticalMarker_size               657
 
 #ifdef __cplusplus

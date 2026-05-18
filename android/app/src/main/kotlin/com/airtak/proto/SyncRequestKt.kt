@@ -63,6 +63,31 @@ public object SyncRequestKt {
     public fun clearRequestedTypes() {
       _builder.clearRequestedTypes()
     }
+
+    /**
+     * <pre>
+     * unique per request; responders skip duplicates
+     * </pre>
+     *
+     * <code>uint32 sync_id = 3;</code>
+     */
+    public var syncId: kotlin.Int
+      @JvmName("getSyncId")
+      get() = _builder.getSyncId()
+      @JvmName("setSyncId")
+      set(value) {
+        _builder.setSyncId(value)
+      }
+    /**
+     * <pre>
+     * unique per request; responders skip duplicates
+     * </pre>
+     *
+     * <code>uint32 sync_id = 3;</code>
+     */
+    public fun clearSyncId() {
+      _builder.clearSyncId()
+    }
   }
 }
 public inline fun com.airtak.proto.SyncRequest.copy(block: com.airtak.proto.SyncRequestKt.Dsl.() -> kotlin.Unit): com.airtak.proto.SyncRequest =

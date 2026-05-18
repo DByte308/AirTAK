@@ -153,6 +153,11 @@ class MissionOverlayRepository @Inject constructor(
             temp.delete()
             error("Image is empty")
         }
+        val actualHash = computeFileHash(temp)
+        if (actualHash != alignment.imageHash) {
+            temp.delete()
+            error("Image does not match the shared alignment. Expected file: ${alignment.imageFileName}")
+        }
         deleteCurrentOverlayImage()
         check(temp.renameTo(overlayFile)) { "Could not save overlay image" }
         val newOverlay = MissionOverlay(

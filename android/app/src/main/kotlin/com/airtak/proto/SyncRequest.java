@@ -11,6 +11,8 @@ package com.airtak.proto;
  * and recent text messages from already-connected nodes.
  * Responders re-broadcast their markers and recent messages with jittered delay
  * (200–800 ms per item) to prevent mesh flood.
+ * sync_id prevents duplicate responses when the same request is relayed
+ * through multiple paths — responders track recently-handled sync_ids (MRU 8).
  * Hop_limit=7; BEST_EFFORT (no ACK — response is the implicit acknowledgment).
  * </pre>
  *
@@ -85,6 +87,44 @@ public  final class SyncRequest extends
   private void clearRequestedTypes() {
     
     requestedTypes_ = 0;
+  }
+
+  public static final int SYNC_ID_FIELD_NUMBER = 3;
+  private int syncId_;
+  /**
+   * <pre>
+   * unique per request; responders skip duplicates
+   * </pre>
+   *
+   * <code>uint32 sync_id = 3;</code>
+   * @return The syncId.
+   */
+  @java.lang.Override
+  public int getSyncId() {
+    return syncId_;
+  }
+  /**
+   * <pre>
+   * unique per request; responders skip duplicates
+   * </pre>
+   *
+   * <code>uint32 sync_id = 3;</code>
+   * @param value The syncId to set.
+   */
+  private void setSyncId(int value) {
+    
+    syncId_ = value;
+  }
+  /**
+   * <pre>
+   * unique per request; responders skip duplicates
+   * </pre>
+   *
+   * <code>uint32 sync_id = 3;</code>
+   */
+  private void clearSyncId() {
+    
+    syncId_ = 0;
   }
 
   public static com.airtak.proto.SyncRequest parseFrom(
@@ -176,6 +216,8 @@ public  final class SyncRequest extends
    * and recent text messages from already-connected nodes.
    * Responders re-broadcast their markers and recent messages with jittered delay
    * (200–800 ms per item) to prevent mesh flood.
+   * sync_id prevents duplicate responses when the same request is relayed
+   * through multiple paths — responders track recently-handled sync_ids (MRU 8).
    * Hop_limit=7; BEST_EFFORT (no ACK — response is the implicit acknowledgment).
    * </pre>
    *
@@ -260,6 +302,46 @@ public  final class SyncRequest extends
       return this;
     }
 
+    /**
+     * <pre>
+     * unique per request; responders skip duplicates
+     * </pre>
+     *
+     * <code>uint32 sync_id = 3;</code>
+     * @return The syncId.
+     */
+    @java.lang.Override
+    public int getSyncId() {
+      return instance.getSyncId();
+    }
+    /**
+     * <pre>
+     * unique per request; responders skip duplicates
+     * </pre>
+     *
+     * <code>uint32 sync_id = 3;</code>
+     * @param value The syncId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setSyncId(int value) {
+      copyOnWrite();
+      instance.setSyncId(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * unique per request; responders skip duplicates
+     * </pre>
+     *
+     * <code>uint32 sync_id = 3;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearSyncId() {
+      copyOnWrite();
+      instance.clearSyncId();
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:airtak.SyncRequest)
   }
   @java.lang.Override
@@ -278,10 +360,11 @@ public  final class SyncRequest extends
           java.lang.Object[] objects = new java.lang.Object[] {
             "requesterNodeId_",
             "requestedTypes_",
+            "syncId_",
           };
           java.lang.String info =
-              "\u0000\u0002\u0000\u0000\u0001\u0002\u0002\u0000\u0000\u0000\u0001\u000b\u0002\u000b" +
-              "";
+              "\u0000\u0003\u0000\u0000\u0001\u0003\u0003\u0000\u0000\u0000\u0001\u000b\u0002\u000b" +
+              "\u0003\u000b";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       // fall through

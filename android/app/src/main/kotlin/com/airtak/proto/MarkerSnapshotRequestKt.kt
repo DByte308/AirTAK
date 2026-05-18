@@ -55,6 +55,23 @@ public object MarkerSnapshotRequestKt {
     public fun clearRequesterNodeId() {
       _builder.clearRequesterNodeId()
     }
+
+    /**
+     * <code>uint32 sync_id = 3;</code>
+     */
+    public var syncId: kotlin.Int
+      @JvmName("getSyncId")
+      get() = _builder.getSyncId()
+      @JvmName("setSyncId")
+      set(value) {
+        _builder.setSyncId(value)
+      }
+    /**
+     * <code>uint32 sync_id = 3;</code>
+     */
+    public fun clearSyncId() {
+      _builder.clearSyncId()
+    }
   }
 }
 public inline fun com.airtak.proto.MarkerSnapshotRequest.copy(block: com.airtak.proto.MarkerSnapshotRequestKt.Dsl.() -> kotlin.Unit): com.airtak.proto.MarkerSnapshotRequest =

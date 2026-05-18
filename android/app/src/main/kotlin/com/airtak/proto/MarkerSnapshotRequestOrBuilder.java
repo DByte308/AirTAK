@@ -18,4 +18,10 @@ public interface MarkerSnapshotRequestOrBuilder extends
    * @return The requesterNodeId.
    */
   int getRequesterNodeId();
+
+  /**
+   * <code>uint32 sync_id = 3;</code>
+   * @return The syncId.
+   */
+  int getSyncId();
 }

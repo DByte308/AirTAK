@@ -27,10 +27,10 @@ PB_BIND(airtak_PositionRequestPacket, airtak_PositionRequestPacket, AUTO)
 PB_BIND(airtak_SyncRequest, airtak_SyncRequest, AUTO)
 
 
-PB_BIND(airtak_OverlayAlignment, airtak_OverlayAlignment, AUTO)
-
-
 PB_BIND(airtak_MarkerSnapshotRequest, airtak_MarkerSnapshotRequest, AUTO)
+
+
+PB_BIND(airtak_OverlayAlignment, airtak_OverlayAlignment, AUTO)
 
 
 PB_BIND(airtak_AudioPacket, airtak_AudioPacket, 2)

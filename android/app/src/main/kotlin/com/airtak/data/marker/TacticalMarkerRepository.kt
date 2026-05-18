@@ -68,6 +68,14 @@ class TacticalMarkerRepository @Inject constructor(
     /** requestId (from sendTacticalMarker) → markerId; cleared on AIRTAK_ACK. */
     private val pendingMarkerAcks = ConcurrentHashMap<Long, Long>()
 
+    /** MRU cache of recently-handled sync_ids to prevent duplicate responses
+     *  when a SYNC_REQUEST or MARKER_SNAPSHOT_REQUEST is relayed through
+     *  multiple paths. Size 8, TTL 10 seconds, oldest evicted when full. */
+    private val handledSyncIds = object : LinkedHashMap<Long, Long>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Long>?): Boolean =
+            size > 8 || (eldest != null && System.currentTimeMillis() > eldest.value)
+    }
+
     val markers: Flow<List<TacticalMarkerEntity>> = dao.observeActive()
 
     /** Receiver-side scope filter (§5.5). */
@@ -333,11 +341,14 @@ class TacticalMarkerRepository @Inject constructor(
     private suspend fun handleSyncRequest(packet: MeshRxPacket) {
         val payload = packet.payload ?: return
         val request = runCatching { SyncRequest.parseFrom(payload) }.getOrNull() ?: return
+        val syncId = request.syncId.toLong() and 0xFFFF_FFFFL
+        if (syncId != 0L && isSyncIdHandled(syncId)) return
         val requesterId = request.requesterNodeId.toLong() and 0xFFFF_FFFFL
         val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: 0L
         if (requesterId == ownId) return
 
         if (request.requestedTypes and SYNC_TYPE_MARKERS != 0) {
+            markSyncIdHandled(syncId)
             rebroadcastOwned()
         }
     }
@@ -347,10 +358,23 @@ class TacticalMarkerRepository @Inject constructor(
     private suspend fun handleSnapshotRequest(packet: MeshRxPacket) {
         val payload = packet.payload ?: return
         val request = runCatching { MarkerSnapshotRequest.parseFrom(payload) }.getOrNull() ?: return
+        val syncId = request.syncId.toLong() and 0xFFFF_FFFFL
+        if (syncId != 0L && isSyncIdHandled(syncId)) return
         val targetId = request.targetNodeId.toLong() and 0xFFFF_FFFFL
         val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: 0L
         if (targetId != ownId) return
+        markSyncIdHandled(syncId)
         rebroadcastOwned()
+    }
+
+    private fun isSyncIdHandled(syncId: Long): Boolean =
+        synchronized(handledSyncIds) { handledSyncIds.containsKey(syncId) }
+
+    private fun markSyncIdHandled(syncId: Long) {
+        if (syncId == 0L) return
+        synchronized(handledSyncIds) {
+            handledSyncIds[syncId] = System.currentTimeMillis() + SYNC_ID_TTL_MS
+        }
     }
 
     private fun entityToProto(entity: TacticalMarkerEntity): TacticalMarker {
@@ -437,5 +461,6 @@ class TacticalMarkerRepository @Inject constructor(
         const val PURGE_INTERVAL_MS = 60L * 60L * 1_000L
         const val REBROADCAST_SPACING_MS = 500L
         private const val SYNC_TYPE_MARKERS = 1
+        private const val SYNC_ID_TTL_MS = 10_000L
     }
 }
