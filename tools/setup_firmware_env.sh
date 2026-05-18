@@ -42,4 +42,5 @@ chmod +x "$BIN_DIR/gcc" "$BIN_DIR/g++" "$BIN_DIR/ar"
 
 echo -e "\033[32mFirmware environment ready.\033[0m"
 echo "Use: ./tools/pio_firmware.sh run -e t_echo_plus"
+echo "Use: ./tools/pio_firmware.sh run -e t_echo -t upload  (USB DFU via adafruit-nrfutil)"
 echo "Use: ./tools/pio_firmware.sh test -e native"

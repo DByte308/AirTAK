@@ -38,8 +38,8 @@
   "upload": {
     "maximum_ram_size": 262144,
     "maximum_size": 815104,
-    "protocol": "nrfjprog",
-    "protocols": ["nrfjprog", "jlink"]
+    "protocol": "nrfutil",
+    "protocols": ["nrfutil", "nrfjprog", "jlink"]
   },
   "url": "https://heltec.org/project/mesh-node-t114/",
   "vendor": "Heltec Automation",

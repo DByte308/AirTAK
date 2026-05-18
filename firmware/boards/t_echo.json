@@ -41,8 +41,8 @@
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,
-    "protocol": "nrfjprog",
-    "protocols": ["jlink", "nrfjprog", "nrfutil"]
+    "protocol": "nrfutil",
+    "protocols": ["nrfutil", "nrfjprog", "jlink"]
   },
   "url": "https://lilygo.cc/products/t-echo-lilygo",
   "vendor": "LILYGO"

@@ -36,4 +36,5 @@ $WrapperDir = Join-Path $VenvDir "Scripts"
 
 Write-Host "Firmware environment ready." -ForegroundColor Green
 Write-Host "Use: .\tools\pio_firmware.ps1 run -e t_echo_plus"
+Write-Host "Use: .\tools\pio_firmware.ps1 run -e t_echo -t upload  (USB DFU via adafruit-nrfutil)"
 Write-Host "Use: .\tools\pio_firmware.ps1 test -e native"
