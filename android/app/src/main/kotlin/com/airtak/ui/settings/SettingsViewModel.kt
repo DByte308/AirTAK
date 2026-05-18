@@ -24,6 +24,7 @@ import com.airtak.proto.Scope
 import com.airtak.proto.DeviceConfig
 import com.airtak.proto.DeviceStatus
 import com.airtak.proto.GameConfig
+import com.airtak.proto.GpsSource
 import com.airtak.proto.LoraConfig
 import com.airtak.proto.LoraRegion
 import com.airtak.proto.PhyProfile
@@ -71,6 +72,7 @@ class SettingsViewModel @Inject constructor(
         val broadcastIntervalSecs: Int = 90,
         val minTxIntervalSecs: Int = 15,
         val smartBroadcast: Boolean = true,
+        val gpsSource: GpsSource = GpsSource.DEVICE_GPS,
     )
     data class PowerState(val gpsDutyCycle: Boolean = false, val displayOffSecs: Int = 0)
     data class GameState(
@@ -119,7 +121,7 @@ class SettingsViewModel @Inject constructor(
                     )
                 }
                 map[ConfigGroup.POSITION]?.let { b -> tryDecode { PositionConfig.parseFrom(b) } }?.let {
-                    _position.value = PositionState(it.broadcastIntervalSecs, it.minTxIntervalSecs, it.smartBroadcast)
+                    _position.value = PositionState(it.broadcastIntervalSecs, it.minTxIntervalSecs, it.smartBroadcast, it.gpsSource)
                 }
                 map[ConfigGroup.POWER]?.let { b -> tryDecode { PowerConfig.parseFrom(b) } }?.let {
                     _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs)
@@ -249,7 +251,8 @@ class SettingsViewModel @Inject constructor(
         val msg = PositionConfig.newBuilder()
             .setBroadcastIntervalSecs(s.broadcastIntervalSecs)
             .setMinTxIntervalSecs(s.minTxIntervalSecs)
-            .setSmartBroadcast(s.smartBroadcast).build()
+            .setSmartBroadcast(s.smartBroadcast)
+            .setGpsSource(s.gpsSource).build()
         config.apply(ConfigGroup.POSITION, msg.toByteArray())
     }
     fun applyPower() {

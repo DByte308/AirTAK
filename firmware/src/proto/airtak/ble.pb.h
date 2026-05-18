@@ -19,7 +19,8 @@ typedef enum _airtak_AdminCommand {
     airtak_AdminCommand_DFU_ENTER = 2, /* enter Nordic DFU mode for OTA update (§6.1) */
     airtak_AdminCommand_RADIO_RESTART = 3, /* trigger controlled radio restart without config change */
     airtak_AdminCommand_GPS_RESET = 4, /* cold-reset the L76K GPS module */
-    airtak_AdminCommand_PAIR_CLEAR = 5 /* remove all BLE bonds; requires confirm_token */
+    airtak_AdminCommand_PAIR_CLEAR = 5, /* remove all BLE bonds; requires confirm_token */
+    airtak_AdminCommand_SET_PHONE_GPS = 6 /* update the device's GPS fix from phone position data; */
 } airtak_AdminCommand;
 
 /* Struct definitions */
@@ -77,9 +78,21 @@ typedef struct _airtak_DeviceStatus {
     char bluetooth_address[18]; /* "AA:BB:CC:DD:EE:FF" */
 } airtak_DeviceStatus;
 
+/* When gps_source=PHONE_GPS, the Android app periodically sends the phone's
+ GPS position to the firmware via SET_PHONE_GPS. The firmware uses this as
+ the device's current GPS fix for POSITION_APP broadcasts and DEVICE_STATUS. */
+typedef struct _airtak_PhoneGpsPosition {
+    double latitude; /* WGS-84 decimal degrees */
+    double longitude;
+    float altitude_m;
+    float accuracy_m; /* Android Location.getAccuracy() in metres */
+} airtak_PhoneGpsPosition;
+
 typedef struct _airtak_AdminRequest {
     airtak_AdminCommand command;
     char confirm_token[96]; /* required for FACTORY_RESET and PAIR_CLEAR */
+    bool has_phone_gps;
+    airtak_PhoneGpsPosition phone_gps; /* position data for SET_PHONE_GPS */
 } airtak_AdminRequest;
 
 typedef struct _airtak_AdminResponse {
@@ -95,12 +108,13 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _airtak_AdminCommand_MIN airtak_AdminCommand_REBOOT
-#define _airtak_AdminCommand_MAX airtak_AdminCommand_PAIR_CLEAR
-#define _airtak_AdminCommand_ARRAYSIZE ((airtak_AdminCommand)(airtak_AdminCommand_PAIR_CLEAR+1))
+#define _airtak_AdminCommand_MAX airtak_AdminCommand_SET_PHONE_GPS
+#define _airtak_AdminCommand_ARRAYSIZE ((airtak_AdminCommand)(airtak_AdminCommand_SET_PHONE_GPS+1))
 
 #define airtak_ConfigPayload_group_ENUMTYPE airtak_ConfigGroup
 
 #define airtak_ConfigAck_group_ENUMTYPE airtak_ConfigGroup
+
 
 
 
@@ -116,14 +130,16 @@ extern "C" {
 #define airtak_DeviceStatus_init_default         {0, "", 0, 0, false, airtak_GpsStatus_init_default, false, airtak_RadioStatus_init_default, 0, 0, "", ""}
 #define airtak_GpsStatus_init_default            {0, 0, 0, 0, 0, 0}
 #define airtak_RadioStatus_init_default          {"", 0, 0, 0, 0}
-#define airtak_AdminRequest_init_default         {_airtak_AdminCommand_MIN, ""}
+#define airtak_PhoneGpsPosition_init_default     {0, 0, 0, 0}
+#define airtak_AdminRequest_init_default         {_airtak_AdminCommand_MIN, "", false, airtak_PhoneGpsPosition_init_default}
 #define airtak_AdminResponse_init_default        {_airtak_AdminCommand_MIN, 0, ""}
 #define airtak_ConfigPayload_init_zero           {_airtak_ConfigGroup_MIN, {0, {0}}, 0}
 #define airtak_ConfigAck_init_zero               {_airtak_ConfigGroup_MIN, 0, "", 0, 0}
 #define airtak_DeviceStatus_init_zero            {0, "", 0, 0, false, airtak_GpsStatus_init_zero, false, airtak_RadioStatus_init_zero, 0, 0, "", ""}
 #define airtak_GpsStatus_init_zero               {0, 0, 0, 0, 0, 0}
 #define airtak_RadioStatus_init_zero             {"", 0, 0, 0, 0}
-#define airtak_AdminRequest_init_zero            {_airtak_AdminCommand_MIN, ""}
+#define airtak_PhoneGpsPosition_init_zero        {0, 0, 0, 0}
+#define airtak_AdminRequest_init_zero            {_airtak_AdminCommand_MIN, "", false, airtak_PhoneGpsPosition_init_zero}
 #define airtak_AdminResponse_init_zero           {_airtak_AdminCommand_MIN, 0, ""}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -156,8 +172,13 @@ extern "C" {
 #define airtak_DeviceStatus_uptime_seconds_tag   8
 #define airtak_DeviceStatus_firmware_version_tag 9
 #define airtak_DeviceStatus_bluetooth_address_tag 10
+#define airtak_PhoneGpsPosition_latitude_tag     1
+#define airtak_PhoneGpsPosition_longitude_tag    2
+#define airtak_PhoneGpsPosition_altitude_m_tag   3
+#define airtak_PhoneGpsPosition_accuracy_m_tag   4
 #define airtak_AdminRequest_command_tag          1
 #define airtak_AdminRequest_confirm_token_tag    2
+#define airtak_AdminRequest_phone_gps_tag        3
 #define airtak_AdminResponse_command_tag         1
 #define airtak_AdminResponse_success_tag         2
 #define airtak_AdminResponse_error_tag           3
@@ -214,11 +235,21 @@ X(a, STATIC,   SINGULAR, UINT32,   packets_tx,        5)
 #define airtak_RadioStatus_CALLBACK NULL
 #define airtak_RadioStatus_DEFAULT NULL
 
+#define airtak_PhoneGpsPosition_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, DOUBLE,   latitude,          1) \
+X(a, STATIC,   SINGULAR, DOUBLE,   longitude,         2) \
+X(a, STATIC,   SINGULAR, FLOAT,    altitude_m,        3) \
+X(a, STATIC,   SINGULAR, FLOAT,    accuracy_m,        4)
+#define airtak_PhoneGpsPosition_CALLBACK NULL
+#define airtak_PhoneGpsPosition_DEFAULT NULL
+
 #define airtak_AdminRequest_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    command,           1) \
-X(a, STATIC,   SINGULAR, STRING,   confirm_token,     2)
+X(a, STATIC,   SINGULAR, STRING,   confirm_token,     2) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  phone_gps,         3)
 #define airtak_AdminRequest_CALLBACK NULL
 #define airtak_AdminRequest_DEFAULT NULL
+#define airtak_AdminRequest_phone_gps_MSGTYPE airtak_PhoneGpsPosition
 
 #define airtak_AdminResponse_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    command,           1) \
@@ -232,6 +263,7 @@ extern const pb_msgdesc_t airtak_ConfigAck_msg;
 extern const pb_msgdesc_t airtak_DeviceStatus_msg;
 extern const pb_msgdesc_t airtak_GpsStatus_msg;
 extern const pb_msgdesc_t airtak_RadioStatus_msg;
+extern const pb_msgdesc_t airtak_PhoneGpsPosition_msg;
 extern const pb_msgdesc_t airtak_AdminRequest_msg;
 extern const pb_msgdesc_t airtak_AdminResponse_msg;
 
@@ -241,17 +273,19 @@ extern const pb_msgdesc_t airtak_AdminResponse_msg;
 #define airtak_DeviceStatus_fields &airtak_DeviceStatus_msg
 #define airtak_GpsStatus_fields &airtak_GpsStatus_msg
 #define airtak_RadioStatus_fields &airtak_RadioStatus_msg
+#define airtak_PhoneGpsPosition_fields &airtak_PhoneGpsPosition_msg
 #define airtak_AdminRequest_fields &airtak_AdminRequest_msg
 #define airtak_AdminResponse_fields &airtak_AdminResponse_msg
 
 /* Maximum encoded size of messages (where known) */
 #define AIRTAK_BLE_PB_H_MAX_SIZE                 airtak_ConfigPayload_size
-#define airtak_AdminRequest_size                 99
+#define airtak_AdminRequest_size                 129
 #define airtak_AdminResponse_size                101
 #define airtak_ConfigAck_size                    109
 #define airtak_ConfigPayload_size                519
 #define airtak_DeviceStatus_size                 182
 #define airtak_GpsStatus_size                    36
+#define airtak_PhoneGpsPosition_size             28
 #define airtak_RadioStatus_size                  40
 
 #ifdef __cplusplus

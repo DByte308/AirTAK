@@ -40,6 +40,16 @@ typedef enum _airtak_ChannelRole {
     airtak_ChannelRole_SECONDARY = 2
 } airtak_ChannelRole;
 
+/* Roadmap: 2.4 | Smart beaconing policy (§8.7). No radio restart required.
+ Which device provides GPS position data for POSITION_APP broadcasts.
+ Phone GPS allows devices without built-in GPS (or users who prefer phone GPS) to
+ participate fully — the Android app sends the phone's GPS position to the firmware
+ via BLE, and the firmware broadcasts it as POSITION_APP normally. */
+typedef enum _airtak_GpsSource {
+    airtak_GpsSource_DEVICE_GPS = 0, /* Use built-in L76K GPS module (default) */
+    airtak_GpsSource_PHONE_GPS = 1 /* Use phone GPS position sent from the Android app over BLE */
+} airtak_GpsSource;
+
 /* Struct definitions */
 /* Roadmap: 2.2 | NODEINFO_APP broadcast uses long_name and short_name. */
 typedef struct _airtak_DeviceConfig {
@@ -95,7 +105,6 @@ typedef struct _airtak_AudioConfig {
     uint32_t frame_count; /* Codec2 frames per LoRa packet; default 8 (160 ms); */
 } airtak_AudioConfig;
 
-/* Roadmap: 2.4 | Smart beaconing policy (§8.7). No radio restart required. */
 typedef struct _airtak_PositionConfig {
     uint32_t broadcast_interval_secs; /* heartbeat max; default 90 */
     uint32_t gps_precision_bits; /* default 32 (full precision) */
@@ -103,6 +112,7 @@ typedef struct _airtak_PositionConfig {
     uint32_t movement_threshold_m; /* fixed 10 m in Defaults.h; not user-configurable */
     uint32_t min_tx_interval_secs; /* minimum gap between TX; default 15 */
     uint32_t position_hop_limit; /* override for POSITION_APP hop_limit; 0 = use firmware default (7) */
+    airtak_GpsSource gps_source; /* GPS data source; default DEVICE_GPS */
 } airtak_PositionConfig;
 
 /* Roadmap: 6.2 | GPS duty cycle for battery life target ≥ 8 h (§7.2, §6.3). */
@@ -148,6 +158,10 @@ extern "C" {
 #define _airtak_ChannelRole_MAX airtak_ChannelRole_SECONDARY
 #define _airtak_ChannelRole_ARRAYSIZE ((airtak_ChannelRole)(airtak_ChannelRole_SECONDARY+1))
 
+#define _airtak_GpsSource_MIN airtak_GpsSource_DEVICE_GPS
+#define _airtak_GpsSource_MAX airtak_GpsSource_PHONE_GPS
+#define _airtak_GpsSource_ARRAYSIZE ((airtak_GpsSource)(airtak_GpsSource_PHONE_GPS+1))
+
 
 
 #define airtak_LoraConfig_region_ENUMTYPE airtak_LoraRegion
@@ -156,6 +170,7 @@ extern "C" {
 
 
 
+#define airtak_PositionConfig_gps_source_ENUMTYPE airtak_GpsSource
 
 
 
@@ -168,7 +183,7 @@ extern "C" {
 #define airtak_ChannelSlot_init_default          {0, "", {0, {0}}, _airtak_ChannelRole_MIN, 0, 0, 0, 0}
 #define airtak_ChannelConfig_init_default        {0, {airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default}}
 #define airtak_AudioConfig_init_default          {0, 0, 0, 0}
-#define airtak_PositionConfig_init_default       {0, 0, 0, 0, 0, 0}
+#define airtak_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, _airtak_GpsSource_MIN}
 #define airtak_PowerConfig_init_default          {0, 0, 0, 0}
 #define airtak_GameConfig_init_default           {"", "", "", "", "", 0, 0}
 #define airtak_SecurityConfig_init_default       {0}
@@ -178,7 +193,7 @@ extern "C" {
 #define airtak_ChannelSlot_init_zero             {0, "", {0, {0}}, _airtak_ChannelRole_MIN, 0, 0, 0, 0}
 #define airtak_ChannelConfig_init_zero           {0, {airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero}}
 #define airtak_AudioConfig_init_zero             {0, 0, 0, 0}
-#define airtak_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0}
+#define airtak_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, _airtak_GpsSource_MIN}
 #define airtak_PowerConfig_init_zero             {0, 0, 0, 0}
 #define airtak_GameConfig_init_zero              {"", "", "", "", "", 0, 0}
 #define airtak_SecurityConfig_init_zero          {0}
@@ -212,6 +227,7 @@ extern "C" {
 #define airtak_PositionConfig_movement_threshold_m_tag 4
 #define airtak_PositionConfig_min_tx_interval_secs_tag 5
 #define airtak_PositionConfig_position_hop_limit_tag 6
+#define airtak_PositionConfig_gps_source_tag     7
 #define airtak_PowerConfig_gps_duty_cycle_tag    1
 #define airtak_PowerConfig_gps_on_secs_tag       2
 #define airtak_PowerConfig_gps_off_secs_tag      3
@@ -280,7 +296,8 @@ X(a, STATIC,   SINGULAR, UINT32,   gps_precision_bits,   2) \
 X(a, STATIC,   SINGULAR, BOOL,     smart_broadcast,   3) \
 X(a, STATIC,   SINGULAR, UINT32,   movement_threshold_m,   4) \
 X(a, STATIC,   SINGULAR, UINT32,   min_tx_interval_secs,   5) \
-X(a, STATIC,   SINGULAR, UINT32,   position_hop_limit,   6)
+X(a, STATIC,   SINGULAR, UINT32,   position_hop_limit,   6) \
+X(a, STATIC,   SINGULAR, UENUM,    gps_source,        7)
 #define airtak_PositionConfig_CALLBACK NULL
 #define airtak_PositionConfig_DEFAULT NULL
 
@@ -340,7 +357,7 @@ extern const pb_msgdesc_t airtak_SecurityConfig_msg;
 #define airtak_GameConfig_size                   162
 #define airtak_LoraConfig_size                   198
 #define airtak_PhyProfile_size                   36
-#define airtak_PositionConfig_size               32
+#define airtak_PositionConfig_size               34
 #define airtak_PowerConfig_size                  20
 #define airtak_SecurityConfig_size               6
 

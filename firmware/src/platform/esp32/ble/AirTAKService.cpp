@@ -255,6 +255,16 @@ class AdminCallbacks : public NimBLECharacteristicCallbacks {
                 GPS::setPower(true);
                 success = true;
                 break;
+            case airtak_AdminCommand_SET_PHONE_GPS:
+                if (request.has_phone_gps && GPS::usingExternalFix()) {
+                    GPS::setExternalFix(
+                        request.phone_gps.latitude,
+                        request.phone_gps.longitude,
+                        request.phone_gps.altitude_m,
+                        request.phone_gps.accuracy_m);
+                    success = true;
+                }
+                break;
             default:
                 break;
         }

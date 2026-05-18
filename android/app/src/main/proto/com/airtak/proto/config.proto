@@ -124,6 +124,15 @@ message AudioConfig {
 // ── Position ──────────────────────────────────────────────────────────────────
 
 // Roadmap: 2.4 | Smart beaconing policy (§8.7). No radio restart required.
+// Which device provides GPS position data for POSITION_APP broadcasts.
+// Phone GPS allows devices without built-in GPS (or users who prefer phone GPS) to
+// participate fully — the Android app sends the phone's GPS position to the firmware
+// via BLE, and the firmware broadcasts it as POSITION_APP normally.
+enum GpsSource {
+  DEVICE_GPS = 0;   // Use built-in L76K GPS module (default)
+  PHONE_GPS  = 1;   // Use phone GPS position sent from the Android app over BLE
+}
+
 message PositionConfig {
   uint32 broadcast_interval_secs = 1;   // heartbeat max; default 90
   uint32 gps_precision_bits      = 2;   // default 32 (full precision)
@@ -131,6 +140,7 @@ message PositionConfig {
   uint32 movement_threshold_m    = 4;   // fixed 10 m in Defaults.h; not user-configurable
   uint32 min_tx_interval_secs    = 5;   // minimum gap between TX; default 15
   uint32 position_hop_limit      = 6;   // override for POSITION_APP hop_limit; 0 = use firmware default (7)
+  GpsSource gps_source           = 7;   // GPS data source; default DEVICE_GPS
 }
 
 // ── Power ─────────────────────────────────────────────────────────────────────

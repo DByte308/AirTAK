@@ -50,6 +50,19 @@ public:
     // Phase 6.2: Enable/disable GPS power via GPIO ENABLE pin (P1.02) for duty cycling.
     static void setPower(bool on);
 
+    // Set the GPS fix from an external source (phone GPS).
+    // When active, currentFix() and hasFix() return the external data.
+    // Used when PositionConfig.gps_source = PHONE_GPS.
+    static void setExternalFix(double lat, double lng, float alt_m, float acc_m);
+
+    // Enable or disable external GPS source mode.
+    // When true, powers down the L76K and uses setExternalFix() data.
+    // When false, powers up the L76K and uses its NMEA data.
+    static void setExternalSource(bool enabled);
+
+    // Returns true when using phone GPS instead of the built-in L76K.
+    static bool usingExternalFix();
+
     // Displacement in meters from the previous position TX location.
     // Used by the smart beaconing logic in Router/MeshNode (§8.7).
     static float displacementFromLastTxMeters();

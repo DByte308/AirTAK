@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.airtak.proto.AdminCommand
 import com.airtak.proto.ChannelRole
+import com.airtak.proto.GpsSource
 import com.airtak.proto.LoraRegion
 import com.airtak.proto.PhyProfile
 import com.airtak.ui.components.HudCard
@@ -1045,6 +1046,25 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
             Switch(
                     checked = position.smartBroadcast,
                     onCheckedChange = { vm.updatePosition { copy(smartBroadcast = it) } }
+            )
+        }
+        Spacer(Modifier.height(24.dp))
+        SectionLabel("GPS source")
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                    if (position.gpsSource == GpsSource.PHONE_GPS) "Phone GPS" else "Device GPS (L76K)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onBackground
+            )
+            Switch(
+                    checked = position.gpsSource == GpsSource.PHONE_GPS,
+                    onCheckedChange = { checked ->
+                        vm.updatePosition {
+                            copy(gpsSource = if (checked) GpsSource.PHONE_GPS else GpsSource.DEVICE_GPS)
+                        }
+                    }
             )
         }
         Spacer(Modifier.height(24.dp))

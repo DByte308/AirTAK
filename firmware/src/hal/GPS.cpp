@@ -3,24 +3,36 @@
 // Planning: §9.5, §7.1 | Roadmap: 1.3
 
 #include "hal/GPS.h"
+#include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "config.h"
 #include <Arduino.h>
+#if AIRTAK_BOARD_HAS_GPS
 #include <TinyGPS++.h>  // TinyGPS++ ≥ 1.0.3 (platformio.ini dependency)
+#endif
 #include <cstring>
 
 namespace airtak {
 
 // ── Static state ──────────────────────────────────────────────────────────────
+#if AIRTAK_BOARD_HAS_GPS
 static TinyGPSPlus s_gps;
+#endif
 static GpsFix      s_current_fix = {};
 static double      s_last_tx_lat = 0.0;
 static double      s_last_tx_lng = 0.0;
+#if AIRTAK_BOARD_HAS_GPS
 static bool        s_baud_upgraded = false;
 static uint32_t    s_current_baud = GPS_BAUD_INITIAL;
 static uint32_t    s_last_valid_sentence_ms = 0;
 static uint32_t    s_last_baud_probe_ms = 0;
+#endif
 
+// External GPS fix (phone GPS via BLE SET_PHONE_GPS).
+static GpsFix      s_external_fix = {};
+static bool        s_using_external = false;
+
+#if AIRTAK_BOARD_HAS_GPS
 static constexpr uint32_t GPS_BAUD_CANDIDATES[] = {
     GPS_BAUD_INITIAL,
     38400,
@@ -36,7 +48,9 @@ static char        s_debug_sentence[128] = {};
 static uint8_t     s_debug_sentence_len = 0;
 static uint8_t     s_debug_sentence_prints = 0;
 #endif
+#endif // AIRTAK_BOARD_HAS_GPS
 
+#if AIRTAK_BOARD_HAS_GPS
 // Board-selected UART used for the GNSS module.
 static HardwareSerial& GPS_SERIAL = AIRTAK_GPS_SERIAL;
 
@@ -112,23 +126,30 @@ static void capture_debug_char(char c) {
     }
 }
 #endif
+#endif // AIRTAK_BOARD_HAS_GPS
 
+#if AIRTAK_BOARD_HAS_GPS
 // ── PMTK command helpers ──────────────────────────────────────────────────────
 static void send_pmtk(const char* cmd) {
     GPS_SERIAL.print(cmd);
     GPS_SERIAL.print("\r\n");
 }
+#endif
 
 // ── GPS::init() ───────────────────────────────────────────────────────────────
 void GPS::init() {
+    // If the device is configured to use phone GPS, don't power up the L76K.
+    s_using_external = (config::ConfigManager::positionGpsSource() == 1);
+
+#if AIRTAK_BOARD_HAS_GPS
     // Enable GPS power via dedicated GPIO (T-Echo Plus only; -1 = no pin).
 #if defined(AIRTAK_PIN_GPS_ENABLE) && AIRTAK_PIN_GPS_ENABLE >= 0
     pinMode(AIRTAK_PIN_GPS_ENABLE, OUTPUT);
-    digitalWrite(AIRTAK_PIN_GPS_ENABLE, HIGH);
+    digitalWrite(AIRTAK_PIN_GPS_ENABLE, s_using_external ? LOW : HIGH);
 #endif
 #if defined(AIRTAK_PIN_GPS_RESET) && AIRTAK_PIN_GPS_RESET >= 0
     pinMode(AIRTAK_PIN_GPS_RESET, OUTPUT);
-    digitalWrite(AIRTAK_PIN_GPS_RESET, HIGH);
+    digitalWrite(AIRTAK_PIN_GPS_RESET, s_using_external ? LOW : HIGH);
 #endif
     // PPS pin — configure as input but do not use in logic (reserved, §9.5)
 #if defined(AIRTAK_PIN_GPS_PPS) && AIRTAK_PIN_GPS_PPS >= 0
@@ -138,10 +159,12 @@ void GPS::init() {
     // Start UART at initial baud rate (§9.5). If a previous firmware left the
     // module at GPS_BAUD_FAST, process() will auto-probe and recover.
     begin_gps_serial(GPS_BAUD_INITIAL);
+#endif // AIRTAK_BOARD_HAS_GPS
 }
 
 // ── GPS::process() ───────────────────────────────────────────────────────────
 void GPS::process(EventGroupHandle_t system_event_group) {
+#if AIRTAK_BOARD_HAS_GPS
     // Feed all available UART bytes to TinyGPS++
     while (GPS_SERIAL.available()) {
         char c = GPS_SERIAL.read();
@@ -237,11 +260,18 @@ void GPS::process(EventGroupHandle_t system_event_group) {
                       s_baud_upgraded    ? "yes" : "NO");
     }
 #endif
+#else
+    (void)system_event_group;  // unused when no hardware GPS
+#endif // AIRTAK_BOARD_HAS_GPS
 }
 
 // ── GPS::currentFix() ────────────────────────────────────────────────────────
-const GpsFix& GPS::currentFix() { return s_current_fix; }
-bool GPS::hasFix() { return s_current_fix.valid; }
+const GpsFix& GPS::currentFix() {
+    return s_using_external ? s_external_fix : s_current_fix;
+}
+bool GPS::hasFix() {
+    return s_using_external ? s_external_fix.valid : s_current_fix.valid;
+}
 
 // ── GPS::setPower() ──────────────────────────────────────────────────────────
 void GPS::setPower(bool on) {
@@ -253,18 +283,46 @@ void GPS::setPower(bool on) {
 #endif
 }
 
+// ── External GPS fix (phone GPS) ─────────────────────────────────────────────
+
+void GPS::setExternalFix(double lat, double lng, float alt_m, float acc_m) {
+    s_external_fix.valid       = true;
+    s_external_fix.latitude    = lat;
+    s_external_fix.longitude   = lng;
+    s_external_fix.altitude_m  = alt_m;
+    s_external_fix.accuracy_m  = acc_m;
+    s_external_fix.hdop        = (acc_m > 0.0f) ? (acc_m / 5.0f) : 1.0f;
+    s_external_fix.satellites  = 0;   // not applicable for phone GPS
+    s_external_fix.timestamp_ms = millis();
+}
+
+void GPS::setExternalSource(bool enabled) {
+    s_using_external = enabled;
+    if (enabled) {
+        setPower(false);  // shut down L76K to save power
+    } else {
+        setPower(true);   // re-enable L76K
+    }
+}
+
+bool GPS::usingExternalFix() {
+    return s_using_external;
+}
+
 // ── Displacement and smart beaconing support ─────────────────────────────────
 static double haversine_m(double lat1, double lon1, double lat2, double lon2);
 
 float GPS::displacementFromLastTxMeters() {
     if (s_last_tx_lat == 0.0 && s_last_tx_lng == 0.0) return 9999.0f; // force first TX
+    const GpsFix& fix = currentFix();
     return (float)haversine_m(s_last_tx_lat, s_last_tx_lng,
-                               s_current_fix.latitude, s_current_fix.longitude);
+                               fix.latitude, fix.longitude);
 }
 
 void GPS::markPositionTransmitted() {
-    s_last_tx_lat = s_current_fix.latitude;
-    s_last_tx_lng = s_current_fix.longitude;
+    const GpsFix& fix = currentFix();
+    s_last_tx_lat = fix.latitude;
+    s_last_tx_lng = fix.longitude;
 }
 
 // Haversine formula — returns distance in meters

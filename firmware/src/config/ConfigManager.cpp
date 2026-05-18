@@ -156,6 +156,7 @@ static size_t encodePositionConfig(uint8_t* buf, size_t buf_len) {
     msg.movement_threshold_m = defaults::POSITION_MOVEMENT_THRESHOLD_M;
     msg.min_tx_interval_secs = defaults::POSITION_MIN_TX_INTERVAL_SECS;
     msg.position_hop_limit = 0;
+    msg.gps_source = static_cast<airtak_GpsSource>(defaults::POSITION_GPS_SOURCE);
     return encodeMessage(airtak_PositionConfig_fields, &msg, buf, buf_len);
 }
 
@@ -502,6 +503,12 @@ uint32_t ConfigManager::positionPrecisionBits() {
 uint8_t ConfigManager::positionHopLimitOverride() {
     uint32_t value = readPositionVarintField(6, 0);
     if (value > 7) value = 7;
+    return static_cast<uint8_t>(value);
+}
+
+uint8_t ConfigManager::positionGpsSource() {
+    uint32_t value = readPositionVarintField(7, defaults::POSITION_GPS_SOURCE);
+    if (value > 1) value = 0;  // clamp to valid enum range
     return static_cast<uint8_t>(value);
 }
 

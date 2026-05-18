@@ -84,8 +84,12 @@ void setup() {
         Serial.println("AirTAK: FlashStore init failed; using volatile defaults");
     }
     airtak::config::ConfigManager::init();
-    airtak::config::ConfigManager::registerCallback([](airtak::ConfigGroup) {
+    airtak::config::ConfigManager::registerCallback([](airtak::ConfigGroup group) {
         airtak::Display::markDirty(airtak::ui::DISPLAY_DIRTY_ALL);
+        if (group == airtak::ConfigGroup::POSITION) {
+            uint8_t src = airtak::config::ConfigManager::positionGpsSource();
+            airtak::GPS::setExternalSource(src == 1);  // 1 = PHONE_GPS
+        }
     });
     airtak::ChannelManager::init();
     airtak::PlayerState::init();

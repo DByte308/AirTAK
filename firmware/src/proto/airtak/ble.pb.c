@@ -21,6 +21,9 @@ PB_BIND(airtak_GpsStatus, airtak_GpsStatus, AUTO)
 PB_BIND(airtak_RadioStatus, airtak_RadioStatus, AUTO)
 
 
+PB_BIND(airtak_PhoneGpsPosition, airtak_PhoneGpsPosition, AUTO)
+
+
 PB_BIND(airtak_AdminRequest, airtak_AdminRequest, AUTO)
 
 

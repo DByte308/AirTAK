@@ -80,11 +80,25 @@ enum AdminCommand {
   RADIO_RESTART = 3;   // trigger controlled radio restart without config change
   GPS_RESET     = 4;   // cold-reset the L76K GPS module
   PAIR_CLEAR    = 5;   // remove all BLE bonds; requires confirm_token
+  SET_PHONE_GPS = 6;   // update the device's GPS fix from phone position data;
+                       // used when PositionConfig.gps_source = PHONE_GPS.
+                       // The phone_gps field of AdminRequest must be populated.
+}
+
+// When gps_source=PHONE_GPS, the Android app periodically sends the phone's
+// GPS position to the firmware via SET_PHONE_GPS. The firmware uses this as
+// the device's current GPS fix for POSITION_APP broadcasts and DEVICE_STATUS.
+message PhoneGpsPosition {
+  double latitude   = 1;   // WGS-84 decimal degrees
+  double longitude  = 2;
+  float  altitude_m = 3;
+  float  accuracy_m = 4;   // Android Location.getAccuracy() in metres
 }
 
 message AdminRequest {
-  AdminCommand command       = 1;
-  string       confirm_token = 2;   // required for FACTORY_RESET and PAIR_CLEAR
+  AdminCommand command         = 1;
+  string       confirm_token   = 2;   // required for FACTORY_RESET and PAIR_CLEAR
+  PhoneGpsPosition phone_gps   = 3;   // position data for SET_PHONE_GPS
 }
 
 message AdminResponse {
