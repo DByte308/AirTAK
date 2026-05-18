@@ -253,6 +253,13 @@ void Display::nextScreen() {
     markDirty(DISPLAY_DIRTY_ALL);
 }
 
+void Display::previousScreen() {
+    uint8_t prev = static_cast<uint8_t>(s_current_screen);
+    prev = (prev == 0) ? (SCREEN_COUNT - 1) : (prev - 1);
+    s_current_screen = static_cast<ScreenId>(prev);
+    markDirty(DISPLAY_DIRTY_ALL);
+}
+
 ui::ScreenId Display::currentScreen()     { return s_current_screen; }
 void Display::markDirty(uint16_t mask)     { s_dirty_mask |= mask; }
 void Display::clearDirty()                 { s_dirty_mask = 0; }

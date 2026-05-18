@@ -79,6 +79,11 @@
 #define AIRTAK_PIN_I2C_SDA                 18
 #define AIRTAK_PIN_I2C_SCL                  8
 
+// Touchscreen (I2C CST328 or GT911, INT on GPIO 16)
+#define AIRTAK_PIN_TOUCH_INT                16
+#define AIRTAK_TOUCH_I2C_ADDR_CST328        0x15
+#define AIRTAK_TOUCH_I2C_ADDR_GT911         0x5D
+
 // Trackball (GPIO matrix)
 #define AIRTAK_PIN_TBALL_UP                 3
 #define AIRTAK_PIN_TBALL_DOWN              15

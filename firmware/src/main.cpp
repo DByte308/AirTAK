@@ -29,6 +29,7 @@
 #include "hal/Display.h"
 #include "hal/Battery.h"
 #include "hal/Button.h"
+#include "hal/Touch.h"
 #include "ble/BLEServer.h"
 #include "ble/AirTAKService.h"
 #include "mesh/MeshNode.h"
@@ -267,6 +268,7 @@ void task_display_refresh(void* params) {
     airtak::Display::refresh(g_system_event_group);
     uint32_t last_refresh_check_ms = millis();
     uint32_t last_player_tick_ms   = 0;
+    bool     screen_changed        = false;
     for (;;) {
         airtak::ButtonGesture gesture = airtak::Button::poll();
         if (gesture == airtak::ButtonGesture::SHORT_PRESS) {
@@ -274,13 +276,27 @@ void task_display_refresh(void* params) {
                 airtak::PlayerState::cancelHit(g_radio_tx_queue);
             } else {
                 airtak::Display::nextScreen();
+                screen_changed = true;
             }
         } else if (gesture == airtak::ButtonGesture::LONG_PRESS) {
             airtak::PlayerState::toggleHit(g_radio_tx_queue);
         }
 
+        airtak::TouchGesture touch = airtak::Touch::poll();
+        if (touch == airtak::TouchGesture::SWIPE_LEFT) {
+            airtak::Display::previousScreen();
+            screen_changed = true;
+        } else if (touch == airtak::TouchGesture::SWIPE_RIGHT) {
+            airtak::Display::nextScreen();
+            screen_changed = true;
+        }
+
         uint32_t now = millis();
-        if ((now - last_refresh_check_ms) >= 5000) {
+        if (screen_changed) {
+            airtak::Display::refresh(g_system_event_group);
+            last_refresh_check_ms = now;
+            screen_changed = false;
+        } else if ((now - last_refresh_check_ms) >= 5000) {
             airtak::Display::refresh(g_system_event_group);
             last_refresh_check_ms = now;
         }

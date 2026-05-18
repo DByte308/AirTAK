@@ -17,6 +17,7 @@
 #elif defined(AIRTAK_PLATFORM_ESP32)
 #include <esp_efuse.h>
 #include <SPI.h>
+#include <Wire.h>
 #endif
 
 namespace airtak {
@@ -49,11 +50,11 @@ void initBoard() {
 #endif
 #if defined(AIRTAK_PLATFORM_ESP32)
     // Initialise the shared SPI bus for T-Deck (TFT + SX1262 share SCK/MOSI/MISO).
-    // Both TFT_eSPI and RadioLib use the default Arduino SPI instance; initialising
-    // it here with the correct pins before either library calls begin() is safe and
-    // idempotent — subsequent SPI.begin() calls with matching pins are no-ops.
     SPI.begin(AIRTAK_PIN_SX1262_SCK, AIRTAK_PIN_SX1262_MISO,
               AIRTAK_PIN_SX1262_MOSI, AIRTAK_PIN_SX1262_NSS);
+#if defined(AIRTAK_PIN_I2C_SDA) && AIRTAK_PIN_I2C_SDA >= 0
+    Wire.begin(AIRTAK_PIN_I2C_SDA, AIRTAK_PIN_I2C_SCL);
+#endif
 #endif
 #endif
 }

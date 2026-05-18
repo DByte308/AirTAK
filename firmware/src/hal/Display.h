@@ -30,6 +30,9 @@ public:
     // Advance to the next screen (triggered by short button press, §12.6).
     static void nextScreen();
 
+    // Go back to the previous screen.
+    static void previousScreen();
+
     // Get the current screen ID.
     static ui::ScreenId currentScreen();
 
