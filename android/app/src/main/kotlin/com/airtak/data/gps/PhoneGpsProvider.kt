@@ -13,9 +13,12 @@
 //     location via the `location` StateFlow for direct map consumption. This
 //     covers the standalone-app case (no LoRa device). No BLE send occurs.
 //
-// Throttling: position is sent to firmware at most once every 10 seconds
-// and only when displacement exceeds 5 metres, matching the smart beaconing
-// heartbeat (which only needs position at TX time, ≥ 15 s).
+// Providers: registers both GPS_PROVIDER (satellite) and NETWORK_PROVIDER
+// (Wi-Fi/cell tower) for faster initial fix and indoor coverage. Only the
+// best-accuracy reading is emitted.
+//
+// Throttling: position is emitted at most once every 5 seconds per provider,
+// or when displacement exceeds 5 metres.
 
 package com.airtak.data.gps
 
@@ -67,7 +70,23 @@ class PhoneGpsProvider @Inject constructor(
     private val _location = MutableStateFlow<PhoneLocation?>(null)
     val location: StateFlow<PhoneLocation?> = _location.asStateFlow()
 
+    private val _isActive = MutableStateFlow(false)
+    val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
+
+    private val _hasFix = MutableStateFlow(false)
+    val hasFix: StateFlow<Boolean> = _hasFix.asStateFlow()
+
     init {
+        // Synchronous initial check: start GPS immediately if no device is
+        // connected, without waiting for the coroutine to process. This
+        // guarantees that Android's GPS status-bar indicator appears and
+        // LocationManager begins requesting fixes before any UI renders.
+        val linkState = ble.linkState.value
+        if (linkState !is LinkState.Connected) {
+            applyState(true, targetBle = false)
+        }
+
+        // React to subsequent state changes (connect, disconnect, config push).
         scope.launch {
             combine(ble.linkState, config.groupBytes) { linkState, map ->
                 linkState to map
@@ -99,30 +118,56 @@ class PhoneGpsProvider @Inject constructor(
     @SuppressLint("MissingPermission")
     private fun start() {
         val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
+        var anyProvider = false
         try {
-            lm.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                MIN_TIME_MS,
-                MIN_DISTANCE_M,
-                locationListener,
-                Looper.getMainLooper(),
-            )
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                lm.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    MIN_TIME_MS,
+                    MIN_DISTANCE_M,
+                    locationListener,
+                    Looper.getMainLooper(),
+                )
+                anyProvider = true
+            }
         } catch (_: SecurityException) { }
+
+        try {
+            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                lm.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    MIN_TIME_MS,
+                    MIN_DISTANCE_M,
+                    locationListener,
+                    Looper.getMainLooper(),
+                )
+                anyProvider = true
+            }
+        } catch (_: SecurityException) { }
+
+        _isActive.value = anyProvider
     }
 
     private fun stop() {
         val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
         lm.removeUpdates(locationListener)
+        _isActive.value = false
+        _hasFix.value = false
     }
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(loc: Location) {
-            _location.value = PhoneLocation(
+            _hasFix.value = true
+            val phoneLoc = PhoneLocation(
                 latitude = loc.latitude,
                 longitude = loc.longitude,
                 altitudeM = loc.altitude.toFloat(),
                 accuracyM = loc.accuracy,
             )
+            val current = _location.value
+            if (current == null || loc.accuracy < current.accuracyM) {
+                _location.value = phoneLoc
+            }
             if (sendToBle) {
                 val req = AdminRequest.newBuilder()
                     .setCommand(AdminCommand.SET_PHONE_GPS)
@@ -141,11 +186,16 @@ class PhoneGpsProvider @Inject constructor(
 
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
         override fun onProviderEnabled(provider: String) {}
-        override fun onProviderDisabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {
+            val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
+            val gpsStillOn = runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
+            val netStillOn = runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)
+            _isActive.value = gpsStillOn || netStillOn
+        }
     }
 
     companion object {
-        private const val MIN_TIME_MS = 10_000L  // 10 s minimum interval
-        private const val MIN_DISTANCE_M = 5.0f   // 5 m minimum displacement
+        private const val MIN_TIME_MS = 5_000L  // 5 s minimum interval (faster for initial fix)
+        private const val MIN_DISTANCE_M = 5.0f  // 5 m minimum displacement
     }
 }

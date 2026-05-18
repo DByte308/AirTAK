@@ -75,6 +75,8 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
     val navController = rememberNavController()
     val link by viewModel.linkState.collectAsState()
     val status by viewModel.deviceStatus.collectAsState()
+    val phoneGpsActive by viewModel.phoneGpsActive.collectAsState()
+    val phoneGpsFix by viewModel.phoneGpsFix.collectAsState()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val pendingDmNodeId by viewModel.pendingDmNodeId.collectAsState()
@@ -116,6 +118,9 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
                     batteryPercent = status?.batteryLevel?.let { (it * 100).toInt() },
                     satellites = status?.gps?.satellites,
                     rssi = status?.radio?.lastRssi,
+                    hasDeviceStatus = status != null,
+                    phoneGpsActive = phoneGpsActive,
+                    phoneGpsFix = phoneGpsFix,
                     onLinkClick = { navController.navigateTopLevel("pair") },
                     compact = true,
                 )
@@ -154,6 +159,9 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
                 batteryPercent = status?.batteryLevel?.let { (it * 100).toInt() },
                 satellites = status?.gps?.satellites,
                 rssi = status?.radio?.lastRssi,
+                hasDeviceStatus = status != null,
+                phoneGpsActive = phoneGpsActive,
+                phoneGpsFix = phoneGpsFix,
                 onLinkClick = { navController.navigateTopLevel("pair") },
                 compact = false,
             )
@@ -200,6 +208,9 @@ private fun HudBar(
     batteryPercent: Int?,
     satellites: Int?,
     rssi: Float?,
+    hasDeviceStatus: Boolean,
+    phoneGpsActive: Boolean,
+    phoneGpsFix: Boolean,
     onLinkClick: () -> Unit,
     compact: Boolean = false,
 ) {
@@ -232,6 +243,13 @@ private fun HudBar(
                     "$it sat",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } ?: if (!hasDeviceStatus && phoneGpsActive) {
+                Text(
+                    if (phoneGpsFix) "GPS fix" else "GPS...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (phoneGpsFix) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             rssi?.let {
@@ -273,7 +291,10 @@ private fun HudBar(
                 )
                 MetricTile(
                     label = "GPS",
-                    value = satellites?.let { "$it sat" } ?: "—",
+                    value = satellites?.let { "$it sat" }
+                        ?: if (!hasDeviceStatus && phoneGpsActive) {
+                            if (phoneGpsFix) "Fix" else "..."
+                        } else "—",
                     modifier = Modifier.weight(1f),
                 )
                 MetricTile(

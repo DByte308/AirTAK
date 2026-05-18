@@ -25,15 +25,20 @@ extern "C" {
 #define LED_STATE_ON         0
 
 #define PIN_BUTTON1          (42)
-
+#define PIN_BUTTON2          (18)
 #define PIN_BUTTON_TOUCH     (11)
 #define BUTTON_ACTIVE_LOW    true
 #define BUTTON_ACTIVE_PULLUP true
+#define BUTTON_TOUCH_ACTIVE_LOW true
+#define BUTTON_TOUCH_ACTIVE_PULLUP true
+#define BUTTON_CLICK_MS      400
+#define BUTTON_TOUCH_MS      200
 
 #define PIN_A0               (4)
 
 static const uint8_t A0 = PIN_A0;
 
+#define BATTERY_PIN          PIN_A0
 #define ADC_RESOLUTION       14
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
@@ -42,9 +47,13 @@ static const uint8_t A0 = PIN_A0;
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 2.0F
 
+#define PIN_NFC1             (9)
+#define PIN_NFC2             (10)
+
 #define PIN_SERIAL1_RX       (41)
 #define PIN_SERIAL1_TX       (40)
 
+#define GPS_L76K
 #define PIN_GPS_REINIT       (37)
 #define PIN_GPS_STANDBY      (34)
 #define PIN_GPS_PPS          (36)
@@ -56,6 +65,9 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_QSPI_IO1         (45)
 #define PIN_QSPI_IO2         (7)
 #define PIN_QSPI_IO3         (5)
+
+#define EXTERNAL_FLASH_DEVICES MX25R1635F
+#define EXTERNAL_FLASH_USE_QSPI
 
 #define SPI_INTERFACES_COUNT 2
 #define PIN_SPI_MISO         (23)
@@ -95,10 +107,17 @@ static const uint8_t SCK  = PIN_SPI_SCK;
 #define PIN_WIRE_SDA         (26)
 #define PIN_WIRE_SCL         (27)
 
+#define HAS_BHI260AP
+#define TP_SER_IO            (11)
+#define PIN_RTC_INT          (16)
+
 #define PIN_POWER_EN         (12)
 
 #define PIN_BUZZER           (6)
 #define PIN_DRV_EN           (8)
+
+#define HAS_DRV2605 1
+#define SERIAL_PRINT_PORT 0
 
 #ifdef __cplusplus
 }

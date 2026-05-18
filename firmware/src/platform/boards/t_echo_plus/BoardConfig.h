@@ -11,6 +11,9 @@
 #define AIRTAK_BOARD_HAS_EXTERNAL_QSPI     1
 #define AIRTAK_BOARD_HAS_EINK_DISPLAY      1
 #define AIRTAK_BOARD_HAS_GPS               1
+#define AIRTAK_BOARD_HAS_IMU               1
+#define AIRTAK_BOARD_HAS_BUZZER            1
+#define AIRTAK_BOARD_HAS_DRV2605           1
 
 // SX1262 LoRa radio
 #define AIRTAK_PIN_SX1262_SCK              19   // P0.19
@@ -20,6 +23,8 @@
 #define AIRTAK_PIN_SX1262_RESET            25   // P0.25
 #define AIRTAK_PIN_SX1262_DIO1             20   // P0.20
 #define AIRTAK_PIN_SX1262_BUSY             17   // P0.17
+#define AIRTAK_PIN_SX1262_DIO2             -1   // internal RF switch, not a physical pin
+#define AIRTAK_PIN_SX1262_DIO3             21   // P0.21, 1.8V TCXO control
 #define AIRTAK_SX1262_TCXO_VOLTAGE         1.8
 
 // SSD1681 E-Ink display
@@ -66,3 +71,13 @@
 
 // Shared peripheral rail for LoRa, GPS, display, and sensors.
 #define AIRTAK_PIN_POWER_EN                12   // P0.12
+
+// Buzzer and haptic driver
+#define AIRTAK_PIN_BUZZER                   6   // P0.06
+#define AIRTAK_PIN_DRV_EN                   8   // P0.08, DRV2605 haptic driver
+
+// Reset button (usable as GPIO)
+#define AIRTAK_PIN_USER_BUTTON2            18   // P0.18
+
+// RTC interrupt
+#define AIRTAK_PIN_RTC_INT                 16   // P0.16

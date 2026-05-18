@@ -4,6 +4,7 @@ package com.airtak.ui
 
 import androidx.lifecycle.ViewModel
 import com.airtak.data.ble.BleRepository
+import com.airtak.data.gps.PhoneGpsProvider
 import com.airtak.data.status.DeviceStatusRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,9 +15,12 @@ import javax.inject.Inject
 class AppShellViewModel @Inject constructor(
     ble: BleRepository,
     status: DeviceStatusRepository,
+    phoneGps: PhoneGpsProvider,
 ) : ViewModel() {
     val linkState = ble.linkState
     val deviceStatus = status.status
+    val phoneGpsActive = phoneGps.isActive
+    val phoneGpsFix = phoneGps.hasFix
 
     private val _pendingDmNodeId = MutableStateFlow<Long?>(null)
     val pendingDmNodeId = _pendingDmNodeId.asStateFlow()
