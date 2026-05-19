@@ -133,15 +133,34 @@ class EspSerialFlasher(
         }
 
         // ---- Reset chip into ROM download mode --------------------------
-        resetIntoBootloader()
+        // On ESP32-S3 native USB-Serial/JTAG (VID 0x303A) the DTR/RTS lines
+        // are NOT wired to EN/IO0 on most modules (T-Deck included) — they
+        // map to the USB-J-S controller, which can soft-reset the chip but
+        // will land it in the *application* unless the GPIO0 strap is
+        // already held low. The user must hold BOOT and tap RESET. For
+        // vendor UART bridges (CP210x, CH340) the classic DTR/RTS pulse
+        // does work and we drive it.
+        if (vendorId != VID_ESP32_NATIVE) {
+            resetIntoBootloader()
+        }
 
         // ---- SYNC handshake ---------------------------------------------
         val syncedAttempt = (0 until SYNC_RETRIES).firstOrNull { trySync() }
         if (syncedAttempt == null) {
             return Result.failure(Exception(
-                "ESP32 did not respond to SYNC. Check cable, hold BOOT and tap RESET, then retry."
+                if (vendorId == VID_ESP32_NATIVE)
+                    "ESP32 did not respond to SYNC. Hold the BOOT button and tap RESET on the T-Deck, " +
+                        "then try again — the chip must already be in the download-mode bootloader for " +
+                        "USB-Serial/JTAG flashing."
+                else
+                    "ESP32 did not respond to SYNC. Check cable, hold BOOT and tap RESET, then retry."
             ))
         }
+
+        // The ROM emits one reply per SYNC frame (8 echoes total). Drain
+        // any extras so the next sendCommand() doesn't grab a stale SYNC
+        // reply and mis-identify it as the SPI_ATTACH response.
+        drainPendingReplies()
 
         // ---- SPI_ATTACH (required on S3 before FLASH_BEGIN) -------------
         // payload: HSPI_ARG(4)=0 + ZERO(4)=0
@@ -196,7 +215,44 @@ class EspSerialFlasher(
             sequence++
         }
 
+        // ---- Invalidate otadata so the bootloader picks our new app ------
+        // The T-Deck / T3-S3 partition tables (default_16MB.csv) are
+        // dual-OTA: two app slots (app0 at 0x10000, app1 at 0x650000) plus
+        // an otadata sector at 0xE000 that records which slot is active.
+        // If the device was previously updated over BLE OTA, otadata may
+        // point at app1 — in which case writing app0 alone leaves the old
+        // app1 firmware running. Erasing otadata to all-0xFF causes the
+        // ROM bootloader to fall back to the *first* valid app slot, which
+        // is the one we just wrote to.
+        if (FLASH_OFFSET == 0x10000) {  // only meaningful for app-slot writes
+            val eraseOk = eraseOtaDataSector()
+            if (!eraseOk) {
+                // Non-fatal: log via exception text but continue. Worst case
+                // the user's device still boots the previous slot and they
+                // can retry; we don't want to lose a successful app write.
+                android.util.Log.w("EspSerialFlasher",
+                    "Could not invalidate otadata; device may still boot the previous OTA slot.")
+            }
+        }
+
         return Result.success(Unit)
+    }
+
+    /** Write 0xFF across the otadata sector (offset 0xE000, size 0x2000) so
+     *  the bootloader falls back to the first OTA app slot. */
+    private suspend fun eraseOtaDataSector(): Boolean {
+        val otaDataOffset = 0xE000
+        val otaDataSize = 0x2000
+        val blockCount = otaDataSize / BLOCK_SIZE
+        val beginPayload = leInt(otaDataSize) + leInt(blockCount) + leInt(BLOCK_SIZE) + leInt(otaDataOffset)
+        if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = 10_000)) return false
+        val blank = ByteArray(BLOCK_SIZE) { 0xFF.toByte() }
+        sequence = 0
+        repeat(blockCount) { seq ->
+            val payload = leInt(blank.size) + leInt(seq) + leInt(0) + leInt(0) + blank
+            if (!sendCommand(ESP_FLASH_DATA, payload, checksumOver = blank)) return false
+        }
+        return true
     }
 
     override suspend fun finalize(): Result<Unit> {
@@ -340,8 +396,20 @@ class EspSerialFlasher(
         val out = outEndpoint ?: return false
         if (connection.bulkTransfer(out, frame, frame.size, timeoutMs) < 0) return false
         if (!expectReply) return true
-        val reply = readSlipPacket(timeoutMs) ?: return false
-        return parseReplyOk(op, reply)
+        // The ROM may have buffered SYNC echoes or stale replies in the
+        // bulk-in pipe. Read until we either match our opcode or the
+        // timeout elapses — drop any other frames silently.
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val reply = readSlipPacket(
+                (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(50)
+            ) ?: return false
+            if (reply.size >= 2 && reply[0] == 0x01.toByte() && reply[1] == op.toByte()) {
+                return parseReplyOk(op, reply)
+            }
+            // Mismatched frame (stale SYNC echo etc.) — discard and keep reading.
+        }
+        return false
     }
 
     /** Issue one 36×0x55 SYNC frame and return true if the ROM replies OK. */
@@ -356,6 +424,21 @@ class EspSerialFlasher(
         // first valid OK reply is enough for our purposes.
         val reply = readSlipPacket(SYNC_TIMEOUT_MS) ?: return false
         return parseReplyOk(ESP_SYNC, reply)
+    }
+
+    /** Drain any pending frames from the bulk-in endpoint. Called after
+     *  SYNC succeeds because the ROM emits 7 additional echo frames that
+     *  would otherwise be consumed as replies to the next real command. */
+    private fun drainPendingReplies() {
+        val ep = inEndpoint ?: return
+        val buf = ByteArray(256)
+        // Brief read loop with short timeout — once the pipe is idle for
+        // one tick we know all queued echoes have been consumed.
+        val deadline = System.currentTimeMillis() + 200
+        while (System.currentTimeMillis() < deadline) {
+            val n = connection.bulkTransfer(ep, buf, buf.size, 30)
+            if (n <= 0) break
+        }
     }
 
     /** Pull bytes from the bulk-in endpoint until a complete SLIP frame
@@ -375,14 +458,20 @@ class EspSerialFlasher(
         return null
     }
 
-    /** ROM reply format: <0x01><opcode><size:2><value:4><payload...>
-     *  Status byte is the last byte (or last 2 for ESP32+). 0 = OK. */
+    /** ROM reply format: `<0x01><opcode><size:2><value:4><data...>`.
+     *  For ESP32-family ROM the trailing `data` ends with a 4-byte status
+     *  block: `<status:1><error:1><reserved:2>` (esptool's
+     *  `STATUS_BYTES_LENGTH = 4`). status == 0 means success. */
     private fun parseReplyOk(expectedOp: Int, reply: ByteArray): Boolean {
-        if (reply.size < 8) return false
+        if (reply.size < 10) return false  // 8-byte header + at least 2 status bytes
         if (reply[0] != 0x01.toByte()) return false
         if (reply[1] != expectedOp.toByte()) return false
-        // Status byte trails the payload; assume it's the last byte for ROM.
-        return reply[reply.size - 1] == 0x00.toByte()
+        // Try 4-byte status trailer first (ROM ESP32-family), fall back to
+        // 2-byte trailer (stub or ESP8266 ROM).
+        val statusByte4 = reply.getOrNull(reply.size - 4)
+        if (statusByte4 != null && statusByte4 == 0x00.toByte()) return true
+        val statusByte2 = reply.getOrNull(reply.size - 2)
+        return statusByte2 != null && statusByte2 == 0x00.toByte()
     }
 
     // ────────────────────────────────────────────────────────────────────

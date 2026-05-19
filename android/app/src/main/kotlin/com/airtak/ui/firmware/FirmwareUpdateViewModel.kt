@@ -79,7 +79,9 @@ class FirmwareUpdateViewModel @Inject constructor(
                 )
 
                 val session = manager.prepareUpdate(firmwareUri, transport, deviceInfo).getOrThrow()
-                val result = session.execute(firmwareBytes) { _progress.value = it }
+                val result = withContext(Dispatchers.IO) {
+                    session.execute(firmwareBytes) { _progress.value = it }
+                }
                 result.fold(
                     onSuccess = { _state.value = FwUpdateState.Done },
                     onFailure = { e ->
@@ -151,7 +153,15 @@ class FirmwareUpdateViewModel @Inject constructor(
                 )
 
                 val session = manager.prepareUpdate(firmwareUri, transport, deviceInfo).getOrThrow()
-                val result = session.execute(firmwareBytes) { _progress.value = it }
+                // USB engines (EspSerialFlasher / NrfSerialDfuEngine) use
+                // blocking UsbDeviceConnection.bulkTransfer / controlTransfer
+                // calls; running them on the Main dispatcher (the default
+                // for viewModelScope) ANRs the app for the duration of the
+                // flash. _progress is a StateFlow which is safe to set
+                // from any thread.
+                val result = withContext(Dispatchers.IO) {
+                    session.execute(firmwareBytes) { _progress.value = it }
+                }
                 result.fold(
                     onSuccess = { _state.value = FwUpdateState.Done },
                     onFailure = { e -> _state.value = FwUpdateState.Error(e.message ?: "Update failed") },
