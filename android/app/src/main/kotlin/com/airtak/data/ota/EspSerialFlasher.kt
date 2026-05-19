@@ -28,8 +28,8 @@ class EspSerialFlasher(
         private const val TIMEOUT_MS = 3000
     }
 
-    private var outEndpoint = 0
-    private var inEndpoint = 0
+    private var outEndpoint: android.hardware.usb.UsbEndpoint? = null
+    private var inEndpoint: android.hardware.usb.UsbEndpoint? = null
     private var sequence = 0
 
     override suspend fun initialize(): Result<DeviceInfo> {
@@ -37,13 +37,13 @@ class EspSerialFlasher(
             val ep = intf.getEndpoint(i)
             if (ep.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK) {
                 if (ep.direction == android.hardware.usb.UsbConstants.USB_DIR_OUT) {
-                    outEndpoint = ep.endpointNumber
+                    outEndpoint = ep
                 } else {
-                    inEndpoint = ep.endpointNumber
+                    inEndpoint = ep
                 }
             }
         }
-        if (outEndpoint == 0 || inEndpoint == 0) {
+        if (outEndpoint == null || inEndpoint == null) {
             return Result.failure(Exception("CDC-ACM endpoints not found"))
         }
 
@@ -145,20 +145,16 @@ class EspSerialFlasher(
     }
 
     private fun writeRead(data: ByteArray): ByteArray? {
-        val result = connection.bulkTransfer(
-            android.hardware.usb.UsbEndpoint(null, outEndpoint),
-            data, data.size, TIMEOUT_MS
-        )
+        val ep = outEndpoint ?: return null
+        val result = connection.bulkTransfer(ep, data, data.size, TIMEOUT_MS)
         if (result < 0) return null
         return readResponse()
     }
 
     private fun readResponse(): ByteArray? {
+        val ep = inEndpoint ?: return null
         val buffer = ByteArray(1024)
-        val result = connection.bulkTransfer(
-            android.hardware.usb.UsbEndpoint(null, inEndpoint),
-            buffer, buffer.size, TIMEOUT_MS
-        )
+        val result = connection.bulkTransfer(ep, buffer, buffer.size, TIMEOUT_MS)
         if (result < 0) return null
         return SlipFramer.decode(buffer.copyOf(result)).firstOrNull()
     }

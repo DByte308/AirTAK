@@ -1472,14 +1472,16 @@ private fun ShareSection(vm: SettingsViewModel) {
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        cfg.loraOrNull?.let { lora ->
+                        if (cfg.hasLora()) {
+                            val lora = cfg.lora
                             Text(
                                 "LoRa: ${lora.region.name}, TX ${lora.txPowerDbm} dBm, ${lora.profilesCount} PHY profiles",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        cfg.channelsOrNull?.let { ch ->
+                        if (cfg.hasChannels()) {
+                            val ch = cfg.channels
                             val activeCount = ch.slotsList.count { it.role != ChannelRole.DISABLED }
                             val encryptedCount = ch.slotsList.count { it.psk.size() > 0 }
                             Text(
@@ -1488,7 +1490,8 @@ private fun ShareSection(vm: SettingsViewModel) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        cfg.gameOrNull?.let { game ->
+                        if (cfg.hasGame()) {
+                            val game = cfg.game
                             val unitParts = listOfNotNull(
                                 game.companyId.takeIf { it.isNotBlank() }?.let { "Company: $it" },
                                 game.platoonId.takeIf { it.isNotBlank() }?.let { "Platoon: $it" },

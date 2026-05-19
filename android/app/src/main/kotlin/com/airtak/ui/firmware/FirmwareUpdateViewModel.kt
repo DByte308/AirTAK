@@ -39,7 +39,7 @@ class FirmwareUpdateViewModel @Inject constructor(
     private val _progress = MutableStateFlow<UpdateProgress>(UpdateProgress.Initializing("Not started"))
     val progress: StateFlow<UpdateProgress> = _progress.asStateFlow()
 
-    private val _state = MutableStateFlow(FwUpdateState.Idle)
+    private val _state = MutableStateFlow<FwUpdateState>(FwUpdateState.Idle)
     val state: StateFlow<FwUpdateState> = _state.asStateFlow()
 
     fun startUpdate(firmwareUri: Uri) {

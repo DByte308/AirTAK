@@ -39,8 +39,8 @@ class NrfSerialDfuEngine(
         private const val TIMEOUT_MS = 5000
     }
 
-    private var outEndpoint = 0
-    private var inEndpoint = 0
+    private var outEndpoint: android.hardware.usb.UsbEndpoint? = null
+    private var inEndpoint: android.hardware.usb.UsbEndpoint? = null
     private var maxTransferSize = 64
 
     override suspend fun initialize(): Result<DeviceInfo> {
@@ -48,13 +48,13 @@ class NrfSerialDfuEngine(
             val ep = intf.getEndpoint(i)
             if (ep.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK) {
                 if (ep.direction == android.hardware.usb.UsbConstants.USB_DIR_OUT) {
-                    outEndpoint = ep.endpointNumber
+                    outEndpoint = ep
                 } else {
-                    inEndpoint = ep.endpointNumber
+                    inEndpoint = ep
                 }
             }
         }
-        if (outEndpoint == 0 || inEndpoint == 0) {
+        if (outEndpoint == null || inEndpoint == null) {
             return Result.failure(Exception("CDC-ACM endpoints not found"))
         }
 
@@ -184,28 +184,22 @@ class NrfSerialDfuEngine(
     }
 
     private fun sendCommand(cmd: ByteArray): ByteArray? {
-        val result = connection.bulkTransfer(
-            android.hardware.usb.UsbEndpoint(null, outEndpoint),
-            cmd, cmd.size, TIMEOUT_MS
-        )
+        val ep = outEndpoint ?: return null
+        val result = connection.bulkTransfer(ep, cmd, cmd.size, TIMEOUT_MS)
         if (result < 0) return null
         return readResponse()
     }
 
     private fun writeData(data: ByteArray): Boolean {
-        val result = connection.bulkTransfer(
-            android.hardware.usb.UsbEndpoint(null, outEndpoint),
-            data, data.size, TIMEOUT_MS
-        )
+        val ep = outEndpoint ?: return false
+        val result = connection.bulkTransfer(ep, data, data.size, TIMEOUT_MS)
         return result >= 0
     }
 
     private fun readResponse(): ByteArray? {
+        val ep = inEndpoint ?: return null
         val buffer = ByteArray(maxTransferSize)
-        val result = connection.bulkTransfer(
-            android.hardware.usb.UsbEndpoint(null, inEndpoint),
-            buffer, buffer.size, TIMEOUT_MS
-        )
+        val result = connection.bulkTransfer(ep, buffer, buffer.size, TIMEOUT_MS)
         if (result < 0) return null
         return buffer.copyOf(result)
     }
