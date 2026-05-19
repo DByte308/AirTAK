@@ -113,6 +113,11 @@ dependencies {
     // QR code
     implementation(libs.zxing.android.embedded)
 
+    // Nordic Semiconductor DFU library — nRF52 Secure DFU over BLE.
+    // Pulls in a foreground service that handles the bootloader handshake,
+    // packet receipt notifications, init-packet upload, and reconnection.
+    implementation(libs.nordic.dfu)
+
     // Unit tests
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)

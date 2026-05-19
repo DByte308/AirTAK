@@ -143,7 +143,8 @@ class FirmwareUpdateManager(
                     transport.vendorId == 0x239A -> NrfSerialDfuEngine(context, transport.connection, transport.intf)
                     transport.vendorId == 0x303A ||
                         transport.vendorId == 0x10C4 ||
-                        transport.vendorId == 0x1A86 -> EspSerialFlasher(transport.connection, transport.intf)
+                        transport.vendorId == 0x1A86 ->
+                        EspSerialFlasher(transport.connection, transport.intf, transport.vendorId)
                     else -> return Result.failure(IllegalArgumentException("Unknown USB vendor: ${transport.vendorId}"))
                 }
             }
@@ -151,7 +152,12 @@ class FirmwareUpdateManager(
                 when {
                     deviceInfo?.platform?.contains("nRF", ignoreCase = true) == true ||
                         deviceInfo?.platform?.contains("NRF", ignoreCase = true) == true ->
-                        NrfBleDfuEngine(context, transport.bluetoothGatt)
+                        NrfBleDfuEngine(
+                            context = context,
+                            ble = transport.repository,
+                            deviceAddress = transport.bluetoothGatt.device.address,
+                            initialDeviceInfo = deviceInfo,
+                        )
                     deviceInfo?.platform?.contains("ESP", ignoreCase = true) == true ->
                         EspBleOtaEngine(transport.repository)
                     else -> return Result.failure(IllegalArgumentException("Unknown platform: ${deviceInfo?.platform}"))

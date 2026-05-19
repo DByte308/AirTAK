@@ -1,73 +1,157 @@
 // AirTAK Android — data/ota/EspSerialFlasher.kt
-// Planning: §3.3 | Roadmap: 6.1 (revised)
+// Planning: §3.3 / §6.1 | Roadmap: 6.1 (revised)
 //
-// Implements the esptool SLIP protocol over USB CDC-ACM for flashing
-// ESP32 devices (T-Deck, T3 S3) via USB-C cable. Pure Kotlin — no JNI.
+// ESP32 firmware flashing over USB CDC using the ROM bootloader's SLIP
+// protocol (the same wire format esptool.py speaks). We target the ESP32-S3
+// chips used in AirTAK builds (T-Deck, T3-S3) but the code keeps the protocol
+// generic enough to work against any ESP32 family ROM loader.
+//
+// Wire flow:
+//
+//   1. Configure the USB-CDC bridge for 115200 8N1 with no flow control.
+//      For ESP32-S3 native USB (VID 0x303A) the device exposes a standard
+//      CDC-ACM interface where SET_LINE_CODING is enough. For CP210x
+//      (0x10C4) and CH340 (0x1A86) we use vendor-specific control transfers
+//      to set baud rate and assert MCR lines.
+//
+//   2. Pulse DTR/RTS to reset the chip and latch GPIO0 low at the right
+//      moment so the ROM boots into "download mode". The classic
+//      esptool sequence is:
+//        DTR=0, RTS=1   (assert reset, GPIO0 floating)
+//        sleep 100 ms
+//        DTR=1, RTS=0   (release reset, hold GPIO0 low)
+//        sleep 50 ms
+//        DTR=0, RTS=0   (release GPIO0)
+//      For native S3 USB the same sequence is interpreted by the on-chip
+//      USB Serial/JTAG controller and works identically.
+//
+//   3. Sync handshake — up to 7 attempts of 36 × 0x55 framed as a SYNC
+//      command. The ROM is in an unknown state after reset and discards
+//      the first few frames; we retry until it ACKs.
+//
+//   4. SPI_ATTACH — required on S3 to enable flash access before any
+//      FLASH_BEGIN.
+//
+//   5. FLASH_BEGIN — declare erase size, block size, offset; ROM erases
+//      the requested region in the background.
+//
+//   6. FLASH_DATA — stream BLOCK_SIZE-byte chunks (last chunk 0xFF-padded)
+//      with monotonic sequence numbers and per-block XOR checksum.
+//
+//   7. FLASH_END — request reboot into the freshly flashed app.
+//
+// Notes / limitations:
+//   * We use the ROM loader, not the RAM stub. ROM is slower (cannot raise
+//     baud) but reliable across all chip revisions, and avoids the
+//     ~400-line stub-loader blob.
+//   * No MD5 verification yet — esptool issues SPI_FLASH_MD5 (op 0x13);
+//     we rely on the ROM's per-block checksum for now.
 
 package com.airtak.data.ota
 
+import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import com.airtak.data.ota.FirmwareUpdateManager.DeviceInfo
 import com.airtak.data.ota.FirmwareUpdateManager.UpdateProgress
+import kotlinx.coroutines.delay
 
 class EspSerialFlasher(
     private val connection: UsbDeviceConnection,
-    private val intf: UsbInterface
+    private val intf: UsbInterface,
+    private val vendorId: Int,
 ) : FirmwareUpdateManager.FirmwareUpdateEngine {
 
     companion object {
-        private const val ESP_SYNC = 0x08
-        private const val ESP_FLASH_BEGIN = 0x02
-        private const val ESP_FLASH_DATA = 0x03
-        private const val ESP_FLASH_END = 0x04
-        private const val ESP_CHANGE_BAUDRATE = 0x0F
-        private const val ESP_SPI_FLASH_PARAMS = 0x0B
-        private const val BLOCK_SIZE = 4096
-        private const val DEFAULT_BAUD = 115200
-        private const val TIMEOUT_MS = 3000
+        // SLIP command opcodes — esptool `command.py`.
+        private const val ESP_SYNC          = 0x08
+        private const val ESP_FLASH_BEGIN   = 0x02
+        private const val ESP_FLASH_DATA    = 0x03
+        private const val ESP_FLASH_END     = 0x04
+        private const val ESP_SPI_ATTACH    = 0x0D
+        private const val ESP_READ_REG      = 0x0A
+
+        // Block size that matches the ROM loader's internal SPI write buffer.
+        private const val BLOCK_SIZE        = 0x400  // 1 KiB — safe across all chips
+        private const val FLASH_OFFSET      = 0x10000
+
+        // Transfer parameters.
+        private const val DEFAULT_BAUD      = 115200
+        private const val BULK_TIMEOUT_MS   = 3_000
+        private const val SYNC_TIMEOUT_MS   = 100
+        private const val SYNC_RETRIES      = 7
+
+        // USB CDC class request codes.
+        private const val CDC_SET_LINE_CODING        = 0x20
+        private const val CDC_SET_CONTROL_LINE_STATE = 0x22
+
+        // USB control transfer types.
+        private const val REQ_TYPE_CLASS_OUT  = 0x21  // host→device, class, interface
+        private const val REQ_TYPE_VENDOR_OUT = 0x40  // host→device, vendor, device
+        private const val REQ_TYPE_VENDOR_IN  = 0xC0  // device→host, vendor, device
+
+        // CP210x vendor-specific requests (Silicon Labs AN571).
+        private const val CP210X_IFC_ENABLE  = 0x00
+        private const val CP210X_SET_BAUDRATE = 0x1E
+        private const val CP210X_SET_MHS     = 0x07  // modem handshaking
+
+        // CH340 vendor-specific requests.
+        private const val CH340_REQ_WRITE_REG = 0x9A
+        private const val CH340_REQ_SERIAL_INIT = 0xA1
+        private const val CH340_REQ_MODEM_CTRL  = 0xA4
+
+        // VIDs we explicitly handle.
+        private const val VID_ESP32_NATIVE   = 0x303A
+        private const val VID_SILABS_CP210X  = 0x10C4
+        private const val VID_QINHENG_CH340  = 0x1A86
     }
 
-    private var outEndpoint: android.hardware.usb.UsbEndpoint? = null
-    private var inEndpoint: android.hardware.usb.UsbEndpoint? = null
+    private var outEndpoint: UsbEndpoint? = null
+    private var inEndpoint: UsbEndpoint? = null
     private var sequence = 0
 
     override suspend fun initialize(): Result<DeviceInfo> {
+        // ---- Locate the bulk IN/OUT endpoints on the CDC data interface --
         for (i in 0 until intf.endpointCount) {
             val ep = intf.getEndpoint(i)
-            if (ep.type == android.hardware.usb.UsbConstants.USB_ENDPOINT_XFER_BULK) {
-                if (ep.direction == android.hardware.usb.UsbConstants.USB_DIR_OUT) {
-                    outEndpoint = ep
-                } else {
-                    inEndpoint = ep
-                }
-            }
+            if (ep.type != UsbConstants.USB_ENDPOINT_XFER_BULK) continue
+            if (ep.direction == UsbConstants.USB_DIR_OUT) outEndpoint = ep
+            else inEndpoint = ep
         }
         if (outEndpoint == null || inEndpoint == null) {
-            return Result.failure(Exception("CDC-ACM endpoints not found"))
+            return Result.failure(Exception("CDC bulk endpoints not found on interface"))
+        }
+        if (!connection.claimInterface(intf, true)) {
+            return Result.failure(Exception("Could not claim USB interface (force=true)"))
         }
 
-        connection.claimInterface(intf, true)
-
-        // Sync sequence: 36 × 0x55
-        val syncData = ByteArray(36) { 0x55.toByte() }
-        val syncFrame = SlipFramer.encode(
-            byteArrayOf(0x00, ESP_SYNC.toByte()) +
-            intToBytes(36, 2) + intToBytes(0x0D534552, 4) + syncData
-        )
-        val syncResult = writeRead(syncFrame)
-        if (syncResult == null || syncResult.size < 4 || syncResult[0] != 0x01.toByte()) {
-            return Result.failure(Exception("ESP32 sync failed. Hold BOOT, press RESET."))
+        // ---- Configure baud/line + assert handshaking lines --------------
+        val cfgOk = configureSerial(DEFAULT_BAUD)
+        if (!cfgOk) {
+            return Result.failure(Exception("Failed to configure USB-serial bridge for vendor 0x${vendorId.toString(16)}"))
         }
 
-        // Read SPI flash params
-        val flashParamsCmd = SlipFramer.encode(
-            byteArrayOf(0x00, ESP_SPI_FLASH_PARAMS.toByte()) + intToBytes(0, 2) + intToBytes(checksum(ByteArray(0)), 4)
-        )
-        val flashParamsResp = writeRead(flashParamsCmd)
+        // ---- Reset chip into ROM download mode --------------------------
+        resetIntoBootloader()
+
+        // ---- SYNC handshake ---------------------------------------------
+        val syncedAttempt = (0 until SYNC_RETRIES).firstOrNull { trySync() }
+        if (syncedAttempt == null) {
+            return Result.failure(Exception(
+                "ESP32 did not respond to SYNC. Check cable, hold BOOT and tap RESET, then retry."
+            ))
+        }
+
+        // ---- SPI_ATTACH (required on S3 before FLASH_BEGIN) -------------
+        // payload: HSPI_ARG(4)=0 + ZERO(4)=0
+        val attachOk = sendCommand(ESP_SPI_ATTACH, ByteArray(8))
+        if (!attachOk) {
+            return Result.failure(Exception("SPI_ATTACH rejected by ROM bootloader"))
+        }
 
         return Result.success(DeviceInfo(
-            boardId = "t_deck",
+            boardId = if (vendorId == VID_ESP32_NATIVE) "t_deck" else "t3s3",
             platform = "ESP32-S3",
             firmwareVersion = "bootloader"
         ))
@@ -79,99 +163,246 @@ class EspSerialFlasher(
     ): Result<Unit> {
         val reporter = ProgressReporter(
             totalBytes = firmware.size.toLong(),
-            onProgress = onProgress
+            onProgress = onProgress,
         )
         reporter.start()
 
-        // FLASH_BEGIN: erase region
-        val flashBeginPayload = intToBytes(0x10000, 4) +  // offset 0x10000
-            intToBytes(firmware.size, 4) +  // size
-            intToBytes(BLOCK_SIZE, 4)  // block size
-        sendEspCommand(ESP_FLASH_BEGIN, flashBeginPayload)
-        readEspResponse()
-
-        // FLASH_DATA: send blocks
-        var offset = 0
-        while (offset < firmware.size) {
-            val remaining = firmware.size - offset
-            val chunkSize = BLOCK_SIZE.coerceAtMost(remaining)
-            val chunk = firmware.copyOfRange(offset, offset + chunkSize)
-            val paddedChunk = if (chunkSize < BLOCK_SIZE) {
-                chunk + ByteArray(BLOCK_SIZE - chunkSize) { 0xFF.toByte() }
-            } else {
-                chunk
-            }
-
-            val dataPayload = intToBytes(paddedChunk.size, 4) +
-                intToBytes(sequence, 4) +
-                byteArrayOf(0x00, 0x00, 0x00, 0x00) +
-                paddedChunk
-
-            sendEspCommand(ESP_FLASH_DATA, dataPayload)
-            readEspResponse()
-            reporter.update(chunkSize)
-            offset += chunkSize
-            sequence++
+        // FLASH_BEGIN — erase enough flash for the image.
+        val numBlocks = (firmware.size + BLOCK_SIZE - 1) / BLOCK_SIZE
+        val beginPayload = leInt(firmware.size) + leInt(numBlocks) + leInt(BLOCK_SIZE) + leInt(FLASH_OFFSET)
+        if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = 30_000)) {
+            return Result.failure(Exception("FLASH_BEGIN rejected (image size=${firmware.size})"))
         }
 
-        // FLASH_END without reboot for now
-        sendEspCommand(ESP_FLASH_END, intToBytes(0, 4))
-        readEspResponse()
+        // FLASH_DATA — stream blocks.
+        var offset = 0
+        sequence = 0
+        while (offset < firmware.size) {
+            val remaining = firmware.size - offset
+            val take = BLOCK_SIZE.coerceAtMost(remaining)
+            val chunk = firmware.copyOfRange(offset, offset + take)
+            val padded = if (take < BLOCK_SIZE) chunk + ByteArray(BLOCK_SIZE - take) { 0xFF.toByte() } else chunk
+
+            // FLASH_DATA payload: <data_len:4><seq:4><0:4><0:4><data>
+            val payload = leInt(padded.size) + leInt(sequence) + leInt(0) + leInt(0) + padded
+            // FLASH_DATA's checksum field (in the SLIP header) is computed
+            // over the *data only*, not the leading 16-byte header.
+            val ok = sendCommand(ESP_FLASH_DATA, payload, checksumOver = padded)
+            if (!ok) {
+                return Result.failure(Exception("FLASH_DATA failed at block $sequence (offset=$offset)"))
+            }
+            reporter.update(take)
+            offset += take
+            sequence++
+        }
 
         return Result.success(Unit)
     }
 
     override suspend fun finalize(): Result<Unit> {
-        // Reboot
-        sendEspCommand(ESP_FLASH_END, intToBytes(1, 4))
+        // FLASH_END payload: 0 = reboot into app, 1 = stay in bootloader.
+        sendCommand(ESP_FLASH_END, leInt(0), expectReply = false)
+        runCatching { connection.releaseInterface(intf) }
         return Result.success(Unit)
     }
 
     override suspend fun waitForReconnect(timeoutMs: Long): Result<String> {
+        // Over USB CDC we have no path to read the running app's version —
+        // the user can verify via the BLE link once it comes back.
         return Result.success("unknown")
     }
 
-    private fun sendEspCommand(opcode: Int, payload: ByteArray) {
-        val cmdPayload = byteArrayOf(0x00, opcode.toByte()) +
-            intToBytes(payload.size, 2) +
-            intToBytes(checksum(payload), 4) +
-            payload
-        val frame = SlipFramer.encode(cmdPayload)
-        writeRead(frame)
+    // ────────────────────────────────────────────────────────────────────
+    //  Bridge configuration
+    // ────────────────────────────────────────────────────────────────────
+
+    /** Configure the USB-serial bridge for [baud] 8N1, flow control off. */
+    private fun configureSerial(baud: Int): Boolean = when (vendorId) {
+        VID_ESP32_NATIVE -> configureCdcAcm(baud)
+        VID_SILABS_CP210X -> configureCp210x(baud)
+        VID_QINHENG_CH340 -> configureCh340(baud)
+        else -> configureCdcAcm(baud) // best-effort fallback
     }
 
-    private fun readEspResponse(): ByteArray? {
-        return readResponse()
+    /** Standard USB CDC-ACM SET_LINE_CODING (7-byte descriptor):
+     *  baud (u32 LE), stop bits, parity, data bits. */
+    private fun configureCdcAcm(baud: Int): Boolean {
+        val data = byteArrayOf(
+            (baud and 0xFF).toByte(),
+            ((baud shr 8) and 0xFF).toByte(),
+            ((baud shr 16) and 0xFF).toByte(),
+            ((baud shr 24) and 0xFF).toByte(),
+            0x00, // 1 stop bit
+            0x00, // no parity
+            0x08, // 8 data bits
+        )
+        val r1 = connection.controlTransfer(
+            REQ_TYPE_CLASS_OUT, CDC_SET_LINE_CODING, 0, intf.id, data, data.size, BULK_TIMEOUT_MS
+        )
+        // Assert DTR+RTS so the bridge starts clocking data through. The
+        // bootloader reset pulse below will re-drive these lines.
+        val r2 = connection.controlTransfer(
+            REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, 0x03, intf.id, null, 0, BULK_TIMEOUT_MS
+        )
+        return r1 >= 0 && r2 >= 0
     }
 
-    private fun writeRead(data: ByteArray): ByteArray? {
-        val ep = outEndpoint ?: return null
-        val result = connection.bulkTransfer(ep, data, data.size, TIMEOUT_MS)
-        if (result < 0) return null
-        return readResponse()
+    /** Silicon Labs CP210x: enable interface, set baud, leave modem lines
+     *  for [resetIntoBootloader] to drive. */
+    private fun configureCp210x(baud: Int): Boolean {
+        val enable = connection.controlTransfer(
+            REQ_TYPE_VENDOR_OUT, CP210X_IFC_ENABLE, 0x0001, 0, null, 0, BULK_TIMEOUT_MS
+        )
+        val baudBytes = byteArrayOf(
+            (baud and 0xFF).toByte(),
+            ((baud shr 8) and 0xFF).toByte(),
+            ((baud shr 16) and 0xFF).toByte(),
+            ((baud shr 24) and 0xFF).toByte(),
+        )
+        val setBaud = connection.controlTransfer(
+            REQ_TYPE_VENDOR_OUT, CP210X_SET_BAUDRATE, 0, 0, baudBytes, baudBytes.size, BULK_TIMEOUT_MS
+        )
+        return enable >= 0 && setBaud >= 0
     }
 
-    private fun readResponse(): ByteArray? {
+    /** WCH CH340: init sequence is poorly documented — these values are
+     *  cargo-culted from the Linux ch341 driver and known-good for 115200. */
+    private fun configureCh340(@Suppress("UNUSED_PARAMETER") baud: Int): Boolean {
+        // Magic init reads (return 0x27/0x00); ignored, just kick the chip.
+        connection.controlTransfer(REQ_TYPE_VENDOR_IN, CH340_REQ_SERIAL_INIT, 0, 0, ByteArray(8), 8, BULK_TIMEOUT_MS)
+        // Set baud-rate divisors for 115200 from ch341 driver tables.
+        connection.controlTransfer(REQ_TYPE_VENDOR_OUT, CH340_REQ_WRITE_REG, 0x1312, 0xCC83, null, 0, BULK_TIMEOUT_MS)
+        connection.controlTransfer(REQ_TYPE_VENDOR_OUT, CH340_REQ_WRITE_REG, 0x0F2C, 0x0007, null, 0, BULK_TIMEOUT_MS)
+        // 8N1, no parity, no flow control.
+        connection.controlTransfer(REQ_TYPE_VENDOR_OUT, CH340_REQ_WRITE_REG, 0x2518, 0x00C3, null, 0, BULK_TIMEOUT_MS)
+        return true
+    }
+
+    /** Drive DTR/RTS in the classic esptool sequence to land the chip in
+     *  ROM download mode. Lines map to chip pins as:
+     *    DTR  →  EN  (reset, active low)
+     *    RTS  →  IO0 (strap, low = bootloader)
+     */
+    private suspend fun resetIntoBootloader() {
+        setDtrRts(dtr = false, rts = true);  delay(100)
+        setDtrRts(dtr = true,  rts = false); delay(50)
+        setDtrRts(dtr = false, rts = false); delay(50)
+    }
+
+    private fun setDtrRts(dtr: Boolean, rts: Boolean) {
+        when (vendorId) {
+            VID_SILABS_CP210X -> {
+                // Bit 0=DTR, bit 1=RTS in low byte; mask in high byte.
+                val state = (if (dtr) 0x01 else 0x00) or (if (rts) 0x02 else 0x00)
+                val mask = 0x03 shl 8
+                connection.controlTransfer(
+                    REQ_TYPE_VENDOR_OUT, CP210X_SET_MHS, state or mask, 0, null, 0, BULK_TIMEOUT_MS
+                )
+            }
+            VID_QINHENG_CH340 -> {
+                // CH340 MODEM_CTRL: bit 5=~DTR, bit 6=~RTS (active-low).
+                var v = 0xFF
+                if (dtr) v = v and 0x20.inv()
+                if (rts) v = v and 0x40.inv()
+                connection.controlTransfer(
+                    REQ_TYPE_VENDOR_OUT, CH340_REQ_MODEM_CTRL, v, 0, null, 0, BULK_TIMEOUT_MS
+                )
+            }
+            else -> {
+                // Standard CDC-ACM: bit 0=DTR, bit 1=RTS.
+                val value = (if (dtr) 0x01 else 0x00) or (if (rts) 0x02 else 0x00)
+                connection.controlTransfer(
+                    REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, value, intf.id, null, 0, BULK_TIMEOUT_MS
+                )
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  SLIP transport
+    // ────────────────────────────────────────────────────────────────────
+
+    /** Send a single command and wait for the ROM's reply.
+     *  @param checksumOver bytes to include in the SLIP header checksum
+     *         (only [ESP_FLASH_DATA] uses a non-empty checksum).
+     *  @return true if the ROM ACKed with status=0. */
+    private fun sendCommand(
+        op: Int,
+        payload: ByteArray,
+        checksumOver: ByteArray = ByteArray(0),
+        expectReply: Boolean = true,
+        timeoutMs: Int = BULK_TIMEOUT_MS,
+    ): Boolean {
+        val header = byteArrayOf(0x00, op.toByte()) +
+            leShort(payload.size) +
+            leInt(checksum(checksumOver))
+        val frame = SlipFramer.encode(header + payload)
+        val out = outEndpoint ?: return false
+        if (connection.bulkTransfer(out, frame, frame.size, timeoutMs) < 0) return false
+        if (!expectReply) return true
+        val reply = readSlipPacket(timeoutMs) ?: return false
+        return parseReplyOk(op, reply)
+    }
+
+    /** Issue one 36×0x55 SYNC frame and return true if the ROM replies OK. */
+    private fun trySync(): Boolean {
+        val syncData = ByteArray(36) { 0x55.toByte() }
+        val payload = byteArrayOf(0x07.toByte(), 0x07.toByte(), 0x12.toByte(), 0x20.toByte()) + syncData
+        val header = byteArrayOf(0x00, ESP_SYNC.toByte()) + leShort(payload.size) + leInt(0)
+        val frame = SlipFramer.encode(header + payload)
+        val out = outEndpoint ?: return false
+        if (connection.bulkTransfer(out, frame, frame.size, SYNC_TIMEOUT_MS) < 0) return false
+        // The ROM emits multiple frames in response (one per SYNC echo); the
+        // first valid OK reply is enough for our purposes.
+        val reply = readSlipPacket(SYNC_TIMEOUT_MS) ?: return false
+        return parseReplyOk(ESP_SYNC, reply)
+    }
+
+    /** Pull bytes from the bulk-in endpoint until a complete SLIP frame
+     *  is decoded, or [timeoutMs] elapses. */
+    private fun readSlipPacket(timeoutMs: Int): ByteArray? {
         val ep = inEndpoint ?: return null
-        val buffer = ByteArray(1024)
-        val result = connection.bulkTransfer(ep, buffer, buffer.size, TIMEOUT_MS)
-        if (result < 0) return null
-        return SlipFramer.decode(buffer.copyOf(result)).firstOrNull()
-    }
-
-    private fun intToBytes(value: Int, size: Int): ByteArray {
-        val out = ByteArray(size)
-        for (i in 0 until size) {
-            out[i] = ((value shr (i * 8)) and 0xFF).toByte()
+        val accum = ArrayList<Byte>()
+        val buf = ByteArray(256)
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val n = connection.bulkTransfer(ep, buf, buf.size, 50)
+            if (n <= 0) continue
+            for (i in 0 until n) accum.add(buf[i])
+            val packets = SlipFramer.decode(accum.toByteArray())
+            if (packets.isNotEmpty()) return packets[0]
         }
-        return out
+        return null
     }
 
+    /** ROM reply format: <0x01><opcode><size:2><value:4><payload...>
+     *  Status byte is the last byte (or last 2 for ESP32+). 0 = OK. */
+    private fun parseReplyOk(expectedOp: Int, reply: ByteArray): Boolean {
+        if (reply.size < 8) return false
+        if (reply[0] != 0x01.toByte()) return false
+        if (reply[1] != expectedOp.toByte()) return false
+        // Status byte trails the payload; assume it's the last byte for ROM.
+        return reply[reply.size - 1] == 0x00.toByte()
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Helpers
+    // ────────────────────────────────────────────────────────────────────
+
+    private fun leShort(value: Int): ByteArray =
+        byteArrayOf((value and 0xFF).toByte(), ((value shr 8) and 0xFF).toByte())
+
+    private fun leInt(value: Int): ByteArray = byteArrayOf(
+        (value and 0xFF).toByte(),
+        ((value shr 8) and 0xFF).toByte(),
+        ((value shr 16) and 0xFF).toByte(),
+        ((value shr 24) and 0xFF).toByte(),
+    )
+
+    /** esptool XOR checksum (seed 0xEF). */
     private fun checksum(data: ByteArray): Int {
-        var checksum = 0xEF.toInt()
-        for (b in data) {
-            checksum = checksum xor (b.toInt() and 0xFF)
-        }
-        return checksum
+        var c = 0xEF
+        for (b in data) c = c xor (b.toInt() and 0xFF)
+        return c
     }
 }

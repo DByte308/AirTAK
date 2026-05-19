@@ -540,8 +540,29 @@ class BleRepository @Inject constructor(
 
     // ── Reconnect backoff (1s, 2s, 4s … 60s) ──────────────────────────────────
     private var backoffAttempt = 0
+    @Volatile private var autoReconnectPaused = false
+
+    /** Suspend the auto-reconnect backoff loop. Used during nRF52 BLE DFU,
+     *  where the device reboots into a different GATT profile (Nordic Secure
+     *  DFU) that doesn't expose the AirTAK service; reconnect attempts would
+     *  thrash and prevent the DFU library from owning the radio. Disconnects
+     *  any active link as a side effect so the DFU library starts from a
+     *  clean slate. Re-enable with `pauseAutoReconnect(false)` after the DFU
+     *  flow finishes (success or failure). */
+    fun pauseAutoReconnect(paused: Boolean) {
+        autoReconnectPaused = paused
+        if (paused) {
+            reconnectJob?.cancel()
+            reconnectJob = null
+            gatt?.disconnect()
+            gatt?.close()
+            gatt = null
+            _linkState.value = LinkState.Disconnected
+        }
+    }
+
     private fun onLinkLost(address: String, @Suppress("UNUSED_PARAMETER") status: Int) {
-        if (prefs.bondedAddress() != address) {
+        if (prefs.bondedAddress() != address || autoReconnectPaused) {
             _linkState.value = LinkState.Disconnected
             return
         }

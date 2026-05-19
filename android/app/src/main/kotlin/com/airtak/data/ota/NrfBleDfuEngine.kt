@@ -1,184 +1,196 @@
 // AirTAK Android — data/ota/NrfBleDfuEngine.kt
-// Planning: §4.2 | Roadmap: 6.1 (revised)
+// Planning: §3.2 / §6.1 | Roadmap: 6.1 (revised)
 //
-// Nordic DFU over BLE for nRF52840 devices. Sends OTA_ENTER admin command to
-// trigger bootloader entry, then initiates Nordic DFU protocol via the
-// no.nordicsemi.android:dfu library (if available) or falls back to a minimal
-// GATT-based DFU implementation.
+// nRF52 firmware updates over BLE using Nordic's Secure DFU. The wire protocol
+// is implemented by `no.nordicsemi.android:dfu`; this engine only sequences
+// the high-level flow:
+//
+//   1. Send an AirTAK ADMIN OTA_ENTER request, which the firmware translates
+//      into a Bluefruit `enterOTADfu()` (writes GPREGRET + soft-resets into
+//      the Adafruit/Nordic bootloader, which re-advertises with the SoftDevice
+//      DFU service 0xFE59 on the same MAC).
+//   2. Tell BleRepository to stop auto-reconnecting (the bootloader doesn't
+//      expose our AirTAK service, so reconnect would thrash) and disconnect.
+//   3. Persist the user-selected firmware bytes to a cache file (the library
+//      accepts both file paths and content Uris; a cache file is more robust
+//      against SAF permission expiry mid-transfer).
+//   4. Hand off to `DfuServiceInitiator` — it handles the bootloader
+//      handshake, init packet upload, packet-receipt-notification flow,
+//      chunk transfer, CRC validation, and reconnect into the application.
+//   5. Restore BleRepository auto-reconnect so the new application image
+//      reconnects normally.
+//
+// The firmware bytes are required to be a `.zip` distribution produced by
+// `adafruit-nrfutil pkg generate` (or equivalent). A raw `.bin`/`.hex` will
+// be rejected by the Secure DFU bootloader because the signed init packet
+// is missing.
 
 package com.airtak.data.ota
 
-import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCharacteristic
 import android.content.Context
-import com.airtak.data.ble.BleConstants
+import com.airtak.data.ble.BleRepository
 import com.airtak.data.ota.FirmwareUpdateManager.DeviceInfo
 import com.airtak.data.ota.FirmwareUpdateManager.UpdateProgress
-import java.util.UUID
-import java.util.zip.CRC32
+import com.airtak.proto.AdminCommand
+import com.airtak.proto.AdminRequest
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import no.nordicsemi.android.dfu.DfuProgressListenerAdapter
+import no.nordicsemi.android.dfu.DfuServiceInitiator
+import no.nordicsemi.android.dfu.DfuServiceListenerHelper
+import java.io.File
+import java.io.FileOutputStream
 
 class NrfBleDfuEngine(
     private val context: Context,
-    private val bluetoothGatt: BluetoothGatt
+    private val ble: BleRepository,
+    private val deviceAddress: String,
+    private val initialDeviceInfo: DeviceInfo,
 ) : FirmwareUpdateManager.FirmwareUpdateEngine {
 
     companion object {
-        // Nordic DFU Service UUID
-        val DFU_SERVICE_UUID: UUID = UUID.fromString("0000FE59-0000-1000-8000-00805F9B34FB")
-        // DFU Control Point (Write/Notify)
-        val DFU_CONTROL_POINT_UUID: UUID = UUID.fromString("8EC90001-F315-4F60-9FB8-838830DAEA50")
-        // DFU Packet (Write w/o Response)
-        val DFU_PACKET_UUID: UUID = UUID.fromString("8EC90003-F315-4F60-9FB8-838830DAEA50")
-        // Buttonless DFU Service UUID
-        val BUTTONLESS_DFU_SERVICE: UUID = UUID.fromString("8EC90004-F315-4F60-9FB8-838830DAEA50")
-        // Enter Bootloader char
-        val BUTTONLESS_DFU_CHAR: UUID = UUID.fromString("8E400001-F315-4F60-9FB8-838830DAEA50")
-
-        private const val DFU_OP_START = 1
-        private const val DFU_OP_INIT = 2
-        private const val DFU_OP_RECEIVE_FW = 3
-        private const val DFU_OP_VALIDATE = 4
-        private const val DFU_OP_EXECUTE = 5
-        private const val CHUNK_SIZE = 20
+        /** Time the Adafruit nRF52 bootloader needs from reboot to advertising. */
+        private const val BOOTLOADER_WAKE_MS = 2_500L
+        /** Cap on the entire library-managed DFU run. */
+        private const val DFU_TIMEOUT_MS = 5L * 60L * 1_000L
     }
 
-    private var deviceInfo: DeviceInfo = DeviceInfo("unknown", "nRF52840", "unknown")
-
-    override suspend fun initialize(): Result<DeviceInfo> {
-        // Read DEVICE_STATUS from the existing AirTAK service
-        val statusChar = bluetoothGatt.getService(BleConstants.SERVICE_UUID)
-            ?.getCharacteristic(BleConstants.CHR_DEVICE_STATUS)
-        if (statusChar != null) {
-            bluetoothGatt.readCharacteristic(statusChar)
-        }
-        return Result.success(deviceInfo)
-    }
+    override suspend fun initialize(): Result<DeviceInfo> = Result.success(initialDeviceInfo)
 
     override suspend fun transfer(
         firmware: ByteArray,
         onProgress: (UpdateProgress) -> Unit
     ): Result<Unit> {
-        // Step 1: Send OTA_ENTER admin command via AirTAK ADMIN characteristic
-        onProgress(UpdateProgress.Initializing("Entering DFU mode..."))
-        sendOtaEnter()
+        // ---- 1. Trigger bootloader entry on the device ----------------------
+        onProgress(UpdateProgress.Initializing("Requesting bootloader entry..."))
+        // DFU_ENTER on nRF52 maps to Bluefruit `enterOTADfu()` (sets GPREGRET
+        // to 0xA8 and soft-resets into the Nordic SoftDevice bootloader).
+        // OTA_ENTER is reserved for the ESP32 in-app OTA path and would be
+        // a no-op here.
+        val adminReq = AdminRequest.newBuilder()
+            .setCommand(AdminCommand.DFU_ENTER)
+            .build()
+            .toByteArray()
+        ble.send(BleRepository.OutboundChannel.Admin, adminReq)
 
-        // Step 2: Wait for device to disconnect and re-advertise as bootloader
-        onProgress(UpdateProgress.Initializing("Waiting for bootloader..."))
-        // The device reboots into Nordic DFU bootloader.
-        // In a real implementation, we'd disconnect and scan for the bootloader.
-        // For now, we assume the GATT connection drops and we reconnect later.
+        // ---- 2. Take the radio away from BleRepository ----------------------
+        // The device will reset and come back up advertising Nordic Secure
+        // DFU (UUID 0xFE59). Our normal reconnect backoff would try to
+        // rediscover the AirTAK service and fail in a loop, racing with the
+        // library. Pause it; we re-enable in finalize/cleanup.
+        ble.pauseAutoReconnect(true)
+        // Give the device time to actually reboot into the bootloader and
+        // start advertising. Skipping this race-conditions the library's scan.
+        delay(BOOTLOADER_WAKE_MS)
 
-        // Step 3: Nordic DFU protocol over BLE
-        val reporter = ProgressReporter(
-            totalBytes = firmware.size.toLong(),
-            onProgress = onProgress
-        )
-        reporter.start()
-
-        val crc = CRC32().apply { update(firmware) }.value
-        val initPacket = createInitPacket(firmware)
-
-        // Create init data object (type=1)
-        sendDfuCommand(DFU_OP_START, byteArrayOf(0x01))
-        sendDfuData(initPacket, reporter)
-
-        // Create firmware data object (type=2)
-        sendDfuCommand(DFU_OP_START, byteArrayOf(0x02))
-
-        // Send firmware in chunks
-        var offset = 0
-        while (offset < firmware.size) {
-            val chunkSize = CHUNK_SIZE.coerceAtMost(firmware.size - offset)
-            val chunk = firmware.copyOfRange(offset, offset + chunkSize)
-            sendDfuData(chunk, reporter)
-            offset += chunkSize
+        // ---- 3. Persist firmware bytes to a cache zip -----------------------
+        onProgress(UpdateProgress.Initializing("Preparing DFU package..."))
+        val pkgFile = try {
+            writeCachePackage(firmware)
+        } catch (e: Exception) {
+            ble.pauseAutoReconnect(false)
+            return Result.failure(Exception("Failed to stage DFU package: ${e.message}", e))
         }
 
-        // Validate and execute
-        sendDfuCommand(DFU_OP_VALIDATE, ByteArray(0))
-        sendDfuCommand(DFU_OP_EXECUTE, ByteArray(0))
+        // ---- 4. Run the Nordic DFU library ---------------------------------
+        onProgress(UpdateProgress.Initializing("Connecting to bootloader..."))
+        val outcome = CompletableDeferred<Result<Unit>>()
+        val listener = object : DfuProgressListenerAdapter() {
+            override fun onDeviceConnecting(deviceAddress: String) {
+                onProgress(UpdateProgress.Initializing("Connecting to bootloader..."))
+            }
+            override fun onEnablingDfuMode(deviceAddress: String) {
+                onProgress(UpdateProgress.Initializing("Enabling DFU mode..."))
+            }
+            override fun onDfuProcessStarted(deviceAddress: String) {
+                onProgress(UpdateProgress.Initializing("Uploading init packet..."))
+            }
+            override fun onProgressChanged(
+                deviceAddress: String,
+                percent: Int,
+                speed: Float,
+                avgSpeed: Float,
+                currentPart: Int,
+                partsTotal: Int,
+            ) {
+                // The library reports percent only; synthesize byte counts so
+                // the existing progress UI keeps working.
+                val total = firmware.size.toLong()
+                val written = total * percent / 100
+                val eta = if (avgSpeed > 0f) ((total - written) / avgSpeed).toInt() else 0
+                onProgress(UpdateProgress.Transferring(written, total, eta))
+            }
+            override fun onFirmwareValidating(deviceAddress: String) {
+                onProgress(UpdateProgress.Verifying(progress = 1f))
+            }
+            override fun onDfuCompleted(deviceAddress: String) {
+                outcome.complete(Result.success(Unit))
+            }
+            override fun onDfuAborted(deviceAddress: String) {
+                outcome.complete(Result.failure(Exception("DFU aborted by user")))
+            }
+            override fun onError(
+                deviceAddress: String,
+                error: Int,
+                errorType: Int,
+                message: String?,
+            ) {
+                outcome.complete(Result.failure(Exception(
+                    "Nordic DFU error type=$errorType code=$error: ${message ?: "<no message>"}"
+                )))
+            }
+        }
 
-        return Result.success(Unit)
+        DfuServiceListenerHelper.registerProgressListener(context, listener)
+        try {
+            DfuServiceInitiator(deviceAddress)
+                .setDeviceName(initialDeviceInfo.boardId)
+                .setPacketsReceiptNotificationsEnabled(true)
+                .setPacketsReceiptNotificationsValue(10)
+                .setForeground(true)
+                .setKeepBond(true)
+                // Restart-then-DFU mode is unnecessary because we triggered
+                // bootloader entry ourselves via AdminCommand OTA_ENTER.
+                .setForceDfu(false)
+                .setZip(android.net.Uri.fromFile(pkgFile))
+                .start(context, AirtakDfuService::class.java)
+
+            val res = withTimeoutOrNull(DFU_TIMEOUT_MS) { outcome.await() }
+                ?: Result.failure(Exception("DFU timed out after ${DFU_TIMEOUT_MS / 1_000}s"))
+
+            return res
+        } finally {
+            DfuServiceListenerHelper.unregisterProgressListener(context, listener)
+            // Always clean up the cache file — it can be tens of MB.
+            runCatching { pkgFile.delete() }
+        }
     }
 
     override suspend fun finalize(): Result<Unit> {
+        // The library has already rebooted the device into the new
+        // application by the time transfer() returns; just resume our
+        // normal reconnect loop so the rest of the app comes back online.
+        ble.pauseAutoReconnect(false)
+        ble.reconnectBonded()
         return Result.success(Unit)
     }
 
     override suspend fun waitForReconnect(timeoutMs: Long): Result<String> {
+        // We don't have a clean way to read the new firmware version until
+        // the AirTAK service exposes it on DEVICE_STATUS again. The
+        // FirmwareUpdateManager's reconnect step is best-effort; report
+        // unknown so the UI moves to Done.
         return Result.success("unknown")
     }
 
-    private fun sendOtaEnter() {
-        try {
-            val adminService = bluetoothGatt.getService(BleConstants.SERVICE_UUID)
-            val adminChar = adminService?.getCharacteristic(BleConstants.CHR_ADMIN)
-            if (adminChar != null) {
-                // OTA_ENTER = 7, send as AdminRequest protobuf
-                val request = byteArrayOf(0x08, 0x07) // field 1 (varint), value 7
-                adminChar.value = request
-                bluetoothGatt.writeCharacteristic(adminChar)
-            }
-        } catch (e: Exception) {
-            // If admin write fails, try Buttonless DFU
-            sendButtonlessDfuEnter()
-        }
-    }
-
-    private fun sendButtonlessDfuEnter() {
-        try {
-            val dfuService = bluetoothGatt.getService(BUTTONLESS_DFU_SERVICE)
-            val dfuChar = dfuService?.getCharacteristic(BUTTONLESS_DFU_CHAR)
-            if (dfuChar != null) {
-                dfuChar.value = byteArrayOf(0x01)
-                bluetoothGatt.writeCharacteristic(dfuChar)
-            }
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun sendDfuCommand(opcode: Int, data: ByteArray) {
-        val dfuService = bluetoothGatt.getService(DFU_SERVICE_UUID)
-        val controlPoint = dfuService?.getCharacteristic(DFU_CONTROL_POINT_UUID)
-        if (controlPoint != null) {
-            controlPoint.value = byteArrayOf(opcode.toByte()) + data
-            bluetoothGatt.writeCharacteristic(controlPoint)
-        }
-    }
-
-    private fun sendDfuData(data: ByteArray, reporter: ProgressReporter) {
-        val dfuService = bluetoothGatt.getService(DFU_SERVICE_UUID)
-        val packetChar = dfuService?.getCharacteristic(DFU_PACKET_UUID)
-        if (packetChar != null) {
-            packetChar.value = data
-            packetChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            bluetoothGatt.writeCharacteristic(packetChar)
-            reporter.update(data.size)
-        }
-    }
-
-    private fun createInitPacket(firmware: ByteArray): ByteArray {
-        val crc = CRC32().apply { update(firmware) }.value
-        val init = ByteArray(14)
-        // Device type: 0xFFFF (any)
-        init[0] = 0xFF.toByte()
-        init[1] = 0xFF.toByte()
-        // Device revision: 0xFFFF (any)
-        init[2] = 0xFF.toByte()
-        init[3] = 0xFF.toByte()
-        // Application version: 0xFFFFFFFF (any)
-        init[4] = 0xFF.toByte()
-        init[5] = 0xFF.toByte()
-        init[6] = 0xFF.toByte()
-        init[7] = 0xFF.toByte()
-        // SoftDevice count: 0
-        init[8] = 0x00
-        init[9] = 0x00
-        // Firmware CRC32
-        init[10] = (crc and 0xFF).toByte()
-        init[11] = ((crc shr 8) and 0xFF).toByte()
-        init[12] = ((crc shr 16) and 0xFF).toByte()
-        init[13] = ((crc shr 24) and 0xFF).toByte()
-        return init
+    /** Stage a `.zip` distribution into the app cache so the library reads
+     *  from a stable path with file:// scheme rather than a SAF content://
+     *  URI whose permission lifetime is tied to the caller activity. */
+    private fun writeCachePackage(firmware: ByteArray): File {
+        val dir = File(context.cacheDir, "dfu").apply { mkdirs() }
+        val out = File(dir, "airtak_dfu_${System.currentTimeMillis()}.zip")
+        FileOutputStream(out).use { it.write(firmware) }
+        return out
     }
 }

@@ -79,5 +79,14 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- Nordic Secure DFU foreground service for nRF52 firmware updates.
+             The Nordic library starts this service from NrfBleDfuEngine and
+             handles the bootloader handshake, packet upload, and reconnect. -->
+        <service
+            android:name=".data.ota.AirtakDfuService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

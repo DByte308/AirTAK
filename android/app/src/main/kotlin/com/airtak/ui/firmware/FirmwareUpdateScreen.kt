@@ -57,6 +57,9 @@ fun FirmwareUpdateScreen(
     val progress by viewModel.progress.collectAsState()
     val state by viewModel.state.collectAsState()
     var selectedUri by remember { mutableStateOf<Uri?>(firmwareUri?.let { Uri.parse(it) }) }
+    // Track which transport the user chose for the currently picked file so
+    // the LaunchedEffect below dispatches to the right ViewModel entry point.
+    var transportMode by remember { mutableStateOf(TransportMode.Ble) }
 
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -95,8 +98,18 @@ fun FirmwareUpdateScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(24.dp))
-                    Button(onClick = { filePicker.launch("*/*") }) {
-                        Text("Select Firmware File")
+                    Button(onClick = {
+                        transportMode = TransportMode.Ble
+                        filePicker.launch("*/*")
+                    }) {
+                        Text("Update via Bluetooth")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = {
+                        transportMode = TransportMode.Usb
+                        filePicker.launch("*/*")
+                    }) {
+                        Text("Update via USB cable")
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onDone) {
@@ -178,10 +191,15 @@ fun FirmwareUpdateScreen(
 
     LaunchedEffect(selectedUri) {
         selectedUri?.let { uri ->
-            viewModel.startUpdate(uri)
+            when (transportMode) {
+                TransportMode.Ble -> viewModel.startUpdate(uri)
+                TransportMode.Usb -> viewModel.startUpdateOverUsb(uri)
+            }
         }
     }
 }
+
+private enum class TransportMode { Ble, Usb }
 
 @Composable
 private fun FirmwareProgress(progress: UpdateProgress) {

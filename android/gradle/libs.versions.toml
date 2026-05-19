@@ -26,6 +26,7 @@ mockk                 = "1.13.12"
 espresso              = "3.6.1"
 test-ext              = "1.2.1"
 zxing                 = "4.3.0"
+nordic-dfu            = "2.7.0"
 
 [libraries]
 # Kotlin
@@ -80,6 +81,9 @@ test-ext-junit                    = { module = "androidx.test.ext:junit", versio
 
 # QR code
 zxing-android-embedded            = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxing" }
+
+# Nordic Semiconductor DFU library (used for nRF52 Secure DFU over BLE)
+nordic-dfu                        = { module = "no.nordicsemi.android:dfu", version.ref = "nordic-dfu" }
 
 [plugins]
 android-application               = { id = "com.android.application", version.ref = "agp" }
