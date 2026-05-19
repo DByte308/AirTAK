@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AirTAK — USB device filter for wired firmware flashing (§3.1) -->
+<resources>
+    <!-- nRF52840 Adafruit bootloader (CDC-ACM serial DFU) vendor-id 0x239A -->
+    <usb-device vendor-id="9578" />
+
+    <!-- ESP32-S3 USB-Serial-JTAG (built-in) vendor-id 0x303A -->
+    <usb-device vendor-id="12346" />
+
+    <!-- CP210x USB-UART (ESP32 dev boards) vendor-id 0x10C4 -->
+    <usb-device vendor-id="4292" />
+
+    <!-- CH340/CH341 USB-UART vendor-id 0x1A86 -->
+    <usb-device vendor-id="6790" />
+</resources>

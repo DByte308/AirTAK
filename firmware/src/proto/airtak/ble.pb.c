@@ -30,6 +30,26 @@ PB_BIND(airtak_AdminRequest, airtak_AdminRequest, AUTO)
 PB_BIND(airtak_AdminResponse, airtak_AdminResponse, AUTO)
 
 
+PB_BIND(airtak_OtaCommand, airtak_OtaCommand, AUTO)
+
+
+PB_BIND(airtak_OtaStart, airtak_OtaStart, AUTO)
+
+
+PB_BIND(airtak_OtaFinish, airtak_OtaFinish, AUTO)
+
+
+PB_BIND(airtak_OtaStatusRequest, airtak_OtaStatusRequest, AUTO)
+
+
+PB_BIND(airtak_OtaCancel, airtak_OtaCancel, AUTO)
+
+
+PB_BIND(airtak_OtaStatus, airtak_OtaStatus, AUTO)
+
+
+
+
 
 
 

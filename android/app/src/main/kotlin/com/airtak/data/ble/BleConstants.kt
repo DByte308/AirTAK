@@ -14,6 +14,8 @@ object BleConstants {
     val CHR_MESH_RX: UUID       = UUID.fromString("4d415348-0003-1000-8000-00805f9b34fb")
     val CHR_DEVICE_STATUS: UUID = UUID.fromString("4d415348-0004-1000-8000-00805f9b34fb")
     val CHR_ADMIN: UUID         = UUID.fromString("4d415348-0005-1000-8000-00805f9b34fb")
+    val CHR_OTA_COMMAND: UUID   = UUID.fromString("4d415348-0006-1000-8000-00805f9b34fb")
+    val CHR_OTA_DATA: UUID      = UUID.fromString("4d415348-0007-1000-8000-00805f9b34fb")
 
     // BLE Recovery (DFU) advertisement name — used by the safe-mode pairing flow.
     const val RECOVERY_ADV_NAME = "AirTAK Recovery"

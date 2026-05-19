@@ -63,6 +63,8 @@ message DeviceStatus {
   uint32      dc_limit_ms_per_hour = 13; // per-band regulatory limit (ms/h); UINT32_MAX if none
   uint32      dc_percentage    = 14;   // current DC in hundredths of a percent (750 = 7.50%)
   uint32      dc_relays_dropped = 15;  // relay packets dropped by DC gate since boot
+  string      board_id         = 16;   // matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+  string      platform         = 17;   // "nRF52840", "ESP32-S3", etc.
 }
 
 message GpsStatus {
@@ -96,6 +98,8 @@ enum AdminCommand {
   SET_PHONE_GPS = 6;   // update the device's GPS fix from phone position data;
                        // used when PositionConfig.gps_source = PHONE_GPS.
                        // The phone_gps field of AdminRequest must be populated.
+  OTA_ENTER     = 7;   // enter OTA mode; BLE OTA or Nordic DFU depending on platform
+  OTA_FINISH    = 8;   // finalize OTA (CRC check + reboot on ESP32; no-op on nRF52)
 }
 
 // When gps_source=PHONE_GPS, the Android app periodically sends the phone's
@@ -118,4 +122,47 @@ message AdminResponse {
   AdminCommand command = 1;
   bool         success = 2;
   string       error   = 3;
+}
+
+// ── OTA (firmware update over BLE, ESP32) ────────────────────────────────────
+// OtaCommand, OtaStatus, and OtaState as defined in §4.4.
+// Only used by the ESP32 BLE OTA path; nRF52 OTA uses Nordic DFU protocol.
+
+enum OtaState {
+  OTA_IDLE      = 0;
+  OTA_RECEIVING = 1;
+  OTA_VERIFYING = 2;
+  OTA_WRITING   = 3;
+  OTA_COMPLETE  = 4;
+  OTA_ERROR     = 5;
+}
+
+message OtaCommand {
+  oneof command {
+    OtaStart        start  = 1;
+    OtaFinish       finish = 2;
+    OtaStatusRequest status = 3;
+    OtaCancel       cancel = 4;
+  }
+}
+
+message OtaStart {
+  uint32 image_size = 1;
+  uint32 crc32      = 2;
+}
+
+message OtaFinish {
+  uint32 crc32 = 1;
+}
+
+message OtaStatusRequest {}
+
+message OtaCancel {}
+
+message OtaStatus {
+  OtaState state         = 1;
+  uint32   bytes_written = 2;
+  uint32   total_size    = 3;
+  uint32   last_error    = 4;
+  string   error_text    = 5;
 }

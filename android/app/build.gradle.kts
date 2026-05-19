@@ -110,6 +110,9 @@ dependencies {
     // Coroutines
     implementation(libs.coroutines.android)
 
+    // QR code
+    implementation(libs.zxing.android.embedded)
+
     // Unit tests
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)

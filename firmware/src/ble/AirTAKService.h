@@ -29,6 +29,8 @@ constexpr char CHAR_MESH_TX_UUID[]         = "4d415348-0002-1000-8000-00805f9b34
 constexpr char CHAR_MESH_RX_UUID[]         = "4d415348-0003-1000-8000-00805f9b34fb";
 constexpr char CHAR_DEVICE_STATUS_UUID[]   = "4d415348-0004-1000-8000-00805f9b34fb";
 constexpr char CHAR_ADMIN_UUID[]           = "4d415348-0005-1000-8000-00805f9b34fb";
+constexpr char CHAR_OTA_COMMAND_UUID[]     = "4d415348-0006-1000-8000-00805f9b34fb";
+constexpr char CHAR_OTA_DATA_UUID[]        = "4d415348-0007-1000-8000-00805f9b34fb";
 
 class AirTAKService {
 public:

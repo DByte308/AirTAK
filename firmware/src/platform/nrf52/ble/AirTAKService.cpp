@@ -223,6 +223,14 @@ static void onAdminWrite(uint16_t conn_hdl, BLECharacteristic* chr,
             DFUService::enterDfu();
             success = true;
             break;
+        case airtak_AdminCommand_OTA_ENTER:
+            DFUService::enterDfu();
+            success = true;
+            break;
+        case airtak_AdminCommand_OTA_FINISH:
+            // nRF52: no-op — Nordic DFU protocol handles finalization
+            success = true;
+            break;
         case airtak_AdminCommand_RADIO_RESTART:
             config::ConfigManager::radioRestartProcedure();
             success = true;

@@ -137,6 +137,20 @@ typedef struct _airtak_GameConfig {
     bool hit_button_enabled; /* enable long-press HIT toggle on device button; default false */
 } airtak_GameConfig;
 
+/* Bundles LoraConfig, ChannelConfig (with PSKs), and the unit-hierarchy subset
+ of GameConfig into a single binary blob for QR-code sharing. The receiver
+ imports these three groups and pushes them to the device in one batch.
+ DeviceConfig (names) and GameConfig.callsign are deliberately excluded —
+ every device must have unique identifiers (§11.13). */
+typedef struct _airtak_ShareableConfig {
+    bool has_lora;
+    airtak_LoraConfig lora; /* region, TX power, 5 PHY profiles */
+    bool has_channels;
+    airtak_ChannelConfig channels; /* all 8 slots including PSKs */
+    bool has_game;
+    airtak_GameConfig game; /* unit hierarchy fields only (callsign stripped on import) */
+} airtak_ShareableConfig;
+
 /* Roadmap: 1.5 | BLE bond management. No radio restart required. */
 typedef struct _airtak_SecurityConfig {
     uint32_t max_bonded_devices; /* 1–4; default 1 */
@@ -178,6 +192,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define airtak_DeviceConfig_init_default         {"", ""}
 #define airtak_PhyProfile_init_default           {"", 0, 0, 0}
@@ -188,6 +203,7 @@ extern "C" {
 #define airtak_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, _airtak_GpsSource_MIN, 0}
 #define airtak_PowerConfig_init_default          {0, 0, 0, 0, 0}
 #define airtak_GameConfig_init_default           {"", "", "", "", "", 0, 0}
+#define airtak_ShareableConfig_init_default      {false, airtak_LoraConfig_init_default, false, airtak_ChannelConfig_init_default, false, airtak_GameConfig_init_default}
 #define airtak_SecurityConfig_init_default       {0}
 #define airtak_DeviceConfig_init_zero            {"", ""}
 #define airtak_PhyProfile_init_zero              {"", 0, 0, 0}
@@ -198,6 +214,7 @@ extern "C" {
 #define airtak_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, _airtak_GpsSource_MIN, 0}
 #define airtak_PowerConfig_init_zero             {0, 0, 0, 0, 0}
 #define airtak_GameConfig_init_zero              {"", "", "", "", "", 0, 0}
+#define airtak_ShareableConfig_init_zero         {false, airtak_LoraConfig_init_zero, false, airtak_ChannelConfig_init_zero, false, airtak_GameConfig_init_zero}
 #define airtak_SecurityConfig_init_zero          {0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -243,6 +260,9 @@ extern "C" {
 #define airtak_GameConfig_company_id_tag         5
 #define airtak_GameConfig_player_color_rgb_tag   6
 #define airtak_GameConfig_hit_button_enabled_tag 7
+#define airtak_ShareableConfig_lora_tag          1
+#define airtak_ShareableConfig_channels_tag      2
+#define airtak_ShareableConfig_game_tag          3
 #define airtak_SecurityConfig_max_bonded_devices_tag 1
 
 /* Struct field encoding specification for nanopb */
@@ -326,6 +346,16 @@ X(a, STATIC,   SINGULAR, BOOL,     hit_button_enabled,   7)
 #define airtak_GameConfig_CALLBACK NULL
 #define airtak_GameConfig_DEFAULT NULL
 
+#define airtak_ShareableConfig_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  lora,              1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  channels,          2) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  game,              3)
+#define airtak_ShareableConfig_CALLBACK NULL
+#define airtak_ShareableConfig_DEFAULT NULL
+#define airtak_ShareableConfig_lora_MSGTYPE airtak_LoraConfig
+#define airtak_ShareableConfig_channels_MSGTYPE airtak_ChannelConfig
+#define airtak_ShareableConfig_game_MSGTYPE airtak_GameConfig
+
 #define airtak_SecurityConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   max_bonded_devices,   1)
 #define airtak_SecurityConfig_CALLBACK NULL
@@ -340,6 +370,7 @@ extern const pb_msgdesc_t airtak_AudioConfig_msg;
 extern const pb_msgdesc_t airtak_PositionConfig_msg;
 extern const pb_msgdesc_t airtak_PowerConfig_msg;
 extern const pb_msgdesc_t airtak_GameConfig_msg;
+extern const pb_msgdesc_t airtak_ShareableConfig_msg;
 extern const pb_msgdesc_t airtak_SecurityConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -352,10 +383,11 @@ extern const pb_msgdesc_t airtak_SecurityConfig_msg;
 #define airtak_PositionConfig_fields &airtak_PositionConfig_msg
 #define airtak_PowerConfig_fields &airtak_PowerConfig_msg
 #define airtak_GameConfig_fields &airtak_GameConfig_msg
+#define airtak_ShareableConfig_fields &airtak_ShareableConfig_msg
 #define airtak_SecurityConfig_fields &airtak_SecurityConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AIRTAK_CONFIG_PB_H_MAX_SIZE              airtak_ChannelConfig_size
+#define AIRTAK_CONFIG_PB_H_MAX_SIZE              airtak_ShareableConfig_size
 #define airtak_AudioConfig_size                  20
 #define airtak_ChannelConfig_size                624
 #define airtak_ChannelSlot_size                  76
@@ -366,6 +398,7 @@ extern const pb_msgdesc_t airtak_SecurityConfig_msg;
 #define airtak_PositionConfig_size               40
 #define airtak_PowerConfig_size                  26
 #define airtak_SecurityConfig_size               6
+#define airtak_ShareableConfig_size              993
 
 #ifdef __cplusplus
 } /* extern "C" */

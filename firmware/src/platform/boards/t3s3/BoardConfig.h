@@ -26,6 +26,7 @@
 #define AIRTAK_BOARD_NAME                  "LilyGo T-LoRa T3 S3"
 #define AIRTAK_PLATFORM_ESP32              1
 #define AIRTAK_BOARD_HAS_BLE_DFU           0
+#define AIRTAK_BOARD_HAS_BLE_OTA           1   // Custom BLE OTA via esp_ota_*
 #define AIRTAK_BOARD_HAS_EXTERNAL_QSPI     0
 #define AIRTAK_BOARD_HAS_OLED_DISPLAY      1
 #define AIRTAK_BOARD_HAS_GPS               0

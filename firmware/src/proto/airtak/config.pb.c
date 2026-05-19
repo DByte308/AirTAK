@@ -33,6 +33,9 @@ PB_BIND(airtak_PowerConfig, airtak_PowerConfig, AUTO)
 PB_BIND(airtak_GameConfig, airtak_GameConfig, AUTO)
 
 
+PB_BIND(airtak_ShareableConfig, airtak_ShareableConfig, 2)
+
+
 PB_BIND(airtak_SecurityConfig, airtak_SecurityConfig, AUTO)
 
 

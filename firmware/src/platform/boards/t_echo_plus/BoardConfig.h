@@ -8,6 +8,7 @@
 #define AIRTAK_BOARD_NAME                  "LilyGo T-Echo Plus"
 #define AIRTAK_PLATFORM_NRF52              1
 #define AIRTAK_BOARD_HAS_BLE_DFU           1
+#define AIRTAK_BOARD_HAS_BLE_OTA           1
 #define AIRTAK_BOARD_HAS_EXTERNAL_QSPI     1
 #define AIRTAK_BOARD_HAS_EINK_DISPLAY      1
 #define AIRTAK_BOARD_HAS_GPS               1

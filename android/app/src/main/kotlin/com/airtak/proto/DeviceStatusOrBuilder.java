@@ -187,4 +187,44 @@ public interface DeviceStatusOrBuilder extends
    * @return The dcRelaysDropped.
    */
   int getDcRelaysDropped();
+
+  /**
+   * <pre>
+   * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+   * </pre>
+   *
+   * <code>string board_id = 16;</code>
+   * @return The boardId.
+   */
+  java.lang.String getBoardId();
+  /**
+   * <pre>
+   * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+   * </pre>
+   *
+   * <code>string board_id = 16;</code>
+   * @return The bytes for boardId.
+   */
+  com.google.protobuf.ByteString
+      getBoardIdBytes();
+
+  /**
+   * <pre>
+   * "nRF52840", "ESP32-S3", etc.
+   * </pre>
+   *
+   * <code>string platform = 17;</code>
+   * @return The platform.
+   */
+  java.lang.String getPlatform();
+  /**
+   * <pre>
+   * "nRF52840", "ESP32-S3", etc.
+   * </pre>
+   *
+   * <code>string platform = 17;</code>
+   * @return The bytes for platform.
+   */
+  com.google.protobuf.ByteString
+      getPlatformBytes();
 }

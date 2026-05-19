@@ -402,6 +402,56 @@ public object DeviceStatusKt {
     public fun clearDcRelaysDropped() {
       _builder.clearDcRelaysDropped()
     }
+
+    /**
+     * ```
+     * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+     * ```
+     *
+     * `string board_id = 16;`
+     */
+    public var boardId: kotlin.String
+      @kotlin.jvm.JvmName("getBoardId")
+        get() = _builder.boardId
+      @kotlin.jvm.JvmName("setBoardId")
+        set(value) {
+        _builder.boardId = value
+      }
+    /**
+     * ```
+     * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+     * ```
+     *
+     * `string board_id = 16;`
+     */
+    public fun clearBoardId() {
+      _builder.clearBoardId()
+    }
+
+    /**
+     * ```
+     * "nRF52840", "ESP32-S3", etc.
+     * ```
+     *
+     * `string platform = 17;`
+     */
+    public var platform: kotlin.String
+      @kotlin.jvm.JvmName("getPlatform")
+        get() = _builder.platform
+      @kotlin.jvm.JvmName("setPlatform")
+        set(value) {
+        _builder.platform = value
+      }
+    /**
+     * ```
+     * "nRF52840", "ESP32-S3", etc.
+     * ```
+     *
+     * `string platform = 17;`
+     */
+    public fun clearPlatform() {
+      _builder.clearPlatform()
+    }
   }
 }
 public inline fun com.airtak.proto.DeviceStatus.copy(block: `com.airtak.proto`.DeviceStatusKt.Dsl.() -> kotlin.Unit): com.airtak.proto.DeviceStatus =

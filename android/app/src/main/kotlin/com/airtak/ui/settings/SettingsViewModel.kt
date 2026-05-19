@@ -13,6 +13,9 @@ import com.airtak.data.config.ConfigRepository
 import com.airtak.data.moderation.ModerationRepository
 import com.airtak.data.prefs.AppPreferences
 import com.airtak.data.status.DeviceStatusRepository
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.util.Base64
 import com.airtak.proto.AdminCommand
 import com.airtak.proto.AdminRequest
 import com.airtak.proto.ChannelConfig
@@ -31,14 +34,18 @@ import com.airtak.proto.PhyProfile
 import com.airtak.proto.PositionConfig
 import com.airtak.proto.PowerConfig
 import com.airtak.proto.SecurityConfig
+import com.airtak.proto.ShareableConfig
 import com.airtak.ui.theme.ThemeMode
 import com.google.protobuf.ByteString
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.random.Random
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -340,9 +347,125 @@ class SettingsViewModel @Inject constructor(
         return targetIdx
     }
 
+    /**
+     * Generate random identifiers for a new device. The long name, short name,
+     * and callsign are unique-per-device fields that should not be shared; this
+     * method fills them with random hexadecimal values so users don't start
+     * with empty defaults.
+     */
+    fun generateRandomIdentity() {
+        val rng = Random(System.nanoTime())
+        val longName = hexString(rng, 8)
+        val shortName = hexString(rng, 4)
+        val callsign = hexString(rng, 6)
+        _device.value = _device.value.copy(longName = longName, shortName = shortName)
+        _game.value = _game.value.copy(callsign = callsign)
+    }
+
+    private fun hexString(rng: Random, len: Int): String =
+        buildString(capacity = len) { repeat(len) { append("0123456789ABCDEF"[rng.nextInt(16)]) } }
+
+    /**
+     * Build a [ShareableConfig] from the current view state. The callsign is
+     * stripped — it must be unique per device and is regenerated on import via
+     * [generateRandomIdentity].
+     */
+    fun buildShareableConfig(): ShareableConfig {
+        val lora = _lora.value
+        val loraMsg = LoraConfig.newBuilder()
+            .setRegion(lora.region).setTxPowerDbm(lora.txPower)
+            .addAllProfiles(lora.profiles).build()
+        val rawChannels = _channels.value.slots.map { it.slot }
+        val chanMsg = ChannelConfig.newBuilder().addAllSlots(rawChannels).build()
+        val game = _game.value
+        val gameMsg = GameConfig.newBuilder()
+            .setCallsign("") // stripped — unique per device
+            .setFireteamId(game.fireteamId)
+            .setSquadId(game.squadId)
+            .setPlatoonId(game.platoonId)
+            .setCompanyId(game.companyId)
+            .setPlayerColorRgb(game.playerColorRgb)
+            .setHitButtonEnabled(game.hitButtonEnabled)
+            .build()
+        return ShareableConfig.newBuilder()
+            .setLora(loraMsg)
+            .setChannels(chanMsg)
+            .setGame(gameMsg)
+            .build()
+    }
+
+    /**
+     * Import a [ShareableConfig] and push LORA, CHANNELS, and GAME groups to
+     * the device. The device names and callsign are left untouched — the caller
+     * should have already populated them with [generateRandomIdentity].
+     */
+    fun importShareableConfig(sc: ShareableConfig) {
+        if (sc.hasLora()) {
+            config.apply(ConfigGroup.LORA, sc.lora.toByteArray())
+        }
+        if (sc.hasChannels()) {
+            config.apply(ConfigGroup.CHANNELS, sc.channels.toByteArray())
+        }
+        if (sc.hasGame()) {
+            val gameMsg = sc.game.toBuilder().setCallsign("").build()
+            config.apply(ConfigGroup.GAME, gameMsg.toByteArray())
+        }
+    }
+        if (config.hasChannels()) {
+            config.apply(ConfigGroup.CHANNELS, config.channels.toByteArray())
+        }
+        if (config.hasGame()) {
+            // Always blank the callsign so it is never overwritten on import
+            val gameMsg = config.game.toBuilder().setCallsign("").build()
+            config.apply(ConfigGroup.GAME, gameMsg.toByteArray())
+        }
+    }
+
+    /**
+     * Encode [config] as a base64-URL-encoded protobuf, prefixed with a
+     * lightweight scheme identifier so scanning apps can recognise the format.
+     */
+    fun encodeConfigToUri(config: ShareableConfig): String {
+        val raw = config.toByteArray()
+        val b64 = Base64.encodeToString(raw, Base64.NO_WRAP or Base64.URL_SAFE or Base64.NO_PADDING)
+        return QR_SCHEME + b64
+    }
+
+    /**
+     * Decode a URI produced by [encodeConfigToUri]. Returns null if the scheme
+     * does not match or the payload cannot be parsed.
+     */
+    fun decodeConfigFromUri(uri: String): ShareableConfig? {
+        if (!uri.startsWith(QR_SCHEME)) return null
+        val b64 = uri.removePrefix(QR_SCHEME)
+        return try {
+            val raw = Base64.decode(b64, Base64.NO_WRAP or Base64.URL_SAFE)
+            ShareableConfig.parseFrom(raw)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Render [uri] as a QR-code bitmap suitable for display.
+     */
+    fun renderQrBitmap(uri: String, size: Int = 512): Bitmap {
+        val writer = QRCodeWriter()
+        val matrix = writer.encode(uri, BarcodeFormat.QR_CODE, size, size)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+        for (x in 0 until size) {
+            for (y in 0 until size) {
+                bitmap.setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
+            }
+        }
+        return bitmap
+    }
+
     private companion object {
         /** Slots 0 and 1 are global (mesh/AirTAK-wide). Slot 2 is reserved for PTT audio. */
         const val MIN_UNIT_SLOT_INDEX = 3
+
+        const val QR_SCHEME = "airtak-config://"
     }
 
     private val _themeMode = MutableStateFlow(prefs.themeMode())

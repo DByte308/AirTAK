@@ -31,7 +31,7 @@ def patch_tft_espi(source, target, env):
         print(f"[patch_tft_espi] WARNING: {header} not found, skipping patch")
         return
 
-    with open(header, "r") as f:
+    with open(header, "r", encoding="utf-8") as f:
         text = f.read()
 
     # Already patched (either by this script or by manual edit)
@@ -43,7 +43,7 @@ def patch_tft_espi(source, target, env):
         return
 
     patched = text.replace(BAD_LINE, GOOD_LINE)
-    with open(header, "w") as f:
+    with open(header, "w", encoding="utf-8") as f:
         f.write(patched)
     print("[patch_tft_espi] Applied SPI_PORT=2 fix to TFT_eSPI_ESP32_S3.h")
 

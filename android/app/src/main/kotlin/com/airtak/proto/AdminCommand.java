@@ -67,6 +67,23 @@ public enum AdminCommand
    * <code>SET_PHONE_GPS = 6;</code>
    */
   SET_PHONE_GPS(6),
+  /**
+   * <pre>
+   * used when PositionConfig.gps_source = PHONE_GPS.
+   * The phone_gps field of AdminRequest must be populated.
+   * </pre>
+   *
+   * <code>OTA_ENTER = 7;</code>
+   */
+  OTA_ENTER(7),
+  /**
+   * <pre>
+   * finalize OTA (CRC check + reboot on ESP32; no-op on nRF52)
+   * </pre>
+   *
+   * <code>OTA_FINISH = 8;</code>
+   */
+  OTA_FINISH(8),
   UNRECOGNIZED(-1),
   ;
 
@@ -122,6 +139,23 @@ public enum AdminCommand
    * <code>SET_PHONE_GPS = 6;</code>
    */
   public static final int SET_PHONE_GPS_VALUE = 6;
+  /**
+   * <pre>
+   * used when PositionConfig.gps_source = PHONE_GPS.
+   * The phone_gps field of AdminRequest must be populated.
+   * </pre>
+   *
+   * <code>OTA_ENTER = 7;</code>
+   */
+  public static final int OTA_ENTER_VALUE = 7;
+  /**
+   * <pre>
+   * finalize OTA (CRC check + reboot on ESP32; no-op on nRF52)
+   * </pre>
+   *
+   * <code>OTA_FINISH = 8;</code>
+   */
+  public static final int OTA_FINISH_VALUE = 8;
 
 
   @java.lang.Override
@@ -152,6 +186,8 @@ public enum AdminCommand
       case 4: return GPS_RESET;
       case 5: return PAIR_CLEAR;
       case 6: return SET_PHONE_GPS;
+      case 7: return OTA_ENTER;
+      case 8: return OTA_FINISH;
       default: return null;
     }
   }

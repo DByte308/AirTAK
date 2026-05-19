@@ -14,8 +14,11 @@ package com.airtak.ui.settings
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +38,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -64,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -80,7 +85,10 @@ import com.airtak.ui.components.HudCard
 import com.airtak.ui.components.SectionLabel
 import com.airtak.ui.components.TacticalText
 import com.airtak.ui.theme.AccentAmber
+import com.airtak.ui.theme.StatusActive
 import com.airtak.ui.theme.ThemeMode
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 
 private enum class Section(val title: String, val subtitle: String) {
     Player("Player", "Callsign, name, unit hierarchy, hit button"),
@@ -90,6 +98,7 @@ private enum class Section(val title: String, val subtitle: String) {
     Security("Security", "BLE bond count"),
     Moderation("Moderation", "Vote-kick bans, ban list, unban"),
     App("Application", "Theme, tile server, defaults"),
+    Share("Share Config", "QR export / scan import of LoRa, channels, unit setup"),
     About("About", "Diagnostics, factory reset"),
 }
 
@@ -129,6 +138,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     Section.Security -> SecuritySection(viewModel)
                     Section.Moderation -> ModerationSection(viewModel)
                     Section.App -> AppSection(viewModel)
+                    Section.Share -> ShareSection(viewModel)
                     Section.About -> AboutSection(viewModel)
                 }
             }
@@ -274,6 +284,16 @@ private fun PlayerSection(
                 label = { Text("Short name (max 4 B)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            OutlinedButton(onClick = { vm.generateRandomIdentity() }) {
+                Text("Generate random identity")
+            }
+        }
+        TacticalText(
+            "Generates random hexadecimal identifiers for callsign, long name, and short name. These are unique per device and are not included in QR config sharing.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
         SectionLabel("Unit hierarchy (optional, self-organized)")
@@ -1312,6 +1332,223 @@ private fun AppSection(vm: SettingsViewModel) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+// ── SHARE CONFIG ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun ShareSection(vm: SettingsViewModel) {
+    val context = LocalContext.current
+    var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var qrUriString by remember { mutableStateOf("") }
+    var importState by remember { mutableStateOf<ImportState>(ImportState.Idle) }
+    val busy = vm.busy.collectAsState().value
+
+    // Pre-fill QR on first visit
+    if (qrBitmap == null) {
+        val config = vm.buildShareableConfig()
+        val uri = vm.encodeConfigToUri(config)
+        qrUriString = uri
+        qrBitmap = vm.renderQrBitmap(uri)
+    }
+
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        if (result.contents != null) {
+            val decoded = vm.decodeConfigFromUri(result.contents)
+            if (decoded != null) {
+                importState = ImportState.Ready(decoded)
+            } else {
+                importState = ImportState.Error("The scanned QR code does not contain a valid AirTAK config.")
+            }
+        }
+        // result.contents == null means the user cancelled
+    }
+
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+        // ── Export ──────────────────────────────────────────────────────────
+        SectionLabel("Export config as QR code")
+        TacticalText(
+            "Generates a QR code containing your LoRa radio settings, all 8 channel slots (including PSKs), and unit hierarchy assignments. Device names and callsigns are deliberately excluded — every device must have unique identifiers.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+
+        qrBitmap?.let { bmp ->
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "QR code with AirTAK config",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White)
+                    .padding(16.dp),
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(
+            onClick = {
+                // Re-generate to pick up any changes since last read
+                val config = vm.buildShareableConfig()
+                val uri = vm.encodeConfigToUri(config)
+                qrUriString = uri
+                qrBitmap = vm.renderQrBitmap(uri)
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Refresh QR code") }
+
+        TacticalText(
+            "Have the other player scan this QR code from their Settings → Share Config → Import tab.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        OutlinedButton(
+            onClick = {
+                val sendIntent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    putExtra(Intent.EXTRA_TEXT, qrUriString)
+                    type = "text/plain"
+                }
+                context.startActivity(Intent.createChooser(sendIntent, "Share AirTAK config"))
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Share config link") }
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(16.dp))
+
+        // ── Import ──────────────────────────────────────────────────────────
+        SectionLabel("Import config from QR code")
+        TacticalText(
+            "Scan a QR code from another AirTAK device to import their LoRa radio settings, channel setup (including PSKs), and unit hierarchy. Your device names and callsign are preserved — they are never overwritten by an import.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+
+        when (val state = importState) {
+            is ImportState.Idle -> {
+                Button(
+                    onClick = {
+                        val options = ScanOptions()
+                            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                            .setPrompt("Scan an AirTAK config QR code")
+                            .setBeepEnabled(false)
+                        scanLauncher.launch(options)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Scan QR code") }
+            }
+            is ImportState.Error -> {
+                Text(
+                    state.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        importState = ImportState.Idle
+                        val options = ScanOptions()
+                            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                            .setPrompt("Scan an AirTAK config QR code")
+                            .setBeepEnabled(false)
+                        scanLauncher.launch(options)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Try again") }
+            }
+            is ImportState.Ready -> {
+                val cfg = state.config
+                HudCard(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Import summary",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        cfg.loraOrNull?.let { lora ->
+                            Text(
+                                "LoRa: ${lora.region.name}, TX ${lora.txPowerDbm} dBm, ${lora.profilesCount} PHY profiles",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        cfg.channelsOrNull?.let { ch ->
+                            val activeCount = ch.slotsList.count { it.role != ChannelRole.DISABLED }
+                            val encryptedCount = ch.slotsList.count { it.psk.size() > 0 }
+                            Text(
+                                "Channels: $activeCount active, $encryptedCount with PSK",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        cfg.gameOrNull?.let { game ->
+                            val unitParts = listOfNotNull(
+                                game.companyId.takeIf { it.isNotBlank() }?.let { "Company: $it" },
+                                game.platoonId.takeIf { it.isNotBlank() }?.let { "Platoon: $it" },
+                                game.squadId.takeIf { it.isNotBlank() }?.let { "Squad: $it" },
+                                game.fireteamId.takeIf { it.isNotBlank() }?.let { "Fireteam: $it" },
+                            )
+                            if (unitParts.isNotEmpty()) {
+                                Text(
+                                    unitParts.joinToString(" · "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = { importState = ImportState.Idle },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Cancel") }
+                    Button(
+                        onClick = {
+                            vm.importShareableConfig(cfg)
+                            importState = ImportState.Applied
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !busy,
+                    ) { Text(if (busy) "Applying…" else "Apply to device") }
+                }
+
+                RadioRestartBanner()
+            }
+            is ImportState.Applied -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.Check,
+                        contentDescription = null,
+                        tint = StatusActive,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        "Config applied! LoRa and channel settings have been pushed to the device. A radio restart may be in progress.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = StatusActive,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = { importState = ImportState.Idle },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Scan another") }
+            }
+        }
+    }
+}
+
+private sealed class ImportState {
+    data object Idle : ImportState()
+    data class Ready(val config: com.airtak.proto.ShareableConfig) : ImportState()
+    data class Error(val message: String) : ImportState()
+    data object Applied : ImportState()
 }
 
 // ── ABOUT ─────────────────────────────────────────────────────────────────────

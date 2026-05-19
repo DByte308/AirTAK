@@ -19,6 +19,7 @@
 #include <FreeRTOS.h>
 #include <queue.h>
 #include <cstring>
+#include <cstdio>
 #include <Arduino.h>
 
 extern QueueHandle_t g_config_change_queue;
@@ -109,10 +110,19 @@ static void copyString(char* dest, size_t dest_len, const char* src) {
     dest[dest_len - 1] = '\0';
 }
 
+static void randomHexString(char* dest, size_t dest_len, size_t hex_len) {
+    if (dest_len == 0) return;
+    size_t n = (hex_len < dest_len - 1) ? hex_len : dest_len - 1;
+    for (size_t i = 0; i < n; i++) {
+        dest[i] = "0123456789ABCDEF"[random(0, 16)];
+    }
+    dest[n] = '\0';
+}
+
 static size_t encodeDeviceConfig(uint8_t* buf, size_t buf_len) {
     airtak_DeviceConfig msg = airtak_DeviceConfig_init_zero;
-    copyString(msg.long_name, sizeof(msg.long_name), defaults::DEVICE_LONG_NAME);
-    copyString(msg.short_name, sizeof(msg.short_name), defaults::DEVICE_SHORT_NAME);
+    randomHexString(msg.long_name, sizeof(msg.long_name), 8);
+    randomHexString(msg.short_name, sizeof(msg.short_name), 4);
     return encodeMessage(airtak_DeviceConfig_fields, &msg, buf, buf_len);
 }
 
@@ -174,7 +184,7 @@ static size_t encodePowerConfig(uint8_t* buf, size_t buf_len) {
 
 static size_t encodeGameConfig(uint8_t* buf, size_t buf_len) {
     airtak_GameConfig msg = airtak_GameConfig_init_zero;
-    copyString(msg.callsign, sizeof(msg.callsign), defaults::GAME_CALLSIGN);
+    randomHexString(msg.callsign, sizeof(msg.callsign), 6);
     copyString(msg.fireteam_id, sizeof(msg.fireteam_id), defaults::GAME_FIRETEAM_ID);
     copyString(msg.squad_id, sizeof(msg.squad_id), defaults::GAME_SQUAD_ID);
     copyString(msg.platoon_id, sizeof(msg.platoon_id), defaults::GAME_PLATOON_ID);

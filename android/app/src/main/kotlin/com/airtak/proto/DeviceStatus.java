@@ -22,6 +22,8 @@ public  final class DeviceStatus extends
     nodeName_ = "";
     firmwareVersion_ = "";
     bluetoothAddress_ = "";
+    boardId_ = "";
+    platform_ = "";
   }
   private int bitField0_;
   public static final int NODE_ID_FIELD_NUMBER = 1;
@@ -694,6 +696,142 @@ public  final class DeviceStatus extends
   private void clearDcRelaysDropped() {
 
     dcRelaysDropped_ = 0;
+  }
+
+  public static final int BOARD_ID_FIELD_NUMBER = 16;
+  private java.lang.String boardId_;
+  /**
+   * <pre>
+   * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+   * </pre>
+   *
+   * <code>string board_id = 16;</code>
+   * @return The boardId.
+   */
+  @java.lang.Override
+  public java.lang.String getBoardId() {
+    return boardId_;
+  }
+  /**
+   * <pre>
+   * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+   * </pre>
+   *
+   * <code>string board_id = 16;</code>
+   * @return The bytes for boardId.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getBoardIdBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(boardId_);
+  }
+  /**
+   * <pre>
+   * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+   * </pre>
+   *
+   * <code>string board_id = 16;</code>
+   * @param value The boardId to set.
+   */
+  @java.lang.SuppressWarnings("ReturnValueIgnored")
+  private void setBoardId(
+      java.lang.String value) {
+    value.getClass();  // minimal bytecode null check
+
+    boardId_ = value;
+  }
+  /**
+   * <pre>
+   * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+   * </pre>
+   *
+   * <code>string board_id = 16;</code>
+   */
+  private void clearBoardId() {
+
+    boardId_ = getDefaultInstance().getBoardId();
+  }
+  /**
+   * <pre>
+   * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+   * </pre>
+   *
+   * <code>string board_id = 16;</code>
+   * @param value The bytes for boardId to set.
+   */
+  private void setBoardIdBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    boardId_ = value.toStringUtf8();
+
+  }
+
+  public static final int PLATFORM_FIELD_NUMBER = 17;
+  private java.lang.String platform_;
+  /**
+   * <pre>
+   * "nRF52840", "ESP32-S3", etc.
+   * </pre>
+   *
+   * <code>string platform = 17;</code>
+   * @return The platform.
+   */
+  @java.lang.Override
+  public java.lang.String getPlatform() {
+    return platform_;
+  }
+  /**
+   * <pre>
+   * "nRF52840", "ESP32-S3", etc.
+   * </pre>
+   *
+   * <code>string platform = 17;</code>
+   * @return The bytes for platform.
+   */
+  @java.lang.Override
+  public com.google.protobuf.ByteString
+      getPlatformBytes() {
+    return com.google.protobuf.ByteString.copyFromUtf8(platform_);
+  }
+  /**
+   * <pre>
+   * "nRF52840", "ESP32-S3", etc.
+   * </pre>
+   *
+   * <code>string platform = 17;</code>
+   * @param value The platform to set.
+   */
+  @java.lang.SuppressWarnings("ReturnValueIgnored")
+  private void setPlatform(
+      java.lang.String value) {
+    value.getClass();  // minimal bytecode null check
+
+    platform_ = value;
+  }
+  /**
+   * <pre>
+   * "nRF52840", "ESP32-S3", etc.
+   * </pre>
+   *
+   * <code>string platform = 17;</code>
+   */
+  private void clearPlatform() {
+
+    platform_ = getDefaultInstance().getPlatform();
+  }
+  /**
+   * <pre>
+   * "nRF52840", "ESP32-S3", etc.
+   * </pre>
+   *
+   * <code>string platform = 17;</code>
+   * @param value The bytes for platform to set.
+   */
+  private void setPlatformBytes(
+      com.google.protobuf.ByteString value) {
+    checkByteStringIsUtf8(value);
+    platform_ = value.toStringUtf8();
+
   }
 
   public static com.airtak.proto.DeviceStatus parseFrom(
@@ -1493,6 +1631,144 @@ public  final class DeviceStatus extends
       return this;
     }
 
+    /**
+     * <pre>
+     * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+     * </pre>
+     *
+     * <code>string board_id = 16;</code>
+     * @return The boardId.
+     */
+    @java.lang.Override
+    public java.lang.String getBoardId() {
+      return instance.getBoardId();
+    }
+    /**
+     * <pre>
+     * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+     * </pre>
+     *
+     * <code>string board_id = 16;</code>
+     * @return The bytes for boardId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getBoardIdBytes() {
+      return instance.getBoardIdBytes();
+    }
+    /**
+     * <pre>
+     * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+     * </pre>
+     *
+     * <code>string board_id = 16;</code>
+     * @param value The boardId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setBoardId(
+        java.lang.String value) {
+      copyOnWrite();
+      instance.setBoardId(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+     * </pre>
+     *
+     * <code>string board_id = 16;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearBoardId() {
+      copyOnWrite();
+      instance.clearBoardId();
+      return this;
+    }
+    /**
+     * <pre>
+     * matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc.
+     * </pre>
+     *
+     * <code>string board_id = 16;</code>
+     * @param value The bytes for boardId to set.
+     * @return This builder for chaining.
+     */
+    public Builder setBoardIdBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setBoardIdBytes(value);
+      return this;
+    }
+
+    /**
+     * <pre>
+     * "nRF52840", "ESP32-S3", etc.
+     * </pre>
+     *
+     * <code>string platform = 17;</code>
+     * @return The platform.
+     */
+    @java.lang.Override
+    public java.lang.String getPlatform() {
+      return instance.getPlatform();
+    }
+    /**
+     * <pre>
+     * "nRF52840", "ESP32-S3", etc.
+     * </pre>
+     *
+     * <code>string platform = 17;</code>
+     * @return The bytes for platform.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getPlatformBytes() {
+      return instance.getPlatformBytes();
+    }
+    /**
+     * <pre>
+     * "nRF52840", "ESP32-S3", etc.
+     * </pre>
+     *
+     * <code>string platform = 17;</code>
+     * @param value The platform to set.
+     * @return This builder for chaining.
+     */
+    public Builder setPlatform(
+        java.lang.String value) {
+      copyOnWrite();
+      instance.setPlatform(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * "nRF52840", "ESP32-S3", etc.
+     * </pre>
+     *
+     * <code>string platform = 17;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearPlatform() {
+      copyOnWrite();
+      instance.clearPlatform();
+      return this;
+    }
+    /**
+     * <pre>
+     * "nRF52840", "ESP32-S3", etc.
+     * </pre>
+     *
+     * <code>string platform = 17;</code>
+     * @param value The bytes for platform to set.
+     * @return This builder for chaining.
+     */
+    public Builder setPlatformBytes(
+        com.google.protobuf.ByteString value) {
+      copyOnWrite();
+      instance.setPlatformBytes(value);
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:airtak.DeviceStatus)
   }
   @java.lang.Override
@@ -1525,11 +1801,14 @@ public  final class DeviceStatus extends
             "dcLimitMsPerHour_",
             "dcPercentage_",
             "dcRelaysDropped_",
+            "boardId_",
+            "platform_",
           };
           java.lang.String info =
-              "\u0000\u000f\u0000\u0001\u0001\u000f\u000f\u0000\u0000\u0000\u0001\u000b\u0002\u0208" +
+              "\u0000\u0011\u0000\u0001\u0001\u0011\u0011\u0000\u0000\u0000\u0001\u000b\u0002\u0208" +
               "\u0003\u0001\u0004\u0007\u0005\u1009\u0000\u0006\u1009\u0001\u0007\u000b\b\u000b" +
-              "\t\u0208\n\u0208\u000b\f\f\u000b\r\u000b\u000e\u000b\u000f\u000b";
+              "\t\u0208\n\u0208\u000b\f\f\u000b\r\u000b\u000e\u000b\u000f\u000b\u0010\u0208\u0011" +
+              "\u0208";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       case GET_DEFAULT_INSTANCE: {

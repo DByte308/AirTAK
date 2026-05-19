@@ -169,6 +169,19 @@ message GameConfig {
   bool   hit_button_enabled = 7;  // enable long-press HIT toggle on device button; default false
 }
 
+// ── Shareable config ─────────────────────────────────────────────────────────
+
+// Bundles LoraConfig, ChannelConfig (with PSKs), and the unit-hierarchy subset
+// of GameConfig into a single binary blob for QR-code sharing. The receiver
+// imports these three groups and pushes them to the device in one batch.
+// DeviceConfig (names) and GameConfig.callsign are deliberately excluded —
+// every device must have unique identifiers (§11.13).
+message ShareableConfig {
+  LoraConfig    lora     = 1;   // region, TX power, 5 PHY profiles
+  ChannelConfig channels = 2;   // all 8 slots including PSKs
+  GameConfig    game     = 3;   // unit hierarchy fields only (callsign stripped on import)
+}
+
 // ── Security ──────────────────────────────────────────────────────────────────
 
 // Roadmap: 1.5 | BLE bond management. No radio restart required.

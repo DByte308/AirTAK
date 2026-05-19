@@ -43,6 +43,10 @@
 #include <cstring>
 #include <esp_system.h>
 
+#if defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
+#include "ota/OtaService.h"
+#endif
+
 extern QueueHandle_t g_ble_tx_queue;
 extern EventGroupHandle_t g_radio_event_group;
 
@@ -55,6 +59,10 @@ static NimBLECharacteristic* s_mesh_tx   = nullptr;
 static NimBLECharacteristic* s_mesh_rx   = nullptr;
 static NimBLECharacteristic* s_status    = nullptr;
 static NimBLECharacteristic* s_admin     = nullptr;
+#if defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
+static NimBLECharacteristic* s_ota_cmd   = nullptr;
+static NimBLECharacteristic* s_ota_data  = nullptr;
+#endif
 
 static QueueHandle_t    s_mesh_rx_queue   = nullptr;
 static QueueHandle_t    s_radio_tx_queue  = nullptr;
@@ -70,6 +78,11 @@ static uint64_t s_config_apply_started_ms = 0;
 static volatile bool s_pending_config_restart = false;
 static airtak_ConfigGroup s_pending_config_group = airtak_ConfigGroup_DEVICE;
 static uint64_t s_pending_config_started_ms = 0;
+
+#if defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
+static uint8_t  s_ota_cmd_assembly[128];
+static uint64_t s_ota_cmd_recv_mask = 0;
+#endif
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -245,6 +258,19 @@ class AdminCallbacks : public NimBLECharacteristicCallbacks {
                 DFUService::enterDfu();
                 success = true;
                 break;
+#if defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
+            case airtak_AdminCommand_OTA_ENTER:
+                // OTA_ENTER via admin channel is a trigger for the ESP32
+                // to prepare for OTA.  Actual data transfer uses OTA_COMMAND
+                // and OTA_DATA characteristics.  Just ack.
+                success = true;
+                break;
+            case airtak_AdminCommand_OTA_FINISH:
+                // Not used — OTA_COMMAND characteristic handles finish().
+                // Respond success for protocol compatibility.
+                success = true;
+                break;
+#endif
             case airtak_AdminCommand_RADIO_RESTART:
                 config::ConfigManager::radioRestartProcedure();
                 success = true;
@@ -285,6 +311,72 @@ class AdminCallbacks : public NimBLECharacteristicCallbacks {
     }
 };
 
+#if defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
+class OtaCommandCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* chr) override {
+        std::string val = chr->getValue();
+        const uint8_t* data = reinterpret_cast<const uint8_t*>(val.data());
+        uint16_t len = static_cast<uint16_t>(val.size());
+
+        FrameHeader hdr;
+        const uint8_t* chunk_payload;
+        size_t chunk_len;
+        if (!Framing::decodeChunk(data, len, &hdr, &chunk_payload, &chunk_len)) return;
+        if (hdr.total_length > sizeof(s_ota_cmd_assembly)) return;
+        if (hdr.chunk_index == 0) {
+            memset(s_ota_cmd_assembly, 0, sizeof(s_ota_cmd_assembly));
+            s_ota_cmd_recv_mask = 0;
+        }
+        bool done = Framing::reassemble(hdr, chunk_payload, chunk_len,
+                                        s_ota_cmd_assembly, &s_ota_cmd_recv_mask);
+        if (!done) return;
+
+        airtak_OtaCommand cmd = airtak_OtaCommand_init_zero;
+        pb_istream_t in_stream = pb_istream_from_buffer(s_ota_cmd_assembly, hdr.total_length);
+        if (!pb_decode(&in_stream, airtak_OtaCommand_fields, &cmd)) return;
+
+        airtak_OtaStatus status_msg = airtak_OtaStatus_init_zero;
+
+        if (cmd.which_command == airtak_OtaCommand_start_tag) {
+            bool ok = ota::OtaService::begin(
+                cmd.command.start.image_size,
+                cmd.command.start.crc32);
+            status_msg.state = ok ? airtak_OtaState_OTA_RECEIVING
+                                  : airtak_OtaState_OTA_ERROR;
+            status_msg.total_size = cmd.command.start.image_size;
+        } else if (cmd.which_command == airtak_OtaCommand_finish_tag) {
+            bool ok = ota::OtaService::finish(cmd.command.finish.crc32);
+            status_msg.state = ok ? airtak_OtaState_OTA_COMPLETE
+                                  : airtak_OtaState_OTA_ERROR;
+        } else if (cmd.which_command == airtak_OtaCommand_status_tag) {
+            auto s = ota::OtaService::state();
+            status_msg.state         = static_cast<airtak_OtaState>(static_cast<uint8_t>(s));
+            status_msg.bytes_written = ota::OtaService::bytesWritten();
+            status_msg.total_size    = ota::OtaService::totalSize();
+        } else if (cmd.which_command == airtak_OtaCommand_cancel_tag) {
+            ota::OtaService::cancel();
+            status_msg.state = airtak_OtaState_OTA_IDLE;
+        }
+
+        uint8_t buf[128];
+        pb_ostream_t out = pb_ostream_from_buffer(buf, sizeof(buf));
+        if (pb_encode(&out, airtak_OtaStatus_fields, &status_msg)) {
+            sendFramed(s_ota_cmd, buf,
+                       static_cast<uint16_t>(out.bytes_written), true);
+        }
+    }
+};
+
+class OtaDataCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* chr) override {
+        std::string val = chr->getValue();
+        const uint8_t* data = reinterpret_cast<const uint8_t*>(val.data());
+        size_t len = val.size();
+        ota::OtaService::writeChunk(data, len);
+    }
+};
+#endif
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 void AirTAKService::init(QueueHandle_t mesh_rx_queue) {
@@ -323,6 +415,21 @@ void AirTAKService::init(QueueHandle_t mesh_rx_queue) {
         NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN |
         NIMBLE_PROPERTY::INDICATE);
     s_admin->setCallbacks(new AdminCallbacks());
+
+#if defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
+    // OTA_COMMAND — write/notify, authenticated (ENC_WITH_MITM)
+    s_ota_cmd = pSvc->createCharacteristic(
+        CHAR_OTA_COMMAND_UUID,
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN |
+        NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_AUTHEN);
+    s_ota_cmd->setCallbacks(new OtaCommandCallbacks());
+
+    // OTA_DATA — write-without-response, authenticated write
+    s_ota_data = pSvc->createCharacteristic(
+        CHAR_OTA_DATA_UUID,
+        NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_AUTHEN);
+    s_ota_data->setCallbacks(new OtaDataCallbacks());
+#endif
 
     pSvc->start();
 }
