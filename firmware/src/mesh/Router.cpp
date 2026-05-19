@@ -19,6 +19,7 @@
 #include "mesh/ChannelManager.h"
 #include "mesh/MeshNode.h"
 #include "mesh/PacketPool.h"
+#include "mesh/DcTracker.h"
 #include "ble/BLEQueue.h"
 #include "config/Defaults.h"
 #include "config/ConfigManager.h"
@@ -407,6 +408,8 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                              QueueHandle_t tx_queue) {
     if (raw_len < OTA_HEADER_BYTES) return;
 
+    DcTracker::tick();
+
     // Parse OTA header (§8.2).
     OtaHeader hdr;
     memcpy(&hdr.dest_node_id, raw + 0, 4);
@@ -632,6 +635,28 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             buildOtaHeader(relay_buf, relay_hdr);
             // Re-encrypt with the original (still-encrypted) payload for relay.
             memcpy(relay_buf + OTA_HEADER_BYTES, payload, payload_len);
+
+            // DC-aware relay suppression gate (§8.7.1, Roadmap 6.10).
+            // Applied after heard-by suppression: only packets that survive
+            // heard-by cancellation reach this gate. Source traffic never
+            // reaches here (returned at self-origin check above).
+            {
+                DcLevel dc_level = DcTracker::currentLevel();
+                if (dc_level >= DcLevel::DC_WARNING) {
+                    bool is_tier1 = DcTracker::isTier1Relay(
+                        static_cast<Portnum>(portnum_value));
+                    if (portnum_value == static_cast<uint32_t>(Portnum::AIRTAK_PLAYER)) {
+                        // Promote state transitions to Tier 1; heartbeats stay Tier 2.
+                        is_tier1 = airtakPlayerIsStateTransition(decrypted, payload_len);
+                    }
+                    if (dc_level >= DcLevel::DC_CRITICAL && !is_tier1) {
+                        return;  // drop Tier 2 at CRITICAL
+                    }
+                    if (dc_level >= DcLevel::DC_WARNING && !is_tier1) {
+                        return;  // drop Tier 2 at WARNING
+                    }
+                }
+            }
 
             // Add to pending relay queue. If full, evict the entry with the earliest
             // send_after_ms (oldest queued relay) so the most recent packet — likely

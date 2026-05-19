@@ -41,6 +41,7 @@
 #include "mesh/MeshNode.h"
 #include "mesh/ChannelManager.h"
 #include "mesh/PacketPool.h"
+#include "mesh/DcTracker.h"
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "config.h"
@@ -95,6 +96,10 @@ static uint16_t buildDeviceStatus(uint8_t* buf, uint16_t buf_len) {
     status.uptime_seconds   = millis() / 1000;
     strncpy(status.firmware_version, AIRTAK_FIRMWARE_VERSION_STR,
             sizeof(status.firmware_version) - 1);
+
+    status.dc_level = static_cast<airtak_DcLevel>(DcTracker::currentLevel());
+    status.trailing_hour_ms = DcTracker::trailingHourMs();
+
     std::string bt_addr = NimBLEDevice::getAddress().toString();
     strncpy(status.bluetooth_address, bt_addr.c_str(), sizeof(status.bluetooth_address) - 1);
 

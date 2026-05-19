@@ -482,6 +482,106 @@ public  final class DeviceStatus extends
 
   }
 
+  public static final int DC_LEVEL_FIELD_NUMBER = 11;
+  private int dcLevel_;
+  /**
+   * <pre>
+   * current duty-cycle throttle level (§8.7.1)
+   * </pre>
+   *
+   * <code>.airtak.DcLevel dc_level = 11;</code>
+   * @return The enum numeric value on the wire for dcLevel.
+   */
+  @java.lang.Override
+  public int getDcLevelValue() {
+    return dcLevel_;
+  }
+  /**
+   * <pre>
+   * current duty-cycle throttle level (§8.7.1)
+   * </pre>
+   *
+   * <code>.airtak.DcLevel dc_level = 11;</code>
+   * @return The dcLevel.
+   */
+  @java.lang.Override
+  public com.airtak.proto.DcLevel getDcLevel() {
+    com.airtak.proto.DcLevel result = com.airtak.proto.DcLevel.forNumber(dcLevel_);
+    return result == null ? com.airtak.proto.DcLevel.UNRECOGNIZED : result;
+  }
+  /**
+   * <pre>
+   * current duty-cycle throttle level (§8.7.1)
+   * </pre>
+   *
+   * <code>.airtak.DcLevel dc_level = 11;</code>
+   * @param value The enum numeric value on the wire for dcLevel to set.
+   */
+  private void setDcLevelValue(int value) {
+      dcLevel_ = value;
+  }
+  /**
+   * <pre>
+   * current duty-cycle throttle level (§8.7.1)
+   * </pre>
+   *
+   * <code>.airtak.DcLevel dc_level = 11;</code>
+   * @param value The dcLevel to set.
+   */
+  private void setDcLevel(com.airtak.proto.DcLevel value) {
+    dcLevel_ = value.getNumber();
+
+  }
+  /**
+   * <pre>
+   * current duty-cycle throttle level (§8.7.1)
+   * </pre>
+   *
+   * <code>.airtak.DcLevel dc_level = 11;</code>
+   */
+  private void clearDcLevel() {
+
+    dcLevel_ = 0;
+  }
+
+  public static final int TRAILING_HOUR_MS_FIELD_NUMBER = 12;
+  private int trailingHourMs_;
+  /**
+   * <pre>
+   * trailing-hour accumulator in milliseconds
+   * </pre>
+   *
+   * <code>uint32 trailing_hour_ms = 12;</code>
+   * @return The trailingHourMs.
+   */
+  @java.lang.Override
+  public int getTrailingHourMs() {
+    return trailingHourMs_;
+  }
+  /**
+   * <pre>
+   * trailing-hour accumulator in milliseconds
+   * </pre>
+   *
+   * <code>uint32 trailing_hour_ms = 12;</code>
+   * @param value The trailingHourMs to set.
+   */
+  private void setTrailingHourMs(int value) {
+    
+    trailingHourMs_ = value;
+  }
+  /**
+   * <pre>
+   * trailing-hour accumulator in milliseconds
+   * </pre>
+   *
+   * <code>uint32 trailing_hour_ms = 12;</code>
+   */
+  private void clearTrailingHourMs() {
+
+    trailingHourMs_ = 0;
+  }
+
   public static com.airtak.proto.DeviceStatus parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -1053,6 +1153,112 @@ public  final class DeviceStatus extends
       return this;
     }
 
+    /**
+     * <pre>
+     * current duty-cycle throttle level (§8.7.1)
+     * </pre>
+     *
+     * <code>.airtak.DcLevel dc_level = 11;</code>
+     * @return The enum numeric value on the wire for dcLevel.
+     */
+    @java.lang.Override
+    public int getDcLevelValue() {
+      return instance.getDcLevelValue();
+    }
+    /**
+     * <pre>
+     * current duty-cycle throttle level (§8.7.1)
+     * </pre>
+     *
+     * <code>.airtak.DcLevel dc_level = 11;</code>
+     * @param value The dcLevel to set.
+     * @return This builder for chaining.
+     */
+    public Builder setDcLevelValue(int value) {
+      copyOnWrite();
+      instance.setDcLevelValue(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * current duty-cycle throttle level (§8.7.1)
+     * </pre>
+     *
+     * <code>.airtak.DcLevel dc_level = 11;</code>
+     * @return The dcLevel.
+     */
+    @java.lang.Override
+    public com.airtak.proto.DcLevel getDcLevel() {
+      return instance.getDcLevel();
+    }
+    /**
+     * <pre>
+     * current duty-cycle throttle level (§8.7.1)
+     * </pre>
+     *
+     * <code>.airtak.DcLevel dc_level = 11;</code>
+     * @param value The enum numeric value on the wire for dcLevel to set.
+     * @return This builder for chaining.
+     */
+    public Builder setDcLevel(com.airtak.proto.DcLevel value) {
+      copyOnWrite();
+      instance.setDcLevel(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * current duty-cycle throttle level (§8.7.1)
+     * </pre>
+     *
+     * <code>.airtak.DcLevel dc_level = 11;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearDcLevel() {
+      copyOnWrite();
+      instance.clearDcLevel();
+      return this;
+    }
+
+    /**
+     * <pre>
+     * trailing-hour accumulator in milliseconds
+     * </pre>
+     *
+     * <code>uint32 trailing_hour_ms = 12;</code>
+     * @return The trailingHourMs.
+     */
+    @java.lang.Override
+    public int getTrailingHourMs() {
+      return instance.getTrailingHourMs();
+    }
+    /**
+     * <pre>
+     * trailing-hour accumulator in milliseconds
+     * </pre>
+     *
+     * <code>uint32 trailing_hour_ms = 12;</code>
+     * @param value The trailingHourMs to set.
+     * @return This builder for chaining.
+     */
+    public Builder setTrailingHourMs(int value) {
+      copyOnWrite();
+      instance.setTrailingHourMs(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * trailing-hour accumulator in milliseconds
+     * </pre>
+     *
+     * <code>uint32 trailing_hour_ms = 12;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearTrailingHourMs() {
+      copyOnWrite();
+      instance.clearTrailingHourMs();
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:airtak.DeviceStatus)
   }
   @java.lang.Override
@@ -1080,11 +1286,13 @@ public  final class DeviceStatus extends
             "uptimeSeconds_",
             "firmwareVersion_",
             "bluetoothAddress_",
+            "dcLevel_",
+            "trailingHourMs_",
           };
           java.lang.String info =
-              "\u0000\n\u0000\u0001\u0001\n\n\u0000\u0000\u0000\u0001\u000b\u0002\u0208\u0003\u0001" +
+              "\u0000\f\u0000\u0001\u0001\f\f\u0000\u0000\u0000\u0001\u000b\u0002\u0208\u0003\u0001" +
               "\u0004\u0007\u0005\u1009\u0000\u0006\u1009\u0001\u0007\u000b\b\u000b\t\u0208\n\u0208" +
-              "";
+              "\u000b\f\f\u000b";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       case GET_DEFAULT_INSTANCE: {

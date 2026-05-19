@@ -10,6 +10,7 @@
 #include "mesh/ChannelManager.h"
 #include "mesh/Router.h"
 #include "mesh/PacketPool.h"
+#include "mesh/DcTracker.h"
 #include "ble/BLEQueue.h"
 #include "config.h"
 #include "airtak/config.pb.h"
@@ -344,6 +345,7 @@ void ConfigManager::radioRestartProcedure() {
 
     Radio::reinit();
     ChannelManager::rekey();
+    DcTracker::reset();  // accumulator invalid after region/PHY change (§8.7.1)
     Radio::resume();
     s_radio_restart_pending = false;
 }

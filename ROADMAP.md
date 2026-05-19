@@ -1,8 +1,9 @@
 # AirTAK — Development Roadmap
 ## Status: IMMUTABLE AFTER ACCEPTANCE — 2026-05-13
-## Derived from: PLANNING.md v1.6
+## Derived from: PLANNING.md v1.7
 ## Amendment: v1.5 — 2026-05-14 — Hop limits unified to 7 for all packet types except AIRTAK_AUDIO=1 (§8.7). Deliverable 2.9 verification values updated accordingly. Profile 3 (Medium/Slow SF10/BW250/CR4/5) added; User Defined moves to index 4 (§8.1).
 ## Amendment: v1.6 — 2026-05-17 — Phase 5 redesign: game-mode system replaced with tactical coordination model. All Phase 5 deliverables rewritten. Formal game modes, admin role, lobby/pause, respawn timers, win conditions, and scoring removed. Replaced with: unit hierarchy configuration, scoped information sharing, tactical marker system (AIRTAK_TACTICAL portnum 257), simplified player status, manual Active/Ended toggle, roster by hierarchy, marker management screen, marker re-broadcast on connect, and decentralized vote-kick moderation (AIRTAK_MODERATION portnum 258) with 3-vote shadowban threshold and 24-hour auto-expiry. Portnums 259–260 reserved. Phase 6 field test validators updated. Cross-dependencies and T.9 updated.
+## Amendment: v1.7 — 2026-05-19 — Duty-cycle-aware relay suppression added to Phase 6 as deliverable 6.10 per PLANNING.md §8.7.1. Trailing-hour accumulator, relay priority classification (Tier 0/1/2), Android DC status display, and e-ink indicators. Phase 6 exit tests extended with DC validation criteria. Cross-dependency table updated; 6.4 now depends on 6.10.
 
 This roadmap enumerates every deliverable required to produce a production-ready AirTAK system. Deliverables are organized into the seven sequential phases defined in §16 of PLANNING.md. A phase MUST NOT be declared complete until every deliverable within it is implemented and every test specified for it in §19 has passed.
 
@@ -149,10 +150,11 @@ All items in Phase 6 depend on all of Phase 5 being complete.
 | **6.7** | Fully offline end-to-end test | From a cold app launch with airplane mode enabled (no internet), run a complete tactical exercise (position sharing, marker creation, scoped messaging, Active→Ended toggle) on ≥ 3 devices. Verify: MapLibre renders from MBTiles (previously downloaded), BLE connects, all coordination features functional, no error dialogs or crashes attributable to lack of internet. | ⊣ 6.4 |
 | **6.8** | Daylight readability review | In direct sunlight: verify e-ink display contrast is legible for all four screen layouts (Main, Messages, Roster, Radio). In direct sunlight: verify Android app text and status chips are legible. Document any contrast deficiencies and fix before declaring Phase 6 complete. | ⊣ 6.4 |
 | **6.9** | Per-slot PHY field test | With two AirTAK devices, activate two channel slots on the same device — slot 0 on Profile 0 (SF11/BW250) and slot 1 on Profile 1 (SF7/BW250). Verify: a Profile 0 device cannot receive Profile 1 transmissions (PHY isolation); a Profile 1 device cannot receive Profile 0 transmissions. Trigger a radio restart via PHY profile change over BLE; verify restart completes in ≤ 300 ms and the BLE connection is maintained throughout. | ⊣ 6.4 |
+| **6.10** | Duty-cycle-aware relay suppression | Implement the trailing-hour accumulator and relay throttle per §8.7.1. Firmware: circular buffer of TxRecord entries tracking `(timestamp_ms, toa_ms)` for all transmits over the trailing 3 600 s window; accumulator sum `trailing_hour_ms` updated O(1) per transmit. Thresholds in `Defaults.h`: `DC_CAUTION` (60 %), `DC_WARNING` (80 %), `DC_CRITICAL` (95 %) of per-band `dc_limit_ms_per_hour`. Relay priority classification: Tier 0 (source traffic, always transmitted), Tier 1 (AIRTAK_ACK, AIRTAK_MODERATION, AIRTAK_POSITION_REQUEST, AIRTAK_PLAYER state transitions, AIRTAK_TACTICAL — relayed through DC_WARNING, dropped only at DC_CRITICAL), Tier 2 (TEXT_MESSAGE_APP, AIRTAK_PLAYER heartbeat, POSITION_APP, TELEMETRY_APP, NODEINFO_APP — dropped at DC_WARNING and above). DC-aware suppression gate applied after heard-by/SNR relay decision. `DEVICE_STATUS` characteristic extended with `DcLevel` enum (OK/CAUTION/WARNING/CRITICAL) and `trailing_hour_seconds` for Android display. E-ink status shows "Radio Busy" at WARNING, "Radio Guard" at CRITICAL. Android: Device Status screen displays DC level as a percentage bar (green/amber/red) with trailing-hour seconds value; receives BLE-level-change notifications without polling. Recovery to normal relay when accumulator drops below 60 %; no hysteresis. All thresholds non-user-configurable (in `Defaults.h` only). Per-band limit derived from LoRa region; changing region resets accumulator. | ⊣ Phase 5 complete |
 
 ### Phase 6 Exit Tests
 
-All items in §19.3 Field Acceptance Test. All six additional Phase 6 items must produce documented pass results. No device reboots in 60-minute field test. Battery life ≥ 8 hours documented. Android background stability ≥ 8 hours on 3 devices documented.
+All items in §19.3 Field Acceptance Test. All Phase 6 items must produce documented pass results. DC-aware relay suppression: trailing-hour accumulator validated; WARNING threshold triggers Tier 2 relay drops on a center-located node in a ≥ 5-device mesh running Profile 0 for ≥ 20 minutes; DC level notifications received by Android app within 1 s of threshold crossing; e-ink indicators appear at correct levels. No device reboots in 60-minute field test. Battery life ≥ 8 hours documented. Android background stability ≥ 8 hours on 3 devices documented.
 
 ---
 
@@ -245,12 +247,13 @@ The following table lists every significant inter-phase and intra-phase dependen
 | 6.1 (Nordic DFU) | Phase 5 complete |
 | 6.2 (GPS duty cycle) | Phase 5 complete |
 | 6.3 (battery life validation) | 6.2 |
-| 6.4 (field acceptance test) | 6.3, Phase 5 complete |
+| 6.4 (field acceptance test) | 6.3, 6.10, Phase 5 complete |
 | 6.5 (Meshtastic interop field test) | 6.4 |
 | 6.6 (Android background 8 h) | 6.4 |
 | 6.7 (fully offline test) | 6.4 |
 | 6.8 (daylight readability) | 6.4 |
 | 6.9 (per-slot PHY field test) | 6.4 |
+| 6.10 (DC-aware relay suppression) | Phase 5 complete |
 | 7.1 (Codec2 firmware) | Phase 6 complete |
 | 7.2 (Short/Speed PHY slot) | 7.1 |
 | 7.3 (firmware audio pipeline) | 7.2 |

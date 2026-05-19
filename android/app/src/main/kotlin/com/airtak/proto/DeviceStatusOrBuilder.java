@@ -128,4 +128,33 @@ public interface DeviceStatusOrBuilder extends
    */
   com.google.protobuf.ByteString
       getBluetoothAddressBytes();
+
+  /**
+   * <pre>
+   * current duty-cycle throttle level (§8.7.1)
+   * </pre>
+   *
+   * <code>.airtak.DcLevel dc_level = 11;</code>
+   * @return The enum numeric value on the wire for dcLevel.
+   */
+  int getDcLevelValue();
+  /**
+   * <pre>
+   * current duty-cycle throttle level (§8.7.1)
+   * </pre>
+   *
+   * <code>.airtak.DcLevel dc_level = 11;</code>
+   * @return The dcLevel.
+   */
+  com.airtak.proto.DcLevel getDcLevel();
+
+  /**
+   * <pre>
+   * trailing-hour accumulator in milliseconds
+   * </pre>
+   *
+   * <code>uint32 trailing_hour_ms = 12;</code>
+   * @return The trailingHourMs.
+   */
+  int getTrailingHourMs();
 }

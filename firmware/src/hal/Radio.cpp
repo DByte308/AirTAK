@@ -14,6 +14,7 @@
 #include "config/Defaults.h"
 #include "mesh/ChannelManager.h"
 #include "mesh/PacketPool.h"
+#include "mesh/DcTracker.h"
 #include "ble/BLEQueue.h"
 #include "config.h"
 
@@ -384,11 +385,14 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
         if (err != RADIOLIB_ERR_NONE) return false;
     }
 
+    uint32_t tx_start_ms = millis();
     int16_t err = s_active_radio->transmit(const_cast<uint8_t*>(data), length);
+    uint32_t tx_elapsed_ms = millis() - tx_start_ms;
     s_active_radio->startReceive();
 
     if (err == RADIOLIB_ERR_NONE) {
         s_packets_tx++;
+        DcTracker::recordTx(tx_elapsed_ms, tx_start_ms);
         return true;
     }
     return false;

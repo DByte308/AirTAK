@@ -36,6 +36,7 @@
 #include "mesh/Router.h"
 #include "mesh/ChannelManager.h"
 #include "mesh/PacketPool.h"
+#include "mesh/DcTracker.h"
 #include "game/PlayerState.h"
 #include "system/RecoveryMode.h"
 #include "platform/Platform.h"
@@ -198,6 +199,7 @@ void task_radio_rxtx(void* params) {
     airtak::Radio::init();
     airtak::MeshNode::init();
     airtak::Router::init();
+    airtak::DcTracker::init();
     airtak::MeshNode::broadcastNodeInfo(g_radio_tx_queue);
     for (;;) {
         airtak::Radio::process(g_radio_rx_queue, g_radio_tx_queue, g_radio_event_group);

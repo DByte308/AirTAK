@@ -37,6 +37,14 @@ message ConfigAck {
 
 // ── Device Status (§10.4) ─────────────────────────────────────────────────────
 
+// Duty-cycle throttle level reported in DeviceStatus (§8.7.1).
+enum DcLevel {
+  DC_OK       = 0;   // 0-59%: normal operation
+  DC_CAUTION  = 1;   // 60-79%: approaching limit; Android notified
+  DC_WARNING  = 2;   // 80-94%: Tier 2 relay suppressed
+  DC_CRITICAL = 3;   // 95-100%: only Tier 1 relay + source
+}
+
 // Notified on DEVICE_STATUS at connect and on any field change (debounced 1 Hz).
 // DEVICE_STATUS is readable without authentication (open characteristic).
 message DeviceStatus {
@@ -50,6 +58,8 @@ message DeviceStatus {
   uint32      uptime_seconds   = 8;
   string      firmware_version = 9;
   string      bluetooth_address = 10;  // "AA:BB:CC:DD:EE:FF"
+  DcLevel     dc_level         = 11;   // current duty-cycle throttle level (§8.7.1)
+  uint32      trailing_hour_ms = 12;   // trailing-hour accumulator in milliseconds
 }
 
 message GpsStatus {

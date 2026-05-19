@@ -270,6 +270,63 @@ public object DeviceStatusKt {
     public fun clearBluetoothAddress() {
       _builder.clearBluetoothAddress()
     }
+
+    /**
+     * ```
+     * current duty-cycle throttle level (§8.7.1)
+     * ```
+     *
+     * `.airtak.DcLevel dc_level = 11;`
+     */
+    public var dcLevel: com.airtak.proto.DcLevel
+      @kotlin.jvm.JvmName("getDcLevel")
+        get() = _builder.dcLevel
+      @kotlin.jvm.JvmName("setDcLevel")
+        set(value) {
+        _builder.dcLevel = value
+      }
+    public var dcLevelValue: kotlin.Int
+      @kotlin.jvm.JvmName("getDcLevelValue")
+        get() = _builder.dcLevelValue
+      @kotlin.jvm.JvmName("setDcLevelValue")
+        set(value) {
+        _builder.dcLevelValue = value
+      }
+    /**
+     * ```
+     * current duty-cycle throttle level (§8.7.1)
+     * ```
+     *
+     * `.airtak.DcLevel dc_level = 11;`
+     */
+    public fun clearDcLevel() {
+      _builder.clearDcLevel()
+    }
+
+    /**
+     * ```
+     * trailing-hour accumulator in milliseconds
+     * ```
+     *
+     * `uint32 trailing_hour_ms = 12;`
+     */
+    public var trailingHourMs: kotlin.Int
+      @kotlin.jvm.JvmName("getTrailingHourMs")
+        get() = _builder.trailingHourMs
+      @kotlin.jvm.JvmName("setTrailingHourMs")
+        set(value) {
+        _builder.trailingHourMs = value
+      }
+    /**
+     * ```
+     * trailing-hour accumulator in milliseconds
+     * ```
+     *
+     * `uint32 trailing_hour_ms = 12;`
+     */
+    public fun clearTrailingHourMs() {
+      _builder.clearTrailingHourMs()
+    }
   }
 }
 public inline fun com.airtak.proto.DeviceStatus.copy(block: `com.airtak.proto`.DeviceStatusKt.Dsl.() -> kotlin.Unit): com.airtak.proto.DeviceStatus =

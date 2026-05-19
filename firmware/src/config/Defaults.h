@@ -160,5 +160,14 @@ constexpr uint32_t NODEINFO_BROADCAST_INTERVAL_SECS = 10800; // 3 hours (§13.2)
 // ── Display ───────────────────────────────────────────────────────────────────
 constexpr uint32_t DISPLAY_MIN_REFRESH_MS = 60000; // 60 s min between full refreshes (§9.6)
 
+// ── Duty-cycle-aware relay suppression (§8.7.1, Roadmap 6.10) ──────────────────
+// Thresholds as percentage of the per-sub-band regulatory limit.
+// All values are in Defaults.h only — not user-configurable via BLE.
+constexpr uint8_t  DC_CAUTION_THRESHOLD_PCT  = 60;   // notify Android only
+constexpr uint8_t  DC_WARNING_THRESHOLD_PCT  = 80;   // drop Tier 2 relay; e-ink "Radio Busy"
+constexpr uint8_t  DC_CRITICAL_THRESHOLD_PCT = 95;   // drop Tier 2; keep Tier 1 only; e-ink "Radio Guard"
+constexpr uint8_t  DC_TX_LOG_SIZE            = 128;  // circular buffer entries (~50 min at 100-node peak relay)
+constexpr uint32_t DC_LIMIT_EU868_G1_MS_PER_HOUR = 360000; // 10 % of 3 600 000 ms (§8.7.1)
+
 } // namespace defaults
 } // namespace airtak
