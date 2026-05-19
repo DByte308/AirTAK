@@ -60,6 +60,9 @@ message DeviceStatus {
   string      bluetooth_address = 10;  // "AA:BB:CC:DD:EE:FF"
   DcLevel     dc_level         = 11;   // current duty-cycle throttle level (§8.7.1)
   uint32      trailing_hour_ms = 12;   // trailing-hour accumulator in milliseconds
+  uint32      dc_limit_ms_per_hour = 13; // per-band regulatory limit (ms/h); UINT32_MAX if none
+  uint32      dc_percentage    = 14;   // current DC in hundredths of a percent (750 = 7.50%)
+  uint32      dc_relays_dropped = 15;  // relay packets dropped by DC gate since boot
 }
 
 message GpsStatus {

@@ -26,6 +26,7 @@ static uint8_t  s_tx_log_head = 0;
 static uint32_t s_trailing_hour_ms = 0;
 static uint32_t s_last_tick_ms = 0;
 static DcLevel   s_current_level = DcLevel::DC_OK;
+static uint32_t s_relays_dropped = 0;
 
 // ── Per-band DC limits (§8.7.1 table) ────────────────────────────────────────
 static uint32_t dcLimitMsForRegion() {
@@ -107,6 +108,20 @@ uint32_t DcTracker::dcLimitMsPerHour() {
     return dcLimitMsForRegion();
 }
 
+uint32_t DcTracker::dcPercentage() {
+    uint32_t limit = dcLimitMsForRegion();
+    if (limit == UINT32_MAX || limit == 0) return 0;
+    return (s_trailing_hour_ms * 10000UL) / limit;
+}
+
+uint32_t DcTracker::relaysDropped() {
+    return s_relays_dropped;
+}
+
+void DcTracker::incrementDroppedRelays() {
+    s_relays_dropped++;
+}
+
 bool DcTracker::isTier1Relay(Portnum portnum) {
     switch (portnum) {
         case Portnum::AIRTAK_ACK:
@@ -124,6 +139,7 @@ void DcTracker::reset() {
     s_tx_log_head = 0;
     s_trailing_hour_ms = 0;
     s_current_level = DcLevel::DC_OK;
+    s_relays_dropped = 0;
 }
 
 void DcTracker::tick() {

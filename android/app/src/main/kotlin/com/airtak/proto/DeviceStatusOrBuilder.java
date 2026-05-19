@@ -157,4 +157,34 @@ public interface DeviceStatusOrBuilder extends
    * @return The trailingHourMs.
    */
   int getTrailingHourMs();
+
+  /**
+   * <pre>
+   * per-band regulatory limit (ms/h); UINT32_MAX if none
+   * </pre>
+   *
+   * <code>uint32 dc_limit_ms_per_hour = 13;</code>
+   * @return The dcLimitMsPerHour.
+   */
+  int getDcLimitMsPerHour();
+
+  /**
+   * <pre>
+   * current DC in hundredths of a percent (750 = 7.50%)
+   * </pre>
+   *
+   * <code>uint32 dc_percentage = 14;</code>
+   * @return The dcPercentage.
+   */
+  int getDcPercentage();
+
+  /**
+   * <pre>
+   * relay packets dropped by DC gate since boot
+   * </pre>
+   *
+   * <code>uint32 dc_relays_dropped = 15;</code>
+   * @return The dcRelaysDropped.
+   */
+  int getDcRelaysDropped();
 }

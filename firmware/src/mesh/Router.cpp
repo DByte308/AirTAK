@@ -649,11 +649,11 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                         // Promote state transitions to Tier 1; heartbeats stay Tier 2.
                         is_tier1 = airtakPlayerIsStateTransition(decrypted, payload_len);
                     }
-                    if (dc_level >= DcLevel::DC_CRITICAL && !is_tier1) {
-                        return;  // drop Tier 2 at CRITICAL
-                    }
-                    if (dc_level >= DcLevel::DC_WARNING && !is_tier1) {
-                        return;  // drop Tier 2 at WARNING
+                    // Tier 1: relayed at all levels (including CRITICAL, per spec decision flow).
+                    // Tier 2: dropped at WARNING and above.
+                    if (!is_tier1) {
+                        DcTracker::incrementDroppedRelays();
+                        return;
                     }
                 }
             }

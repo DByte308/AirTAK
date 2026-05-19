@@ -44,6 +44,17 @@ public:
     // Per-band DC limit in ms/hour. Returns UINT32_MAX for regions with no limit.
     static uint32_t dcLimitMsPerHour();
 
+    // Current duty-cycle percentage in hundredths (e.g., 750 = 7.50%).
+    // Returns 0 if no limit applies.
+    static uint32_t dcPercentage();
+
+    // Number of relay packets dropped by the DC-aware gate since boot.
+    static uint32_t relaysDropped();
+
+    // Increment the dropped-relay counter. Called by Router when the
+    // DC gate decides to suppress a relay.
+    static void incrementDroppedRelays();
+
     // Returns true if the given portnum is Tier 1 relay priority (§8.7.1).
     // Tier 1 packets are relayed through DC_WARNING, dropped only at DC_CRITICAL.
     // NOTE: AIRTAK_PLAYER classification depends on is_state_transition field;

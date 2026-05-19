@@ -582,6 +582,120 @@ public  final class DeviceStatus extends
     trailingHourMs_ = 0;
   }
 
+  public static final int DC_LIMIT_MS_PER_HOUR_FIELD_NUMBER = 13;
+  private int dcLimitMsPerHour_;
+  /**
+   * <pre>
+   * per-band regulatory limit (ms/h); UINT32_MAX if none
+   * </pre>
+   *
+   * <code>uint32 dc_limit_ms_per_hour = 13;</code>
+   * @return The dcLimitMsPerHour.
+   */
+  @java.lang.Override
+  public int getDcLimitMsPerHour() {
+    return dcLimitMsPerHour_;
+  }
+  /**
+   * <pre>
+   * per-band regulatory limit (ms/h); UINT32_MAX if none
+   * </pre>
+   *
+   * <code>uint32 dc_limit_ms_per_hour = 13;</code>
+   * @param value The dcLimitMsPerHour to set.
+   */
+  private void setDcLimitMsPerHour(int value) {
+    
+    dcLimitMsPerHour_ = value;
+  }
+  /**
+   * <pre>
+   * per-band regulatory limit (ms/h); UINT32_MAX if none
+   * </pre>
+   *
+   * <code>uint32 dc_limit_ms_per_hour = 13;</code>
+   */
+  private void clearDcLimitMsPerHour() {
+
+    dcLimitMsPerHour_ = 0;
+  }
+
+  public static final int DC_PERCENTAGE_FIELD_NUMBER = 14;
+  private int dcPercentage_;
+  /**
+   * <pre>
+   * current DC in hundredths of a percent (750 = 7.50%)
+   * </pre>
+   *
+   * <code>uint32 dc_percentage = 14;</code>
+   * @return The dcPercentage.
+   */
+  @java.lang.Override
+  public int getDcPercentage() {
+    return dcPercentage_;
+  }
+  /**
+   * <pre>
+   * current DC in hundredths of a percent (750 = 7.50%)
+   * </pre>
+   *
+   * <code>uint32 dc_percentage = 14;</code>
+   * @param value The dcPercentage to set.
+   */
+  private void setDcPercentage(int value) {
+    
+    dcPercentage_ = value;
+  }
+  /**
+   * <pre>
+   * current DC in hundredths of a percent (750 = 7.50%)
+   * </pre>
+   *
+   * <code>uint32 dc_percentage = 14;</code>
+   */
+  private void clearDcPercentage() {
+
+    dcPercentage_ = 0;
+  }
+
+  public static final int DC_RELAYS_DROPPED_FIELD_NUMBER = 15;
+  private int dcRelaysDropped_;
+  /**
+   * <pre>
+   * relay packets dropped by DC gate since boot
+   * </pre>
+   *
+   * <code>uint32 dc_relays_dropped = 15;</code>
+   * @return The dcRelaysDropped.
+   */
+  @java.lang.Override
+  public int getDcRelaysDropped() {
+    return dcRelaysDropped_;
+  }
+  /**
+   * <pre>
+   * relay packets dropped by DC gate since boot
+   * </pre>
+   *
+   * <code>uint32 dc_relays_dropped = 15;</code>
+   * @param value The dcRelaysDropped to set.
+   */
+  private void setDcRelaysDropped(int value) {
+    
+    dcRelaysDropped_ = value;
+  }
+  /**
+   * <pre>
+   * relay packets dropped by DC gate since boot
+   * </pre>
+   *
+   * <code>uint32 dc_relays_dropped = 15;</code>
+   */
+  private void clearDcRelaysDropped() {
+
+    dcRelaysDropped_ = 0;
+  }
+
   public static com.airtak.proto.DeviceStatus parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -1259,6 +1373,126 @@ public  final class DeviceStatus extends
       return this;
     }
 
+    /**
+     * <pre>
+     * per-band regulatory limit (ms/h); UINT32_MAX if none
+     * </pre>
+     *
+     * <code>uint32 dc_limit_ms_per_hour = 13;</code>
+     * @return The dcLimitMsPerHour.
+     */
+    @java.lang.Override
+    public int getDcLimitMsPerHour() {
+      return instance.getDcLimitMsPerHour();
+    }
+    /**
+     * <pre>
+     * per-band regulatory limit (ms/h); UINT32_MAX if none
+     * </pre>
+     *
+     * <code>uint32 dc_limit_ms_per_hour = 13;</code>
+     * @param value The dcLimitMsPerHour to set.
+     * @return This builder for chaining.
+     */
+    public Builder setDcLimitMsPerHour(int value) {
+      copyOnWrite();
+      instance.setDcLimitMsPerHour(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * per-band regulatory limit (ms/h); UINT32_MAX if none
+     * </pre>
+     *
+     * <code>uint32 dc_limit_ms_per_hour = 13;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearDcLimitMsPerHour() {
+      copyOnWrite();
+      instance.clearDcLimitMsPerHour();
+      return this;
+    }
+
+    /**
+     * <pre>
+     * current DC in hundredths of a percent (750 = 7.50%)
+     * </pre>
+     *
+     * <code>uint32 dc_percentage = 14;</code>
+     * @return The dcPercentage.
+     */
+    @java.lang.Override
+    public int getDcPercentage() {
+      return instance.getDcPercentage();
+    }
+    /**
+     * <pre>
+     * current DC in hundredths of a percent (750 = 7.50%)
+     * </pre>
+     *
+     * <code>uint32 dc_percentage = 14;</code>
+     * @param value The dcPercentage to set.
+     * @return This builder for chaining.
+     */
+    public Builder setDcPercentage(int value) {
+      copyOnWrite();
+      instance.setDcPercentage(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * current DC in hundredths of a percent (750 = 7.50%)
+     * </pre>
+     *
+     * <code>uint32 dc_percentage = 14;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearDcPercentage() {
+      copyOnWrite();
+      instance.clearDcPercentage();
+      return this;
+    }
+
+    /**
+     * <pre>
+     * relay packets dropped by DC gate since boot
+     * </pre>
+     *
+     * <code>uint32 dc_relays_dropped = 15;</code>
+     * @return The dcRelaysDropped.
+     */
+    @java.lang.Override
+    public int getDcRelaysDropped() {
+      return instance.getDcRelaysDropped();
+    }
+    /**
+     * <pre>
+     * relay packets dropped by DC gate since boot
+     * </pre>
+     *
+     * <code>uint32 dc_relays_dropped = 15;</code>
+     * @param value The dcRelaysDropped to set.
+     * @return This builder for chaining.
+     */
+    public Builder setDcRelaysDropped(int value) {
+      copyOnWrite();
+      instance.setDcRelaysDropped(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * relay packets dropped by DC gate since boot
+     * </pre>
+     *
+     * <code>uint32 dc_relays_dropped = 15;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearDcRelaysDropped() {
+      copyOnWrite();
+      instance.clearDcRelaysDropped();
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:airtak.DeviceStatus)
   }
   @java.lang.Override
@@ -1288,11 +1522,14 @@ public  final class DeviceStatus extends
             "bluetoothAddress_",
             "dcLevel_",
             "trailingHourMs_",
+            "dcLimitMsPerHour_",
+            "dcPercentage_",
+            "dcRelaysDropped_",
           };
           java.lang.String info =
-              "\u0000\f\u0000\u0001\u0001\f\f\u0000\u0000\u0000\u0001\u000b\u0002\u0208\u0003\u0001" +
-              "\u0004\u0007\u0005\u1009\u0000\u0006\u1009\u0001\u0007\u000b\b\u000b\t\u0208\n\u0208" +
-              "\u000b\f\f\u000b";
+              "\u0000\u000f\u0000\u0001\u0001\u000f\u000f\u0000\u0000\u0000\u0001\u000b\u0002\u0208" +
+              "\u0003\u0001\u0004\u0007\u0005\u1009\u0000\u0006\u1009\u0001\u0007\u000b\b\u000b" +
+              "\t\u0208\n\u0208\u000b\f\f\u000b\r\u000b\u000e\u000b\u000f\u000b";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       case GET_DEFAULT_INSTANCE: {

@@ -86,6 +86,9 @@ typedef struct _airtak_DeviceStatus {
     char bluetooth_address[18]; /* "AA:BB:CC:DD:EE:FF" */
     airtak_DcLevel dc_level; /* current duty-cycle throttle level (§8.7.1) */
     uint32_t trailing_hour_ms; /* trailing-hour accumulator in milliseconds */
+    uint32_t dc_limit_ms_per_hour; /* per-band regulatory limit (ms/h); UINT32_MAX if none */
+    uint32_t dc_percentage; /* current DC in hundredths of a percent (750 = 7.50%) */
+    uint32_t dc_relays_dropped; /* relay packets dropped by DC gate since boot */
 } airtak_DeviceStatus;
 
 /* When gps_source=PHONE_GPS, the Android app periodically sends the phone's
@@ -142,7 +145,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define airtak_ConfigPayload_init_default        {_airtak_ConfigGroup_MIN, {0, {0}}, 0}
 #define airtak_ConfigAck_init_default            {_airtak_ConfigGroup_MIN, 0, "", 0, 0}
-#define airtak_DeviceStatus_init_default         {0, "", 0, 0, false, airtak_GpsStatus_init_default, false, airtak_RadioStatus_init_default, 0, 0, "", "", _airtak_DcLevel_MIN, 0}
+#define airtak_DeviceStatus_init_default         {0, "", 0, 0, false, airtak_GpsStatus_init_default, false, airtak_RadioStatus_init_default, 0, 0, "", "", _airtak_DcLevel_MIN, 0, 0, 0, 0}
 #define airtak_GpsStatus_init_default            {0, 0, 0, 0, 0, 0}
 #define airtak_RadioStatus_init_default          {"", 0, 0, 0, 0}
 #define airtak_PhoneGpsPosition_init_default     {0, 0, 0, 0}
@@ -150,7 +153,7 @@ extern "C" {
 #define airtak_AdminResponse_init_default        {_airtak_AdminCommand_MIN, 0, ""}
 #define airtak_ConfigPayload_init_zero           {_airtak_ConfigGroup_MIN, {0, {0}}, 0}
 #define airtak_ConfigAck_init_zero               {_airtak_ConfigGroup_MIN, 0, "", 0, 0}
-#define airtak_DeviceStatus_init_zero            {0, "", 0, 0, false, airtak_GpsStatus_init_zero, false, airtak_RadioStatus_init_zero, 0, 0, "", "", _airtak_DcLevel_MIN, 0}
+#define airtak_DeviceStatus_init_zero            {0, "", 0, 0, false, airtak_GpsStatus_init_zero, false, airtak_RadioStatus_init_zero, 0, 0, "", "", _airtak_DcLevel_MIN, 0, 0, 0, 0}
 #define airtak_GpsStatus_init_zero               {0, 0, 0, 0, 0, 0}
 #define airtak_RadioStatus_init_zero             {"", 0, 0, 0, 0}
 #define airtak_PhoneGpsPosition_init_zero        {0, 0, 0, 0}
@@ -189,6 +192,9 @@ extern "C" {
 #define airtak_DeviceStatus_bluetooth_address_tag 10
 #define airtak_DeviceStatus_dc_level_tag         11
 #define airtak_DeviceStatus_trailing_hour_ms_tag 12
+#define airtak_DeviceStatus_dc_limit_ms_per_hour_tag 13
+#define airtak_DeviceStatus_dc_percentage_tag    14
+#define airtak_DeviceStatus_dc_relays_dropped_tag 15
 #define airtak_PhoneGpsPosition_latitude_tag     1
 #define airtak_PhoneGpsPosition_longitude_tag    2
 #define airtak_PhoneGpsPosition_altitude_m_tag   3
@@ -229,7 +235,10 @@ X(a, STATIC,   SINGULAR, UINT32,   uptime_seconds,    8) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   9) \
 X(a, STATIC,   SINGULAR, STRING,   bluetooth_address,  10) \
 X(a, STATIC,   SINGULAR, UENUM,    dc_level,         11) \
-X(a, STATIC,   SINGULAR, UINT32,   trailing_hour_ms,  12)
+X(a, STATIC,   SINGULAR, UINT32,   trailing_hour_ms,  12) \
+X(a, STATIC,   SINGULAR, UINT32,   dc_limit_ms_per_hour,  13) \
+X(a, STATIC,   SINGULAR, UINT32,   dc_percentage,    14) \
+X(a, STATIC,   SINGULAR, UINT32,   dc_relays_dropped,  15)
 #define airtak_DeviceStatus_CALLBACK NULL
 #define airtak_DeviceStatus_DEFAULT NULL
 #define airtak_DeviceStatus_gps_MSGTYPE airtak_GpsStatus
@@ -302,7 +311,7 @@ extern const pb_msgdesc_t airtak_AdminResponse_msg;
 #define airtak_AdminResponse_size                101
 #define airtak_ConfigAck_size                    109
 #define airtak_ConfigPayload_size                519
-#define airtak_DeviceStatus_size                 190
+#define airtak_DeviceStatus_size                 208
 #define airtak_GpsStatus_size                    36
 #define airtak_PhoneGpsPosition_size             28
 #define airtak_RadioStatus_size                  40

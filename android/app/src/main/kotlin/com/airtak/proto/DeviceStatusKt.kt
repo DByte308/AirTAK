@@ -327,6 +327,81 @@ public object DeviceStatusKt {
     public fun clearTrailingHourMs() {
       _builder.clearTrailingHourMs()
     }
+
+    /**
+     * ```
+     * per-band regulatory limit (ms/h); UINT32_MAX if none
+     * ```
+     *
+     * `uint32 dc_limit_ms_per_hour = 13;`
+     */
+    public var dcLimitMsPerHour: kotlin.Int
+      @kotlin.jvm.JvmName("getDcLimitMsPerHour")
+        get() = _builder.dcLimitMsPerHour
+      @kotlin.jvm.JvmName("setDcLimitMsPerHour")
+        set(value) {
+        _builder.dcLimitMsPerHour = value
+      }
+    /**
+     * ```
+     * per-band regulatory limit (ms/h); UINT32_MAX if none
+     * ```
+     *
+     * `uint32 dc_limit_ms_per_hour = 13;`
+     */
+    public fun clearDcLimitMsPerHour() {
+      _builder.clearDcLimitMsPerHour()
+    }
+
+    /**
+     * ```
+     * current DC in hundredths of a percent (750 = 7.50%)
+     * ```
+     *
+     * `uint32 dc_percentage = 14;`
+     */
+    public var dcPercentage: kotlin.Int
+      @kotlin.jvm.JvmName("getDcPercentage")
+        get() = _builder.dcPercentage
+      @kotlin.jvm.JvmName("setDcPercentage")
+        set(value) {
+        _builder.dcPercentage = value
+      }
+    /**
+     * ```
+     * current DC in hundredths of a percent (750 = 7.50%)
+     * ```
+     *
+     * `uint32 dc_percentage = 14;`
+     */
+    public fun clearDcPercentage() {
+      _builder.clearDcPercentage()
+    }
+
+    /**
+     * ```
+     * relay packets dropped by DC gate since boot
+     * ```
+     *
+     * `uint32 dc_relays_dropped = 15;`
+     */
+    public var dcRelaysDropped: kotlin.Int
+      @kotlin.jvm.JvmName("getDcRelaysDropped")
+        get() = _builder.dcRelaysDropped
+      @kotlin.jvm.JvmName("setDcRelaysDropped")
+        set(value) {
+        _builder.dcRelaysDropped = value
+      }
+    /**
+     * ```
+     * relay packets dropped by DC gate since boot
+     * ```
+     *
+     * `uint32 dc_relays_dropped = 15;`
+     */
+    public fun clearDcRelaysDropped() {
+      _builder.clearDcRelaysDropped()
+    }
   }
 }
 public inline fun com.airtak.proto.DeviceStatus.copy(block: `com.airtak.proto`.DeviceStatusKt.Dsl.() -> kotlin.Unit): com.airtak.proto.DeviceStatus =
