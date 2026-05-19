@@ -1371,10 +1371,6 @@ private fun ShareSection(vm: SettingsViewModel) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         // ── Export ──────────────────────────────────────────────────────────
         SectionLabel("Export config as QR code")
-        TacticalText(
-            "Generates a QR code containing your LoRa radio settings, all 8 channel slots (including PSKs), and unit hierarchy assignments. Device names and callsigns are deliberately excluded — every device must have unique identifiers.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Spacer(Modifier.height(12.dp))
 
         qrBitmap?.let { bmp ->
@@ -1402,10 +1398,6 @@ private fun ShareSection(vm: SettingsViewModel) {
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Refresh QR code") }
 
-        TacticalText(
-            "Have the other player scan this QR code from their Settings → Share Config → Import tab.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Spacer(Modifier.height(4.dp))
         OutlinedButton(
             onClick = {
@@ -1425,10 +1417,7 @@ private fun ShareSection(vm: SettingsViewModel) {
 
         // ── Import ──────────────────────────────────────────────────────────
         SectionLabel("Import config from QR code")
-        TacticalText(
-            "Scan a QR code from another AirTAK device to import their LoRa radio settings, channel setup (including PSKs), and unit hierarchy. Your device names and callsign are preserved — they are never overwritten by an import.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+
         Spacer(Modifier.height(12.dp))
 
         when (val state = importState) {
