@@ -42,6 +42,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
@@ -53,8 +54,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.airtak.R
+import com.airtak.proto.DcLevel
 import com.airtak.ui.components.LinkChip
 import com.airtak.ui.components.MetricTile
+import com.airtak.ui.theme.AccentAmber
+import com.airtak.ui.theme.StatusActive
+import com.airtak.ui.theme.StatusHit
 // (legacy GameScreen import retired — Markers tab now lives in com.airtak.ui.markers.MarkersScreen)
 import com.airtak.ui.map.MapScreen
 import com.airtak.ui.messages.MessagesScreen
@@ -124,6 +129,9 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
                     phoneGpsFix = phoneGpsFix,
                     onLinkClick = { navController.navigateTopLevel("pair") },
                     compact = true,
+                    dcLevel = status?.dcLevel ?: DcLevel.DC_OK,
+                    dcPercentage = status?.dcPercentage ?: 0,
+                    dcRelaysDropped = status?.dcRelaysDropped ?: 0,
                 )
                 Box(Modifier.fillMaxSize()) {
                     AppNavHost(
@@ -166,6 +174,9 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
                 phoneGpsFix = phoneGpsFix,
                 onLinkClick = { navController.navigateTopLevel("pair") },
                 compact = false,
+                dcLevel = status?.dcLevel ?: DcLevel.DC_OK,
+                dcPercentage = status?.dcPercentage ?: 0,
+                dcRelaysDropped = status?.dcRelaysDropped ?: 0,
             )
         },
         bottomBar = {
@@ -204,6 +215,28 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
 }
 
 @Composable
+private fun DcLevel.displayColor(): Color = when (this) {
+    DcLevel.DC_OK -> StatusActive
+    DcLevel.DC_CAUTION -> AccentAmber
+    DcLevel.DC_WARNING -> Color(0xFFFF7043)
+    DcLevel.DC_CRITICAL -> StatusHit
+    DcLevel.UNRECOGNIZED -> MaterialTheme.colorScheme.onSurfaceVariant
+}
+
+private fun DcLevel.shortName(): String = when (this) {
+    DcLevel.DC_OK -> "OK"
+    DcLevel.DC_CAUTION -> "CAUT"
+    DcLevel.DC_WARNING -> "WARN"
+    DcLevel.DC_CRITICAL -> "CRIT"
+    DcLevel.UNRECOGNIZED -> "?"
+}
+
+private fun formatDcPercent(hundredths: Int): String {
+    val pct = hundredths / 100.0
+    return "%.1f%%".format(pct)
+}
+
+@Composable
 private fun HudBar(
     linkState: com.airtak.data.ble.LinkState,
     callsign: String,
@@ -216,6 +249,9 @@ private fun HudBar(
     phoneGpsFix: Boolean,
     onLinkClick: () -> Unit,
     compact: Boolean = false,
+    dcLevel: DcLevel = DcLevel.DC_OK,
+    dcPercentage: Int = 0,
+    dcRelaysDropped: Int = 0,
 ) {
     if (compact) {
         // Landscape: single slim row — just link chip + callsign + inline metrics
@@ -263,6 +299,13 @@ private fun HudBar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (hasDeviceStatus) {
+                Text(
+                    "DC ${formatDcPercent(dcPercentage)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = dcLevel.displayColor(),
+                )
+            }
         }
     } else {
         Column(
@@ -304,6 +347,13 @@ private fun HudBar(
                 MetricTile(
                     label = "RSSI",
                     value = rssi?.let { "${it.toInt()} dBm" } ?: "—",
+                    modifier = Modifier.weight(1f),
+                )
+                MetricTile(
+                    label = "DC",
+                    value = if (hasDeviceStatus) "${dcLevel.shortName()} ${formatDcPercent(dcPercentage)}" else "—",
+                    accent = dcLevel.displayColor(),
+                    secondary = if (hasDeviceStatus && dcRelaysDropped > 0) "drp:$dcRelaysDropped" else null,
                     modifier = Modifier.weight(1f),
                 )
             }

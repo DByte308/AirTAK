@@ -104,6 +104,7 @@ fun MetricTile(
     value: String,
     modifier: Modifier = Modifier,
     accent: Color = MaterialTheme.colorScheme.primary,
+    secondary: String? = null,
 ) {
     Column(
         modifier
@@ -123,6 +124,14 @@ fun MetricTile(
             color = accent,
             fontWeight = FontWeight.SemiBold,
         )
+        if (secondary != null) {
+            Text(
+                text = secondary,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
     }
 }
 
