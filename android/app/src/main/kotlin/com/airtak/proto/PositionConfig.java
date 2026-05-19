@@ -305,6 +305,44 @@ public  final class PositionConfig extends
     gpsSource_ = 0;
   }
 
+  public static final int POSITION_CHANNEL_INDEX_FIELD_NUMBER = 8;
+  private int positionChannelIndex_;
+  /**
+   * <pre>
+   * which channel slot broadcasts POSITION_APP; default 0 (PRIMARY)
+   * </pre>
+   *
+   * <code>uint32 position_channel_index = 8;</code>
+   * @return The positionChannelIndex.
+   */
+  @java.lang.Override
+  public int getPositionChannelIndex() {
+    return positionChannelIndex_;
+  }
+  /**
+   * <pre>
+   * which channel slot broadcasts POSITION_APP; default 0 (PRIMARY)
+   * </pre>
+   *
+   * <code>uint32 position_channel_index = 8;</code>
+   * @param value The positionChannelIndex to set.
+   */
+  private void setPositionChannelIndex(int value) {
+    
+    positionChannelIndex_ = value;
+  }
+  /**
+   * <pre>
+   * which channel slot broadcasts POSITION_APP; default 0 (PRIMARY)
+   * </pre>
+   *
+   * <code>uint32 position_channel_index = 8;</code>
+   */
+  private void clearPositionChannelIndex() {
+
+    positionChannelIndex_ = 0;
+  }
+
   public static com.airtak.proto.PositionConfig parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -708,6 +746,46 @@ public  final class PositionConfig extends
       return this;
     }
 
+    /**
+     * <pre>
+     * which channel slot broadcasts POSITION_APP; default 0 (PRIMARY)
+     * </pre>
+     *
+     * <code>uint32 position_channel_index = 8;</code>
+     * @return The positionChannelIndex.
+     */
+    @java.lang.Override
+    public int getPositionChannelIndex() {
+      return instance.getPositionChannelIndex();
+    }
+    /**
+     * <pre>
+     * which channel slot broadcasts POSITION_APP; default 0 (PRIMARY)
+     * </pre>
+     *
+     * <code>uint32 position_channel_index = 8;</code>
+     * @param value The positionChannelIndex to set.
+     * @return This builder for chaining.
+     */
+    public Builder setPositionChannelIndex(int value) {
+      copyOnWrite();
+      instance.setPositionChannelIndex(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * which channel slot broadcasts POSITION_APP; default 0 (PRIMARY)
+     * </pre>
+     *
+     * <code>uint32 position_channel_index = 8;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearPositionChannelIndex() {
+      copyOnWrite();
+      instance.clearPositionChannelIndex();
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:airtak.PositionConfig)
   }
   @java.lang.Override
@@ -731,10 +809,11 @@ public  final class PositionConfig extends
             "minTxIntervalSecs_",
             "positionHopLimit_",
             "gpsSource_",
+            "positionChannelIndex_",
           };
           java.lang.String info =
-              "\u0000\u0007\u0000\u0000\u0001\u0007\u0007\u0000\u0000\u0000\u0001\u000b\u0002\u000b" +
-              "\u0003\u0007\u0004\u000b\u0005\u000b\u0006\u000b\u0007\f";
+              "\u0000\b\u0000\u0000\u0001\b\b\u0000\u0000\u0000\u0001\u000b\u0002\u000b\u0003\u0007" +
+              "\u0004\u000b\u0005\u000b\u0006\u000b\u0007\f\b\u000b";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       case GET_DEFAULT_INSTANCE: {

@@ -113,6 +113,7 @@ typedef struct _airtak_PositionConfig {
     uint32_t min_tx_interval_secs; /* minimum gap between TX; default 15 */
     uint32_t position_hop_limit; /* override for POSITION_APP hop_limit; 0 = use firmware default (7) */
     airtak_GpsSource gps_source; /* GPS data source; default DEVICE_GPS */
+    uint32_t position_channel_index; /* which channel slot broadcasts POSITION_APP; default 0 (PRIMARY) */
 } airtak_PositionConfig;
 
 /* Roadmap: 6.2 | GPS duty cycle + display brightness/timeout for battery life. */
@@ -184,7 +185,7 @@ extern "C" {
 #define airtak_ChannelSlot_init_default          {0, "", {0, {0}}, _airtak_ChannelRole_MIN, 0, 0, 0, 0}
 #define airtak_ChannelConfig_init_default        {0, {airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default, airtak_ChannelSlot_init_default}}
 #define airtak_AudioConfig_init_default          {0, 0, 0, 0}
-#define airtak_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, _airtak_GpsSource_MIN}
+#define airtak_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, _airtak_GpsSource_MIN, 0}
 #define airtak_PowerConfig_init_default          {0, 0, 0, 0, 0}
 #define airtak_GameConfig_init_default           {"", "", "", "", "", 0, 0}
 #define airtak_SecurityConfig_init_default       {0}
@@ -194,7 +195,7 @@ extern "C" {
 #define airtak_ChannelSlot_init_zero             {0, "", {0, {0}}, _airtak_ChannelRole_MIN, 0, 0, 0, 0}
 #define airtak_ChannelConfig_init_zero           {0, {airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero, airtak_ChannelSlot_init_zero}}
 #define airtak_AudioConfig_init_zero             {0, 0, 0, 0}
-#define airtak_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, _airtak_GpsSource_MIN}
+#define airtak_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, _airtak_GpsSource_MIN, 0}
 #define airtak_PowerConfig_init_zero             {0, 0, 0, 0, 0}
 #define airtak_GameConfig_init_zero              {"", "", "", "", "", 0, 0}
 #define airtak_SecurityConfig_init_zero          {0}
@@ -229,6 +230,7 @@ extern "C" {
 #define airtak_PositionConfig_min_tx_interval_secs_tag 5
 #define airtak_PositionConfig_position_hop_limit_tag 6
 #define airtak_PositionConfig_gps_source_tag     7
+#define airtak_PositionConfig_position_channel_index_tag 8
 #define airtak_PowerConfig_gps_duty_cycle_tag    1
 #define airtak_PowerConfig_gps_on_secs_tag       2
 #define airtak_PowerConfig_gps_off_secs_tag      3
@@ -299,7 +301,8 @@ X(a, STATIC,   SINGULAR, BOOL,     smart_broadcast,   3) \
 X(a, STATIC,   SINGULAR, UINT32,   movement_threshold_m,   4) \
 X(a, STATIC,   SINGULAR, UINT32,   min_tx_interval_secs,   5) \
 X(a, STATIC,   SINGULAR, UINT32,   position_hop_limit,   6) \
-X(a, STATIC,   SINGULAR, UENUM,    gps_source,        7)
+X(a, STATIC,   SINGULAR, UENUM,    gps_source,        7) \
+X(a, STATIC,   SINGULAR, UINT32,   position_channel_index,   8)
 #define airtak_PositionConfig_CALLBACK NULL
 #define airtak_PositionConfig_DEFAULT NULL
 
@@ -360,7 +363,7 @@ extern const pb_msgdesc_t airtak_SecurityConfig_msg;
 #define airtak_GameConfig_size                   162
 #define airtak_LoraConfig_size                   198
 #define airtak_PhyProfile_size                   36
-#define airtak_PositionConfig_size               34
+#define airtak_PositionConfig_size               40
 #define airtak_PowerConfig_size                  26
 #define airtak_SecurityConfig_size               6
 

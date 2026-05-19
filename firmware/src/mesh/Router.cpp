@@ -306,6 +306,15 @@ static const ChannelSlot* selectTxSlot(Portnum portnum, bool require_downlink) {
         if (slotUsableForTx(audio, require_downlink)) return audio;
     }
 
+    if (portnum == Portnum::POSITION_APP) {
+        uint8_t idx = config::ConfigManager::positionChannelIndex();
+        if (idx < MAX_CHANNEL_SLOTS) {
+            const ChannelSlot* pos_slot = ChannelManager::slotByIndex(idx);
+            if (slotUsableForTx(pos_slot, require_downlink)) return pos_slot;
+        }
+        // Configured slot not usable — fall through to default primary path.
+    }
+
     bool private_airtak = isAirTAKPortnum(portnum) &&
                           portnum != Portnum::AIRTAK_ACK &&
                           portnum != Portnum::AIRTAK_AUDIO;

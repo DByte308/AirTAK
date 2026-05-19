@@ -87,4 +87,14 @@ public interface PositionConfigOrBuilder extends
    * @return The gpsSource.
    */
   com.airtak.proto.GpsSource getGpsSource();
+
+  /**
+   * <pre>
+   * which channel slot broadcasts POSITION_APP; default 0 (PRIMARY)
+   * </pre>
+   *
+   * <code>uint32 position_channel_index = 8;</code>
+   * @return The positionChannelIndex.
+   */
+  int getPositionChannelIndex();
 }

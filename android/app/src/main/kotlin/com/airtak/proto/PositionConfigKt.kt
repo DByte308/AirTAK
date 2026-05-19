@@ -209,6 +209,31 @@ public object PositionConfigKt {
     public fun clearGpsSource() {
       _builder.clearGpsSource()
     }
+
+    /**
+     * ```
+     * which channel slot broadcasts POSITION_APP; default 0 (PRIMARY)
+     * ```
+     *
+     * `uint32 position_channel_index = 8;`
+     */
+    public var positionChannelIndex: kotlin.Int
+      @kotlin.jvm.JvmName("getPositionChannelIndex")
+        get() = _builder.positionChannelIndex
+      @kotlin.jvm.JvmName("setPositionChannelIndex")
+        set(value) {
+        _builder.positionChannelIndex = value
+      }
+    /**
+     * ```
+     * which channel slot broadcasts POSITION_APP; default 0 (PRIMARY)
+     * ```
+     *
+     * `uint32 position_channel_index = 8;`
+     */
+    public fun clearPositionChannelIndex() {
+      _builder.clearPositionChannelIndex()
+    }
   }
 }
 public inline fun com.airtak.proto.PositionConfig.copy(block: `com.airtak.proto`.PositionConfigKt.Dsl.() -> kotlin.Unit): com.airtak.proto.PositionConfig =

@@ -73,6 +73,7 @@ class SettingsViewModel @Inject constructor(
         val minTxIntervalSecs: Int = 15,
         val smartBroadcast: Boolean = true,
         val gpsSource: GpsSource = GpsSource.DEVICE_GPS,
+        val positionChannelIndex: Int = 0,
     )
     data class PowerState(val gpsDutyCycle: Boolean = false, val displayOffSecs: Int = 0, val brightnessPct: Int = 100)
     data class GameState(
@@ -121,7 +122,7 @@ class SettingsViewModel @Inject constructor(
                     )
                 }
                 map[ConfigGroup.POSITION]?.let { b -> tryDecode { PositionConfig.parseFrom(b) } }?.let {
-                    _position.value = PositionState(it.broadcastIntervalSecs, it.minTxIntervalSecs, it.smartBroadcast, it.gpsSource)
+                    _position.value = PositionState(it.broadcastIntervalSecs, it.minTxIntervalSecs, it.smartBroadcast, it.gpsSource, it.positionChannelIndex)
                 }
                 map[ConfigGroup.POWER]?.let { b -> tryDecode { PowerConfig.parseFrom(b) } }?.let {
                     _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs, it.brightnessPct)
@@ -252,7 +253,9 @@ class SettingsViewModel @Inject constructor(
             .setBroadcastIntervalSecs(s.broadcastIntervalSecs)
             .setMinTxIntervalSecs(s.minTxIntervalSecs)
             .setSmartBroadcast(s.smartBroadcast)
-            .setGpsSource(s.gpsSource).build()
+            .setGpsSource(s.gpsSource)
+            .setPositionChannelIndex(s.positionChannelIndex)
+            .build()
         config.apply(ConfigGroup.POSITION, msg.toByteArray())
     }
     fun applyPower() {

@@ -141,6 +141,7 @@ message PositionConfig {
   uint32 min_tx_interval_secs    = 5;   // minimum gap between TX; default 15
   uint32 position_hop_limit      = 6;   // override for POSITION_APP hop_limit; 0 = use firmware default (7)
   GpsSource gps_source           = 7;   // GPS data source; default DEVICE_GPS
+  uint32 position_channel_index  = 8;   // which channel slot broadcasts POSITION_APP; default 0 (PRIMARY)
 }
 
 // ── Power ─────────────────────────────────────────────────────────────────────

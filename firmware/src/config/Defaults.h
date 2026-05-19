@@ -92,6 +92,7 @@ constexpr uint32_t POSITION_MOVEMENT_THRESHOLD_M     = 10;    // fixed; not user
 constexpr uint32_t POSITION_MIN_TX_INTERVAL_SECS     = 15;    // min gap between TX
 constexpr uint32_t POSITION_HIT_HEARTBEAT_SECS       = 300;   // 5 min when HIT/RESPAWNING/ELIMINATED
 constexpr uint8_t  POSITION_GPS_SOURCE               = 0;     // 0=DEVICE_GPS, 1=PHONE_GPS
+constexpr uint8_t  POSITION_CHANNEL_INDEX             = 0;     // which channel slot broadcasts POSITION_APP
 
 // ── Per-packet-type default hop limits (§8.7, updated v1.5) ────────────────────
 // All types use hop_limit=7 (maximum) except AIRTAK_AUDIO=1 and AIRTAK_ACK (dynamic).

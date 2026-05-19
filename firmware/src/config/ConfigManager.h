@@ -75,6 +75,7 @@ public:
     static uint32_t positionPrecisionBits();
     static uint8_t  positionHopLimitOverride();
     static uint8_t  positionGpsSource();          // 0=DEVICE_GPS, 1=PHONE_GPS
+    static uint8_t  positionChannelIndex();       // which channel slot broadcasts POSITION_APP
 
     // ── LoRa parameter accessors (read from LORA config buffer) ──────────────
     // These are used by Radio::reinit() to apply the committed LORA config

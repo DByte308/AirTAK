@@ -1007,6 +1007,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
     val power by vm.power.collectAsState()
     LaunchedEffect(Unit) { vm.readPosition() }
     LaunchedEffect(Unit) { vm.readPower() }
+    LaunchedEffect(Unit) { vm.readChannels() }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         SectionLabel("Position broadcast")
         Spacer(Modifier.height(8.dp))
@@ -1066,6 +1067,28 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                         }
                     }
             )
+        }
+        Spacer(Modifier.height(24.dp))
+        SectionLabel("Position broadcast channel")
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Select which channel carries your GPS position. Use an encrypted channel shared with your team — avoid unencrypted channels to prevent enemy tracking.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        val channels by vm.channels.collectAsState()
+        val activeSlotOptions = channels.slots
+            .filter { it.slot.role != ChannelRole.DISABLED }
+            .map { it.slot.index to it.slot.name }
+        NumberDropdown(
+            label = "Channel",
+            value = position.positionChannelIndex,
+            options = activeSlotOptions.map { it.first },
+            onValue = { vm.updatePosition { copy(positionChannelIndex = it) } },
+            modifier = Modifier.fillMaxWidth(),
+        ) { value ->
+            activeSlotOptions.firstOrNull { it.first == value }?.second ?: "Slot $value"
         }
         Spacer(Modifier.height(24.dp))
         SectionLabel("Power saving")
