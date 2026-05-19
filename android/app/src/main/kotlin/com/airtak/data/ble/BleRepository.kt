@@ -51,7 +51,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ConcurrentLinkedDeque
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -75,6 +75,18 @@ class BleRepository @Inject constructor(
     )
     val inbound: SharedFlow<InboundFrame> = _inbound.asSharedFlow()
 
+    /** Surfaces a fatal write failure (all retries exhausted) so callers like
+     *  the OTA engine can abort instead of silently losing bytes. Reset to
+     *  null whenever a new operation begins succeeding. */
+    private val _txFailure = MutableStateFlow<TxFailure?>(null)
+    val txFailure: StateFlow<TxFailure?> = _txFailure.asStateFlow()
+
+    data class TxFailure(val charUuid: java.util.UUID, val status: Int, val attempts: Int)
+
+    /** Clear any latched write failure. The OTA engine calls this before
+     *  starting a session so a stale error from earlier doesn't trip it. */
+    fun clearTxFailure() { _txFailure.value = null }
+
     // ── Internal ──────────────────────────────────────────────────────────────
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val adapter: BluetoothAdapter? =
@@ -86,19 +98,32 @@ class BleRepository @Inject constructor(
     private var currentMtu: Int = 23
     private var chunkPayloadSize: Int = 23 - BleFraming.HEADER_BYTES - BleFraming.ATT_OVERHEAD
 
-    /** Per-characteristic reassemblers — chunked notifications must not interleave. */
+    /** Per-characteristic reassemblers — chunked notifications must not interleave.
+     *  OTA_COMMAND is included so device-side OtaStatus replies are reassembled
+     *  during a firmware update session. */
     private val reassemblers = mapOf(
         BleConstants.CHR_CONFIG_RW     to BleFraming.Reassembler(),
         BleConstants.CHR_MESH_RX       to BleFraming.Reassembler(),
         BleConstants.CHR_DEVICE_STATUS to BleFraming.Reassembler(),
         BleConstants.CHR_ADMIN         to BleFraming.Reassembler(),
+        BleConstants.CHR_OTA_COMMAND   to BleFraming.Reassembler(),
     )
 
     /** Outbound queue serialized to prevent GATT op overlap. */
-    private val txQueue = ConcurrentLinkedQueue<TxOp>()
+    private val txQueue = ConcurrentLinkedDeque<TxOp>()
     @Volatile private var txInFlight = false
+    @Volatile private var currentTxOp: TxOp? = null
+    /** Guards the txInFlight check/set and the writeCharacteristic call so two
+     *  threads can't both pass the `if (txInFlight) return` check and then
+     *  issue overlapping writes (Android refuses with rc=201 BUSY). */
+    private val pumpLock = Any()
 
-    private data class TxOp(val charUuid: java.util.UUID, val chunk: ByteArray, val writeNoResponse: Boolean)
+    private data class TxOp(
+        val charUuid: java.util.UUID,
+        val chunk: ByteArray,
+        val writeNoResponse: Boolean,
+        var retriesLeft: Int = 3,
+    )
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -187,21 +212,69 @@ class BleRepository @Inject constructor(
     /** Current GATT instance — exposed for OTA firmware update transport. */
     fun getGatt(): BluetoothGatt? = gatt
 
-    /** Send a payload on a writable characteristic. Returns immediately; transfer is async. */
+    /** Send a payload on a writable characteristic. Returns immediately; transfer is async.
+     *
+     *  - [OutboundChannel.OtaData] is special: firmware OTA chunks are written raw
+     *    (no 6-byte AirTAK chunk header, no further splitting) because the ESP32
+     *    `OtaDataCallbacks::onWrite` handler feeds each BLE write straight into
+     *    `esp_ota_write`. The caller is responsible for sizing each chunk to fit
+     *    the negotiated MTU (typically `mtu - 3`).
+     *  - All other channels go through the chunk-framed envelope. */
     fun send(channel: OutboundChannel, payload: ByteArray) {
         if (_linkState.value !is LinkState.Connected) return
         val uuid = when (channel) {
-            OutboundChannel.ConfigRw -> BleConstants.CHR_CONFIG_RW
-            OutboundChannel.MeshTx   -> BleConstants.CHR_MESH_TX
-            OutboundChannel.Admin    -> BleConstants.CHR_ADMIN
+            OutboundChannel.ConfigRw   -> BleConstants.CHR_CONFIG_RW
+            OutboundChannel.MeshTx     -> BleConstants.CHR_MESH_TX
+            OutboundChannel.Admin      -> BleConstants.CHR_ADMIN
+            OutboundChannel.OtaCommand -> BleConstants.CHR_OTA_COMMAND
+            OutboundChannel.OtaData    -> BleConstants.CHR_OTA_DATA
         }
+        // OTA_DATA uses write-WITH-response so the BLE stack paces chunks to
+        // the firmware's `esp_ota_write` throughput (flash erase+write is ~10–30
+        // ms per chunk on ESP32-S3). Write-without-response would let Android
+        // queue ~100 writes and silently drop the rest once the controller's
+        // link-layer buffer fills, leaving the device with a half-written image.
         val noResponse = channel == OutboundChannel.MeshTx
-        val chunks = BleFraming.encode(payload, chunkPayloadSize)
-        chunks.forEach { txQueue.add(TxOp(uuid, it, noResponse)) }
+        if (channel == OutboundChannel.OtaData) {
+            // Raw, unframed write — the firmware treats each ATT payload as a
+            // complete OTA chunk. Serialize through txQueue for flow control.
+            txQueue.add(TxOp(uuid, payload, noResponse))
+        } else {
+            val chunks = BleFraming.encode(payload, chunkPayloadSize)
+            chunks.forEach { txQueue.add(TxOp(uuid, it, noResponse)) }
+        }
         pumpTx()
     }
 
-    enum class OutboundChannel { ConfigRw, MeshTx, Admin }
+    /** Effective ATT payload size for OTA_DATA chunks at the negotiated MTU.
+     *  Capped at 512 bytes because that is the Android-side maximum for a
+     *  `BluetoothGattCharacteristic` value, regardless of MTU. Writes larger
+     *  than 512 throw "value should not be longer than max length of an
+     *  attribute value" before they ever reach the air. */
+    fun otaDataChunkSize(): Int =
+        (currentMtu - BleFraming.ATT_OVERHEAD).coerceIn(1, 512)
+
+    /** Suspend until the outbound queue has drained (all writes acked) or the
+     *  timeout elapses. Returns true if drained, false on timeout. Used by the
+     *  OTA engine to flush pending chunks before requesting a status snapshot
+     *  or finalizing the update. */
+    suspend fun awaitTxIdle(timeoutMs: Long = 30_000L): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (txQueue.isNotEmpty() || txInFlight) {
+            if (System.currentTimeMillis() > deadline) return false
+            if (_linkState.value !is LinkState.Connected) return false
+            kotlinx.coroutines.delay(20)
+        }
+        return true
+    }
+
+    /** Depth of the pending outbound write queue (excluding the in-flight op).
+     *  The OTA engine uses this for cooperative backpressure so it doesn't
+     *  queue thousands of OTA_DATA chunks ahead of an OTA_COMMAND status
+     *  request that needs to make round-trip progress. */
+    fun txQueueDepth(): Int = txQueue.size
+
+    enum class OutboundChannel { ConfigRw, MeshTx, Admin, OtaCommand, OtaData }
 
     // ── GATT callbacks ────────────────────────────────────────────────────────
 
@@ -215,12 +288,19 @@ class BleRepository @Inject constructor(
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
+                    // Android caches the remote GATT database per-bond. When the
+                    // firmware adds new characteristics (e.g. OTA_COMMAND /
+                    // OTA_DATA) the bonded phone keeps using the stale cache and
+                    // writes to those handles silently no-op. Force a refresh
+                    // BEFORE service discovery so we always see the live schema.
+                    refreshGattCache(g)
                     // Request the largest supported MTU; the device may grant less.
                     g.requestMtu(517)
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     txQueue.clear()
                     txInFlight = false
+                    currentTxOp = null
                     reassemblers.values.forEach { it.reset() }
                     runCatching { g.close() }
                     if (gatt === g) gatt = null
@@ -248,6 +328,18 @@ class BleRepository @Inject constructor(
                 g.disconnect()
                 return
             }
+            // Warn loudly if expected characteristics are missing. This used
+            // to silently fail when the bonded phone held a stale GATT cache
+            // from before OTA_COMMAND / OTA_DATA were added.
+            val missing = BleConstants.ALL_CHARS.filter { service.getCharacteristic(it) == null }
+            if (missing.isNotEmpty()) {
+                android.util.Log.w(
+                    "BleRepository",
+                    "GATT schema missing ${missing.size} characteristic(s): " +
+                        missing.joinToString { it.toString().take(8) } +
+                        " — phone is likely using a stale cache. Unpair the device and reconnect."
+                )
+            }
             // Enable notifications on every notify-capable characteristic.
             scope.launch {
                 BleConstants.NOTIFY_CHARS.forEach { uuid ->
@@ -272,13 +364,49 @@ class BleRepository @Inject constructor(
         override fun onCharacteristicWrite(
             g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int,
         ) {
+            val op = currentTxOp
+            currentTxOp = null
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                android.util.Log.w(
+                    "BleRepository",
+                    "Write to ${ch.uuid} failed: status=$status " +
+                        "(5=INSUFFICIENT_AUTHENTICATION, 8=INSUFFICIENT_ENCRYPTION, " +
+                        "15=INSUFFICIENT_AUTHORIZATION, 133=GATT_ERROR, 137=GATT_AUTH_FAIL)",
+                )
+                // Re-queue the failed op at the FRONT so the data stream stays
+                // in order. Without this, transient errors (controller busy /
+                // peer flow-control) silently drop bytes — fatal for OTA where
+                // even one missing chunk corrupts the image.
+                if (op != null && op.retriesLeft > 0) {
+                    op.retriesLeft -= 1
+                    txQueue.addFirst(op)
+                } else if (op != null) {
+                    // Retries exhausted — surface the failure to callers and
+                    // drain the queue. Continuing would lose bytes silently
+                    // and produce a truncated firmware image at finalize.
+                    android.util.Log.e(
+                        "BleRepository",
+                        "Giving up on ${op.charUuid} after retries (last status=$status). " +
+                            "Dropping ${txQueue.size} queued op(s).",
+                    )
+                    _txFailure.value = TxFailure(op.charUuid, status, attempts = 4 - op.retriesLeft)
+                    txQueue.clear()
+                }
+            }
             txInFlight = false
             pumpTx()
         }
 
         override fun onDescriptorWrite(
             g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int,
-        ) { /* notifications enable serially via delay() in onServicesDiscovered */ }
+        ) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                android.util.Log.w(
+                    "BleRepository",
+                    "CCCD write on ${descriptor.characteristic.uuid} failed: status=$status",
+                )
+            }
+        }
     }
 
     private fun enableSubscription(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
@@ -310,29 +438,103 @@ class BleRepository @Inject constructor(
             BleConstants.CHR_MESH_RX       -> InboundChannel.MeshRx
             BleConstants.CHR_DEVICE_STATUS -> InboundChannel.DeviceStatus
             BleConstants.CHR_ADMIN         -> InboundChannel.Admin
+            BleConstants.CHR_OTA_COMMAND   -> InboundChannel.OtaCommand
             else -> return
         }
         _inbound.tryEmit(InboundFrame(channel, payload))
     }
 
     private fun pumpTx() {
-        if (txInFlight) return
-        val g = gatt ?: return
-        val op = txQueue.poll() ?: return
-        val service = g.getService(BleConstants.SERVICE_UUID) ?: return
-        val ch = service.getCharacteristic(op.charUuid) ?: return
-        val writeType = if (op.writeNoResponse)
-            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-        else
-            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        txInFlight = true
-        @Suppress("DEPRECATION")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            g.writeCharacteristic(ch, op.chunk, writeType)
-        } else {
-            ch.writeType = writeType
-            ch.value = op.chunk
-            g.writeCharacteristic(ch)
+        // Serialize the check-set of txInFlight together with the actual
+        // writeCharacteristic call. Without this lock, multiple coroutines
+        // calling enqueueTx → pumpTx concurrently all see txInFlight=false,
+        // all set it true, and all hit Android's GATT layer simultaneously —
+        // which returns rc=201 (ERROR_GATT_WRITE_REQUEST_BUSY) for all but
+        // one and stalls the queue (the survivor's callback fires, but the
+        // others left phantom state behind).
+        val op: TxOp
+        val g: BluetoothGatt
+        val ch: BluetoothGattCharacteristic
+        val writeType: Int
+        synchronized(pumpLock) {
+            if (txInFlight) return
+            g = gatt ?: return
+            op = txQueue.poll() ?: return
+            val service = g.getService(BleConstants.SERVICE_UUID) ?: return
+            ch = service.getCharacteristic(op.charUuid) ?: run {
+                android.util.Log.e(
+                    "BleRepository",
+                    "Cannot write ${op.charUuid}: characteristic not present in remote GATT db " +
+                        "(stale cache?). Forgetting bond and reconnecting may resolve this.",
+                )
+                return
+            }
+            writeType = if (op.writeNoResponse)
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            else
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            txInFlight = true
+            currentTxOp = op
+        }
+        val writeResult = runCatching {
+            @Suppress("DEPRECATION")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val rc = g.writeCharacteristic(ch, op.chunk, writeType)
+                if (rc == BluetoothGatt.GATT_SUCCESS) rc
+                else throw IllegalStateException("writeCharacteristic returned rc=$rc")
+            } else {
+                ch.writeType = writeType
+                ch.value = op.chunk
+                @Suppress("DEPRECATION")
+                if (g.writeCharacteristic(ch)) BluetoothGatt.GATT_SUCCESS
+                else throw IllegalStateException("writeCharacteristic returned false")
+            }
+        }
+        writeResult.onFailure { e ->
+            // e.g. IllegalArgumentException("value should not be longer than
+            // max length of an attribute value") when a caller asks to write
+            // more than 512 bytes. The framework throws before delivering an
+            // onCharacteristicWrite callback, so we must un-block the queue
+            // ourselves or every subsequent write deadlocks.
+            android.util.Log.e(
+                "BleRepository",
+                "writeCharacteristic(${op.charUuid}, ${op.chunk.size} bytes) threw: ${e.message}",
+            )
+            currentTxOp = null
+            if (op.retriesLeft > 0) {
+                op.retriesLeft -= 1
+                txQueue.addFirst(op)
+                scope.launch {
+                    delay(20)
+                    synchronized(pumpLock) { txInFlight = false }
+                    pumpTx()
+                }
+            } else {
+                android.util.Log.e(
+                    "BleRepository",
+                    "Giving up on ${op.charUuid} after retries (sync failure: ${e.message}). " +
+                        "Dropping ${txQueue.size} queued op(s).",
+                )
+                _txFailure.value = TxFailure(op.charUuid, status = -1, attempts = 4 - op.retriesLeft)
+                txQueue.clear()
+                synchronized(pumpLock) { txInFlight = false }
+                pumpTx()
+            }
+        }
+    }
+
+    /** Invoke the hidden `BluetoothGatt.refresh()` via reflection. This wipes
+     *  Android's per-bond GATT attribute cache so the next `discoverServices()`
+     *  re-reads the live schema from the device. Required after the firmware
+     *  changes its set of characteristics (e.g. adding OTA_COMMAND / OTA_DATA)
+     *  without bumping the GAP Service-Changed indication. */
+    private fun refreshGattCache(g: BluetoothGatt) {
+        runCatching {
+            val m = g.javaClass.getMethod("refresh")
+            val ok = m.invoke(g) as? Boolean ?: false
+            android.util.Log.d("BleRepository", "BluetoothGatt.refresh() = $ok")
+        }.onFailure {
+            android.util.Log.w("BleRepository", "BluetoothGatt.refresh() not available: ${it.message}")
         }
     }
 

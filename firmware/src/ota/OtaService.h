@@ -33,10 +33,13 @@ public:
     // Returns false on flash write failure.
     static bool writeChunk(const uint8_t* data, size_t len);
 
-    // Finalize OTA.  Validates CRC, writes boot partition, returns true
-    // if rebooting is imminent.  Never returns on success (esp_restart / reboot).
-    // Returns false if CRC mismatch.
+    // Finalize OTA.  Validates CRC and writes the boot partition. Returns
+    // true on success. Does NOT reboot — callers must explicitly invoke
+    // reboot() after notifying the host of the OtaStatus(COMPLETE) result.
     static bool finish(uint32_t expectedCrc);
+
+    // Reboot into the freshly-flashed partition. Never returns.
+    static void reboot();
 
     // Cancel in-progress OTA.  Safe to call from any state.
     static void cancel();

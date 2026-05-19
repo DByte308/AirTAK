@@ -87,9 +87,15 @@ bool OtaService::finish(uint32_t expectedCrc) {
     }
 
     s_state = State::Complete;
-    esp_restart();
-    // never returns
+    // NOTE: Do NOT esp_restart() here. The caller (OtaCommandCallbacks)
+    // first sends OtaStatus(COMPLETE) over BLE so the Android app can
+    // distinguish a real successful update from an unrelated disconnect,
+    // then explicitly calls reboot() below.
     return true;
+}
+
+void OtaService::reboot() {
+    esp_restart();
 }
 
 void OtaService::cancel() {

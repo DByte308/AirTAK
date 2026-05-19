@@ -37,7 +37,7 @@ data class DiscoveredDevice(
 )
 
 /** Inbound payload from any notify-capable AirTAK characteristic. */
-enum class InboundChannel { ConfigRw, MeshRx, DeviceStatus, Admin }
+enum class InboundChannel { ConfigRw, MeshRx, DeviceStatus, Admin, OtaCommand }
 
 data class InboundFrame(
     val channel: InboundChannel,

@@ -60,7 +60,7 @@ class FirmwareUpdateViewModel @Inject constructor(
                 } ?: throw Exception("BLE GATT not available")
 
                 val status = deviceStatusRepo.status.value
-                val transport = FirmwareUpdateManager.Transport.BleGatt(gatt)
+                val transport = FirmwareUpdateManager.Transport.BleGatt(gatt, ble)
                 val deviceInfo = FirmwareUpdateManager.DeviceInfo(
                     boardId = status?.boardId ?: "unknown",
                     platform = status?.platform ?: "unknown",
@@ -68,9 +68,16 @@ class FirmwareUpdateViewModel @Inject constructor(
                 )
 
                 val session = manager.prepareUpdate(firmwareUri, transport, deviceInfo).getOrThrow()
-                session.execute { _progress.value = it }
-
-                _state.value = FwUpdateState.Done
+                val result = session.execute(firmwareBytes) { _progress.value = it }
+                result.fold(
+                    onSuccess = { _state.value = FwUpdateState.Done },
+                    onFailure = { e ->
+                        // execute() has already emitted UpdateProgress.Error
+                        // via the progress callback; surface it on the state
+                        // flow so the screen actually shows the failure.
+                        _state.value = FwUpdateState.Error(e.message ?: "Update failed")
+                    },
+                )
             } catch (e: Exception) {
                 _progress.value = UpdateProgress.Error(e.message ?: "Unknown error", canRetry = false)
                 _state.value = FwUpdateState.Error(e.message ?: "Unknown error")

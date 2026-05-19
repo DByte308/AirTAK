@@ -317,12 +317,19 @@ class OtaCommandCallbacks : public NimBLECharacteristicCallbacks {
         std::string val = chr->getValue();
         const uint8_t* data = reinterpret_cast<const uint8_t*>(val.data());
         uint16_t len = static_cast<uint16_t>(val.size());
+        Serial.printf("[OTA_CMD] onWrite len=%u\n", (unsigned)len);
 
         FrameHeader hdr;
         const uint8_t* chunk_payload;
         size_t chunk_len;
-        if (!Framing::decodeChunk(data, len, &hdr, &chunk_payload, &chunk_len)) return;
-        if (hdr.total_length > sizeof(s_ota_cmd_assembly)) return;
+        if (!Framing::decodeChunk(data, len, &hdr, &chunk_payload, &chunk_len)) {
+            Serial.println("[OTA_CMD] decodeChunk FAILED");
+            return;
+        }
+        if (hdr.total_length > sizeof(s_ota_cmd_assembly)) {
+            Serial.printf("[OTA_CMD] total_length %u exceeds buffer\n", hdr.total_length);
+            return;
+        }
         if (hdr.chunk_index == 0) {
             memset(s_ota_cmd_assembly, 0, sizeof(s_ota_cmd_assembly));
             s_ota_cmd_recv_mask = 0;
@@ -333,7 +340,11 @@ class OtaCommandCallbacks : public NimBLECharacteristicCallbacks {
 
         airtak_OtaCommand cmd = airtak_OtaCommand_init_zero;
         pb_istream_t in_stream = pb_istream_from_buffer(s_ota_cmd_assembly, hdr.total_length);
-        if (!pb_decode(&in_stream, airtak_OtaCommand_fields, &cmd)) return;
+        if (!pb_decode(&in_stream, airtak_OtaCommand_fields, &cmd)) {
+            Serial.printf("[OTA_CMD] pb_decode FAILED, total_length=%u\n", hdr.total_length);
+            return;
+        }
+        Serial.printf("[OTA_CMD] decoded which=%d\n", (int)cmd.which_command);
 
         airtak_OtaStatus status_msg = airtak_OtaStatus_init_zero;
 
@@ -348,6 +359,9 @@ class OtaCommandCallbacks : public NimBLECharacteristicCallbacks {
             bool ok = ota::OtaService::finish(cmd.command.finish.crc32);
             status_msg.state = ok ? airtak_OtaState_OTA_COMPLETE
                                   : airtak_OtaState_OTA_ERROR;
+            status_msg.bytes_written = ota::OtaService::bytesWritten();
+            status_msg.total_size    = ota::OtaService::totalSize();
+            if (!ok) status_msg.last_error = ota::OtaService::lastError();
         } else if (cmd.which_command == airtak_OtaCommand_status_tag) {
             auto s = ota::OtaService::state();
             status_msg.state         = static_cast<airtak_OtaState>(static_cast<uint8_t>(s));
@@ -361,8 +375,21 @@ class OtaCommandCallbacks : public NimBLECharacteristicCallbacks {
         uint8_t buf[128];
         pb_ostream_t out = pb_ostream_from_buffer(buf, sizeof(buf));
         if (pb_encode(&out, airtak_OtaStatus_fields, &status_msg)) {
+            // OTA_COMMAND has the NOTIFY property only (see init below).
+            // Calling indicate() on a non-indicate characteristic would be a
+            // no-op and the Android app would never see OtaStatus replies.
             sendFramed(s_ota_cmd, buf,
-                       static_cast<uint16_t>(out.bytes_written), true);
+                       static_cast<uint16_t>(out.bytes_written), false);
+        }
+
+        // If the finish succeeded, give the notification a moment to reach
+        // the host's BLE stack, then reboot into the freshly-flashed image.
+        // OtaService::finish() intentionally does NOT esp_restart() so the
+        // Android app can observe an explicit OtaStatus(COMPLETE) event.
+        if (cmd.which_command == airtak_OtaCommand_finish_tag &&
+            status_msg.state == airtak_OtaState_OTA_COMPLETE) {
+            vTaskDelay(pdMS_TO_TICKS(250));
+            ota::OtaService::reboot();  // never returns
         }
     }
 };
@@ -372,7 +399,19 @@ class OtaDataCallbacks : public NimBLECharacteristicCallbacks {
         std::string val = chr->getValue();
         const uint8_t* data = reinterpret_cast<const uint8_t*>(val.data());
         size_t len = val.size();
-        ota::OtaService::writeChunk(data, len);
+        if (!ota::OtaService::writeChunk(data, len)) {
+            // Log only on transitions to keep the serial buffer sane — a
+            // sustained log spam can itself starve the BLE stack.
+            static bool s_logged_once = false;
+            if (!s_logged_once) {
+                Serial.printf("[OTA_DATA] writeChunk FAILED at %u bytes "
+                              "(state=%u, err=0x%08x). Subsequent failures suppressed.\n",
+                              (unsigned)ota::OtaService::bytesWritten(),
+                              (unsigned)ota::OtaService::state(),
+                              (unsigned)ota::OtaService::lastError());
+                s_logged_once = true;
+            }
+        }
     }
 };
 #endif
@@ -424,10 +463,12 @@ void AirTAKService::init(QueueHandle_t mesh_rx_queue) {
         NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_AUTHEN);
     s_ota_cmd->setCallbacks(new OtaCommandCallbacks());
 
-    // OTA_DATA — write-without-response, authenticated write
+    // OTA_DATA — write-with-response (paced by Android to flash throughput),
+    // authenticated write. Write-without-response would let the host flood
+    // chunks faster than esp_ota_write can absorb them.
     s_ota_data = pSvc->createCharacteristic(
         CHAR_OTA_DATA_UUID,
-        NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_AUTHEN);
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN);
     s_ota_data->setCallbacks(new OtaDataCallbacks());
 #endif
 

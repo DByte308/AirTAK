@@ -23,9 +23,25 @@ object BleConstants {
     // Standard Client Characteristic Configuration Descriptor.
     val CCC_DESCRIPTOR: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
-    /** All five AirTAK characteristics in stable order for iteration. */
-    val ALL_CHARS = listOf(CHR_CONFIG_RW, CHR_MESH_TX, CHR_MESH_RX, CHR_DEVICE_STATUS, CHR_ADMIN)
+    /** All AirTAK characteristics in stable order for iteration. */
+    val ALL_CHARS = listOf(
+        CHR_CONFIG_RW,
+        CHR_MESH_TX,
+        CHR_MESH_RX,
+        CHR_DEVICE_STATUS,
+        CHR_ADMIN,
+        CHR_OTA_COMMAND,
+        CHR_OTA_DATA,
+    )
 
-    /** Subset that requires NOTIFY enablement on connect. */
-    val NOTIFY_CHARS = listOf(CHR_CONFIG_RW, CHR_MESH_RX, CHR_DEVICE_STATUS, CHR_ADMIN)
+    /** Subset that requires NOTIFY enablement on connect.
+     *  OTA_COMMAND is included so the device's OtaStatus responses (RECEIVING /
+     *  COMPLETE / ERROR) reach the app during a firmware update session. */
+    val NOTIFY_CHARS = listOf(
+        CHR_CONFIG_RW,
+        CHR_MESH_RX,
+        CHR_DEVICE_STATUS,
+        CHR_ADMIN,
+        CHR_OTA_COMMAND,
+    )
 }

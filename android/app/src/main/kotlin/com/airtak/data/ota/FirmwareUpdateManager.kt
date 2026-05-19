@@ -12,6 +12,7 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
 import android.net.Uri
 import com.airtak.data.ble.BleConstants
+import com.airtak.data.ble.BleRepository
 import kotlinx.coroutines.flow.Flow
 
 class FirmwareUpdateManager(
@@ -31,7 +32,11 @@ class FirmwareUpdateManager(
         ) : Transport()
 
         data class BleGatt(
-            val bluetoothGatt: BluetoothGatt
+            val bluetoothGatt: BluetoothGatt,
+            /** Repository used by BLE OTA engines to send framed writes via the
+             *  shared serialized tx queue and to observe link state during the
+             *  post-flash reconnect window. */
+            val repository: BleRepository,
         ) : Transport()
     }
 
@@ -75,7 +80,10 @@ class FirmwareUpdateManager(
                 else -> null
             }
 
-        suspend fun execute(onProgress: (UpdateProgress) -> Unit): Result<String> {
+        suspend fun execute(
+            firmware: ByteArray,
+            onProgress: (UpdateProgress) -> Unit,
+        ): Result<String> {
             onProgress(UpdateProgress.Initializing("Detecting device..."))
             val initResult = engine.initialize()
             if (initResult.isFailure) {
@@ -86,10 +94,9 @@ class FirmwareUpdateManager(
                 return Result.failure(initResult.exceptionOrNull()!!)
             }
 
-            val deviceInfo = initResult.getOrThrow()
             onProgress(UpdateProgress.Initializing("Transferring firmware..."))
 
-            val transferResult = engine.transfer(deviceInfo.toString().encodeToByteArray(), onProgress)
+            val transferResult = engine.transfer(firmware, onProgress)
             if (transferResult.isFailure) {
                 onProgress(UpdateProgress.Error(
                     "Transfer failed: ${transferResult.exceptionOrNull()?.message}",
@@ -146,7 +153,7 @@ class FirmwareUpdateManager(
                         deviceInfo?.platform?.contains("NRF", ignoreCase = true) == true ->
                         NrfBleDfuEngine(context, transport.bluetoothGatt)
                     deviceInfo?.platform?.contains("ESP", ignoreCase = true) == true ->
-                        EspBleOtaEngine(transport.bluetoothGatt)
+                        EspBleOtaEngine(transport.repository)
                     else -> return Result.failure(IllegalArgumentException("Unknown platform: ${deviceInfo?.platform}"))
                 }
             }
