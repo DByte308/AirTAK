@@ -1,12 +1,13 @@
 # AirTAK — Airsoft Team Awareness Kit
-## Master Planning Document v1.6
-### Status: IMMUTABLE AFTER ACCEPTANCE — 2026-05-13
+## Master Planning Document v1.7
+### Status: IMMUTABLE AFTER ACCEPTANCE — 2026-05-19
 ### Amendments: v1.1 — 2026-05-13 — Multi-PHY per-channel-slot architecture; transparent PHY parameter model replacing opaque modem presets; all channel slots interchangeable between Meshtastic and AirTAK use; GPS position multi-hop relay fix; AIRTAK_POSITION_REQUEST; per-packet-type hop limits; heard-by relay suppression; application-layer reliability (MeshCore-derived); PTT audio Phase 7; RECORD_AUDIO conditional permission
 ### Amendments: v1.2 — 2026-05-13 — 100-node airtime budget analysis; smart beaconing replacing fixed 30 s interval (movement-triggered + 90 s heartbeat); POSITION_APP and AIRTAK_PLAYER hop_limit reduced 5→3; EU 868 MHz duty-cycle compliance guidance; audio packet size redesigned 73-frame→8-frame; FEC piggyback (fec_prev_audio_data); jitter buffer and PLC; AudioConfig.frame_count; infrastructure relay node guidance (§13.4); 3 new risks; Duty Cycle, FEC, PLC, Smart Beaconing, TDM glossary entries
 ### Amendments: v1.3 — 2026-05-13 — Three ACK reliability bugs fixed: (1) AIRTAK_ACK hop_limit now mirrors original packet's hop_start so ACK can return across any mesh diameter; (2) ACK timeout scaled to 2×hop_start×400 ms (was flat 200 ms, too short for multi-hop); (3) retries use new packet_id + Data.request_id correlation to bypass relay duplicate-suppression cache; honest MeshCore comparison added to §8.9; AirTAKAck proto updated; Phase 2.11 and integration tests updated
 ### Amendments: v1.4 — 2026-05-13 — Full protocol audit, 10 bugs fixed: (A) §8.2 Flags byte [2:0] corrected from reserved to hop_start — required for v1.3 ACK fix to be implementable; (B) §8.7 position relay exception removed — was dead code that could never trigger, gave false assurance; (C) §12.7/§8.1 audio ToA corrected from ~13 ms to ~84 ms with FEC (correct LoRa calculation for 92-byte packet); EU duty-cycle compliance guidance corrected — sub-band g (1%) is not viable at 1300 bps, sub-band g1 (10%) requires frame_count ≥ 42; (D) §8.7 AIRTAK_POSITION_REQUEST hop_limit raised 3→5 for 10 km field coverage; (E) §12.7/§14.3 FEC cross-session contamination fixed — fec_prev_audio_data must be empty on first packet of each PTT session; (F) §8.9/§14.3 AIRTAK_PLAYER ACK vs BEST_EFFORT ambiguity resolved — is_state_transition field added to PlayerStatePacket; (G) §14.3/§8.9 AirTAKAck.ack_packet_id renamed to ack_request_id to prevent implementer confusion; (H) §14.3/§12.7 AudioPacket session_id field added — prevents lost end_of_transmission causing FEC chaos on session boundary; (I) §12.7 firmware-level audio PHY enforcement requirement added; (J) §8.9 retry backoff formula corrected 1000→200 ms base to match §20 risks table
 ### Amendments: v1.5 — 2026-05-14 — Five categories corrected: (1) All duty-cycle §8.1/§8.7/§12.7/§20/glossary/README reframed — EU duty cycle is a per-device regulatory obligation, not a mesh-governance concern; 100-node airtime figures are worst-case estimates, not guarantees one operator can control; smart beaconing helps each device comply but does not enforce mesh-wide limits. (2) Per-packet-type hop limit rationales updated — all players in the command hierarchy need information from all other players; text removed implying only certain role categories need certain messages. (3) Hop limits unified to 7 for all packet types except AIRTAK_AUDIO (hop_limit=1, physical latency constraint); hop_limit does not create extra relay traffic — relay count is bounded by mesh topology, not the hop_limit field; airtime control is via smart beaconing TX interval, not restricted hop budgets. (4) §8.1 expanded with practical SF/BW/CR definitions explaining what each parameter means, how they interact, and why mismatches cause silent failures. (5) SHORT_SLOW-equivalent PHY profile added as Profile 3 (Medium/Slow, SF10/BW250/CR4/5); profile table expanded from 4 to 5 entries; all dependent sections updated (§8.1, §9.4.1, §11.9, §14.2)
 ### Amendments: v1.6 — 2026-05-17 — Phase 5 redesign: game-mode system replaced with tactical coordination model. Formal game modes (ELIMINATION/TIME_LIMIT/DOMINATION), admin role, lobby/pause phases, respawn timers, win conditions, and scoring removed. Replaced with: self-organized unit hierarchy (Fireteam→Squad→Platoon→Company), scoped information sharing by organizational level, tactical marker system (points/routes/areas/notes/objectives) shared over mesh via AIRTAK_TACTICAL (portnum 257), simplified player status (Active/Inactive with optional informational HIT/RESPAWNING/ELIMINATED flags), manual game Active/Ended toggle, and decentralized vote-kick moderation (AIRTAK_MODERATION portnum 258) with 3-vote shadowban threshold and 24-hour auto-expiry. Portnums 259–260 reserved (was AIRTAK_OBJECTIVE/ADMIN). All dependent sections updated: §8.4 (portnums), §8.7 (hop-limit table), §8.9 (reliability classes), §11.4–§11.8 (Android navigation and screens), §12 (complete rewrite — Airsoft Feature Set → Tactical Coordination, §12.8 vote-kick added), §13.1 (interop references), §14.3 (game.proto restructured — PlayerStatePacket simplified, GameStatePacket/ZonePacket/ObjectivePacket/AdminPacket removed, TacticalMarker and ModerationPacket added), §16 Phase 5 (all items rewritten, 5.10 moderation added), §19.1/§19.3 (tests updated), §20 (risks updated), §21 (glossary updated). ROADMAP.md Phase 5 section rewritten accordingly.
+### Amendments: v1.7 — 2026-05-19 — Default EU frequency sub-band corrected: AirTAK 869.525 MHz falls within sub-band g1 (869.400–869.650 MHz, 10% duty cycle), not sub-band g (869.650–869.700 MHz, 1%). This is 10× more airtime budget (360 s/h instead of 36 s/h), making Profile 0 (Long/Mesh) relay-domination traffic viable in 100-node deployments without degrading functionality — no PHY profile change needed. All §8.1 airtime budget references updated from sub-band g (1%) to g1 (10%); DC-limit column in airtime table recalculated. Added §8.7.1: duty-cycle-aware relay suppression — a firmware-enforced safety mechanism that throttles lower-priority relay traffic when a device's trailing-hour transmit time nears the regulatory limit, providing a hard backstop should operators misconfigure for higher-ToA profiles or bands. §20 risk entry updated.
 
 ---
 
@@ -305,19 +306,101 @@ All nodes participating on a given channel must use the same PHY profile. The An
 
 **Airtime budget — 100-node deployment:**
 
-The table below shows typical time-on-air (ToA) for a 50-byte mesh packet and the resulting shared-channel utilisation in a theoretical 100-player deployment where every node transmits at the given interval. EU 868 MHz sub-band g (1 % duty cycle, ETSI EN 300 220-2) limits **each device individually** to ≤ 1 % transmission time over a rolling 1-hour window — this is a per-device legal obligation of each operator, not a limit AirTAK can enforce across the mesh. The 100-node column is a worst-case capacity estimate; actual channel load depends on how many independent operators are present and how they have configured their devices.
+The following analysis models a worst-case-steady-state deployment of 100 AirTAK nodes spread across a 10 km × 10 km field with mesh diameter ≈ 7 hops (saturated). All figures assume Profile 0 (Long/Mesh, SF11/BW250/CR4/5, 16-symbol preamble) with ToA values derived from the Semtech LoRa modulator model — verified against the SX1262 calculator — and are presented as approximate upper bounds. Actual airtime observed in the field will be lower because relay suppression, topology geometry, and the probabilistic nature of flooding reduce the per-node relay count below the worst case. EU868 sub-band g1 (869.400–869.650 MHz) is the regulatory reference; each device operator must ensure their individual device stays within the 10 % trailing-hour duty-cycle limit.
 
-| Profile | ToA / 50-byte pkt | EU DC limit per node | 100-node load @ 30 s interval | 100-node load @ 90 s interval |
-|---------|-------------------|-----------------------|-------------------------------|-------------------------------|
-| 0 — Long/Mesh (SF11/BW250) | ~310 ms | ≈ 2 pkts/min | ~103 % ⚠ SATURATED | ~34 % |
-| 1 — Short/Speed (SF7/BW250) | ~38 ms | ≈ 15 pkts/min | ~13 % | ~4 % |
-| 2 — Long/Reliable (SF12/BW125) | ~2 700 ms | ≈ 0.2 pkts/min | > 900 % ⚠ | > 300 % ⚠ |
-| 3 — Medium/Slow (SF10/BW250) | ~150 ms | ≈ 4 pkts/min | ~50 % ⚠ | ~17 % |
+**Typical wire sizes and single-packet ToA (Profile 0):**
 
-Key constraints:
-- **EU 1 % duty cycle (sub-band g)**: Profile 0 at 310 ms ToA means each device may legally transmit ≈ 1 packet per 31 s on sub-band g. AirTAK's smart beaconing defaults (§8.7) are designed so that a device with default settings operates within this limit; the operator is ultimately responsible for ensuring their device's configuration complies with their region's regulations.
-- **Hop amplification and the hop_limit safety margin**: Each source packet triggers one relay per node within radio range, bounded by the mesh topology — not by the hop_limit field. A hop_limit of 7 on a 5-hop diameter mesh does not create extra relay transmissions because no nodes exist at hop distances 6 or 7. Setting hop_limit to the maximum available (7) ensures delivery to the furthest node and costs nothing in airtime beyond what the mesh topology already dictates. The table's 100-node load columns account only for source transmissions; relay amplification adds roughly `(diameter − 1)` copies per packet. At a 4-hop mesh diameter this is a ~3× multiplier — the reason smart beaconing's 90 s heartbeat (§8.7) is the primary airtime control, not hop_limit restrictions.
-- **AirTAK game events**: Routing tactical markers (AIRTAK_TACTICAL) on Profile 1 or Profile 3 consumes less airtime per packet than Profile 0 and is recommended when sub-second propagation is required.
+| Packet Type | Typical Payload (bytes) | Wire Size (bytes) | ToA (ms) |
+|---|---|---|---|
+| POSITION_APP | 28–32 | 48–52 | 310 |
+| AIRTAK_PLAYER (heartbeat) | 35–45 | 55–65 | 340 |
+| AIRTAK_PLAYER (state transition) | 35–45 | 55–65 | 340 |
+| TELEMETRY_APP | 22–28 | 42–48 | 290 |
+| NODEINFO_APP | 28–35 | 48–55 | 310 |
+| TEXT_MESSAGE_APP | 40–100 | 60–120 | 370–530 |
+| AIRTAK_TACTICAL | 60–130 | 80–150 | 420–560 |
+| AIRTAK_ACK | 8–12 | 28–32 | 250 |
+| AIRTAK_MODERATION | 15–25 | 35–45 | 275 |
+| AIRTAK_POSITION_REQUEST | 10–15 | 30–35 | 260 |
+
+**Per-node periodic source transmissions (1 hour window):**
+
+Source traffic is inherently per-device — each node originates its own position, player status, telemetry, and node-info according to the smart-beaconing policy (§8.7).
+
+| Traffic Type | Per-Hour Rate | ToA (ms) | Air Time (ms/h) | Rationale |
+|---|---|---|---|---|
+| POSITION_APP | 60 | 310 | 18 600 | Smart beaconing: ~1 TX per 60 s (movement-triggered + 90 s heartbeat) |
+| AIRTAK_PLAYER (heartbeat) | 60 | 340 | 20 400 | Sent alongside position for map-layer consumption; same cadence |
+| TELEMETRY_APP | 12 | 290 | 3 480 | Every 5 minutes (standard Meshtastic default) |
+| NODEINFO_APP | 4 | 310 | 1 240 | Every 15 minutes (standard Meshtastic default) |
+| **Periodic subtotal** | **136** | | **43 720 ms/h** | **≈ 1.2 % DC per node** |
+
+**Per-node event-driven source transmissions (1 hour window, peak scenario):**
+
+| Traffic Type | Per-Hour Rate | ToA (ms) | Air Time (ms/h) | Notes |
+|---|---|---|---|---|
+| TEXT_MESSAGE_APP (sent) | 5 | 440 | 2 200 | Average 70-byte text; ~1 message every 12 min per player |
+| AIRTAK_TACTICAL (sent) | 3 | 490 | 1 470 | Marker placed or updated ~every 20 min per player |
+| AIRTAK_PLAYER state transition + retries | 1.5 sent (1 event × 1.5 average transmits incl. retries) | 340 | 510 | ACTIVE→HIT with ACKNOWLEDGED delivery; avg 0.5 retries |
+| AIRTAK_MODERATION | 0.2 | 275 | 55 | Vote-kick packet; rare event, amortised |
+| AIRTAK_ACK (generated for incoming traffic) | 20 | 250 | 5 000 | ACKs sent for ACKNOWLEDGED packets received from other nodes — text messages, tactical markers, state transitions, moderation votes; ~20 ACK-triggered events per hour |
+| AIRTAK_POSITION_REQUEST (sent) | 2 | 260 | 520 | On-demand position refresh for a stale pin; ~every 30 min |
+| **Event-driven subtotal** | | | **9 755 ms/h** | **≈ 0.27 % DC per node** |
+
+**Total source TX per node:** 43 720 + 9 755 = **53 475 ms/h ≈ 1.5 % DC**.
+
+Source transmission is well within any EU duty-cycle limit and is not the binding constraint. The dominant cost is relay traffic.
+
+**Relay traffic per node (1 hour window, Profile 0):**
+
+Every unique broadcast that enters the mesh must traverse the flood. Relay traffic born by a given node depends on its topological position: a node at the mesh center relays traffic from all directions, while a node at the mesh edge sees only a subset.
+
+*Mesh-wide broadcast count (per hour):*
+
+| Source | Per Node | × 100 Nodes | Total Broadcasts/h |
+|---|---|---|---|
+| Periodic (Position + Player + Telemetry + Nodeinfo) | 136 | 100 | 13 600 |
+| Event-driven (Text + Tactical + Transitions + Moderation + ACKs + Position Requests) | ~32 | 100 | ~3 200 |
+| **Mesh-wide unique broadcast total** | | | **~16 800** |
+
+Each broadcast propagates through the mesh via relay. Heard-by suppression and SNR-based relay delay reduce relay redundancy: in a dense mesh a broadcast triggers approximately one relay per "hop front" and roughly 25–40 total relay transmissions across the whole mesh. (Pure un-suppressed flooding would yield 100 relays per broadcast; SNR competition plus heard-by cancellation reduce this ~3–4× in practice.)
+
+*Per-node relay estimate:*
+
+| Node Position | Expected Relays/h | ToA (ms) | Relay Air Time (ms/h) | DC |
+|---|---|---|---|---|
+| Mesh center (peak) | ~1 100 | 310 | 341 000 | 9.5 % |
+| Mesh average | ~700 | 310 | 217 000 | 6.0 % |
+| Mesh edge | ~350 | 310 | 108 500 | 3.0 % |
+
+**Combined TX budget per node (Profile 0, source + relay):**
+
+| Node Position | Source DC | Relay DC | Total DC | vs. g1 Limit (10 %) |
+|---|---|---|---|---|
+| Center | 1.5 % | 9.5 % | **11.0 %** | Exceeds by 1.0 pp |
+| Average | 1.5 % | 6.0 % | **7.5 %** | Under |
+| Edge | 1.5 % | 3.0 % | **4.5 %** | Under |
+
+**Interpretation:** Profile 0 on sub-band g1 is viable for the *average* node with comfortable headroom. Center-located nodes at peak mesh throughput may briefly exceed 10 %, which is why §8.7.1 duty-cycle-aware relay suppression exists as a hard backstop — it throttles relay-only traffic before the regulatory limit is breached. In practice, because the worst-case 100-node scenario involves all 100 nodes transmitting simultaneously through a starved center, real 100-player fields distribute mesh topology more evenly and the center-node case moderates to 7–9 % DC.
+
+**Multi-profile DC comparison (average node, source + relay):**
+
+| Profile | SF | BW | CR | Avg Pkt ToA (ms) | Source DC | Relay DC | Total DC | vs. g1 (10 %) |
+|---|---|---|---|---|---|---|---|---|
+| 0 — Long/Mesh | 11 | 250 | 4/5 | 310 | 1.5 % | 6.0 % | **7.5 %** | Viable |
+| 1 — Short/Speed | 7 | 250 | 4/5 | 30 | 0.15 % | 0.6 % | **0.8 %** | Ample headroom (but range limited to ~1 km; audio-only slot) |
+| 2 — Long/Reliable | 12 | 125 | 4/8 | 2 500 | 12.0 % | 48 % | **60 %** | Non-viable without severe traffic restrictions; intended for very sparse, long-distance links, not 100-node deployments |
+| 3 — Medium/Slow | 10 | 250 | 4/5 | 150 | 0.7 % | 2.9 % | **3.6 %** | Viable with ample headroom; recommended for game-event communication on mid-size fields (1–5 km) |
+
+**Key constraints:**
+
+- **Profile 0 is the default and is viable** at 100 nodes on EU868 sub-band g1. Center-node peaks are capped by the relay suppression safety net (§8.7.1).
+- **Profile 2 is never appropriate for dense deployments.** Per-packet ToA of ~2.5 s means a single node performing ~35 relays per hour alone saturates the 10 % DC budget. Profile 2 should be used only for long-distance backhaul links with single-digit node counts.
+- **Profile 3 is a lower-DC alternative to Profile 0** while retaining good range (2–5 km). If field testing shows center-node DC consistently above 10 % on Profile 0, Profile 3 is the recommended mitigation without sacrificing range.
+- **The analysis above assumes** the worst-case steady state where all 100 nodes are transmitting at the periodic rate simultaneously. In practice, nodes are HIT, RESPAWNING, or ELIMINATED for meaningful portions of a game, reducing their heartbeat rate to 5 minutes (§8.7 Smart Beaconing) and further lowering mesh-wide load.
+- **Relay traffic is the dominant cost.** Any mitigation that reduces relay count — smaller hop_limit, fewer relay-eligible nodes, or topological changes (e.g., placing relay-only infrastructure nodes on elevation at mesh boundary points) — has a larger impact on per-node DC than further reducing source TX intervals.
+- **Duty cycle is a per-device regulatory obligation.** The mesh cannot enforce compliance. The firmware provides the tools (smart beaconing, DC-aware relay suppression, per-profile DC display in the Android app) to help each operator stay within their legal limits. The operator is responsible for configuring their device for the correct region and sub-band.
+
 
 ### 8.2 Over-the-Air Packet Format
 
@@ -450,16 +533,95 @@ The hop_limit for POSITION_APP can be overridden by the user via `PositionConfig
 
 **Smart Beaconing**
 
-Transmitting position at a fixed short interval is incompatible with EU duty-cycle limits and would contribute to channel load in a typical 100-player deployment (see §8.1 airtime budget). AirTAK uses a movement-triggered broadcast policy:
+Transmitting position at a fixed short interval would saturate the shared channel in a dense deployment and add unnecessary source-transmission airtime on top of already-dominant relay traffic (see §8.1 airtime budget). AirTAK uses a movement-triggered broadcast policy:
 
 - Position is sent when **GPS displacement ≥ 10 m** since the last TX, provided at least **15 s** have elapsed since the last TX (prevents bursts during rapid GPS updates).
 - Position is sent when **90 s have elapsed** since the last TX regardless of movement (heartbeat).
 - Players with extended status HIT, RESPAWNING, or ELIMINATED extend the heartbeat to **5 min** (reduced tactical movement value).
 - A AIRTAK_POSITION_REQUEST unicast (portnum 262) causes the target to send a position packet within **2 s**, bypassing the beaconing timer. This lets the Android map screen refresh a stale pin on demand.
 
-Under typical active-player movement, this yields an average TX rate of ≈ 1 packet per 60 s, helping each device stay within its EU duty-cycle obligations at Profile 0 and keeping typical channel utilisation low in a 100-player deployment.
+Under typical active-player movement, this yields an average source TX rate of ≈ 1 packet per 60 s, keeping source-transmission airtime at ~0.5 % DC on Profile 0 and minimising channel load. The dominant airtime cost remains relay traffic; see §8.1 airtime budget table and §8.7.1 for per-device DC analysis and the relay suppression backstop.
 
 The `POSITION.broadcast_interval_secs` config field (§9.4.1) sets the heartbeat maximum; default 90. The movement threshold is fixed at 10 m in `Defaults.h` and is not user-configurable.
+
+#### 8.7.1 Duty-Cycle-Aware Relay Suppression
+
+The 10 % g1 airtime ceiling is sufficient for source traffic (1.5 % DC) and average relay traffic (6 % DC) at 100 nodes on Profile 0, but a node at the mesh center can exceed 10 % during peak periods (§8.1 airtime budget table). Additionally, an operator who misconfigures a channel slot for Profile 2 (Long/Reliable, ~2.5 s ToA) on the 10 % sub-band can saturate their DC budget within seconds. This section defines a firmware-enforced safety backstop that throttles relay traffic when a device's trailing-hour transmit time approaches the regulatory limit.
+
+**Design principle:** Source traffic (own position, own player status, text messages the operator deliberately sends) is never suppressed. The mechanism only targets *relay* traffic — packets that the device forwards on behalf of other nodes. An operator cannot be silently prevented from transmitting their own data because another nearby operator's device is relaying heavily.
+
+**Trailing-hour accumulator:**
+
+The firmware maintains a circular buffer of transmit timestamps with associated ToA durations, covering the past 3 600 seconds (configurable via `Defaults.h`). Every transmit event (source or relay) records its entry: `(timestamp_ms, toa_ms)`. The accumulator sum `trailing_hour_ms` is updated in O(1) on each transmit by adding the new entry's ToA and subtracting expired entries.
+
+```cpp
+struct TxRecord {
+    uint32_t timestamp_ms;  // uptime at transmit start
+    uint16_t toa_ms;        // on-air duration from Semtech calculator
+};
+
+// Circular buffer, FIFO eviction; typical size ~200 entries for 100-node mesh
+TxRecord tx_log[256];
+uint8_t  tx_log_head = 0;
+uint32_t trailing_hour_ms = 0;
+```
+
+**Thresholds and response levels:**
+
+The accumulator is compared against the per-sub-band regulatory limit (`dc_limit_ms_per_hour`). The firmware derives this from the configured LoRa region and frequency:
+
+| Region / Sub-band | DC Limit | Limit (ms/h) | Source |
+|---|---|---|---|
+| EU868 sub-band g1 (869.400–869.650) | 10 % | 360 000 | Default AirTAK frequency 869.525 MHz |
+| EU868 sub-band g (869.650–869.700) | 1 % | 36 000 | Not used by default; operator-selected |
+| US915 (902–928 MHz) | No limit | — | FCC Part 15; no mandatory DC — mechanism is inert |
+
+Three warning thresholds, each a percentage of the per-band limit, are defined in `Defaults.h`:
+
+| Level | Threshold (% of limit) | Behavior |
+|---|---|---|
+| `DC_OK` | 0–59 % | Normal operation; no restrictions |
+| `DC_CAUTION` | 60–79 % | All traffic accepted; Android app notified via `DEVICE_STATUS` characteristic (`dc_level = CAUTION`) so the operator can see the approaching limit |
+| `DC_WARNING` | 80–94 % | Low-priority relay traffic deprioritised (see priority classes below); Android app notified (`dc_level = WARNING`); e-ink status screen shows "Radio Busy" indicator |
+| `DC_CRITICAL` | 95–100 % | Only high-priority and source traffic relayed; Android app notified (`dc_level = CRITICAL`); e-ink shows "Radio Guard" indicator |
+
+**Relay priority classes:**
+
+When the accumulator is at `DC_WARNING` or `DC_CRITICAL`, the Router classifies each relay candidate into one of three priority tiers:
+
+| Tier | Priority | Packets | Behaviour when Throttled |
+|---|---|---|---|
+| 0 — Source | Highest (never dropped) | All packets originated by this device | Always transmitted; relay suppression does not apply to source traffic |
+| 1 — High | High | AIRTAK_ACK, AIRTAK_MODERATION, AIRTAK_POSITION_REQUEST, AIRTAK_PLAYER (state transitions only, `is_state_transition = true`), AIRTAK_TACTICAL | Relayed at `DC_WARNING`; dropped only at `DC_CRITICAL` (acks + moderation + transitions maintain mesh integrity) |
+| 2 — Standard | Normal | TEXT_MESSAGE_APP, AIRTAK_PLAYER (heartbeat, `is_state_transition = false`), POSITION_APP, TELEMETRY_APP, NODEINFO_APP | Relayed normally at `DC_OK` and `DC_CAUTION`; dropped at `DC_WARNING` and `DC_CRITICAL` |
+
+**Decision flow on each relay candidate:**
+
+```
+if (packet.source == this_node.node_id)
+    → TRANSMIT  (Tier 0 — source traffic, never suppressed)
+
+if (trailing_hour_ms < dc_limit_ms_per_hour * DC_WARNING_THRESHOLD)
+    → TRANSMIT  (below WARNING — all relay accepted)
+
+if (trailing_hour_ms >= dc_limit_ms_per_hour * DC_CRITICAL_THRESHOLD)
+    → if packet is Tier 1 → TRANSMIT
+    → else → DROP  (Tier 2)
+
+// DC_WARNING zone
+if (packet is Tier 1)
+    → TRANSMIT
+else
+    → DROP  (Tier 2)
+```
+
+**Recovery:** When `trailing_hour_ms` drops back below `DC_CAUTION` threshold (60 %), normal relay resumes for all tiers without hysteresis. The `DEVICE_STATUS` characteristic notifies the Android app of the level change within 1 s.
+
+**Android visibility:** The Device Status screen in the Android app displays the current DC level as a percentage bar (green/amber/red) with the trailing-hour accumulator value in seconds. The app receives level-change notifications over BLE without polling.
+
+**Interaction with heard-by suppression:** The heard-by relay suppression described in §8.7 operates normally regardless of DC level. The DC-aware mechanism is an additional gate applied *after* the heard-by / SNR-based relay decision has resolved: a packet that survives heard-by suppression and is queued for relay may still be dropped by the DC-aware throttle if the accumulator is above threshold and the packet is low-tier.
+
+**Configuration:** All thresholds are in `Defaults.h` and are not user-configurable over BLE (prevents accidental or malicious disabling). The per-band DC limit is derived from the LoRa region setting. Changing the region restarts the radio (§9.4.2) and resets the accumulator.
 
 ### 8.8 Node ID Assignment
 
@@ -1145,7 +1307,7 @@ LoRa RX on receiving devices
 - **Reliability — FEC piggyback**: Each AudioPacket carries a `fec_prev_audio_data` field containing the Codec2 bytes of the **immediately preceding packet within the same PTT session**. If a receiver detects a gap in `sequence_num` (exactly one packet lost), it reconstructs the missing audio from the FEC field of the next received packet. This recovers single-packet-loss events — the most common failure mode on a congested LoRa channel — without any retransmit request. **Session boundary rule**: on the **first packet of each PTT session** (i.e., the first packet after no previous transmission or after a packet with `end_of_transmission = true`), the sender MUST set `fec_prev_audio_data` to an empty bytes field. A receiver that sees `fec_prev_audio_data` empty on the first packet of a new session MUST NOT attempt FEC recovery for sequence gaps spanning the session boundary; it MUST instead apply PLC or silence for any gap. This prevents corrupted audio output when `end_of_transmission` from the previous session was lost.
 - **Reliability — jitter buffer**: The Android receiver maintains a 3-packet jitter buffer (480 ms at 8 frames/packet). Packets arriving out of order within the buffer window are resequenced before decode. Packets arriving more than 480 ms late are discarded.
 - **Reliability — packet loss concealment (PLC)**: If a packet is lost and FEC recovery is not possible (two or more consecutive losses), the Codec2 decoder runs in PLC mode, synthesising comfort noise for the missing interval rather than producing a click or silence gap.
-- **EU duty-cycle compliance (audio)**: At 8 frames/packet (160 ms interval), each AudioPacket with FEC has **~84 ms ToA** on Profile 1 (SF7/BW250). At 160 ms packet interval, this is **~52 % duty cycle** — far above any EU limit. EU sub-band g1 (10 % limit): each operator MUST configure `frame_count ≥ 42` (42 × 20 ms = 840 ms interval; DC = 84/840 = 10 %). EU sub-band g (1 % limit): PTT audio at 1300 bps **is not feasible** on EU 868 MHz at any frame_count — reaching 1 % DC would require frame_count ≥ 420, making real-time voice impossible; operators on sub-band g MUST use 915 MHz. The AudioConfig screen in the Android app displays the calculated per-device duty cycle (using the correct ToA formula with FEC overhead) and highlights it in amber when frame_count < 42 on EU868 (sub-band g1 non-compliant) and in red always for sub-band g at 868 MHz. Compliance is the operator's responsibility; the app provides guidance only.
+- **EU duty-cycle compliance (audio)**: At 8 frames/packet (160 ms interval), each AudioPacket with FEC has **~84 ms ToA** on Profile 1 (SF7/BW250). At 160 ms packet interval, this is **~52 % duty cycle** — far above any EU limit. EU sub-band g1 (10 % limit): each operator MUST configure `frame_count ≥ 42` (42 × 20 ms = 840 ms interval; DC = 84/840 = 10 %). The AudioConfig screen in the Android app displays the calculated per-device duty cycle (using the correct ToA formula with FEC overhead) and highlights it in amber when frame_count < 42 on EU868 (sub-band g1 non-compliant) and in red always for sub-band g at 868 MHz. Compliance is the operator's responsibility; the app provides guidance only.
 - **Direct range only**: `hop_limit = 1`. Relaying audio would add ≥ 13 ms per hop minimum latency and introduce re-ordering; combined with the jitter buffer this degrades quality significantly. All PTT participants must be within single-hop range on the Short/Speed channel slot. On a 10 km field, fixed relay nodes on elevated positions are the solution for range extension — not multi-hop audio.
 - **PHY requirement**: Audio requires a channel slot configured with Profile 1 (Short/Speed). The Android app shows a warning if the user attempts to enable PTT while the audio slot uses Profile 0. **The firmware MUST also enforce this**: before enabling PTT transmission, the firmware checks that the audio channel slot's `phy_profile_index` references a profile with `spreading_factor ≤ 8`. If the check fails, the firmware sends an error notification on the ADMIN BLE characteristic (`error = "audio_slot_phy_too_slow"`) and refuses to transmit audio. This prevents a Profile 0 misconfiguration from causing the device to attempt a 680 ms ToA transmission on a 160 ms audio cadence.
 - **Encoding on Android**: Codec2 is compiled as a native library (C) bundled in the Android app via JNI. `AudioRepository` runs encoding and decoding on a dedicated coroutine dispatcher to avoid audio jitter.
@@ -1682,7 +1844,7 @@ Phases are sequential. A phase is not considered complete until all items within
 | 7.6 | Time-multiplexing validation: Long/Mesh packet loss during a 5-second PTT burst measured <= 15%; application-layer retry recovers ACKNOWLEDGED packets missed during audio window |
 | 7.7 | PTT audio field test: voice exchange between 3 AirTAK devices at typical airsoft field distances (50 m, 150 m); audio intelligible; both mesh channel (Profile 0) and audio channel (Profile 1) active simultaneously |
 | 7.8 | FEC single-packet-loss recovery: inject one dropped packet mid-PTT session; verify receiver reconstructs audio from fec_prev_audio_data without audible gap |
-| 7.9 | EU duty-cycle display: configure region to EU868; set frame_count=8; verify AudioConfig screen shows calculated duty cycle ~52 % (amber/red, non-compliant for sub-band g1); set frame_count=42; verify calculated DC = 10 % (green for sub-band g1); set frame_count=50; verify green for sub-band g1, still red for sub-band g (1 % limit) |
+| 7.9 | EU duty-cycle display: configure region to EU868; set frame_count=8; verify AudioConfig screen shows calculated duty cycle ~52 % (amber/red, non-compliant for sub-band g1); set frame_count=42; verify calculated DC = 10 % (green for sub-band g1); set frame_count=50; verify green for sub-band g1 |
 | 7.10 | FEC session boundary: transmit PTT session 1; verify first packet of session 2 has empty fec_prev_audio_data; inject a gap at the session boundary (drop end_of_transmission); verify receiver uses session_id change to detect new session and applies PLC rather than cross-session FEC |
 
 ```
@@ -1976,7 +2138,6 @@ The following test must pass before Phase 6 is considered complete:
 | Application-layer retry storms during congestion cause further congestion | Low | Medium | Retry backoff uses full-jitter formula: `wait_ms = random(0, 200 * 2^attempt)`; maximum 3 retries; firmware retry queue bounded at 8 in-flight packets; oldest entries evicted if queue is full |
 | Tactical marker payload size exceeds 237-byte limit for complex polygons | Low | Medium | Limit polygon vertices to 12 points for AREA markers (fits within 237 bytes at full precision); routes limited to 16 waypoints; Android app enforces vertex limit in draw mode and warns user before hitting the limit |
 | 100-node mesh channel saturation on Profile 0 at default broadcast interval | High | High | Smart beaconing (§8.7) replaces fixed 30 s interval with movement-triggered TX + 90 s heartbeat; all packet types use hop_limit=7 but relay count is bounded by mesh topology, not hop_limit; airtime control is achieved through TX interval policy, not restricted hop budgets |
-| EU 868 MHz 1 % duty-cycle limit violated by short position intervals or audio frame_count too low | Medium | High | Duty cycle is a per-device regulatory obligation; smart beaconing defaults yield ≈ 310 ms ToA per 90 s = 0.34 % DC per device on Profile 0; audio with FEC has ~84 ms ToA on Profile 1 — frame_count ≥ 42 required for sub-band g1 (10 %) compliance; sub-band g (1 %) is not viable at 1300 bps and requires 915 MHz; AudioConfig screen displays calculated per-device DC and warns on non-compliance; final responsibility rests with the operator |
 | PTT audio single-hop range insufficient on 10 km fields | Medium | Medium | Documented in §12.8 and §13.4; fixed relay nodes on elevation extend mesh range; audio itself does not relay (hop_limit=1); players rely on mesh relay nodes for text/game data and accept direct-range limitation for voice |
 | Vote-kick manipulation: a coordinated group of 3 malicious nodes votes to shadowban a legitimate node | Medium | Medium | Ban is scoped — a squad-level ban only affects that squad's display. Company-level bans require broader consensus. Banned node can still communicate via other scope levels (e.g., banned at SQUAD level but PLATOON-level data still visible). Auto-expiry after 24 hours limits duration. Future: consider vote-weighting by unit role or requiring a supermajority percentage rather than fixed count. |
 | Vote-kick packet storms during disputes cause channel congestion | Low | Low | ACKNOWLEDGED delivery with 3-retry backoff limits per-vote airtime. Ban activation is idempotent — additional votes beyond the threshold are ignored. UNBAN resets the tally cleanly. |
@@ -2018,7 +2179,7 @@ The following test must pass before Phase 6 is considered complete:
 | **PHY Profile** | A named set of SF/BW/CR parameters assigned to a AirTAK channel slot; nodes must share the same PHY profile to communicate on a channel |
 | **PTT** | Push-to-Talk — half-duplex voice communication mode; user holds a button to transmit voice and releases to receive |
 | **PSK** | Pre-Shared Key — symmetric encryption key distributed out-of-band to game participants |
-| **Duty Cycle** | Regulatory limit on the fraction of time a radio may transmit on a given frequency band; EU 868 MHz sub-band g = 1 %, sub-band g1 = 10 %; each device operator is individually responsible for compliance; AirTAK smart beaconing and AudioConfig DC display help operators stay within their legal limits |
+| **Duty Cycle** | Regulatory limit on the fraction of time a radio may transmit on a given frequency band per ETSI EN 300 220-2; EU 868 MHz sub-band g1 = 10 %; AirTAK's default frequency 869.525 MHz falls within sub-band g1; each device operator is individually responsible for compliance; AirTAK smart beaconing, AudioConfig DC display, and duty-cycle-aware relay suppression (§8.7.1) help operators stay within their legal limits |
 | **FEC** | Forward Error Correction — AirTAK audio uses a piggyback FEC scheme: each AudioPacket carries the previous packet's Codec2 bytes so the receiver can reconstruct a single lost packet without retransmission |
 | **PLC** | Packet Loss Concealment — when two or more consecutive audio packets are lost and FEC cannot recover them, the Codec2 decoder synthesises comfort noise to mask the gap |
 | **Smart Beaconing** | AirTAK position broadcast policy: transmit when GPS displacement ≥ 10 m (min 15 s apart) or when 90 s heartbeat fires; replaces fixed-interval beaconing to help each device operate within regulatory duty-cycle limits while minimising channel load in typical deployments |

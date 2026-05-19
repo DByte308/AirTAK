@@ -93,9 +93,14 @@ static int countUsedBlock(void* context, lfs_block_t) {
 }
 
 bool FlashStore::init() {
-    // If the bootloader used QSPI in XIP mode, the peripheral is left active
-    // and must be explicitly deinitialized before the app can re-own it.
+    // The UF2 bootloader leaves the QSPI peripheral in XIP mode to expose
+    // a CIRCUITPY drive on the external flash. The peripheral must be
+    // explicitly released before the application can re-own it. Failing to
+    // do so causes nrfx_qspi_init() to hang in its blocking ready-wait loop
+    // because the peripheral is still configured for the bootloader's context.
     nrfx_qspi_uninit();
+
+    delayMicroseconds(100);
 
     if (!s_flash.begin(s_supported_flash, sizeof(s_supported_flash) / sizeof(s_supported_flash[0]))) {
         return false;
