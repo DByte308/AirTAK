@@ -99,6 +99,8 @@ uint32_t ConfigManager::positionMinTxIntervalSecs() { return defaults::POSITION_
 uint32_t ConfigManager::positionMovementThresholdM() { return defaults::POSITION_MOVEMENT_THRESHOLD_M; }
 uint32_t ConfigManager::positionPrecisionBits() { return defaults::POSITION_GPS_PRECISION_BITS; }
 uint8_t ConfigManager::positionHopLimitOverride() { return 0; }
+uint8_t ConfigManager::positionGpsSource() { return 0; }
+uint8_t ConfigManager::positionChannelIndex() { return 0; }
 float ConfigManager::loraFrequencyMhz() { return 869.525f; }
 uint8_t ConfigManager::loraTxPowerDbm() { return defaults::LORA_TX_POWER_DBM; }
 uint8_t ConfigManager::primarySlotPhyProfileIndex() { return 0; }
