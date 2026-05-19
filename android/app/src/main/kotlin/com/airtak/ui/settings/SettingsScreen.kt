@@ -18,6 +18,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -103,7 +104,10 @@ private enum class Section(val title: String, val subtitle: String) {
 }
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel = hiltViewModel(),
+    onFirmwareSelected: ((Uri) -> Unit)? = null,
+) {
     var current by remember { mutableStateOf<Section?>(null) }
     // When non-null, the Channels editor scrolls / highlights the given slot
     // index on entry (used by the "Set up channel" flow from the Player section).
@@ -139,7 +143,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     Section.Moderation -> ModerationSection(viewModel)
                     Section.App -> AppSection(viewModel)
                     Section.Share -> ShareSection(viewModel)
-                    Section.About -> AboutSection(viewModel)
+                    Section.About -> AboutSection(viewModel, onFirmwareSelected)
                 }
             }
         }
@@ -1554,13 +1558,19 @@ private sealed class ImportState {
 // ── ABOUT ─────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun AboutSection(vm: SettingsViewModel) {
+private fun AboutSection(vm: SettingsViewModel, onFirmwareSelected: ((Uri) -> Unit)?) {
     val status by vm.deviceStatus.collectAsState()
     val context = LocalContext.current
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { onFirmwareSelected?.invoke(it) }
+    }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         HudCard(Modifier.fillMaxWidth()) {
             Column {
                 LabelValue("Firmware", status?.firmwareVersion ?: "—")
+                LabelValue("Board", status?.boardId ?: "—")
                 LabelValue(
                         "Node ID",
                         status?.nodeId?.toString(16)?.uppercase()?.padStart(8, '0') ?: "—"
@@ -1582,6 +1592,11 @@ private fun AboutSection(vm: SettingsViewModel) {
                 onClick = { vm.sendAdmin(AdminCommand.REBOOT) },
                 modifier = Modifier.fillMaxWidth(),
         ) { Text("Reboot Device") }
+        Spacer(Modifier.height(8.dp))
+        Button(
+                onClick = { filePicker.launch("*/*") },
+                modifier = Modifier.fillMaxWidth(),
+        ) { Text("Update Firmware") }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
                 onClick = { openBatteryOptimizationSettings(context) },

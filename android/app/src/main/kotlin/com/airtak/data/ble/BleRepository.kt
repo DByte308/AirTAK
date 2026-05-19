@@ -184,6 +184,9 @@ class BleRepository @Inject constructor(
         disconnect()
     }
 
+    /** Current GATT instance — exposed for OTA firmware update transport. */
+    fun getGatt(): BluetoothGatt? = gatt
+
     /** Send a payload on a writable characteristic. Returns immediately; transfer is async. */
     fun send(channel: OutboundChannel, payload: ByteArray) {
         if (_linkState.value !is LinkState.Connected) return

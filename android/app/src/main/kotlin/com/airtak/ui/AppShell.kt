@@ -8,6 +8,7 @@
 package com.airtak.ui
 
 import android.content.res.Configuration
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -53,6 +55,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import com.airtak.R
 import com.airtak.proto.DcLevel
 import com.airtak.ui.components.LinkChip
@@ -66,6 +70,7 @@ import com.airtak.ui.messages.MessagesScreen
 import com.airtak.ui.pairing.PairingScreen
 import com.airtak.ui.players.PlayersScreen
 import com.airtak.ui.settings.SettingsScreen
+import com.airtak.ui.firmware.FirmwareUpdateScreen
 
 enum class Destination(val route: String, val labelRes: Int, val icon: ImageVector) {
     Map      ("map",      R.string.nav_map,      Icons.Outlined.Map),
@@ -89,6 +94,12 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
     val pendingLocateMarkerId by viewModel.pendingLocateMarkerId.collectAsState()
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    LaunchedEffect(Unit) {
+        viewModel.usbFirmwareTrigger.collect {
+            navController.navigate("firmwareUpdate/")
+        }
+    }
 
     if (isLandscape) {
         // Landscape: NavigationRail on the left, slim HUD at top, body beside rail
@@ -417,8 +428,24 @@ private fun AppNavHost(
         }
         composable(Destination.Players.route)  { PlayersScreen(onMessagePlayer = onMessagePlayer, onLocatePlayer = onLocatePlayer) }
         composable(Destination.Game.route)     { com.airtak.ui.markers.MarkersScreen(onLocateMarker = onLocateMarker) }
-        composable(Destination.Settings.route) { SettingsScreen() }
+        composable(Destination.Settings.route) {
+            SettingsScreen(
+                onFirmwareSelected = { uri ->
+                    navController.navigate("firmwareUpdate/${Uri.encode(uri.toString())}")
+                },
+            )
+        }
         composable("pair")                     { PairingScreen(onDone = { navController.popBackStack() }) }
+        composable(
+            "firmwareUpdate/{uri}",
+            arguments = listOf(navArgument("uri") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val uri = backStackEntry.arguments?.getString("uri")
+            FirmwareUpdateScreen(
+                firmwareUri = uri,
+                onDone = { navController.popBackStack() },
+            )
+        }
     }
 }
 

@@ -12,12 +12,14 @@ package com.airtak.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +37,8 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var prefs: AppPreferences
 
+    private val appShellViewModel: AppShellViewModel by viewModels()
+
     private val requestPerms = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { /* result evaluated reactively by repositories */ }
@@ -47,6 +51,11 @@ class MainActivity : ComponentActivity() {
         // pairing screen invokes LinkService.start once pairing completes.
         if (prefs.bondedAddress() != null) LinkService.start(this)
 
+        // If launched via USB device attachment, trigger firmware update flow.
+        if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            appShellViewModel.onUsbDeviceAttached()
+        }
+
         setContent {
             var themeMode by remember { mutableStateOf(prefs.themeMode()) }
             LaunchedEffect(Unit) {
@@ -55,6 +64,13 @@ class MainActivity : ComponentActivity() {
             AirTakTheme(mode = themeMode) {
                 AppShell()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            appShellViewModel.onUsbDeviceAttached()
         }
     }
 

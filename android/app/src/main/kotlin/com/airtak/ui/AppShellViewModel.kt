@@ -7,7 +7,9 @@ import com.airtak.data.ble.BleRepository
 import com.airtak.data.gps.PhoneGpsProvider
 import com.airtak.data.status.DeviceStatusRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 
@@ -39,4 +41,11 @@ class AppShellViewModel @Inject constructor(
 
     fun setLocateMarker(markerId: Long) { _pendingLocateMarkerId.value = markerId }
     fun clearLocateMarker() { _pendingLocateMarkerId.value = null }
+
+    private val _usbFirmwareTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val usbFirmwareTrigger = _usbFirmwareTrigger.asSharedFlow()
+
+    fun onUsbDeviceAttached() {
+        _usbFirmwareTrigger.tryEmit(Unit)
+    }
 }
