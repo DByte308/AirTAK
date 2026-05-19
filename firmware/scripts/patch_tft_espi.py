@@ -1,13 +1,12 @@
 """
 Pre-build extra_script: patches TFT_eSPI_ESP32_S3.h to fix the SPI_PORT crash.
 
-Root cause: On ESP32-S3, TFT_eSPI defaults `SPI_PORT = FSPI = 0`, but
-`REG_SPI_BASE(0) = 0` (the macro requires i >= 2 for valid SPI peripheral
-addresses). This makes SET_BUS_WRITE_MODE write to address 0x10, causing a
+Root cause: On older TFT_eSPI (<2.5.43), TFT_eSPI defaults `SPI_PORT = FSPI = 0`,
+but `REG_SPI_BASE(0)` produces an invalid address on ESP32-S3, causing a
 StoreProhibited guru meditation on every boot.
 
-Fix: SPIClass(FSPI=0) uses GPSPI2 at DR_REG_SPI2_BASE = 0x60024000.
-REG_SPI_BASE(2) = 0x60024000, so SPI_PORT must be 2.
+TFT_eSPI >= 2.5.43 ships its own REG_SPI_BASE fix (line ~31).  When detected,
+the patch is skipped — the library already handles ESP32-S3 correctly.
 """
 
 import os
@@ -33,6 +32,11 @@ def patch_tft_espi(source, target, env):
 
     with open(header, "r", encoding="utf-8") as f:
         text = f.read()
+
+    # TFT_eSPI >= 2.5.43 ships its own REG_SPI_BASE fix — skip our patch.
+    if "DR_REG_SPI2_BASE" in text or "DR_REG_SPI3_BASE" in text:
+        print("[patch_tft_espi] Library already has ESP32-S3 fix, skipping patch")
+        return
 
     # Already patched (either by this script or by manual edit)
     if "SPI_PORT FSPI" not in text:
