@@ -17,6 +17,7 @@
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "config.h"
+#include "platform/Platform.h"
 #include "airtak/ble.pb.h"
 #include <pb_encode.h>
 #include <bluefruit.h>
@@ -68,6 +69,9 @@ static uint16_t buildDeviceStatus(uint8_t* buf, uint16_t buf_len) {
     status.dc_limit_ms_per_hour = DcTracker::dcLimitMsPerHour();
     status.dc_percentage = DcTracker::dcPercentage();
     status.dc_relays_dropped = DcTracker::relaysDropped();
+
+    strncpy(status.board_id, AIRTAK_BOARD_ID, sizeof(status.board_id) - 1);
+    strncpy(status.platform, platform::mcuFamilyName(), sizeof(status.platform) - 1);
 
     pb_ostream_t stream = pb_ostream_from_buffer(buf, buf_len);
     if (!pb_encode(&stream, airtak_DeviceStatus_fields, &status)) return 0;

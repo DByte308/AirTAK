@@ -411,15 +411,6 @@ class SettingsViewModel @Inject constructor(
             config.apply(ConfigGroup.GAME, gameMsg.toByteArray())
         }
     }
-        if (config.hasChannels()) {
-            config.apply(ConfigGroup.CHANNELS, config.channels.toByteArray())
-        }
-        if (config.hasGame()) {
-            // Always blank the callsign so it is never overwritten on import
-            val gameMsg = config.game.toBuilder().setCallsign("").build()
-            config.apply(ConfigGroup.GAME, gameMsg.toByteArray())
-        }
-    }
 
     /**
      * Encode [config] as a base64-URL-encoded protobuf, prefixed with a

@@ -3,6 +3,9 @@ airtak.ConfigAck.error max_size:96
 airtak.DeviceStatus.node_name max_size:40
 airtak.DeviceStatus.firmware_version max_size:16
 airtak.DeviceStatus.bluetooth_address max_size:18
+airtak.DeviceStatus.board_id          max_size:24
+airtak.DeviceStatus.platform         max_size:16
 airtak.RadioStatus.channel_name max_size:17
 airtak.AdminRequest.confirm_token max_size:96
 airtak.AdminResponse.error max_size:96
+airtak.OtaStatus.error_text max_size:80

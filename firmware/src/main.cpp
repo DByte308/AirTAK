@@ -42,6 +42,10 @@
 #include "platform/Platform.h"
 #include "config.h"
 
+#if defined(AIRTAK_PLATFORM_ESP32) && defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
+#include <esp_ota_ops.h>
+#endif
+
 // ── Inter-task communication handles ─────────────────────────────────────────
 // All inter-task communication uses these queues and event groups.
 // No direct function calls between task contexts.
@@ -133,6 +137,9 @@ void setup() {
         Serial.println("AirTAK: FlashStore init failed; using volatile defaults");
     } else {
         Serial.println("AirTAK: FlashStore OK");
+#if defined(AIRTAK_PLATFORM_ESP32) && defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
+        esp_ota_mark_app_valid_cancel_rollback();
+#endif
     }
     Serial.flush();
     ledOn();

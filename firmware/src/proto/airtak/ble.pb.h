@@ -102,8 +102,8 @@ typedef struct _airtak_DeviceStatus {
     uint32_t dc_limit_ms_per_hour; /* per-band regulatory limit (ms/h); UINT32_MAX if none */
     uint32_t dc_percentage; /* current DC in hundredths of a percent (750 = 7.50%) */
     uint32_t dc_relays_dropped; /* relay packets dropped by DC gate since boot */
-    pb_callback_t board_id; /* matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc. */
-    pb_callback_t platform; /* "nRF52840", "ESP32-S3", etc. */
+    char board_id[24]; /* matches AIRTAK_BOARD_ID: "t_echo_plus", "t_deck", etc. */
+    char platform[16]; /* "nRF52840", "ESP32-S3", etc. */
 } airtak_DeviceStatus;
 
 /* When gps_source=PHONE_GPS, the Android app periodically sends the phone's
@@ -161,7 +161,7 @@ typedef struct _airtak_OtaStatus {
     uint32_t bytes_written;
     uint32_t total_size;
     uint32_t last_error;
-    pb_callback_t error_text;
+    char error_text[80];
 } airtak_OtaStatus;
 
 
@@ -206,7 +206,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define airtak_ConfigPayload_init_default        {_airtak_ConfigGroup_MIN, {0, {0}}, 0}
 #define airtak_ConfigAck_init_default            {_airtak_ConfigGroup_MIN, 0, "", 0, 0}
-#define airtak_DeviceStatus_init_default         {0, "", 0, 0, false, airtak_GpsStatus_init_default, false, airtak_RadioStatus_init_default, 0, 0, "", "", _airtak_DcLevel_MIN, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}}
+#define airtak_DeviceStatus_init_default         {0, "", 0, 0, false, airtak_GpsStatus_init_default, false, airtak_RadioStatus_init_default, 0, 0, "", "", _airtak_DcLevel_MIN, 0, 0, 0, 0, "", ""}
 #define airtak_GpsStatus_init_default            {0, 0, 0, 0, 0, 0}
 #define airtak_RadioStatus_init_default          {"", 0, 0, 0, 0}
 #define airtak_PhoneGpsPosition_init_default     {0, 0, 0, 0}
@@ -217,10 +217,10 @@ extern "C" {
 #define airtak_OtaFinish_init_default            {0}
 #define airtak_OtaStatusRequest_init_default     {0}
 #define airtak_OtaCancel_init_default            {0}
-#define airtak_OtaStatus_init_default            {_airtak_OtaState_MIN, 0, 0, 0, {{NULL}, NULL}}
+#define airtak_OtaStatus_init_default            {_airtak_OtaState_MIN, 0, 0, 0, ""}
 #define airtak_ConfigPayload_init_zero           {_airtak_ConfigGroup_MIN, {0, {0}}, 0}
 #define airtak_ConfigAck_init_zero               {_airtak_ConfigGroup_MIN, 0, "", 0, 0}
-#define airtak_DeviceStatus_init_zero            {0, "", 0, 0, false, airtak_GpsStatus_init_zero, false, airtak_RadioStatus_init_zero, 0, 0, "", "", _airtak_DcLevel_MIN, 0, 0, 0, 0, {{NULL}, NULL}, {{NULL}, NULL}}
+#define airtak_DeviceStatus_init_zero            {0, "", 0, 0, false, airtak_GpsStatus_init_zero, false, airtak_RadioStatus_init_zero, 0, 0, "", "", _airtak_DcLevel_MIN, 0, 0, 0, 0, "", ""}
 #define airtak_GpsStatus_init_zero               {0, 0, 0, 0, 0, 0}
 #define airtak_RadioStatus_init_zero             {"", 0, 0, 0, 0}
 #define airtak_PhoneGpsPosition_init_zero        {0, 0, 0, 0}
@@ -231,7 +231,7 @@ extern "C" {
 #define airtak_OtaFinish_init_zero               {0}
 #define airtak_OtaStatusRequest_init_zero        {0}
 #define airtak_OtaCancel_init_zero               {0}
-#define airtak_OtaStatus_init_zero               {_airtak_OtaState_MIN, 0, 0, 0, {{NULL}, NULL}}
+#define airtak_OtaStatus_init_zero               {_airtak_OtaState_MIN, 0, 0, 0, ""}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define airtak_ConfigPayload_group_tag           1
@@ -326,9 +326,9 @@ X(a, STATIC,   SINGULAR, UINT32,   trailing_hour_ms,  12) \
 X(a, STATIC,   SINGULAR, UINT32,   dc_limit_ms_per_hour,  13) \
 X(a, STATIC,   SINGULAR, UINT32,   dc_percentage,    14) \
 X(a, STATIC,   SINGULAR, UINT32,   dc_relays_dropped,  15) \
-X(a, CALLBACK, SINGULAR, STRING,   board_id,         16) \
-X(a, CALLBACK, SINGULAR, STRING,   platform,         17)
-#define airtak_DeviceStatus_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, STRING,   board_id,         16) \
+X(a, STATIC,   SINGULAR, STRING,   platform,         17)
+#define airtak_DeviceStatus_CALLBACK NULL
 #define airtak_DeviceStatus_DEFAULT NULL
 #define airtak_DeviceStatus_gps_MSGTYPE airtak_GpsStatus
 #define airtak_DeviceStatus_radio_MSGTYPE airtak_RadioStatus
@@ -413,8 +413,8 @@ X(a, STATIC,   SINGULAR, UENUM,    state,             1) \
 X(a, STATIC,   SINGULAR, UINT32,   bytes_written,     2) \
 X(a, STATIC,   SINGULAR, UINT32,   total_size,        3) \
 X(a, STATIC,   SINGULAR, UINT32,   last_error,        4) \
-X(a, CALLBACK, SINGULAR, STRING,   error_text,        5)
-#define airtak_OtaStatus_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, STRING,   error_text,        5)
+#define airtak_OtaStatus_CALLBACK NULL
 #define airtak_OtaStatus_DEFAULT NULL
 
 extern const pb_msgdesc_t airtak_ConfigPayload_msg;
@@ -449,19 +449,19 @@ extern const pb_msgdesc_t airtak_OtaStatus_msg;
 #define airtak_OtaStatus_fields &airtak_OtaStatus_msg
 
 /* Maximum encoded size of messages (where known) */
-/* airtak_DeviceStatus_size depends on runtime parameters */
-/* airtak_OtaStatus_size depends on runtime parameters */
 #define AIRTAK_BLE_PB_H_MAX_SIZE                 airtak_ConfigPayload_size
 #define airtak_AdminRequest_size                 129
 #define airtak_AdminResponse_size                101
 #define airtak_ConfigAck_size                    109
 #define airtak_ConfigPayload_size                519
+#define airtak_DeviceStatus_size                 252
 #define airtak_GpsStatus_size                    36
 #define airtak_OtaCancel_size                    0
 #define airtak_OtaCommand_size                   14
 #define airtak_OtaFinish_size                    6
 #define airtak_OtaStart_size                     12
 #define airtak_OtaStatusRequest_size             0
+#define airtak_OtaStatus_size                    101
 #define airtak_PhoneGpsPosition_size             28
 #define airtak_RadioStatus_size                  40
 
