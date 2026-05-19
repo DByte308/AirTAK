@@ -1386,31 +1386,6 @@ private fun ShareSection(vm: SettingsViewModel) {
             )
         }
 
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(
-            onClick = {
-                // Re-generate to pick up any changes since last read
-                val config = vm.buildShareableConfig()
-                val uri = vm.encodeConfigToUri(config)
-                qrUriString = uri
-                qrBitmap = vm.renderQrBitmap(uri)
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Refresh QR code") }
-
-        Spacer(Modifier.height(4.dp))
-        OutlinedButton(
-            onClick = {
-                val sendIntent = Intent().apply {
-                    action = Intent.ACTION_SEND
-                    putExtra(Intent.EXTRA_TEXT, qrUriString)
-                    type = "text/plain"
-                }
-                context.startActivity(Intent.createChooser(sendIntent, "Share AirTAK config"))
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Share config link") }
-
         Spacer(Modifier.height(24.dp))
         HorizontalDivider()
         Spacer(Modifier.height(16.dp))
