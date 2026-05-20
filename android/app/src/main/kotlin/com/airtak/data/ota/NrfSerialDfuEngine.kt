@@ -50,6 +50,8 @@ class NrfSerialDfuEngine(
     private val intf: UsbInterface,
 ) : FirmwareUpdateManager.FirmwareUpdateEngine {
     override var onDebug: ((String) -> Unit)? = null
+    private fun dbg(msg: String) { android.util.Log.d("NrfSerial", msg); onDebug?.invoke(msg) }
+    private fun dbgErr(msg: String) { android.util.Log.e("NrfSerial", msg); onDebug?.invoke("ERROR: $msg") }
 
     companion object {
         // Nordic Secure DFU opcodes (table from nrfutil 6.x serial transport).
@@ -86,6 +88,7 @@ class NrfSerialDfuEngine(
     private var inEndpoint: UsbEndpoint? = null
 
     override suspend fun initialize(): Result<DeviceInfo> {
+        dbg("init: locating endpoints...")
         for (i in 0 until intf.endpointCount) {
             val ep = intf.getEndpoint(i)
             if (ep.type != UsbConstants.USB_ENDPOINT_XFER_BULK) continue
@@ -93,35 +96,54 @@ class NrfSerialDfuEngine(
             else inEndpoint = ep
         }
         if (outEndpoint == null || inEndpoint == null) {
+            dbgErr("CDC bulk endpoints not found")
             return Result.failure(Exception("CDC bulk endpoints not found"))
         }
+        dbg("endpoints OK")
         if (!connection.claimInterface(intf, true)) {
+            dbgErr("claimInterface failed")
             return Result.failure(Exception("Could not claim CDC interface"))
         }
+        dbg("interface claimed")
 
         // Configure the Adafruit bootloader CDC endpoint for 115200 8N1 +
         // DTR/RTS asserted (the bootloader gates serial RX on DTR).
-        configureCdcAcm(DEFAULT_BAUD)
+        dbg("configuring CDC ACM 115200...")
+        if (!configureCdcAcm(DEFAULT_BAUD)) {
+            dbgErr("configureCdcAcm failed")
+            return Result.failure(Exception("Failed to configure USB serial for nRF52 bootloader"))
+        }
+        dbg("CDC ACM configured")
 
         // PING is a cheap probe; if the bootloader responds we know the
         // serial pipe is alive and we're talking to the right firmware.
         val pingId = 0x01.toByte()
+        dbg("sending PING...")
         sendControl(byteArrayOf(OP_PING, pingId))
         val pingResp = readResponse(OP_PING)
-            ?: return Result.failure(Exception(
+        if (pingResp == null) {
+            dbgErr("PING no response")
+            return Result.failure(Exception(
                 "nRF52 bootloader did not respond to PING. Make sure the device " +
                     "is in DFU mode (double-tap RESET to enter the bootloader)."
             ))
+        }
+        dbg("PING response OK")
         if (pingResp.size < 1 || pingResp[0] != pingId) {
+            dbgErr("PING id mismatch: got ${pingResp[0].toInt() and 0xFF}, expected ${pingId.toInt() and 0xFF}")
             return Result.failure(Exception("PING id mismatch — wrong device on this serial port"))
         }
 
         // Disable packet receipt notifications: with PRN=0 the bootloader
         // ACKs only the CALC_CRC at the end of each object, simplifying our
         // state machine without a measurable throughput hit on USB.
+        dbg("SET_PRN 0...")
         sendControl(byteArrayOf(OP_SET_PRN, 0x00, 0x00))
-        readResponse(OP_SET_PRN)
-            ?: return Result.failure(Exception("SET_PRN rejected"))
+        if (readResponse(OP_SET_PRN) == null) {
+            dbgErr("SET_PRN rejected")
+            return Result.failure(Exception("SET_PRN rejected"))
+        }
+        dbg("init OK")
 
         return Result.success(DeviceInfo(
             boardId = "unknown",
@@ -260,7 +282,7 @@ class NrfSerialDfuEngine(
     //  USB CDC line config
     // ────────────────────────────────────────────────────────────────────
 
-    private fun configureCdcAcm(baud: Int) {
+    private fun configureCdcAcm(baud: Int): Boolean {
         val data = byteArrayOf(
             (baud and 0xFF).toByte(),
             ((baud shr 8) and 0xFF).toByte(),
@@ -270,13 +292,14 @@ class NrfSerialDfuEngine(
             0x00, // no parity
             0x08, // 8 data bits
         )
-        connection.controlTransfer(
+        val r1 = connection.controlTransfer(
             REQ_TYPE_CLASS_OUT, CDC_SET_LINE_CODING, 0, intf.id, data, data.size, BULK_TIMEOUT_MS
         )
-        // Assert DTR + RTS so the bootloader's CDC RX path is enabled.
-        connection.controlTransfer(
+        // Assert DTR + RTS — the Adafruit bootloader gates serial RX on DTR.
+        val r2 = connection.controlTransfer(
             REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, 0x03, intf.id, null, 0, BULK_TIMEOUT_MS
         )
+        return r1 >= 0 && r2 >= 0
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -303,34 +326,55 @@ class NrfSerialDfuEngine(
         return packet.copyOfRange(3, packet.size)
     }
 
+    // Persistent SLIP decoder state — survives across readSlipPacket calls
+    // so partial frames spanning multiple USB transfers are reassembled.
+    private var slipPartial: ArrayList<Byte>? = null
+    private var slipEscaped = false
+    private var slipPend = java.util.ArrayDeque<Byte>()
+
     private fun readSlipPacket(): ByteArray? {
         val ep = inEndpoint ?: return null
-        val acc = ArrayList<Byte>()
         val buf = ByteArray(256)
         val deadline = System.currentTimeMillis() + BULK_TIMEOUT_MS
-        var started = false
-        var escaped = false
-        val out = ArrayList<Byte>()
         while (System.currentTimeMillis() < deadline) {
+            // Drain pending bytes first
+            while (slipPend.isNotEmpty()) {
+                val pkt = slipDecode(slipPend.removeFirst())
+                if (pkt != null) return pkt
+            }
             val n = connection.bulkTransfer(ep, buf, buf.size, 100)
-            if (n <= 0) continue
-            for (i in 0 until n) {
-                val b = buf[i]
-                when {
-                    !started -> if (b == SLIP_END) started = true
-                    escaped -> {
-                        when (b) {
-                            SLIP_ESC_END -> out.add(SLIP_END)
-                            SLIP_ESC_ESC -> out.add(SLIP_ESC)
-                            else -> out.add(b)
-                        }
-                        escaped = false
+            if (n > 0) {
+                for (i in 0 until n) {
+                    val pkt = slipDecode(buf[i])
+                    if (pkt != null) {
+                        for (j in i + 1 until n) slipPend.addLast(buf[j])
+                        return pkt
                     }
-                    b == SLIP_ESC -> escaped = true
-                    b == SLIP_END -> if (out.isNotEmpty()) return out.toByteArray()
-                    else -> out.add(b)
                 }
             }
+        }
+        return null
+    }
+
+    private fun slipDecode(b: Byte): ByteArray? {
+        if (slipPartial == null) {
+            if (b == SLIP_END) slipPartial = ArrayList()
+        } else if (slipEscaped) {
+            slipEscaped = false
+            when (b) {
+                SLIP_ESC_END -> slipPartial!!.add(SLIP_END)
+                SLIP_ESC_ESC -> slipPartial!!.add(SLIP_ESC)
+                else -> slipPartial!!.add(b)
+            }
+        } else when (b) {
+            SLIP_ESC -> slipEscaped = true
+            SLIP_END -> {
+                val pkt = slipPartial!!.toByteArray()
+                slipPartial = null
+                if (pkt.isNotEmpty()) return pkt
+                slipPartial = ArrayList()
+            }
+            else -> slipPartial!!.add(b)
         }
         return null
     }
