@@ -255,10 +255,6 @@ private fun PlayerSection(
     LaunchedEffect(Unit) { vm.readChannels() }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         SectionLabel("Player identity")
-        TacticalText(
-                "Your callsign is visible to all players on the mesh grid.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
                 value = game.callsign,
@@ -269,10 +265,6 @@ private fun PlayerSection(
         )
         Spacer(Modifier.height(16.dp))
         SectionLabel("Device identifiers")
-        TacticalText(
-                "These names identify your device on the mesh. The short name is shown on device displays and node lists.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
                 value = device.longName,
@@ -295,17 +287,8 @@ private fun PlayerSection(
                 Text("Generate random identity")
             }
         }
-        TacticalText(
-            "Generates random hexadecimal identifiers for callsign, long name, and short name. These are unique per device and are not included in QR config sharing.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Spacer(Modifier.height(16.dp))
         SectionLabel("Unit hierarchy (optional, self-organized)")
-        TacticalText(
-                "Assign yourself to a unit and link it to a channel slot below. Nodes sharing the same unit ID are grouped in the roster. " +
-                        "Slots 0 and 1 are reserved for mesh-wide traffic, slot 2 is reserved for PTT audio — pick slots 3+ for unit-scoped comms.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Spacer(Modifier.height(8.dp))
 
         val channelOptions: List<UnitChannelOption> =
