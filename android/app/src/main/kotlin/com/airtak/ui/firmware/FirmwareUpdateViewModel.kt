@@ -53,6 +53,13 @@ class FirmwareUpdateViewModel @Inject constructor(
     private val _state = MutableStateFlow<FwUpdateState>(FwUpdateState.Idle)
     val state: StateFlow<FwUpdateState> = _state.asStateFlow()
 
+    private val _debugLog = MutableStateFlow<List<String>>(emptyList())
+    val debugLog: StateFlow<List<String>> = _debugLog.asStateFlow()
+
+    private fun addDebug(msg: String) {
+        _debugLog.value = _debugLog.value + msg
+    }
+
     fun startUpdate(firmwareUri: Uri) {
         if (_state.value !is FwUpdateState.Idle) return
         _state.value = FwUpdateState.InProgress
@@ -80,7 +87,7 @@ class FirmwareUpdateViewModel @Inject constructor(
 
                 val session = manager.prepareUpdate(firmwareUri, transport, deviceInfo).getOrThrow()
                 val result = withContext(Dispatchers.IO) {
-                    session.execute(firmwareBytes) { _progress.value = it }
+                    session.execute(firmwareBytes, { _progress.value = it }, ::addDebug)
                 }
                 result.fold(
                     onSuccess = { _state.value = FwUpdateState.Done },
@@ -160,7 +167,7 @@ class FirmwareUpdateViewModel @Inject constructor(
                 // flash. _progress is a StateFlow which is safe to set
                 // from any thread.
                 val result = withContext(Dispatchers.IO) {
-                    session.execute(firmwareBytes) { _progress.value = it }
+                    session.execute(firmwareBytes, { _progress.value = it }, ::addDebug)
                 }
                 result.fold(
                     onSuccess = { _state.value = FwUpdateState.Done },
@@ -224,6 +231,7 @@ class FirmwareUpdateViewModel @Inject constructor(
     fun reset() {
         _progress.value = UpdateProgress.Initializing("Not started")
         _state.value = FwUpdateState.Idle
+        _debugLog.value = emptyList()
     }
 
     sealed class FwUpdateState {

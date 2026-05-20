@@ -53,15 +53,23 @@ import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
+import android.content.Context
 import com.airtak.data.ota.FirmwareUpdateManager.DeviceInfo
 import com.airtak.data.ota.FirmwareUpdateManager.UpdateProgress
 import kotlinx.coroutines.delay
+import org.json.JSONObject
 
 class EspSerialFlasher(
+    private val context: Context,
     private val connection: UsbDeviceConnection,
     private val intf: UsbInterface,
     private val vendorId: Int,
 ) : FirmwareUpdateManager.FirmwareUpdateEngine {
+
+    override var onDebug: ((String) -> Unit)? = null
+
+    private fun dbg(msg: String) { android.util.Log.d("EspFlash", msg); onDebug?.invoke(msg) }
+    private fun dbgErr(msg: String) { android.util.Log.e("EspFlash", msg); onDebug?.invoke("ERROR: $msg") }
 
     companion object {
         // SLIP command opcodes — esptool `command.py`.
@@ -69,6 +77,9 @@ class EspSerialFlasher(
         private const val ESP_FLASH_BEGIN   = 0x02
         private const val ESP_FLASH_DATA    = 0x03
         private const val ESP_FLASH_END     = 0x04
+        private const val ESP_MEM_BEGIN     = 0x05
+        private const val ESP_MEM_END       = 0x06
+        private const val ESP_MEM_DATA      = 0x07
         private const val ESP_SPI_ATTACH    = 0x0D
         private const val ESP_READ_REG      = 0x0A
 
@@ -78,6 +89,7 @@ class EspSerialFlasher(
         private const val FLASH_OFFSET      = 0x10000   // app0 offset in default_16MB.csv
         private const val OTA_DATA_OFFSET   = 0xE000    // otadata partition offset
         private const val OTA_DATA_SIZE     = 0x2000    // otadata partition size (sector-aligned)
+        private const val APP1_OFFSET       = 0x650000  // app1 offset in default_16MB.csv
 
         // First byte of an ESP32 OTA app image (esp_image_header_t.magic).
         private const val ESP_APP_MAGIC     = 0xE9.toByte()
@@ -85,6 +97,7 @@ class EspSerialFlasher(
         // Transfer parameters.
         private const val DEFAULT_BAUD      = 115200
         private const val BULK_TIMEOUT_MS   = 3_000
+        private const val FLASH_DATA_TIMEOUT_MS = 10_000  // flash writes can exceed 3s
         private const val SYNC_TIMEOUT_MS   = 100
         private const val SYNC_RETRIES      = 7
 
@@ -118,6 +131,7 @@ class EspSerialFlasher(
     private var sequence = 0
 
     override suspend fun initialize(): Result<DeviceInfo> {
+        dbg("initialize: locating endpoints...")
         // ---- Locate the bulk IN/OUT endpoints on the CDC data interface --
         for (i in 0 until intf.endpointCount) {
             val ep = intf.getEndpoint(i)
@@ -126,33 +140,39 @@ class EspSerialFlasher(
             else inEndpoint = ep
         }
         if (outEndpoint == null || inEndpoint == null) {
+            dbgErr("CDC bulk endpoints not found")
             return Result.failure(Exception("CDC bulk endpoints not found on interface"))
         }
+        dbg("endpoints OK: out=${outEndpoint?.address?.toString(16)} in=${inEndpoint?.address?.toString(16)}")
         if (!connection.claimInterface(intf, true)) {
+            dbgErr("claimInterface failed")
             return Result.failure(Exception("Could not claim USB interface (force=true)"))
         }
+        dbg("interface claimed")
 
         // ---- Configure baud/line + assert handshaking lines --------------
+        dbg("configureSerial(baud=${DEFAULT_BAUD})...")
         val cfgOk = configureSerial(DEFAULT_BAUD)
         if (!cfgOk) {
+            dbgErr("configureSerial failed")
             return Result.failure(Exception("Failed to configure USB-serial bridge for vendor 0x${vendorId.toString(16)}"))
         }
+        dbg("serial configured OK")
 
         // ---- Reset chip into ROM download mode --------------------------
-        // On ESP32-S3 native USB-Serial/JTAG (VID 0x303A) the DTR/RTS lines
-        // are NOT wired to EN/IO0 on most modules (T-Deck included) — they
-        // map to the USB-J-S controller, which can soft-reset the chip but
-        // will land it in the *application* unless the GPIO0 strap is
-        // already held low. The user must hold BOOT and tap RESET. For
-        // vendor UART bridges (CP210x, CH340) the classic DTR/RTS pulse
-        // does work and we drive it.
         if (vendorId != VID_ESP32_NATIVE) {
+            dbg("resetIntoBootloader()...")
             resetIntoBootloader()
+            dbg("reset done")
+        } else {
+            dbg("ESP32 native USB — skipping DTR/RTS reset (user must hold BOOT+RESET)")
         }
 
         // ---- SYNC handshake ---------------------------------------------
+        dbg("SYNC handshake (retries=$SYNC_RETRIES)...")
         val syncedAttempt = (0 until SYNC_RETRIES).firstOrNull { trySync() }
         if (syncedAttempt == null) {
+            dbgErr("SYNC failed after $SYNC_RETRIES attempts")
             return Result.failure(Exception(
                 if (vendorId == VID_ESP32_NATIVE)
                     "ESP32 did not respond to SYNC. Hold the BOOT button and tap RESET on the T-Deck, " +
@@ -162,24 +182,118 @@ class EspSerialFlasher(
                     "ESP32 did not respond to SYNC. Check cable, hold BOOT and tap RESET, then retry."
             ))
         }
+        dbg("SYNC OK on attempt ${syncedAttempt}")
 
-        // The ROM emits one reply per SYNC frame (8 echoes total). Drain
-        // any extras so the next sendCommand() doesn't grab a stale SYNC
-        // reply and mis-identify it as the SPI_ATTACH response.
         drainPendingReplies()
+        dbg("pending replies drained")
 
-        // ---- SPI_ATTACH (required on S3 before FLASH_BEGIN) -------------
-        // payload: HSPI_ARG(4)=0 + ZERO(4)=0
-        val attachOk = sendCommand(ESP_SPI_ATTACH, ByteArray(8))
-        if (!attachOk) {
+        // ---- SPI_ATTACH --------
+        dbg("SPI_ATTACH...")
+        if (!sendCommand(ESP_SPI_ATTACH, ByteArray(8))) {
+            dbgErr("SPI_ATTACH rejected")
             return Result.failure(Exception("SPI_ATTACH rejected by ROM bootloader"))
         }
+        dbg("SPI_ATTACH OK")
 
+        // ---- Upload stub loader --------
+        val stubResult = uploadStubLoader()
+        if (stubResult.isFailure) {
+            return Result.failure(stubResult.exceptionOrNull() ?: Exception("stub upload failed"))
+        }
+        dbg("initialize: DONE")
         return Result.success(DeviceInfo(
             boardId = if (vendorId == VID_ESP32_NATIVE) "t_deck" else "t3s3",
             platform = "ESP32-S3",
-            firmwareVersion = "bootloader"
+            firmwareVersion = "stub"
         ))
+    }
+
+    /** Upload esptool's RAM stub loader so flash writes use the correct IDF
+     *  driver instead of the buggy ROM (ESP32-S3 rev 0.2 ACKs writes but
+     *  does not execute them).  The stub binary is stored in the app assets. */
+    private suspend fun uploadStubLoader(): Result<Unit> {
+        val ramBlockSize = 0x1800
+        dbg("stub: loading assets...")
+
+        // Load stub
+        val textBytes: ByteArray; val dataBytes: ByteArray
+        val textStart: Int; val dataStart: Int; val entry: Int
+        try {
+            val meta = JSONObject(context.assets.open("esp32s3_stub_meta.json").bufferedReader().readText())
+            textStart = meta.getInt("text_start"); dataStart = meta.getInt("data_start"); entry = meta.getInt("entry")
+            textBytes = context.assets.open("esp32s3_stub_text.bin").readBytes()
+            dataBytes = context.assets.open("esp32s3_stub_data.bin").readBytes()
+            dbg("stub: text=${textBytes.size}@0x${textStart.toString(16)} data=${dataBytes.size}@0x${dataStart.toString(16)} entry=0x${entry.toString(16)}")
+        } catch (e: Exception) {
+            dbgErr("stub: asset load failed: ${e.message}")
+            return Result.failure(Exception("stub_asset: ${e.message}"))
+        }
+
+        // MEM_BEGIN text
+        val textBlocks = (textBytes.size + ramBlockSize - 1) / ramBlockSize
+        val textBegin = leInt(textBytes.size) + leInt(textBlocks) + leInt(ramBlockSize) + leInt(textStart)
+        dbg("stub: MEM_BEGIN text size=${textBytes.size} blocks=$textBlocks off=0x${textStart.toString(16)}")
+        if (!sendCommand(ESP_MEM_BEGIN, textBegin, timeoutMs = 10_000))
+            return Result.failure(Exception("MEM_BEGIN_text rejected"))
+        dbg("stub: MEM_BEGIN text OK")
+
+        // MEM_DATA text
+        for (seq in 0 until textBlocks) {
+            val from = seq * ramBlockSize
+            val to = (from + ramBlockSize).coerceAtMost(textBytes.size)
+            val chunk = textBytes.copyOfRange(from, to)
+            val p = leInt(chunk.size) + leInt(seq) + leInt(0) + leInt(0) + chunk
+            if (!sendCommand(ESP_MEM_DATA, p, checksumOver = chunk))
+                return Result.failure(Exception("MEM_DATA_text seq=$seq failed"))
+        }
+        dbg("stub: MEM_DATA text OK (${textBlocks} blocks)")
+
+        // MEM_BEGIN data
+        val dataBlocks = (dataBytes.size + ramBlockSize - 1) / ramBlockSize
+        val dataBegin = leInt(dataBytes.size) + leInt(dataBlocks) + leInt(ramBlockSize) + leInt(dataStart)
+        dbg("stub: MEM_BEGIN data size=${dataBytes.size} blocks=$dataBlocks off=0x${dataStart.toString(16)}")
+        if (!sendCommand(ESP_MEM_BEGIN, dataBegin, timeoutMs = 10_000))
+            return Result.failure(Exception("MEM_BEGIN_data rejected"))
+        dbg("stub: MEM_BEGIN data OK")
+
+        // MEM_DATA data
+        for (seq in 0 until dataBlocks) {
+            val from = seq * ramBlockSize
+            val to = (from + ramBlockSize).coerceAtMost(dataBytes.size)
+            val chunk = dataBytes.copyOfRange(from, to)
+            val p = leInt(chunk.size) + leInt(seq) + leInt(0) + leInt(0) + chunk
+            if (!sendCommand(ESP_MEM_DATA, p, checksumOver = chunk))
+                return Result.failure(Exception("MEM_DATA_data seq=$seq failed"))
+        }
+        dbg("stub: MEM_DATA data OK (${dataBlocks} blocks)")
+
+        // MEM_END
+        val memEndPayload = leInt(0) + leInt(entry)
+        val memEndFrame = SlipFramer.encode(
+            byteArrayOf(0x00, ESP_MEM_END.toByte()) + leShort(memEndPayload.size) + leInt(0) + memEndPayload
+        )
+        val out = outEndpoint ?: return Result.failure(Exception("MEM_END: no endpoint"))
+        if (connection.bulkTransfer(out, memEndFrame, memEndFrame.size, 200) < 0) {
+            dbgErr("MEM_END: bulkTransfer failed")
+            return Result.failure(Exception("MEM_END: send failed"))
+        }
+        dbg("stub: MEM_END sent (${memEndFrame.size}B), draining ROM reply...")
+
+        // Drain the ROM's MEM_END reply (op=0x06).  Must use SLIP decode here.
+        val romReply = readSlipPacket(500)
+        dbg("stub: ROM reply: ${romReply?.size ?: 0}B ${if (romReply != null && romReply.size >= 2) "op=0x%02x".format(romReply[1].toInt() and 0xFF) else "none"}")
+
+        // Read OHAI — no artificial delay; the stub starts while we read the ROM reply.
+        // Use a long timeout since the stub must initialise SPI flash before sending OHAI.
+        dbg("stub: waiting for OHAI (10s timeout)...")
+        val hello = readSlipPacket(10_000)
+        val helloStr = hello?.let { String(it) }
+        val rawHex = hello?.joinToString("") { "%02x".format(it) } ?: "null"
+        dbg("stub: hello response: $helloStr (raw=$rawHex)")
+        if (helloStr != "OHAI") 
+            return Result.failure(Exception("stub_hello: ${helloStr ?: "timeout"}"))
+        dbg("stub: OHAI received — stub running!")
+        return Result.success(Unit)
     }
 
     override suspend fun transfer(
@@ -201,35 +315,56 @@ class EspSerialFlasher(
             ))
         }
 
-        // Write to a single slot (app0) — exactly what esptool.py does.
-        val numBlocks = (firmware.size + BLOCK_SIZE - 1) / BLOCK_SIZE
-        val eraseSize = ((firmware.size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE) * FLASH_SECTOR_SIZE
-        val beginPayload = leInt(eraseSize) + leInt(numBlocks) + leInt(BLOCK_SIZE) + leInt(FLASH_OFFSET)
-        if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = 30_000)) {
-            return Result.failure(Exception("FLASH_BEGIN rejected at offset 0x${FLASH_OFFSET.toString(16)} (image size=${firmware.size})"))
+        // 1. Erase otadata so the bootloader falls back to app0.
+        val otaBlockCount = OTA_DATA_SIZE / BLOCK_SIZE
+        val otaBegin = leInt(OTA_DATA_SIZE) + leInt(otaBlockCount) + leInt(BLOCK_SIZE) + leInt(OTA_DATA_OFFSET)
+        if (!sendCommand(ESP_FLASH_BEGIN, otaBegin, timeoutMs = 10_000)) {
+            dbg("otadata FLASH_BEGIN failed — continuing anyway")
+        } else {
+            val blank = ByteArray(BLOCK_SIZE) { 0xFF.toByte() }
+            for (otaSeq in 0 until otaBlockCount) {
+                val p = leInt(blank.size) + leInt(otaSeq) + leInt(0) + leInt(0) + blank
+                if (!sendCommand(ESP_FLASH_DATA, p, checksumOver = blank)) break
+            }
         }
 
+        // 2. Write firmware to app0 only.  Single-slot write halves the USB
+        //    transfer and avoids the Android USB IN-pipe exhaustion that
+        //    occurs during sustained dual-slot (~1400 block) transfers.
+        val targets = listOf(FLASH_OFFSET)
+        val numBlocks = (firmware.size + BLOCK_SIZE - 1) / BLOCK_SIZE
+        val eraseSize = ((firmware.size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE) * FLASH_SECTOR_SIZE
+
         val reporter = ProgressReporter(
-            totalBytes = firmware.size.toLong(),
+            totalBytes = firmware.size.toLong() * targets.size,
             onProgress = onProgress,
         )
         reporter.start()
 
-        var offset = 0
-        sequence = 0
-        while (offset < firmware.size) {
-            val remaining = firmware.size - offset
-            val take = BLOCK_SIZE.coerceAtMost(remaining)
-            val chunk = firmware.copyOfRange(offset, offset + take)
-            val padded = if (take < BLOCK_SIZE) chunk + ByteArray(BLOCK_SIZE - take) { 0xFF.toByte() } else chunk
-
-            val payload = leInt(padded.size) + leInt(sequence) + leInt(0) + leInt(0) + padded
-            if (!sendCommand(ESP_FLASH_DATA, payload, checksumOver = padded)) {
-                return Result.failure(Exception("FLASH_DATA failed at block $sequence (offset=$offset)"))
+        for (flashOffset in targets) {
+            val beginPayload = leInt(eraseSize) + leInt(numBlocks) + leInt(BLOCK_SIZE) + leInt(flashOffset)
+            dbg("FLASH_BEGIN off=0x${flashOffset.toString(16)} erase=0x${eraseSize.toString(16)} blocks=$numBlocks")
+            if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = 30_000)) {
+                return Result.failure(Exception("FLASH_BEGIN rejected at offset 0x${flashOffset.toString(16)} (image size=${firmware.size})"))
             }
-            reporter.update(take)
-            offset += take
-            sequence++
+
+            var offset = 0
+            sequence = 0
+            while (offset < firmware.size) {
+                val remaining = firmware.size - offset
+                val take = BLOCK_SIZE.coerceAtMost(remaining)
+                val chunk = firmware.copyOfRange(offset, offset + take)
+                val padded = if (take < BLOCK_SIZE) chunk + ByteArray(BLOCK_SIZE - take) { 0xFF.toByte() } else chunk
+
+                val payload = leInt(padded.size) + leInt(sequence) + leInt(0) + leInt(0) + padded
+                if (!sendCommand(ESP_FLASH_DATA, payload, checksumOver = padded, timeoutMs = FLASH_DATA_TIMEOUT_MS)) {
+                    return Result.failure(Exception("FLASH_DATA failed at block $sequence (offset=$offset) for offset 0x${flashOffset.toString(16)}"))
+                }
+                reporter.update(take)
+                offset += take
+                sequence++
+                if (sequence % 128 == 0) dbg("...block $sequence/${numBlocks} OK")
+            }
         }
 
         return Result.success(Unit)
@@ -365,6 +500,18 @@ class EspSerialFlasher(
     //  SLIP transport
     // ────────────────────────────────────────────────────────────────────
 
+    private fun clearEndpointHalt(endpoint: UsbEndpoint) {
+        // Standard USB CLEAR_FEATURE(ENDPOINT_HALT) — the PC driver does this
+        // automatically after a stall; Android's USB host does not.
+        connection.controlTransfer(
+            0x02,  // bmReqType: host→device, standard, endpoint
+            0x01,  // CLEAR_FEATURE
+            0x00,  // ENDPOINT_HALT
+            endpoint.address,
+            null, 0, 500
+        )
+    }
+
     /** Send a single command and wait for the ROM's reply.
      *  @param checksumOver bytes to include in the SLIP header checksum
      *         (only [ESP_FLASH_DATA] uses a non-empty checksum).
@@ -382,21 +529,53 @@ class EspSerialFlasher(
             leInt(cs)
         val frame = SlipFramer.encode(header + payload)
         val out = outEndpoint ?: return false
-        if (connection.bulkTransfer(out, frame, frame.size, timeoutMs) < 0) return false
+        val writeStart = System.currentTimeMillis()
+        if (connection.bulkTransfer(out, frame, frame.size, timeoutMs) < 0) {
+            dbgErr("sendCmd op=0x%02x: bulkTransfer OUT failed (frame=${frame.size}B)".format(op))
+            return false
+        }
         if (!expectReply) return true
         // The ROM may have buffered SYNC echoes or stale replies in the
         // bulk-in pipe. Read until we either match our opcode or the
         // timeout elapses — drop any other frames silently.
         val deadline = System.currentTimeMillis() + timeoutMs
+        var discarded = 0
+        var lastDiscardedOp = -1
         while (System.currentTimeMillis() < deadline) {
-            val reply = readSlipPacket(
-                (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(50)
-            ) ?: return false
+            val remainingMs = (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(50)
+            val reply = readSlipPacket(remainingMs)
+            if (reply == null) {
+                val elapsed = System.currentTimeMillis() - writeStart
+                // After 3s of silence, clear the IN endpoint halt (Android
+                // does not auto-clear) and give it one more chance.
+                if (elapsed > 3_000) {
+                    inEndpoint?.let { clearEndpointHalt(it) }
+                    dbg("sendCmd op=0x%02x: cleared IN endpoint halt, retrying...".format(op))
+                    val retryReply = readSlipPacket(3_000)
+                    if (retryReply != null && retryReply.size >= 2 && 
+                        retryReply[0] == 0x01.toByte() && retryReply[1] == op.toByte()) {
+                        return parseReplyOk(op, retryReply)
+                    }
+                }
+                if (discarded > 0) {
+                    dbgErr("sendCmd op=0x%02x: TIMEOUT after ${elapsed}ms (discarded $discarded frames, last op=0x%02x)".format(op, lastDiscardedOp))
+                } else {
+                    dbgErr("sendCmd op=0x%02x: TIMEOUT after ${elapsed}ms (no data received)".format(op))
+                }
+                return false
+            }
             if (reply.size >= 2 && reply[0] == 0x01.toByte() && reply[1] == op.toByte()) {
                 return parseReplyOk(op, reply)
             }
-            // Mismatched frame (stale SYNC echo etc.) — discard and keep reading.
+            // Mismatched frame — discard and keep reading.
+            discarded++
+            if (reply.size >= 2) {
+                lastDiscardedOp = reply[1].toInt() and 0xFF
+                val hex = reply.joinToString("") { "%02x".format(it) }
+                dbg("  discarded #$discarded: ${reply.size}B op=0x%02x raw=$hex".format(lastDiscardedOp))
+            }
         }
+        dbgErr("sendCmd op=0x%02x: DEADLINE (discarded $discarded)".format(op))
         return false
     }
 
@@ -429,19 +608,63 @@ class EspSerialFlasher(
         }
     }
 
+    // Persistent SLIP decoder state (like esptool's slip_reader generator).
+    // These survive across readSlipPacket calls so partial packets that span
+    // multiple USB transfers are reassembled correctly.
+    private var slipPartial: ArrayList<Byte>? = null  // null = waiting for 0xC0
+    private var slipEscaped = false
+    private val slipPending = java.util.ArrayDeque<Byte>()  // unprocessed bytes
+
     /** Pull bytes from the bulk-in endpoint until a complete SLIP frame
      *  is decoded, or [timeoutMs] elapses. */
     private fun readSlipPacket(timeoutMs: Int): ByteArray? {
         val ep = inEndpoint ?: return null
-        val accum = ArrayList<Byte>()
         val buf = ByteArray(256)
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
+            // First drain buffered bytes from previous overshoot
+            while (slipPending.isNotEmpty()) {
+                val pkt = slipDecodeByte(slipPending.removeFirst())
+                if (pkt != null) return pkt
+            }
+            // Then read new bytes from USB
             val n = connection.bulkTransfer(ep, buf, buf.size, 50)
-            if (n <= 0) continue
-            for (i in 0 until n) accum.add(buf[i])
-            val packets = SlipFramer.decode(accum.toByteArray())
-            if (packets.isNotEmpty()) return packets[0]
+            if (n > 0) {
+                for (i in 0 until n) {
+                    val pkt = slipDecodeByte(buf[i])
+                    if (pkt != null) {
+                        // Save remaining bytes for next call
+                        for (j in i + 1 until n) slipPending.addLast(buf[j])
+                        return pkt
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    /** Decode a single byte through the persistent SLIP state machine.
+     *  Returns a completed packet or null. */
+    private fun slipDecodeByte(b: Byte): ByteArray? {
+        if (slipPartial == null) {
+            if (b == SlipFramer.END) slipPartial = ArrayList()
+            // else skip garbage between frames
+        } else if (slipEscaped) {
+            slipEscaped = false
+            when (b) {
+                SlipFramer.ESC_END -> slipPartial!!.add(SlipFramer.END)
+                SlipFramer.ESC_ESC -> slipPartial!!.add(SlipFramer.ESC)
+                else -> slipPartial!!.add(b)
+            }
+        } else when (b) {
+            SlipFramer.ESC -> slipEscaped = true
+            SlipFramer.END -> {
+                val pkt = slipPartial!!.toByteArray()
+                slipPartial = null
+                if (pkt.isNotEmpty()) return pkt
+                slipPartial = ArrayList()
+            }
+            else -> slipPartial!!.add(b)
         }
         return null
     }

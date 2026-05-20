@@ -48,6 +48,7 @@ class NrfBleDfuEngine(
     private val deviceAddress: String,
     private val initialDeviceInfo: DeviceInfo,
 ) : FirmwareUpdateManager.FirmwareUpdateEngine {
+    override var onDebug: ((String) -> Unit)? = null
 
     companion object {
         /** Time the Adafruit nRF52 bootloader needs from reboot to advertising. */

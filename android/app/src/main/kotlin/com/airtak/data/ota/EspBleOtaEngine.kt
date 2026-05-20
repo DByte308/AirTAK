@@ -37,6 +37,7 @@ import java.util.zip.CRC32
 class EspBleOtaEngine(
     private val ble: BleRepository,
 ) : FirmwareUpdateManager.FirmwareUpdateEngine {
+    override var onDebug: ((String) -> Unit)? = null
 
     companion object {
         // Status request frequency during chunk streaming.

@@ -14,12 +14,19 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
@@ -56,6 +63,7 @@ fun FirmwareUpdateScreen(
 ) {
     val progress by viewModel.progress.collectAsState()
     val state by viewModel.state.collectAsState()
+    val debugLog by viewModel.debugLog.collectAsState()
     var selectedUri by remember { mutableStateOf<Uri?>(firmwareUri?.let { Uri.parse(it) }) }
     // Track which transport the user chose for the currently picked file so
     // the LaunchedEffect below dispatches to the right ViewModel entry point.
@@ -119,6 +127,8 @@ fun FirmwareUpdateScreen(
 
                 is FirmwareUpdateViewModel.FwUpdateState.InProgress -> {
                     FirmwareProgress(progress)
+                    Spacer(Modifier.height(16.dp))
+                    DebugLogView(debugLog)
                 }
 
                 is FirmwareUpdateViewModel.FwUpdateState.Done -> {
@@ -171,6 +181,8 @@ fun FirmwareUpdateScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(24.dp))
+                    DebugLogView(debugLog)
+                    Spacer(Modifier.height(8.dp))
                     Button(onClick = {
                         viewModel.reset()
                         selectedUri = null
@@ -307,6 +319,9 @@ private fun FirmwareProgress(progress: UpdateProgress) {
             is UpdateProgress.Done -> {
                 // handled by state
             }
+            is UpdateProgress.Debug -> {
+                // shown in DebugLogView; no inline rendering
+            }
         }
     }
 }
@@ -315,4 +330,32 @@ private fun formatBytes(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"
     val kb = bytes / 1024
     return "$kb KB"
+}
+
+@Composable
+private fun DebugLogView(log: List<String>) {
+    if (log.isEmpty()) return
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Debug Log",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.small,
+        ) {
+            LazyColumn(modifier = Modifier.padding(8.dp)) {
+                items(log) { msg ->
+                    Text(
+                        msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
 }

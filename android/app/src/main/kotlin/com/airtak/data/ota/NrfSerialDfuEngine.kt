@@ -49,6 +49,7 @@ class NrfSerialDfuEngine(
     private val connection: UsbDeviceConnection,
     private val intf: UsbInterface,
 ) : FirmwareUpdateManager.FirmwareUpdateEngine {
+    override var onDebug: ((String) -> Unit)? = null
 
     companion object {
         // Nordic Secure DFU opcodes (table from nrfutil 6.x serial transport).
