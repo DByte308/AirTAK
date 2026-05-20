@@ -48,6 +48,7 @@ class NrfSerialDfuEngine(
     @Suppress("UNUSED_PARAMETER") context: android.content.Context,
     private val connection: UsbDeviceConnection,
     private val intf: UsbInterface,
+    private val usbDevice: android.hardware.usb.UsbDevice,
 ) : FirmwareUpdateManager.FirmwareUpdateEngine {
     override var onDebug: ((String) -> Unit)? = null
     private fun dbg(msg: String) { android.util.Log.d("NrfSerial", msg); onDebug?.invoke(msg) }
@@ -282,7 +283,26 @@ class NrfSerialDfuEngine(
     //  USB CDC line config
     // ────────────────────────────────────────────────────────────────────
 
+    // CDC ACM class codes
+    private val CDC_CONTROL_CLASS = 0x02
+    private val CDC_DATA_CLASS = 0x0A
+
+    /** Find the CDC Communications Interface (class 0x02).  nRF52 DFU
+     *  exposes two interfaces: control (iface 0) and data (iface 1).
+     *  SET_LINE_CODING / SET_CONTROL_LINE_STATE must target the control
+     *  interface; sending to the data interface is rejected by the
+     *  Adafruit bootloader. */
+    private fun findControlInterface(): UsbInterface? {
+        for (i in 0 until usbDevice.interfaceCount) {
+            val candidate = usbDevice.getInterface(i)
+            if (candidate.interfaceClass == CDC_CONTROL_CLASS) return candidate
+        }
+        return null
+    }
+
     private fun configureCdcAcm(baud: Int): Boolean {
+        val ctrlIntf = findControlInterface() ?: intf
+        dbg("configureCdcAcm: using interface ${ctrlIntf.id} (class=0x${ctrlIntf.interfaceClass.toString(16)})")
         val data = byteArrayOf(
             (baud and 0xFF).toByte(),
             ((baud shr 8) and 0xFF).toByte(),
@@ -293,11 +313,11 @@ class NrfSerialDfuEngine(
             0x08, // 8 data bits
         )
         val r1 = connection.controlTransfer(
-            REQ_TYPE_CLASS_OUT, CDC_SET_LINE_CODING, 0, intf.id, data, data.size, BULK_TIMEOUT_MS
+            REQ_TYPE_CLASS_OUT, CDC_SET_LINE_CODING, 0, ctrlIntf.id, data, data.size, BULK_TIMEOUT_MS
         )
         // Assert DTR + RTS — the Adafruit bootloader gates serial RX on DTR.
         val r2 = connection.controlTransfer(
-            REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, 0x03, intf.id, null, 0, BULK_TIMEOUT_MS
+            REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, 0x03, ctrlIntf.id, null, 0, BULK_TIMEOUT_MS
         )
         return r1 >= 0 && r2 >= 0
     }

@@ -8,6 +8,7 @@ package com.airtak.data.ota
 
 import android.bluetooth.BluetoothGatt
 import android.content.Context
+import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
 import android.net.Uri
@@ -28,7 +29,8 @@ class FirmwareUpdateManager(
         data class UsbCdc(
             val connection: UsbDeviceConnection,
             val intf: UsbInterface,
-            val vendorId: Int
+            val vendorId: Int,
+            val usbDevice: UsbDevice,
         ) : Transport()
 
         data class BleGatt(
@@ -156,7 +158,7 @@ class FirmwareUpdateManager(
         val engine = when (transport) {
             is Transport.UsbCdc -> {
                 when {
-                    transport.vendorId == 0x239A -> NrfSerialDfuEngine(context, transport.connection, transport.intf)
+                    transport.vendorId == 0x239A -> NrfSerialDfuEngine(context, transport.connection, transport.intf, transport.usbDevice)
                     transport.vendorId == 0x303A ||
                         transport.vendorId == 0x10C4 ||
                         transport.vendorId == 0x1A86 ->

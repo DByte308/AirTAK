@@ -147,6 +147,7 @@ class FirmwareUpdateViewModel @Inject constructor(
                     connection = connection,
                     intf = dataIntf,
                     vendorId = device.vendorId,
+                    usbDevice = device,
                 )
 
                 // The engine will read DeviceInfo from the bootloader; we
