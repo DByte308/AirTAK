@@ -114,7 +114,11 @@ void setup() {
 
     Serial.begin(115200);
     delay(1000);
+#ifdef AIRTAK_FLASH_TEST
+    Serial.println("FLASH TEST boot");
+#else
     Serial.println("AirTAK boot");
+#endif
     Serial.flush();
 
     wdtFeed();
@@ -131,12 +135,24 @@ void setup() {
 
     wdtFeed();
     ledOff();
+#ifdef AIRTAK_FLASH_TEST
+    Serial.println("FLASH TEST: FlashStore init...");
+#else
     Serial.println("AirTAK: FlashStore init...");
+#endif
     Serial.flush();
     if (!airtak::config::FlashStore::init()) {
+#ifdef AIRTAK_FLASH_TEST
+        Serial.println("FLASH TEST: FlashStore init failed; using volatile defaults");
+#else
         Serial.println("AirTAK: FlashStore init failed; using volatile defaults");
+#endif
     } else {
+#ifdef AIRTAK_FLASH_TEST
+        Serial.println("FLASH TEST: FlashStore OK");
+#else
         Serial.println("AirTAK: FlashStore OK");
+#endif
 #if defined(AIRTAK_PLATFORM_ESP32) && defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
         esp_ota_mark_app_valid_cancel_rollback();
 #endif

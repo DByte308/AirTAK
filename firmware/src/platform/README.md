@@ -39,3 +39,40 @@ This is preferred over per-radio-variant build targets because:
 - RadioLib supports runtime probing via SPI chip-ID registers.
 
 Contrast with Meshtastic's approach: all radio defines in one `variant.h`, with runtime probing in `RadioInterface.cpp`. AirTAK follows the same strategy but keeps the radio abstraction inside `Radio.cpp` rather than scattered through `NodeDB.cpp` and `configuration.h`.
+
+## Flash Test Firmware
+
+To verify that OTA (BLE / USB serial) or OTG flashing via the Android app actually succeeds, build a flash-test variant of the firmware. When the `AIRTAK_FLASH_TEST` compile flag is set, the display header renders **FLASH TEST OK** instead of **AirTAK** and the serial boot log prints a `FLASH TEST` prefix — giving an immediate visual confirmation on the device that the new image was written correctly.
+
+### Build
+
+Each production environment in `firmware/platformio.ini` has a commented-out `-DAIRTAK_FLASH_TEST` flag. Uncomment it for the target board, then build as usual:
+
+```ini
+; Uncomment to build flash-test firmware (display shows "FLASH TEST OK"):
+; -DAIRTAK_FLASH_TEST
+```
+
+```
+./tools/pio_firmware.sh run -e t_echo        # T-Echo (nRF52840)
+./tools/pio_firmware.sh run -e t_echo_plus    # T-Echo Plus (nRF52840)
+./tools/pio_firmware.sh run -e heltec_t114    # Heltec T114 (nRF52840)
+./tools/pio_firmware.sh run -e t3s3           # T3 S3 (ESP32-S3)
+./tools/pio_firmware.sh run -e t_deck         # T-Deck (ESP32-S3)
+```
+
+The flag is the only difference from a production build — all other settings, libraries, and source filters are identical. Artifact format is unchanged:
+
+- **nRF52 boards** output a `.hex` file (`.pio/build/<env>/firmware.hex`). Package it into a DFU zip with `adafruit-nrfutil` before flashing via the Android app's BLE DFU or USB serial DFU path.
+- **ESP32 boards** output a `.bin` file (`.pio/build/<env>/firmware.bin`) that starts with the ESP OTA app magic byte (`0xE9`). Use it directly with the Android app's USB serial flasher or BLE OTA path.
+
+### Affected source files
+
+The flag is gated in the following files:
+
+| File | Change |
+|---|---|
+| `src/platform/boards/*/hal/Display.cpp` (all 5 boards) | `renderMainScreen()` header text |
+| `src/main.cpp` | Serial boot messages (`"AirTAK boot"` → `"FLASH TEST boot"`, etc.) |
+
+The flag does **not** alter any radio, mesh, config, BLE service, recovery, or OTA protocol behaviour — the test firmware is functionally identical to production and can be left on the device indefinitely.

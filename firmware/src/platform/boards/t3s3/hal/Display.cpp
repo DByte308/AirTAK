@@ -84,7 +84,11 @@ static void drawFooter() {
 // ── Screen renderers ─────────────────────────────────────────────────────────
 
 static void renderMainScreen() {
+#ifdef AIRTAK_FLASH_TEST
+    drawHeader("FLASH TEST OK");
+#else
     drawHeader("AirTAK");
+#endif
 
     s_display.setTextSize(1);
     s_display.setTextColor(SSD1306_WHITE);

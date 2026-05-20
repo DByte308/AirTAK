@@ -23,6 +23,9 @@ import com.airtak.data.overlays.MissionOverlayPoint
 import com.airtak.data.overlays.MissionOverlayRepository
 import com.airtak.data.overlays.OverlayAlignmentRepository
 import com.airtak.data.overlays.ReceivedAlignment
+import com.airtak.data.routing.RouteCalcState
+import com.airtak.data.routing.RoutePoint
+import com.airtak.data.routing.RoutingRepository
 import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.data.tiles.TileBounds
 import com.airtak.data.tiles.TileDownloadState
@@ -126,6 +129,7 @@ class MapViewModel @Inject constructor(
     private val markerRepo: TacticalMarkerRepository,
     private val gameRepo: com.airtak.data.game.GameRepository,
     private val overlayAlignmentRepo: OverlayAlignmentRepository,
+    private val routingRepo: RoutingRepository,
 ) : ViewModel() {
     private val showPlayers = MutableStateFlow(true)
     private val showWaypoints = MutableStateFlow(true)
@@ -491,6 +495,39 @@ class MapViewModel @Inject constructor(
 
     val overlayShareEnabled: StateFlow<Boolean> = missionOverlayRepository.shareEnabled
     val availableAlignments: StateFlow<List<ReceivedAlignment>> = overlayAlignmentRepo.alignments
+
+    val routeState: StateFlow<RouteCalcState> = routingRepo.routeState
+    val segmentDownloadState = routingRepo.downloadState
+    val segmentDataReady: StateFlow<Boolean> = routingRepo.isDataReady
+    val selectedProfile: StateFlow<String> = routingRepo.selectedProfile
+    val availableProfiles: List<String> get() = routingRepo.availableProfiles
+
+    fun setProfile(name: String) { routingRepo.setProfile(name) }
+
+    fun navigateToMarker(marker: MarkerVisual, ownLat: Double, ownLon: Double) {
+        val target = marker.points.firstOrNull() ?: return
+        if (routingRepo.isDataReady.value) {
+            routingRepo.calculateRoute(ownLat, ownLon, target.first, target.second)
+        } else {
+            routingRepo.beelineRoute(ownLat, ownLon, target.first, target.second)
+        }
+    }
+
+    fun navigateRoutePoints(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double) {
+        if (routingRepo.isDataReady.value) {
+            routingRepo.calculateRoute(fromLat, fromLon, toLat, toLon)
+        } else {
+            routingRepo.beelineRoute(fromLat, fromLon, toLat, toLon)
+        }
+    }
+
+    fun downloadSegments(bounds: TileBounds) {
+        routingRepo.downloadSegments(bounds)
+    }
+
+    fun clearRoute() {
+        routingRepo.clearRoute()
+    }
 
     private fun RemoteNodeEntity.toMapNode(now: Long): MapNode {
         val label = callsign.ifBlank { shortName.ifBlank { nodeId.toString(16).uppercase().takeLast(4) } }

@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,8 +22,10 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.outlined.AltRoute
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.Icons
@@ -32,6 +35,7 @@ import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Place
@@ -89,6 +93,8 @@ import com.airtak.data.geocoding.GeocodingResult
 import com.airtak.data.overlays.MissionOverlayCornerId
 import com.airtak.data.overlays.MissionOverlayCorners
 import com.airtak.data.overlays.MissionOverlayPoint
+import com.airtak.data.routing.RouteCalcState
+import com.airtak.data.routing.SegmentDownloadState
 import com.airtak.proto.MarkerType
 import com.airtak.proto.PlayerStatus
 import com.airtak.proto.Scope
@@ -145,10 +151,13 @@ import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import org.maplibre.geojson.Polygon
 import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.math.tan
 
 @Composable
@@ -195,6 +204,14 @@ fun MapScreen(
     var showAlignmentPicker by remember { mutableStateOf(false) }
     var pendingAlignmentImport by remember { mutableStateOf<com.airtak.data.overlays.ReceivedAlignment?>(null) }
     var showStatusPicker by remember { mutableStateOf(false) }
+    val routeState by viewModel.routeState.collectAsState()
+    val selectedProfileName by viewModel.selectedProfile.collectAsState()
+    var segmentSelectMode by remember { mutableStateOf(false) }
+    var segmentFirstCorner by remember { mutableStateOf<LatLng?>(null) }
+    var selectedSegmentBounds by remember { mutableStateOf<TileBounds?>(null) }
+    var routePlanMode by remember { mutableStateOf(false) }
+    var routePlanStart by remember { mutableStateOf<LatLng?>(null) }
+    var routePlanEnd by remember { mutableStateOf<LatLng?>(null) }
 
     fun updateOwnLabelPoint() {
         val pos = ui.ownPosition
@@ -238,6 +255,31 @@ fun MapScreen(
             selectedTileBounds = boundsFromCorners(first, latLng)
             tileFirstCorner = null
             tileSelectMode = false
+        }
+    }
+
+    fun markSegmentCorner(latLng: LatLng) {
+        val first = segmentFirstCorner
+        if (first == null) {
+            segmentFirstCorner = latLng
+        } else {
+            selectedSegmentBounds = boundsFromCorners(first, latLng)
+            segmentFirstCorner = null
+            segmentSelectMode = false
+        }
+    }
+
+    fun markRoutePlanPoint(latLng: LatLng) {
+        if (routePlanStart == null) {
+            routePlanStart = latLng
+        } else {
+            routePlanEnd = latLng
+            routePlanMode = false
+            val start = routePlanStart!!
+            val end = latLng
+            viewModel.navigateRoutePoints(start.latitude, start.longitude, end.latitude, end.longitude)
+            routePlanStart = null
+            routePlanEnd = null
         }
     }
 
@@ -286,7 +328,7 @@ fun MapScreen(
         }
     }
 
-    DisposableEffect(map, tileSelectMode, tileFirstCorner, missionOverlayEditMode, selectedOverlayCorner, ui.missionOverlay, drawing) {
+    DisposableEffect(map, tileSelectMode, tileFirstCorner, segmentSelectMode, segmentFirstCorner, routePlanMode, routePlanStart, routePlanEnd, missionOverlayEditMode, selectedOverlayCorner, ui.missionOverlay, drawing) {
         val targetMap = map
         if (targetMap == null) {
             onDispose {}
@@ -296,6 +338,12 @@ fun MapScreen(
                     true
                 } else if (tileSelectMode) {
                     markTileCorner(latLng)
+                    true
+                } else if (segmentSelectMode) {
+                    markSegmentCorner(latLng)
+                    true
+                } else if (routePlanMode) {
+                    markRoutePlanPoint(latLng)
                     true
                 } else if (drawing is DrawingState.Active) {
                     viewModel.addDrawingPoint(latLng.latitude, latLng.longitude)
@@ -329,6 +377,10 @@ fun MapScreen(
                     // Corner alignment is handled by draggable screen-space handles.
                 } else if (tileSelectMode) {
                     markTileCorner(latLng)
+                } else if (segmentSelectMode) {
+                    markSegmentCorner(latLng)
+                } else if (routePlanMode) {
+                    markRoutePlanPoint(latLng)
                 } else if (drawing is DrawingState.Active) {
                     viewModel.addDrawingPoint(latLng.latitude, latLng.longitude)
                 } else {
@@ -429,6 +481,9 @@ fun MapScreen(
     LaunchedEffect(map, drawing) {
         map?.getStyle { style -> updateDraftLayer(style, drawing) }
     }
+    LaunchedEffect(map, routeState) {
+        map?.getStyle { style -> updateNavRouteLayer(style, routeState) }
+    }
 
     LaunchedEffect(map, tileFirstCorner, selectedTileBounds) {
         map?.getStyle { style -> updateTileSelectionLayer(style, selectedTileBounds) }
@@ -471,6 +526,8 @@ fun MapScreen(
             showPlayers = ui.showPlayers,
             showWaypoints = ui.showWaypoints,
             selectingTiles = tileSelectMode,
+            selectingSegments = segmentSelectMode,
+            routePlanning = routePlanMode,
             gameActive = gameActive,
             drawingActive = drawing is DrawingState.Active,
             playerStatus = playerStatus,
@@ -492,10 +549,31 @@ fun MapScreen(
             onDownload = {
                 tileSelectMode = !tileSelectMode
                 missionOverlayEditMode = false
+                segmentSelectMode = false
+                routePlanMode = false
                 tileFirstCorner = null
                 selectedTileBounds = null
                 tileUrl = ui.configuredTileTemplate
             },
+            onSegmentDownload = {
+                segmentSelectMode = !segmentSelectMode
+                missionOverlayEditMode = false
+                tileSelectMode = false
+                routePlanMode = false
+                segmentFirstCorner = null
+                selectedSegmentBounds = null
+            },
+            onPlanRoute = {
+                routePlanMode = !routePlanMode
+                missionOverlayEditMode = false
+                tileSelectMode = false
+                segmentSelectMode = false
+                routePlanStart = null
+                routePlanEnd = null
+            },
+            selectedProfile = selectedProfileName,
+            availableProfiles = viewModel.availableProfiles,
+            onSelectProfile = { viewModel.setProfile(it) },
             modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
         )
 
@@ -536,6 +614,84 @@ fun MapScreen(
             firstCorner = tileFirstCorner != null,
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
         )
+
+        if (segmentSelectMode) {
+            StatusPill(
+                text = if (segmentFirstCorner != null) "Routing region: second corner" else "Routing region: first corner",
+                color = AccentCyan,
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp),
+            )
+        }
+        val segState by viewModel.segmentDownloadState.collectAsState()
+        val segVal = segState
+        when (segVal) {
+            SegmentDownloadState.Idle -> {}
+            is SegmentDownloadState.Running -> {
+                StatusPill(
+                    "Segments ${segVal.completed}/${segVal.total}",
+                    AccentCyan,
+                    Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp),
+                )
+            }
+            is SegmentDownloadState.Complete -> {
+                val total = segVal.downloaded + segVal.skipped
+                if (total == 0) {
+                    StatusPill("No segments downloaded", AccentAmber, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp))
+                } else {
+                    StatusPill("Routing data ready ($total segments)", AccentCyan, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp))
+                }
+            }
+            is SegmentDownloadState.Failed -> {
+                StatusPill(segVal.message, AccentAmber, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp))
+            }
+        }
+
+        if (routePlanMode) {
+            StatusPill(
+                text = if (routePlanStart == null) "Route: tap start point" else "Route: tap end point",
+                color = AccentCyan,
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 96.dp),
+            )
+        }
+        val routeCalc = routeState
+        if (routeCalc is RouteCalcState.Calculating) {
+            StatusPill("Calculating route...", AccentCyan, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 96.dp))
+        }
+        if (routeCalc is RouteCalcState.Failed) {
+            StatusPill(
+                routeCalc.message,
+                AccentAmber,
+                Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 96.dp),
+            )
+            LaunchedEffect(routeCalc) {
+                kotlinx.coroutines.delay(4000)
+                if (routeState is RouteCalcState.Failed) viewModel.clearRoute()
+            }
+        }
+
+        if (routeState is RouteCalcState.Complete) {
+            val state = routeState as RouteCalcState.Complete
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        formatDistance(state.distanceM),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    TextButton(onClick = { viewModel.clearRoute() }) {
+                        Text("Clear")
+                    }
+                }
+            }
+        }
 
         val ownLabel = ui.ownPosition?.label.orEmpty()
         val labelPoint = ownLabelPoint
@@ -639,10 +795,15 @@ fun MapScreen(
     tappedMarker?.let { marker ->
         MarkerDetailDialog(
             marker = marker,
+            ownPosition = ui.ownPosition,
             onDismiss = { tappedMarker = null },
             onDelete = {
                 viewModel.deleteMarker(marker.markerId)
                 tappedMarker = null
+            },
+            onNavigate = {
+                val own = ui.ownPosition ?: return@MarkerDetailDialog
+                viewModel.navigateToMarker(marker, own.latitude, own.longitude)
             },
         )
     }
@@ -734,6 +895,40 @@ fun MapScreen(
             },
             dismissButton = {
                 TextButton(onClick = { selectedTileBounds = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    selectedSegmentBounds?.let { bounds ->
+        AlertDialog(
+            onDismissRequest = { selectedSegmentBounds = null },
+            title = { Text("Routing Data Region") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        bounds.displayString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "Download BRouter .rd5 segment files for this area to enable on-road/trail route calculation.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "Without segments → fallback to straight-line route.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.downloadSegments(bounds)
+                    selectedSegmentBounds = null
+                }) { Text("Download") }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedSegmentBounds = null }) { Text("Cancel") }
             },
         )
     }
@@ -947,6 +1142,8 @@ private fun MapToolbar(
     showPlayers: Boolean,
     showWaypoints: Boolean,
     selectingTiles: Boolean,
+    selectingSegments: Boolean,
+    routePlanning: Boolean,
     gameActive: Boolean,
     drawingActive: Boolean,
     playerStatus: PlayerStatus,
@@ -960,6 +1157,11 @@ private fun MapToolbar(
     editingMissionOverlay: Boolean,
     onMissionOverlay: () -> Unit,
     onDownload: () -> Unit,
+    onSegmentDownload: () -> Unit,
+    onPlanRoute: () -> Unit,
+    selectedProfile: String,
+    availableProfiles: List<String>,
+    onSelectProfile: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -969,7 +1171,9 @@ private fun MapToolbar(
         tonalElevation = 0.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            modifier = Modifier
+                .padding(horizontal = 6.dp, vertical = 4.dp)
+                .horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -1052,6 +1256,56 @@ private fun MapToolbar(
                 ),
             ) {
                 Icon(Icons.Outlined.Download, contentDescription = "Download tiles")
+            }
+            IconButton(
+                onClick = onSegmentDownload,
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = if (selectingSegments) AccentCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+            ) {
+                Icon(Icons.Outlined.Layers, contentDescription = "Download routing data")
+            }
+            IconButton(
+                onClick = onPlanRoute,
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = if (routePlanning) AccentCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+            ) {
+                Icon(Icons.AutoMirrored.Outlined.AltRoute, contentDescription = "Plan route")
+            }
+            Box {
+                var profileExpanded by remember { mutableStateOf(false) }
+                Surface(
+                    modifier = Modifier.clickable { profileExpanded = true },
+                    shape = RoundedCornerShape(8.dp),
+                    color = AccentCyan.copy(alpha = 0.12f),
+                ) {
+                    Text(
+                        selectedProfile.replace("-", " "),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AccentCyan,
+                    )
+                }
+                DropdownMenu(
+                    expanded = profileExpanded,
+                    onDismissRequest = { profileExpanded = false },
+                ) {
+                    availableProfiles.forEach { name ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    name.replace("-", " "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            },
+                            onClick = {
+                                onSelectProfile(name)
+                                profileExpanded = false
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -1347,9 +1601,17 @@ private fun priorityLabel(priority: Int): String = when (priority) {
 @Composable
 private fun MarkerDetailDialog(
     marker: MarkerVisual,
+    ownPosition: OwnPosition?,
     onDismiss: () -> Unit,
     onDelete: () -> Unit,
+    onNavigate: () -> Unit = {},
 ) {
+    val distance = ownPosition?.let { own ->
+        marker.points.firstOrNull()?.let { point ->
+            haversineDistance(own.latitude, own.longitude, point.first, point.second)
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(marker.label.ifBlank { "Marker" }) },
@@ -1360,6 +1622,9 @@ private fun MarkerDetailDialog(
                 if (marker.type == MarkerType.MARKER_TYPE_OBJECTIVE) {
                     Text("Team: ${teamLabel(marker.controllingTeam)}", style = MaterialTheme.typography.bodySmall)
                     Text("Priority: ${priorityLabel(marker.priority)}", style = MaterialTheme.typography.bodySmall)
+                }
+                if (distance != null) {
+                    Text("Distance: ${formatDistance(distance)}", style = MaterialTheme.typography.bodySmall)
                 }
                 if (marker.description.isNotBlank()) {
                     Spacer(Modifier.height(4.dp))
@@ -1373,16 +1638,35 @@ private fun MarkerDetailDialog(
             }
         },
         confirmButton = {
-            if (marker.ownedLocally) {
-                TextButton(onClick = onDelete) { Text("Delete") }
-            } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onClick = {
+                    onNavigate()
+                    onDismiss()
+                }) {
+                    Text("Navigate")
+                }
+                if (marker.ownedLocally) {
+                    TextButton(onClick = onDelete) { Text("Delete") }
+                }
                 TextButton(onClick = onDismiss) { Text("Close") }
             }
         },
-        dismissButton = if (marker.ownedLocally) {
-            { TextButton(onClick = onDismiss) { Text("Close") } }
-        } else null,
     )
+}
+
+private fun haversineDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val R = 6_371_000.0
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = sin(dLat / 2).pow(2) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c
+}
+
+private fun formatDistance(meters: Double): String = when {
+    meters < 10 -> "${meters.roundToInt()} m"
+    meters < 1000 -> "${(meters / 10).roundToInt() * 10} m"
+    else -> "%.1f km".format(meters / 1000)
 }
 
 private fun markerTypeLabel(type: MarkerType): String = when (type) {
@@ -1843,6 +2127,15 @@ private fun ensureMarkerLayers(style: Style, textColor: Int) {
             ),
         )
     }
+    if (style.getSource(NAV_ROUTE_SOURCE) == null) style.addSource(emptyGeoJsonSource(NAV_ROUTE_SOURCE))
+    if (style.getLayer(NAV_ROUTE_LINE_LAYER) == null) {
+        style.addLayer(
+            LineLayer(NAV_ROUTE_LINE_LAYER, NAV_ROUTE_SOURCE).withProperties(
+                lineColor("#FF4D5E"),
+                lineWidth(5f),
+            ),
+        )
+    }
     if (style.getLayer(DRAFT_LINE_LAYER) == null) {
         style.addLayer(
             LineLayer(DRAFT_LINE_LAYER, DRAFT_SOURCE).withProperties(
@@ -1957,6 +2250,17 @@ private fun updateDraftLayer(style: Style, drawing: DrawingState) {
         }
     }
     source.setGeoJson(FeatureCollection.fromFeatures(features))
+}
+
+private fun updateNavRouteLayer(style: Style, state: RouteCalcState) {
+    val source = style.getSourceAs<GeoJsonSource>(NAV_ROUTE_SOURCE) ?: return
+    if (state !is RouteCalcState.Complete || state.points.size < 2) {
+        source.setGeoJson(emptyFeatureCollection())
+        return
+    }
+    val coordinates = state.points.map { Point.fromLngLat(it.longitude, it.latitude) }
+    val line = LineString.fromLngLats(coordinates)
+    source.setGeoJson(FeatureCollection.fromFeature(Feature.fromGeometry(line)))
 }
 
 private fun updateMissionOverlay(style: Style, overlay: MissionOverlay?) {
@@ -2232,6 +2536,8 @@ private const val DRAFT_SOURCE = "draft-marker-source"
 private const val DRAFT_POINT_LAYER = "draft-marker-point-layer"
 private const val DRAFT_LINE_LAYER = "draft-marker-line-layer"
 private const val DRAFT_FILL_LAYER = "draft-marker-fill-layer"
+private const val NAV_ROUTE_SOURCE = "nav-route-source"
+private const val NAV_ROUTE_LINE_LAYER = "nav-route-line-layer"
 private const val MAX_TILES_PER_DOWNLOAD = 15_000
 private const val NUDGE_PX = 2f
 

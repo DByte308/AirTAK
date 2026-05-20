@@ -74,7 +74,13 @@ class EspSerialFlasher(
 
         // Block size that matches the ROM loader's internal SPI write buffer.
         private const val BLOCK_SIZE        = 0x400  // 1 KiB — safe across all chips
-        private const val FLASH_OFFSET      = 0x10000
+        private const val FLASH_SECTOR_SIZE = 0x1000 // 4 KiB — ESP32 minimum erase unit
+        private const val FLASH_OFFSET      = 0x10000   // app0 offset in default_16MB.csv
+        private const val OTA_DATA_OFFSET   = 0xE000    // otadata partition offset
+        private const val OTA_DATA_SIZE     = 0x2000    // otadata partition size (sector-aligned)
+
+        // First byte of an ESP32 OTA app image (esp_image_header_t.magic).
+        private const val ESP_APP_MAGIC     = 0xE9.toByte()
 
         // Transfer parameters.
         private const val DEFAULT_BAUD      = 115200
@@ -180,20 +186,35 @@ class EspSerialFlasher(
         firmware: ByteArray,
         onProgress: (UpdateProgress) -> Unit
     ): Result<Unit> {
+        // ---- Validate: the binary must be an OTA app image, not a factory
+        //      image. Factory images start with a bootloader and are not
+        //      position-independent — they MUST be flashed at offset 0.
+        if (firmware.isEmpty()) {
+            return Result.failure(Exception("Firmware file is empty"))
+        }
+        if (firmware[0] != ESP_APP_MAGIC) {
+            return Result.failure(Exception(
+                "This firmware file does not appear to be an OTA/app binary " +
+                "(first byte is 0x${firmware[0].toUByte().toString(16)}, not 0xE9). " +
+                "If you are trying to flash a factory image, use esptool.py on a PC " +
+                "instead — the USB serial flasher only supports OTA app binaries."
+            ))
+        }
+
+        // Write to a single slot (app0) — exactly what esptool.py does.
+        val numBlocks = (firmware.size + BLOCK_SIZE - 1) / BLOCK_SIZE
+        val eraseSize = ((firmware.size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE) * FLASH_SECTOR_SIZE
+        val beginPayload = leInt(eraseSize) + leInt(numBlocks) + leInt(BLOCK_SIZE) + leInt(FLASH_OFFSET)
+        if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = 30_000)) {
+            return Result.failure(Exception("FLASH_BEGIN rejected at offset 0x${FLASH_OFFSET.toString(16)} (image size=${firmware.size})"))
+        }
+
         val reporter = ProgressReporter(
             totalBytes = firmware.size.toLong(),
             onProgress = onProgress,
         )
         reporter.start()
 
-        // FLASH_BEGIN — erase enough flash for the image.
-        val numBlocks = (firmware.size + BLOCK_SIZE - 1) / BLOCK_SIZE
-        val beginPayload = leInt(firmware.size) + leInt(numBlocks) + leInt(BLOCK_SIZE) + leInt(FLASH_OFFSET)
-        if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = 30_000)) {
-            return Result.failure(Exception("FLASH_BEGIN rejected (image size=${firmware.size})"))
-        }
-
-        // FLASH_DATA — stream blocks.
         var offset = 0
         sequence = 0
         while (offset < firmware.size) {
@@ -202,12 +223,8 @@ class EspSerialFlasher(
             val chunk = firmware.copyOfRange(offset, offset + take)
             val padded = if (take < BLOCK_SIZE) chunk + ByteArray(BLOCK_SIZE - take) { 0xFF.toByte() } else chunk
 
-            // FLASH_DATA payload: <data_len:4><seq:4><0:4><0:4><data>
             val payload = leInt(padded.size) + leInt(sequence) + leInt(0) + leInt(0) + padded
-            // FLASH_DATA's checksum field (in the SLIP header) is computed
-            // over the *data only*, not the leading 16-byte header.
-            val ok = sendCommand(ESP_FLASH_DATA, payload, checksumOver = padded)
-            if (!ok) {
+            if (!sendCommand(ESP_FLASH_DATA, payload, checksumOver = padded)) {
                 return Result.failure(Exception("FLASH_DATA failed at block $sequence (offset=$offset)"))
             }
             reporter.update(take)
@@ -215,49 +232,19 @@ class EspSerialFlasher(
             sequence++
         }
 
-        // ---- Invalidate otadata so the bootloader picks our new app ------
-        // The T-Deck / T3-S3 partition tables (default_16MB.csv) are
-        // dual-OTA: two app slots (app0 at 0x10000, app1 at 0x650000) plus
-        // an otadata sector at 0xE000 that records which slot is active.
-        // If the device was previously updated over BLE OTA, otadata may
-        // point at app1 — in which case writing app0 alone leaves the old
-        // app1 firmware running. Erasing otadata to all-0xFF causes the
-        // ROM bootloader to fall back to the *first* valid app slot, which
-        // is the one we just wrote to.
-        if (FLASH_OFFSET == 0x10000) {  // only meaningful for app-slot writes
-            val eraseOk = eraseOtaDataSector()
-            if (!eraseOk) {
-                // Non-fatal: log via exception text but continue. Worst case
-                // the user's device still boots the previous slot and they
-                // can retry; we don't want to lose a successful app write.
-                android.util.Log.w("EspSerialFlasher",
-                    "Could not invalidate otadata; device may still boot the previous OTA slot.")
-            }
-        }
-
         return Result.success(Unit)
-    }
-
-    /** Write 0xFF across the otadata sector (offset 0xE000, size 0x2000) so
-     *  the bootloader falls back to the first OTA app slot. */
-    private suspend fun eraseOtaDataSector(): Boolean {
-        val otaDataOffset = 0xE000
-        val otaDataSize = 0x2000
-        val blockCount = otaDataSize / BLOCK_SIZE
-        val beginPayload = leInt(otaDataSize) + leInt(blockCount) + leInt(BLOCK_SIZE) + leInt(otaDataOffset)
-        if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = 10_000)) return false
-        val blank = ByteArray(BLOCK_SIZE) { 0xFF.toByte() }
-        sequence = 0
-        repeat(blockCount) { seq ->
-            val payload = leInt(blank.size) + leInt(seq) + leInt(0) + leInt(0) + blank
-            if (!sendCommand(ESP_FLASH_DATA, payload, checksumOver = blank)) return false
-        }
-        return true
     }
 
     override suspend fun finalize(): Result<Unit> {
         // FLASH_END payload: 0 = reboot into app, 1 = stay in bootloader.
         sendCommand(ESP_FLASH_END, leInt(0), expectReply = false)
+        // The ROM bootloader needs time to commit the final flash write
+        // buffer to physical SPI flash and begin the software reset. If
+        // we release the USB interface too quickly, the host USB stack
+        // may tear down the connection before the ROM finishes committing,
+        // leaving stale data on the flash chip.  esptool.py observes the
+        // same window and uses a 1–2 s post-FLASH_END delay.
+        delay(2_000)
         runCatching { connection.releaseInterface(intf) }
         return Result.success(Unit)
     }
@@ -389,9 +376,10 @@ class EspSerialFlasher(
         expectReply: Boolean = true,
         timeoutMs: Int = BULK_TIMEOUT_MS,
     ): Boolean {
+        val cs = if (checksumOver.isEmpty()) 0 else checksum(checksumOver)
         val header = byteArrayOf(0x00, op.toByte()) +
             leShort(payload.size) +
-            leInt(checksum(checksumOver))
+            leInt(cs)
         val frame = SlipFramer.encode(header + payload)
         val out = outEndpoint ?: return false
         if (connection.bulkTransfer(out, frame, frame.size, timeoutMs) < 0) return false
@@ -459,19 +447,20 @@ class EspSerialFlasher(
     }
 
     /** ROM reply format: `<0x01><opcode><size:2><value:4><data...>`.
-     *  For ESP32-family ROM the trailing `data` ends with a 4-byte status
-     *  block: `<status:1><error:1><reserved:2>` (esptool's
-     *  `STATUS_BYTES_LENGTH = 4`). status == 0 means success. */
+     *  ESP32-S2/S3/C3 ROMs use a 2-byte status trailer: `<status:1><error:1>`.
+     *  ESP32 (classic) ROMs use a 4-byte status trailer: `<status:1><error:1><reserved:2>`.
+     *  We check the 2-byte position first since AirTAK targets ESP32-S3.
+     *  status == 0 means success. */
     private fun parseReplyOk(expectedOp: Int, reply: ByteArray): Boolean {
         if (reply.size < 10) return false  // 8-byte header + at least 2 status bytes
         if (reply[0] != 0x01.toByte()) return false
         if (reply[1] != expectedOp.toByte()) return false
-        // Try 4-byte status trailer first (ROM ESP32-family), fall back to
-        // 2-byte trailer (stub or ESP8266 ROM).
-        val statusByte4 = reply.getOrNull(reply.size - 4)
-        if (statusByte4 != null && statusByte4 == 0x00.toByte()) return true
+        // Check 2-byte status trailer first (ESP32-S3 used by AirTAK), then
+        // fall back to 4-byte (ESP32 classic / stub).
         val statusByte2 = reply.getOrNull(reply.size - 2)
-        return statusByte2 != null && statusByte2 == 0x00.toByte()
+        if (statusByte2 != null && statusByte2 == 0x00.toByte()) return true
+        val statusByte4 = reply.getOrNull(reply.size - 4)
+        return statusByte4 != null && statusByte4 == 0x00.toByte()
     }
 
     // ────────────────────────────────────────────────────────────────────

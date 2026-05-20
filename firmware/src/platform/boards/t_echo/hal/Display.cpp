@@ -65,7 +65,11 @@ static void drawFooter() {
 }
 
 static void renderMainScreen() {
+#ifdef AIRTAK_FLASH_TEST
+    drawHeader("FLASH TEST OK");
+#else
     drawHeader("AirTAK");
+#endif
     s_display.setFont(&FreeSans9pt7b);
     s_display.setTextColor(GxEPD_BLACK);
 

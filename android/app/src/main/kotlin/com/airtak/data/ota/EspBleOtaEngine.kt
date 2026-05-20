@@ -50,6 +50,9 @@ class EspBleOtaEngine(
         // whole image up front and starving OTA_COMMAND status requests.
         private const val MAX_QUEUE_DEPTH = 8
 
+        // First byte of an ESP32 OTA app image (esp_image_header_t.magic).
+        private const val ESP_APP_MAGIC = 0xE9.toByte()
+
         // Wire-format constants for airtak.OtaState.
         private const val STATE_RECEIVING = 1
         private const val STATE_COMPLETE  = 4
@@ -73,6 +76,18 @@ class EspBleOtaEngine(
         }
         if (ble.linkState.value !is LinkState.Connected) {
             return Result.failure(IllegalStateException("BLE link is not connected"))
+        }
+
+        // Validate: the binary must be an OTA app image, not a factory image.
+        // Factory images start with a bootloader (byte != 0xE9) and cannot be
+        // flashed to an OTA app partition — their internal offsets are wrong.
+        if (firmware[0] != ESP_APP_MAGIC) {
+            return Result.failure(Exception(
+                "This firmware file does not appear to be an OTA/app binary " +
+                "(first byte is 0x${firmware[0].toUByte().toString(16)}, not 0xE9). " +
+                "If you are trying to flash a factory image, use esptool.py on a PC " +
+                "or the USB serial flasher in chip-download mode instead."
+            ))
         }
 
         val crc = CRC32().apply { update(firmware) }.value

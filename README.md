@@ -101,6 +101,10 @@ docs/
 └── tactical-protocol.md   Tactical coordination packet flow diagrams
 ```
 
+## Flashing verification
+
+The Android app supports OTA firmware updates over BLE and USB serial. To verify that a flash actually wrote the new image to the device, build a flash-test firmware that renders **FLASH TEST OK** on the display instead of **AirTAK**. See [`firmware/src/platform/README.md`](firmware/src/platform/README.md#flash-test-firmware) for environments and build commands.
+
 ## Design document
 
 All architecture, protocol, and implementation decisions are in [`PLANNING.md`](PLANNING.md).  

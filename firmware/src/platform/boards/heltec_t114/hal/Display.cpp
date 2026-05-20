@@ -97,7 +97,11 @@ static void drawFooter() {
 }
 
 static void renderMainScreen() {
+#ifdef AIRTAK_FLASH_TEST
+    drawHeader("FLASH TEST OK");
+#else
     drawHeader("AirTAK");
+#endif
 
     s_tft.setTextSize(1);
     int16_t y = CONTENT_Y + 2;
