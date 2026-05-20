@@ -363,6 +363,13 @@ class EspSerialFlasher(
                 reporter.update(take)
                 offset += take
                 sequence++
+                // Pace transfers to the stub's flash write speed (~0.7ms/page,
+                // 4 pages/block ≈ 3ms).  Without this, the ESP32-S3 USB device
+                // NAKs while busy, the Android host controller counts NAKs and
+                // eventually stalls the IN endpoint.  The 5ms delay lets each
+                // write commit before the next command arrives, preventing the
+                // NAK accumulation that triggers the stall.
+                delay(5)
                 if (sequence % 128 == 0) dbg("...block $sequence/${numBlocks} OK")
             }
         }
