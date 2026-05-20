@@ -300,78 +300,68 @@ class EspSerialFlasher(
         firmware: ByteArray,
         onProgress: (UpdateProgress) -> Unit
     ): Result<Unit> {
-        // ---- Validate: the binary must be an OTA app image, not a factory
-        //      image. Factory images start with a bootloader and are not
-        //      position-independent — they MUST be flashed at offset 0.
         if (firmware.isEmpty()) {
             return Result.failure(Exception("Firmware file is empty"))
         }
-        if (firmware[0] != ESP_APP_MAGIC) {
-            return Result.failure(Exception(
-                "This firmware file does not appear to be an OTA/app binary " +
-                "(first byte is 0x${firmware[0].toUByte().toString(16)}, not 0xE9). " +
-                "If you are trying to flash a factory image, use esptool.py on a PC " +
-                "instead — the USB serial flasher only supports OTA app binaries."
-            ))
-        }
 
-        // 1. Erase otadata so the bootloader falls back to app0.
-        val otaBlockCount = OTA_DATA_SIZE / BLOCK_SIZE
-        val otaBegin = leInt(OTA_DATA_SIZE) + leInt(otaBlockCount) + leInt(BLOCK_SIZE) + leInt(OTA_DATA_OFFSET)
-        if (!sendCommand(ESP_FLASH_BEGIN, otaBegin, timeoutMs = 10_000)) {
-            dbg("otadata FLASH_BEGIN failed — continuing anyway")
-        } else {
-            val blank = ByteArray(BLOCK_SIZE) { 0xFF.toByte() }
-            for (otaSeq in 0 until otaBlockCount) {
-                val p = leInt(blank.size) + leInt(otaSeq) + leInt(0) + leInt(0) + blank
-                if (!sendCommand(ESP_FLASH_DATA, p, checksumOver = blank)) break
+        // Detect image type: OTA app (starts with 0xE9, typically < 2 MB)
+        // or a combined / factory image (flashed at offset 0).
+        val isOta = firmware[0] == ESP_APP_MAGIC && firmware.size < 2_097_152
+        val flashOffset = if (isOta) FLASH_OFFSET else 0
+        dbg("Image type: ${if (isOta) "OTA app (0x10000)" else "factory (0x0)"} size=${firmware.size}")
+
+        // 1. For OTA: erase otadata so the bootloader falls back to app0.
+        if (isOta) {
+            val otaBlockCount = OTA_DATA_SIZE / BLOCK_SIZE
+            val otaBegin = leInt(OTA_DATA_SIZE) + leInt(otaBlockCount) + leInt(BLOCK_SIZE) + leInt(OTA_DATA_OFFSET)
+            if (!sendCommand(ESP_FLASH_BEGIN, otaBegin, timeoutMs = 10_000)) {
+                dbg("otadata FLASH_BEGIN failed — continuing")
+            } else {
+                val blank = ByteArray(BLOCK_SIZE) { 0xFF.toByte() }
+                for (otaSeq in 0 until otaBlockCount) {
+                    val p = leInt(blank.size) + leInt(otaSeq) + leInt(0) + leInt(0) + blank
+                    if (!sendCommand(ESP_FLASH_DATA, p, checksumOver = blank)) break
+                }
             }
         }
 
-        // 2. Write firmware to app0 only.  Single-slot write halves the USB
-        //    transfer and avoids the Android USB IN-pipe exhaustion that
-        //    occurs during sustained dual-slot (~1400 block) transfers.
-        val targets = listOf(FLASH_OFFSET)
+        // 2. Write firmware to a single slot (app0 for OTA, 0x0 for factory).
         val numBlocks = (firmware.size + BLOCK_SIZE - 1) / BLOCK_SIZE
         val eraseSize = ((firmware.size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE) * FLASH_SECTOR_SIZE
 
+        val beginPayload = leInt(eraseSize) + leInt(numBlocks) + leInt(BLOCK_SIZE) + leInt(flashOffset)
+        dbg("FLASH_BEGIN off=0x${flashOffset.toString(16)} erase=0x${eraseSize.toString(16)} blocks=$numBlocks")
+        if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = 30_000)) {
+            return Result.failure(Exception("FLASH_BEGIN rejected at offset 0x${flashOffset.toString(16)} (image size=${firmware.size})"))
+        }
+
         val reporter = ProgressReporter(
-            totalBytes = firmware.size.toLong() * targets.size,
+            totalBytes = firmware.size.toLong(),
             onProgress = onProgress,
         )
         reporter.start()
 
-        for (flashOffset in targets) {
-            val beginPayload = leInt(eraseSize) + leInt(numBlocks) + leInt(BLOCK_SIZE) + leInt(flashOffset)
-            dbg("FLASH_BEGIN off=0x${flashOffset.toString(16)} erase=0x${eraseSize.toString(16)} blocks=$numBlocks")
-            if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = 30_000)) {
-                return Result.failure(Exception("FLASH_BEGIN rejected at offset 0x${flashOffset.toString(16)} (image size=${firmware.size})"))
-            }
+        var offset = 0
+        sequence = 0
+        while (offset < firmware.size) {
+            val remaining = firmware.size - offset
+            val take = BLOCK_SIZE.coerceAtMost(remaining)
+            val chunk = firmware.copyOfRange(offset, offset + take)
+            val padded = if (take < BLOCK_SIZE) chunk + ByteArray(BLOCK_SIZE - take) { 0xFF.toByte() } else chunk
 
-            var offset = 0
-            sequence = 0
-            while (offset < firmware.size) {
-                val remaining = firmware.size - offset
-                val take = BLOCK_SIZE.coerceAtMost(remaining)
-                val chunk = firmware.copyOfRange(offset, offset + take)
-                val padded = if (take < BLOCK_SIZE) chunk + ByteArray(BLOCK_SIZE - take) { 0xFF.toByte() } else chunk
-
-                val payload = leInt(padded.size) + leInt(sequence) + leInt(0) + leInt(0) + padded
-                if (!sendCommand(ESP_FLASH_DATA, payload, checksumOver = padded, timeoutMs = FLASH_DATA_TIMEOUT_MS)) {
-                    return Result.failure(Exception("FLASH_DATA failed at block $sequence (offset=$offset) for offset 0x${flashOffset.toString(16)}"))
-                }
-                reporter.update(take)
-                offset += take
-                sequence++
-                // Pace transfers to the stub's flash write speed (~0.7ms/page,
-                // 4 pages/block ≈ 3ms).  Without this, the ESP32-S3 USB device
-                // NAKs while busy, the Android host controller counts NAKs and
-                // eventually stalls the IN endpoint.  The 5ms delay lets each
-                // write commit before the next command arrives, preventing the
-                // NAK accumulation that triggers the stall.
-                delay(5)
-                if (sequence % 128 == 0) dbg("...block $sequence/${numBlocks} OK")
+            val payload = leInt(padded.size) + leInt(sequence) + leInt(0) + leInt(0) + padded
+            if (!sendCommand(ESP_FLASH_DATA, payload, checksumOver = padded, timeoutMs = FLASH_DATA_TIMEOUT_MS)) {
+                return Result.failure(Exception("FLASH_DATA failed at block $sequence (offset=$offset)"))
             }
+            reporter.update(take)
+            offset += take
+            sequence++
+            // Pace transfers to the stub's flash write speed (~0.7ms/page,
+            // 4 pages/block ≈ 3ms).  Without this, the ESP32-S3 USB device
+            // NAKs while busy, the Android host controller counts NAKs and
+            // eventually stalls the IN endpoint.
+            delay(5)
+            if (sequence % 128 == 0) dbg("...block $sequence/${numBlocks} OK")
         }
 
         return Result.success(Unit)
