@@ -57,9 +57,7 @@ object SlipFramer {
                 else -> current.add(b)
             }
         }
-        if (current.isNotEmpty()) {
-            packets.add(current.toByteArray())
-        }
+        // Only return COMPLETE frames; partial frame stays in the buffer.
         return packets
     }
 }

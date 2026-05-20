@@ -608,12 +608,11 @@ class EspSerialFlasher(
         }
     }
 
-    // Persistent SLIP decoder state (like esptool's slip_reader generator).
-    // These survive across readSlipPacket calls so partial packets that span
-    // multiple USB transfers are reassembled correctly.
-    private var slipPartial: ArrayList<Byte>? = null  // null = waiting for 0xC0
-    private var slipEscaped = false
-    private val slipPending = java.util.ArrayDeque<Byte>()  // unprocessed bytes
+    // Simple ring-buffer SLIP decoder (no persistent state machines).
+    // Bytes accumulate here, SlipFramer.decode() extracts complete frames,
+    // consumed bytes are trimmed.  This avoids the ghost-frame bugs of
+    // byte-by-byte state machines and slipPending queues.
+    private val ringBuf = ArrayList<Byte>()
 
     /** Pull bytes from the bulk-in endpoint until a complete SLIP frame
      *  is decoded, or [timeoutMs] elapses. */
@@ -622,52 +621,39 @@ class EspSerialFlasher(
         val buf = ByteArray(256)
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            // First drain buffered bytes from previous overshoot
-            while (slipPending.isNotEmpty()) {
-                val pkt = slipDecodeByte(slipPending.removeFirst())
-                if (pkt != null) return pkt
-            }
-            // Then read new bytes from USB
-            val n = connection.bulkTransfer(ep, buf, buf.size, 50)
-            if (n > 0) {
-                for (i in 0 until n) {
-                    val pkt = slipDecodeByte(buf[i])
-                    if (pkt != null) {
-                        // Save remaining bytes for next call
-                        for (j in i + 1 until n) slipPending.addLast(buf[j])
-                        return pkt
+            // Try to decode from buffered bytes first
+            val packets = SlipFramer.decode(ringBuf.toByteArray())
+            if (packets.isNotEmpty()) {
+                val pkt = packets[0]
+                // Find the end of this packet in ringBuf (after the second 0xC0/END)
+                var endIdx = -1
+                var started = false
+                var consumed = 0
+                for (i in ringBuf.indices) {
+                    val b = ringBuf[i]
+                    if (!started && b == SlipFramer.END) { started = true; continue }
+                    if (started) {
+                        if (b == SlipFramer.END) { endIdx = i; break }
                     }
                 }
+                if (endIdx > 0) {
+                    repeat(endIdx + 1) { ringBuf.removeAt(0) }
+                }
+                // Discard empty frames (consecutive 0xC0 bytes)
+                if (pkt.isNotEmpty()) return pkt
+                continue
+            }
+            // Read more bytes from USB
+            val n = connection.bulkTransfer(ep, buf, buf.size, 50)
+            if (n > 0) {
+                for (i in 0 until n) ringBuf.add(buf[i])
             }
         }
         return null
     }
 
-    /** Decode a single byte through the persistent SLIP state machine.
-     *  Returns a completed packet or null. */
-    private fun slipDecodeByte(b: Byte): ByteArray? {
-        if (slipPartial == null) {
-            if (b == SlipFramer.END) slipPartial = ArrayList()
-            // else skip garbage between frames
-        } else if (slipEscaped) {
-            slipEscaped = false
-            when (b) {
-                SlipFramer.ESC_END -> slipPartial!!.add(SlipFramer.END)
-                SlipFramer.ESC_ESC -> slipPartial!!.add(SlipFramer.ESC)
-                else -> slipPartial!!.add(b)
-            }
-        } else when (b) {
-            SlipFramer.ESC -> slipEscaped = true
-            SlipFramer.END -> {
-                val pkt = slipPartial!!.toByteArray()
-                slipPartial = null
-                if (pkt.isNotEmpty()) return pkt
-                slipPartial = ArrayList()
-            }
-            else -> slipPartial!!.add(b)
-        }
-        return null
-    }
+    // Remove the now-unused persistent state fields and functions
+    // (slipPartial, slipEscaped, slipPending, slipDecodeByte)
 
     /** ROM reply format: `<0x01><opcode><size:2><value:4><data...>`.
      *  ESP32-S2/S3/C3 ROMs use a 2-byte status trailer: `<status:1><error:1>`.
