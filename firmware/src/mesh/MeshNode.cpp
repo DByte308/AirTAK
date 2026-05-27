@@ -57,9 +57,8 @@ static uint16_t encodeFixed32(uint8_t* buf, uint16_t pos, uint32_t field, uint32
 
 // ── serializeUser() ───────────────────────────────────────────────────────────
 // Serializes a meshtastic.User proto for NODEINFO_APP (§13.2).
-// Fields: id(1,string), long_name(2,string), short_name(3,string),
-//         macaddr(4,bytes), hw_model(6,varint).
-// Fields 5 (is_licensed) and 7 (role) are omitted as optional.
+// Fields: id(1), long_name(2), short_name(3), macaddr(4),
+//         hw_model(5), is_licensed(6), role(7).
 static uint16_t serializeUser(uint8_t* buf, uint16_t buf_len) {
     // id: "!XXXXXXXX" where X = lower 8 hex digits of node_id (Meshtastic convention).
     char id_str[12];
@@ -80,8 +79,12 @@ static uint16_t serializeUser(uint8_t* buf, uint16_t buf_len) {
     pos = encodeString(buf, pos, 2, long_name);  // field 2: long_name
     pos = encodeString(buf, pos, 3, short_name); // field 3: short_name
     pos = encodeBytes (buf, pos, 4, macaddr, sizeof(macaddr));
-    // field 6: hw_model = 43 (LILYGO_TECHO) — Meshtastic HardwareModel enum
-    pos = encodeTag   (buf, pos, 6, 0); pos = encodeVarint(buf, pos, 43);
+    // field 5: hw_model — Meshtastic HardwareModel enum, platform-specific
+    pos = encodeTag   (buf, pos, 5, 0); pos = encodeVarint(buf, pos, platform::meshtasticHwModel());
+    // field 6: is_licensed = false (default, must match Meshtastic owner.is_licensed)
+    pos = encodeTag   (buf, pos, 6, 0); pos = encodeVarint(buf, pos, 0);
+    // field 7: role = 0 (CLIENT)
+    pos = encodeTag   (buf, pos, 7, 0); pos = encodeVarint(buf, pos, 0);
 
     (void)buf_len;
     return pos;

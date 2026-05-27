@@ -97,5 +97,21 @@ void macAddress(uint8_t out[6]) {
 #endif
 }
 
+uint8_t meshtasticHwModel() {
+#if defined(AIRTAK_BOARD_T_DECK)
+    return 50;  // meshtastic_HardwareModel_T_DECK
+#elif defined(AIRTAK_BOARD_T_ECHO_PLUS)
+    return 25;  // meshtastic_HardwareModel_T_ECHO
+#elif defined(AIRTAK_BOARD_T_ECHO)
+    return 25;  // meshtastic_HardwareModel_T_ECHO
+#elif defined(AIRTAK_BOARD_HELTEC_T114)
+    return 43;  // meshtastic_HardwareModel_HELTEC_V3
+#elif defined(AIRTAK_PLATFORM_NATIVE)
+    return 0;   // meshtastic_HardwareModel_UNSET
+#else
+#error "Add meshtasticHwModel() support for this board."
+#endif
+}
+
 } // namespace platform
 } // namespace airtak

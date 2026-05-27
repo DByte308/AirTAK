@@ -107,6 +107,7 @@ static bool appendBytes(uint8_t* buf, uint16_t& pos, uint16_t max_len,
 struct DataMetadata {
     Portnum  portnum = Portnum::UNKNOWN_APP;
     uint32_t dest = 0xFFFFFFFF;
+    uint32_t source = 0;
     uint32_t request_id = 0;
     bool     want_response = false;
     bool     has_request_id = false;
@@ -418,6 +419,28 @@ static bool parseDataMetadata(const uint8_t* data, uint16_t data_len, DataMetada
                 case 4:
                     out.dest = (value == 0) ? 0xFFFFFFFF : value;
                     break;
+                case 5:
+                    out.source = value;
+                    break;
+                case 6:
+                    out.request_id = value;
+                    out.has_request_id = true;
+                    break;
+                default:
+                    break;
+            }
+        } else if (wire == 5) {
+            if (pos + 4 > data_len) return false;
+            uint32_t value;
+            memcpy(&value, data + pos, 4);
+            pos += 4;
+            switch (field) {
+                case 4:
+                    out.dest = (value == 0) ? 0xFFFFFFFF : value;
+                    break;
+                case 5:
+                    out.source = value;
+                    break;
                 case 6:
                     out.request_id = value;
                     out.has_request_id = true;
@@ -445,14 +468,14 @@ static bool buildDataMessage(Portnum portnum, uint32_t dest, uint32_t src,
         if (!appendVarU32(out, pos, max_len, 1)) return false;
     }
     if (dest != 0xFFFFFFFF) {
-        if (!appendTag(out, pos, max_len, 4, 0)) return false;
-        if (!appendVarU32(out, pos, max_len, dest)) return false;
+        if (!appendTag(out, pos, max_len, 4, 5)) return false;
+        memcpy(out + pos, &dest, 4); pos += 4;
     }
-    if (!appendTag(out, pos, max_len, 5, 0)) return false;
-    if (!appendVarU32(out, pos, max_len, src)) return false;
+    if (!appendTag(out, pos, max_len, 5, 5)) return false;
+    memcpy(out + pos, &src, 4); pos += 4;
     if (want_ack) {
-        if (!appendTag(out, pos, max_len, 6, 0)) return false;
-        if (!appendVarU32(out, pos, max_len, request_id)) return false;
+        if (!appendTag(out, pos, max_len, 6, 5)) return false;
+        memcpy(out + pos, &request_id, 4); pos += 4;
     }
     out_len = pos;
     return true;

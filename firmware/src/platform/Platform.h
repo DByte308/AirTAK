@@ -20,5 +20,8 @@ void initBoard();
 uint32_t nodeId();
 void macAddress(uint8_t out[6]);
 
+// Meshtastic HardwareModel enum value for this board.
+uint8_t meshtasticHwModel();
+
 } // namespace platform
 } // namespace airtak
