@@ -34,16 +34,17 @@ void setUp() {}
 void tearDown() {}
 
 void test_key_derivation_aes128_zero_pad() {
-    const uint8_t psk[6] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29};
-    const uint8_t expected[16] = {
-        0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 16-byte default Meshtastic PSK → key.length=16 → AES-128.
+    // Matches Meshtastic getKey() + NRF52 nRFCrypto AES-128 path.
+    const uint8_t psk[16] = {
+        0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
+        0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01,
     };
     uint8_t key[32];
     uint8_t key_len;
     Crypto::deriveKey(psk, sizeof(psk), key, key_len);
     TEST_ASSERT_EQUAL(16, key_len);
-    TEST_ASSERT_EQUAL_MEMORY(expected, key, 16);
+    TEST_ASSERT_EQUAL_MEMORY(psk, key, 16);
 }
 
 void test_key_derivation_aes128_exact_16() {
@@ -81,7 +82,7 @@ void test_key_derivation_zero_length() {
     uint8_t key[32];
     uint8_t key_len;
     Crypto::deriveKey(nullptr, 0, key, key_len);
-    TEST_ASSERT_EQUAL(16, key_len);
+    TEST_ASSERT_EQUAL(0, key_len);
     uint8_t zeros[32] = {};
     TEST_ASSERT_EQUAL_MEMORY(zeros, key, 16);
 }

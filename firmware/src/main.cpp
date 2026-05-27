@@ -225,8 +225,24 @@ void task_radio_rxtx(void* params) {
     airtak::DcTracker::init();
     {
         const auto* s = airtak::ChannelManager::primarySlot();
-        Serial.printf("[INIT] %s hash=0x%02X psk=%u\n",
-            s?s->name:"?", s?s->channel_hash:0, s?(unsigned)s->psk_len:0);
+        uint8_t sf = 0, cr = 0;
+        uint32_t bw = 0;
+        airtak::config::ConfigManager::loraPhyProfile(
+            s ? s->phy_profile_index : 0, sf, bw, cr);
+        Serial.printf("[INIT] node=%08X %s hash=0x%02X psk=%u freq=%.3f sf=%u bw=%lu cr=4/%u sync=0x%02X plat=%08X\n",
+            airtak::MeshNode::nodeId(),
+            s?s->name:"?", s?s->channel_hash:0, s?(unsigned)s->psk_len:0,
+            airtak::config::ConfigManager::loraFrequencyMhz(),
+            (unsigned)sf, (unsigned long)bw, (unsigned)cr,
+            LORA_SYNC_WORD,
+            airtak::platform::nodeId());
+        for (uint8_t si = 0; si < 8; si++) {
+            auto* cs = airtak::ChannelManager::slotByIndex(si);
+            if (cs && cs->role != airtak::ChannelRole::DISABLED) {
+                Serial.printf("  slot%u %s hash=0x%02X psk=%u\n", si, cs->name, cs->channel_hash, cs->psk_len);
+            }
+        }
+        Serial.flush();
         Serial.flush();
     }
     airtak::MeshNode::broadcastNodeInfo(g_radio_tx_queue);
@@ -251,8 +267,23 @@ void task_radio_rxtx(void* params) {
 
         {
             static uint32_t ls = 0;
+            static bool     first_stats = true;
             if (millis() - ls > 10000) {
                 ls = millis();
+                if (first_stats) {
+                    first_stats = false;
+                    const auto* s = airtak::ChannelManager::primarySlot();
+                    uint8_t sf = 0, cr = 0;
+                    uint32_t bw = 0;
+                    airtak::config::ConfigManager::loraPhyProfile(
+                        s ? s->phy_profile_index : 0, sf, bw, cr);
+                    Serial.printf("[INIT] %s hash=0x%02X psk=%u freq=%.3f sf=%u bw=%lu cr=4/%u sync=0x%02X\n",
+                        s?s->name:"?", s?s->channel_hash:0, s?(unsigned)s->psk_len:0,
+                        airtak::config::ConfigManager::loraFrequencyMhz(),
+                        (unsigned)sf, (unsigned long)bw, (unsigned)cr,
+                        LORA_SYNC_WORD);
+                    Serial.flush();
+                }
                 Serial.printf("[STATS] tx=%lu rx=%lu rssi=%.1f snr=%.1f dio=%lu\n",
                     airtak::Radio::packetsTx(), airtak::Radio::packetsRx(),
                     airtak::Radio::lastRssi(), airtak::Radio::lastSnr(),

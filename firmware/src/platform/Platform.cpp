@@ -12,6 +12,7 @@
 #if defined(AIRTAK_PLATFORM_NRF52)
 #define NRF_FICR_BASE        0x10000000UL
 #define NRF_FICR_DEVICEID0   (*(volatile uint32_t*)(NRF_FICR_BASE + 0x060))
+#define NRF_FICR_DEVICEID1   (*(volatile uint32_t*)(NRF_FICR_BASE + 0x064))
 #define NRF_FICR_DEVICEADDR0 (*(volatile uint32_t*)(NRF_FICR_BASE + 0x0A4))
 #define NRF_FICR_DEVICEADDR1 (*(volatile uint32_t*)(NRF_FICR_BASE + 0x0A8))
 #elif defined(AIRTAK_PLATFORM_ESP32)
@@ -61,10 +62,17 @@ void initBoard() {
 
 uint32_t nodeId() {
 #if defined(AIRTAK_PLATFORM_NRF52)
-    return NRF_FICR_DEVICEID0;
+    // XOR DEVICEID0 with both halves of the 64-bit BLE MAC address.
+    // DEVICEID[0] alone can collide across devices (only 32 bits).
+    // The MAC address is guaranteed unique per IEEE OUI assignment.
+    uint32_t mac0 = NRF_FICR_DEVICEADDR0;
+    uint32_t mac1 = NRF_FICR_DEVICEADDR1;
+    return NRF_FICR_DEVICEID0 ^ mac0 ^ (mac1 << 16);
 #elif defined(AIRTAK_PLATFORM_ESP32)
-    uint64_t mac = ESP.getEfuseMac();
-    return static_cast<uint32_t>((mac ^ (mac >> 32)) & 0xFFFFFFFFUL);
+    uint8_t mb[6];
+    esp_efuse_mac_get_default(mb);
+    return (uint32_t)mb[0] | ((uint32_t)mb[1] << 8) |
+           ((uint32_t)mb[2] << 16) | ((uint32_t)mb[3] << 24);
 #elif defined(AIRTAK_PLATFORM_NATIVE)
     return 0x4D415348UL;
 #else

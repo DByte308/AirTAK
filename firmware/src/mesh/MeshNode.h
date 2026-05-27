@@ -46,7 +46,36 @@ public:
     // Phase 2.2: Called by the Router when a NODEINFO_APP packet is received from a
     // remote node. Tracks unique source IDs so knownNodeCount() stays accurate.
     // Updates the display dirty flag when a new node is first seen.
-    static void onNodeInfoReceived(uint32_t src_node_id);
+    static void onNodeInfoReceived(uint32_t src_node_id,
+                                   const char* long_name = nullptr,
+                                   const char* short_name = nullptr);
+
+    // Called by the Router when a POSITION_APP packet is received from a remote node.
+    // Tracks the remote node's position for map display.
+    static void onPositionReceived(uint32_t src_node_id,
+                                   double lat, double lon, int32_t alt_m,
+                                   uint32_t timestamp_secs);
+
+    // Called by the Router when a TELEMETRY_APP packet is received from a remote node.
+    // Tracks the remote node's battery level.
+    static void onTelemetryReceived(uint32_t src_node_id,
+                                    float battery_level);
+
+    // Query information about a known remote node. Returns nullptr if not found.
+    struct RemoteNodeInfo {
+        uint32_t node_id;
+        char long_name[40];
+        char short_name[5];
+        bool has_position;
+        double latitude;
+        double longitude;
+        int32_t altitude_m;
+        uint32_t last_position_secs;
+        float battery_level;
+        uint32_t last_seen_ms;
+    };
+    static const RemoteNodeInfo* getRemoteNode(uint8_t index);
+    static uint8_t remoteNodeCount();
 };
 
 } // namespace airtak

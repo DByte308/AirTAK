@@ -217,29 +217,120 @@ void MeshNode::handlePositionRequest(uint32_t requester_id, QueueHandle_t tx_que
 uint32_t MeshNode::nodeId()          { return s_node_id;          }
 uint32_t MeshNode::knownNodeCount()  { return s_known_node_count; }
 
-// ── MeshNode::onNodeInfoReceived() ───────────────────────────────────────────
-// Track up to 50 unique remote node IDs. When a new node is seen for the first
+// ── Remote node tracking ──────────────────────────────────────────────────────
+// Track up to 50 unique remote node IDs with metadata from NODEINFO_APP,
+// POSITION_APP, and TELEMETRY_APP packets. When a new node is seen for the first
 // time, increment s_known_node_count and mark the display dirty so the main
 // screen reflects the updated mesh size.
 constexpr uint8_t  MAX_KNOWN_NODES = 50;
-static uint32_t    s_known_ids[MAX_KNOWN_NODES];
-static uint8_t     s_known_id_count = 0;
 
-void MeshNode::onNodeInfoReceived(uint32_t src_node_id) {
-    if (src_node_id == 0) return;
+struct RemoteNode {
+    uint32_t node_id;
+    char     long_name[40];
+    char     short_name[5];
+    bool     has_position;
+    double   latitude;
+    double   longitude;
+    int32_t  altitude_m;
+    uint32_t last_position_secs;
+    float    battery_level;
+    bool     has_battery;
+    uint32_t last_seen_ms;
+};
+
+static RemoteNode s_remote_nodes[MAX_KNOWN_NODES];
+static uint8_t    s_known_id_count = 0;
+
+static RemoteNode* findOrCreateRemote(uint32_t src_node_id) {
+    if (src_node_id == 0 || src_node_id == s_node_id) return nullptr;
     for (uint8_t i = 0; i < s_known_id_count; i++) {
-        if (s_known_ids[i] == src_node_id) {
-            Serial.printf("[NODE] known %u\n", src_node_id);
-            return;
+        if (s_remote_nodes[i].node_id == src_node_id) {
+            return &s_remote_nodes[i];
         }
     }
-    if (s_known_id_count < MAX_KNOWN_NODES) {
-        s_known_ids[s_known_id_count++] = src_node_id;
-    }
+    if (s_known_id_count >= MAX_KNOWN_NODES) return nullptr;
+    auto& node = s_remote_nodes[s_known_id_count];
+    memset(&node, 0, sizeof(node));
+    node.node_id = src_node_id;
+    node.battery_level = -1.0f;
+    node.last_seen_ms = millis();
+    s_known_id_count++;
     s_known_node_count = s_known_id_count;
     Display::markDirty(DISPLAY_DIRTY_RADIO);
+#ifndef AIRTAK_NATIVE_TEST
     Serial.printf("[NODE] added %u count=%u\n", src_node_id, s_known_id_count);
     Serial.flush();
+#endif
+    return &node;
+}
+
+void MeshNode::onNodeInfoReceived(uint32_t src_node_id,
+                                   const char* long_name,
+                                   const char* short_name) {
+    if (src_node_id == 0) return;
+    RemoteNode* node = findOrCreateRemote(src_node_id);
+    if (!node) return;
+    node->last_seen_ms = millis();
+    if (long_name && long_name[0]) {
+        strncpy(node->long_name, long_name, sizeof(node->long_name) - 1);
+        node->long_name[sizeof(node->long_name) - 1] = '\0';
+    }
+    if (short_name && short_name[0]) {
+        strncpy(node->short_name, short_name, sizeof(node->short_name) - 1);
+        node->short_name[sizeof(node->short_name) - 1] = '\0';
+    }
+#ifndef AIRTAK_NATIVE_TEST
+    Serial.printf("[NODE] info %u name=%s short=%s\n", src_node_id,
+                  node->long_name, node->short_name);
+    Serial.flush();
+#endif
+}
+
+void MeshNode::onPositionReceived(uint32_t src_node_id,
+                                   double lat, double lon, int32_t alt_m,
+                                   uint32_t timestamp_secs) {
+    if (src_node_id == 0) return;
+    RemoteNode* node = findOrCreateRemote(src_node_id);
+    if (!node) return;
+    node->has_position = true;
+    node->latitude = lat;
+    node->longitude = lon;
+    node->altitude_m = alt_m;
+    node->last_position_secs = timestamp_secs;
+    node->last_seen_ms = millis();
+}
+
+void MeshNode::onTelemetryReceived(uint32_t src_node_id,
+                                    float battery_level) {
+    if (src_node_id == 0) return;
+    RemoteNode* node = findOrCreateRemote(src_node_id);
+    if (!node) return;
+    node->battery_level = battery_level;
+    node->has_battery = true;
+    node->last_seen_ms = millis();
+}
+
+const MeshNode::RemoteNodeInfo* MeshNode::getRemoteNode(uint8_t index) {
+    if (index >= s_known_id_count) return nullptr;
+    static RemoteNodeInfo info;
+    const auto& src = s_remote_nodes[index];
+    info.node_id = src.node_id;
+    strncpy(info.long_name, src.long_name, sizeof(info.long_name));
+    info.long_name[sizeof(info.long_name) - 1] = '\0';
+    strncpy(info.short_name, src.short_name, sizeof(info.short_name));
+    info.short_name[sizeof(info.short_name) - 1] = '\0';
+    info.has_position = src.has_position;
+    info.latitude = src.latitude;
+    info.longitude = src.longitude;
+    info.altitude_m = src.altitude_m;
+    info.last_position_secs = src.last_position_secs;
+    info.battery_level = src.battery_level;
+    info.last_seen_ms = src.last_seen_ms;
+    return &info;
+}
+
+uint8_t MeshNode::remoteNodeCount() {
+    return s_known_id_count;
 }
 
 } // namespace airtak

@@ -57,7 +57,11 @@ uint32_t MeshNode::nodeId() { return 0x12345678; }
 void MeshNode::maybeTransmitPosition(QueueHandle_t, EventGroupHandle_t) {}
 void MeshNode::handlePositionRequest(uint32_t, QueueHandle_t) { s_position_request_count++; }
 uint32_t MeshNode::knownNodeCount() { return 0; }
-void MeshNode::onNodeInfoReceived(uint32_t) { s_nodeinfo_received_count++; }
+void MeshNode::onNodeInfoReceived(uint32_t, const char*, const char*) { s_nodeinfo_received_count++; }
+void MeshNode::onPositionReceived(uint32_t, double, double, int32_t, uint32_t) {}
+void MeshNode::onTelemetryReceived(uint32_t, float) {}
+const MeshNode::RemoteNodeInfo* MeshNode::getRemoteNode(uint8_t) { return nullptr; }
+uint8_t MeshNode::remoteNodeCount() { return 0; }
 
 void ChannelManager::init() {}
 void ChannelManager::rekey() {}

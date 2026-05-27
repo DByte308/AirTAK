@@ -506,5 +506,9 @@ void AirTAKService::completePendingConfigRestart(bool success) {
                      success ? nullptr : "radio_restart_failed");
 }
 
+bool AirTAKService::pendingConfigRestart() {
+    return s_pending_config_restart;
+}
+
 } // namespace ble
 } // namespace airtak

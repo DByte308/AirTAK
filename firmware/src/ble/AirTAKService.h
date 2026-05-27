@@ -53,6 +53,9 @@ public:
     // Called by the Config Apply task after a queued radio restart has completed.
     static void completePendingConfigRestart(bool success);
 
+    // Returns true if a config commit triggered a pending radio restart.
+    static bool pendingConfigRestart();
+
     // Set the radio TX queue handle so MESH_TX writes can enqueue packets for the Radio task.
     static void setRadioTxQueue(QueueHandle_t q);
 };

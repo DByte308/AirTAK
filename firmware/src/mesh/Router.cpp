@@ -205,11 +205,176 @@ static bool extractDataPayload(const uint8_t* data_pb, uint16_t data_len,
 }
 
 static bool readPositionRequestTarget(const uint8_t* data_pb, uint16_t data_len,
-                                      uint32_t& target_node_id) {
+                                       uint32_t& target_node_id) {
     const uint8_t* inner = nullptr;
     uint16_t inner_len = 0;
     if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return false;
     return readVarintField(inner, inner_len, 1, target_node_id);
+}
+
+// ── Meshtastic packet parsers (§13.1, §13.2) ──────────────────────────────────
+// Extract fields from meshtastic.User, meshtastic.Position, and
+// meshtastic.DeviceTelemetry protobufs for interop with stock Meshtastic nodes.
+
+static void parseNodeInfoPayload(const uint8_t* data_pb, uint16_t data_len,
+                                  const char*& long_name, const char*& short_name,
+                                  const char*& node_id_str) {
+    long_name = nullptr;
+    short_name = nullptr;
+    node_id_str = nullptr;
+    const uint8_t* inner = nullptr;
+    uint16_t inner_len = 0;
+    if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return;
+
+    static char ln_buf[40];
+    static char sn_buf[5];
+    static char id_buf[16];
+
+    uint16_t pos = 0;
+    while (pos < inner_len) {
+        uint32_t tag;
+        if (!readVarint(inner, inner_len, pos, tag)) break;
+        uint8_t wire = tag & 0x07;
+        uint32_t field = tag >> 3;
+        if (wire == 2) {
+            uint32_t flen = 0; uint8_t shift = 0;
+            while (pos < inner_len) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            if (field == 1 && flen > 0 && flen < sizeof(id_buf)) {
+                memcpy(id_buf, inner + pos, flen);
+                id_buf[flen] = '\0';
+                node_id_str = id_buf;
+            } else if (field == 2 && flen > 0 && flen < sizeof(ln_buf)) {
+                memcpy(ln_buf, inner + pos, flen);
+                ln_buf[flen] = '\0';
+                long_name = ln_buf;
+            } else if (field == 3 && flen > 0 && flen < sizeof(sn_buf)) {
+                memcpy(sn_buf, inner + pos, flen);
+                sn_buf[flen] = '\0';
+                short_name = sn_buf;
+            }
+            pos += flen;
+        } else {
+            if (!skipField(inner, inner_len, pos, wire)) break;
+        }
+    }
+}
+
+static void parsePositionPayload(const uint8_t* data_pb, uint16_t data_len,
+                                  double& lat, double& lon, int32_t& alt_m,
+                                  uint32_t& timestamp_secs, bool& valid) {
+    valid = false;
+    const uint8_t* inner = nullptr;
+    uint16_t inner_len = 0;
+    if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return;
+
+    int32_t lat_i = 0, lon_i = 0;
+    bool has_lat = false, has_lon = false;
+    alt_m = 0;
+    timestamp_secs = 0;
+
+    uint16_t pos = 0;
+    while (pos < inner_len) {
+        uint32_t tag;
+        if (!readVarint(inner, inner_len, pos, tag)) break;
+        uint8_t wire = tag & 0x07;
+        uint32_t field = tag >> 3;
+        if (wire == 5 && field >= 1 && field <= 4) {
+            uint32_t v = 0;
+            memcpy(&v, inner + pos, 4);
+            pos += 4;
+            if (field == 1) { lat_i = (int32_t)v; has_lat = true; }
+            else if (field == 2) { lon_i = (int32_t)v; has_lon = true; }
+            else if (field == 4) { timestamp_secs = v; }
+        } else if (wire == 0) {
+            uint32_t v = 0;
+            if (!readVarint(inner, inner_len, pos, v)) break;
+            if (field == 3) alt_m = (int32_t)v;
+        } else {
+            if (!skipField(inner, inner_len, pos, wire)) break;
+        }
+    }
+
+    if (has_lat && has_lon) {
+        lat = (double)lat_i * 1e-7;
+        lon = (double)lon_i * 1e-7;
+        valid = true;
+    }
+}
+
+static void parseTelemetryPayload(const uint8_t* data_pb, uint16_t data_len,
+                                   float& battery_level, bool& has_battery) {
+    has_battery = false;
+    const uint8_t* inner = nullptr;
+    uint16_t inner_len = 0;
+    if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return;
+
+    uint16_t pos = 0;
+    while (pos < inner_len) {
+        uint32_t tag;
+        if (!readVarint(inner, inner_len, pos, tag)) break;
+        uint8_t wire = tag & 0x07;
+        uint32_t field = tag >> 3;
+        if (wire == 2 && field == 2) {
+            uint32_t sublen = 0; uint8_t shift = 0;
+            while (pos < inner_len) { uint8_t b = inner[pos++]; sublen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            uint16_t sub_end = (uint16_t)(pos + sublen);
+            if (sub_end > inner_len) break;
+            while (pos < sub_end) {
+                uint32_t stag;
+                if (!readVarint(inner, sub_end, pos, stag)) break;
+                uint8_t swire = stag & 0x07;
+                uint32_t sfield = stag >> 3;
+                if (swire == 5 && sfield == 2) {
+                    uint32_t v = 0;
+                    memcpy(&v, inner + pos, 4);
+                    pos += 4;
+                    float bat;
+                    memcpy(&bat, &v, sizeof(bat));
+                    battery_level = bat;
+                    has_battery = true;
+                    break;
+                } else if (swire == 0) {
+                    uint32_t ignored;
+                    if (!readVarint(inner, sub_end, pos, ignored)) break;
+                } else if (swire == 2) {
+                    uint32_t flen = 0; uint8_t fshift = 0;
+                    while (pos < sub_end) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << fshift; if (!(b & 0x80)) break; fshift += 7; }
+                    pos += (uint16_t)flen;
+                } else { break; }
+            }
+            break;
+        } else {
+            if (!skipField(inner, inner_len, pos, wire)) break;
+        }
+    }
+}
+
+// Parse a TEXT_MESSAGE_APP protobuf to get the message text.
+// Returns a pointer to a static buffer; empty string if no text found.
+static const char* parseTextMessagePayload(const uint8_t* data_pb, uint16_t data_len) {
+    const uint8_t* inner = nullptr;
+    uint16_t inner_len = 0;
+    if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return "";
+
+    static char msg_buf[256];
+    uint16_t pos = 0;
+    while (pos < inner_len) {
+        uint32_t tag;
+        if (!readVarint(inner, inner_len, pos, tag)) break;
+        uint8_t wire = tag & 0x07;
+        uint32_t field = tag >> 3;
+        if (wire == 2 && field == 1) {
+            uint32_t flen = 0; uint8_t shift = 0;
+            while (pos < inner_len) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            uint32_t copy = flen < sizeof(msg_buf) - 1 ? flen : sizeof(msg_buf) - 1;
+            memcpy(msg_buf, inner + pos, copy);
+            msg_buf[copy] = '\0';
+            return msg_buf;
+        } else {
+            if (!skipField(inner, inner_len, pos, wire)) break;
+        }
+    }
+    return "";
 }
 
 // Returns true if the inner PlayerStatePacket has is_state_transition = true.
@@ -440,9 +605,11 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     uint8_t decrypted[MESH_MAX_PAYLOAD_BYTES];
     DataMetadata data_meta;
     bool data_valid = false;
+    bool hash_matched = false;
     uint8_t search_index = 0;
     while (const ChannelSlot* candidate = ChannelManager::findByHash(hdr.channel_hash, search_index)) {
         search_index = candidate->index + 1;
+        hash_matched = true;
         memcpy(decrypted, payload, payload_len);
 
         if (candidate->psk_len > 0) {
@@ -459,7 +626,23 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             break;
         }
     }
-    if (!slot) return; // unknown channel or undecryptable payload — discard
+    if (!slot) {
+        static uint32_t last_hash_log = 0;
+        if (millis() - last_hash_log > 3000) {
+            last_hash_log = millis();
+#ifndef AIRTAK_NATIVE_TEST
+            if (hash_matched) {
+                Serial.printf("[DECFAIL] hash=0x%02X matched but decrypt fail src=%08X\n",
+                    hdr.channel_hash, hdr.src_node_id);
+            } else {
+                Serial.printf("[HASH] no slot for hash=0x%02X src=%08X\n",
+                    hdr.channel_hash, hdr.src_node_id);
+            }
+            Serial.flush();
+#endif
+        }
+        return;
+    }
 
     uint32_t dup_key = hdr.packet_id;
     uint32_t now_ms  = millis();
@@ -468,9 +651,11 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     {
         static uint32_t pc = 0;
         if (++pc <= 10) {
+#ifndef AIRTAK_NATIVE_TEST
             Serial.printf("[PCKT] portnum=%u valid=%d src=%08X relay=%02X\n",
                 (unsigned)portnum_value, data_valid, hdr.src_node_id, hdr.relay_node_low);
             Serial.flush();
+#endif
         }
     }
 
@@ -548,16 +733,61 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     }
 
     // ── NODEINFO_APP dispatch (§2.2) ──────────────────────────────────────────
-    // Track remote node IDs so knownNodeCount() stays accurate for the display.
+    // Track remote node IDs and extract long_name/short_name for display.
     if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::NODEINFO_APP)) {
         static uint32_t nic = 0;
+        const char* long_name = nullptr;
+        const char* short_name = nullptr;
+        const char* id_str = nullptr;
+        parseNodeInfoPayload(decrypted, payload_len, long_name, short_name, id_str);
         if (++nic <= 5) {
-            Serial.printf("[NODEINFO] src=%08X appDup=%d pv=%u ni=%u\n",
-                hdr.src_node_id, app_duplicate, (unsigned)portnum_value,
-                (unsigned)static_cast<uint32_t>(Portnum::NODEINFO_APP));
+#ifndef AIRTAK_NATIVE_TEST
+            Serial.printf("[NODEINFO] src=%08X id=%s name=%s short=%s\n",
+                hdr.src_node_id,
+                id_str ? id_str : "?",
+                long_name ? long_name : "?",
+                short_name ? short_name : "?");
             Serial.flush();
+#endif
         }
-        MeshNode::onNodeInfoReceived(hdr.src_node_id);
+        MeshNode::onNodeInfoReceived(hdr.src_node_id, long_name, short_name);
+    }
+
+    // ── POSITION_APP dispatch (§13.1) ─────────────────────────────────────────
+    // Track remote node positions for map display.
+    if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::POSITION_APP)) {
+        double lat = 0.0, lon = 0.0;
+        int32_t alt_m = 0;
+        uint32_t ts_secs = 0;
+        bool pos_valid = false;
+        parsePositionPayload(decrypted, payload_len, lat, lon, alt_m, ts_secs, pos_valid);
+        if (pos_valid) {
+            MeshNode::onPositionReceived(hdr.src_node_id, lat, lon, alt_m, ts_secs);
+        }
+    }
+
+    // ── TELEMETRY_APP dispatch (§13.1) ────────────────────────────────────────
+    if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::TELEMETRY_APP)) {
+        float battery = -1.0f;
+        bool has_bat = false;
+        parseTelemetryPayload(decrypted, payload_len, battery, has_bat);
+        if (has_bat) {
+            MeshNode::onTelemetryReceived(hdr.src_node_id, battery);
+        }
+    }
+
+    // ── TEXT_MESSAGE_APP dispatch (§13.1) ─────────────────────────────────────
+    if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::TEXT_MESSAGE_APP)) {
+        const char* text = parseTextMessagePayload(decrypted, payload_len);
+        if (text && text[0]) {
+            static uint32_t tmc = 0;
+            if (++tmc <= 5) {
+#ifndef AIRTAK_NATIVE_TEST
+                Serial.printf("[TEXT] from=%08X text=%.60s\n", hdr.src_node_id, text);
+                Serial.flush();
+#endif
+            }
+        }
     }
 
     // ── AIRTAK_POSITION_REQUEST dispatch (§2.12) ──────────────────────────────
@@ -741,9 +971,9 @@ void Router::tickRelayQueue(QueueHandle_t tx_queue) {
 }
 
 static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_limit,
-                          bool want_ack, uint32_t packet_id,
-                          const uint8_t* data_pb, uint16_t data_len,
-                          QueueHandle_t tx_queue) {
+                           bool want_ack, uint32_t packet_id,
+                           const uint8_t* data_pb, uint16_t data_len,
+                           QueueHandle_t tx_queue) {
     if (!slot || !tx_queue || data_len > MESH_MAX_PAYLOAD_BYTES) return false;
 
     // For the originator, hop_limit == hop_start (§8.2).  Both are set to the

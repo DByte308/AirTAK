@@ -130,14 +130,15 @@ static void loadConfiguredSlots() {
         }
     }
 
-    // Force slot 0 to LongFast defaults for interop testing.
-    {
-        auto& s = s_slots[0];
+    // Apply Meshtastic LongFast defaults when the slot still has the seed
+    // default ("AirTAK" from Defaults.h) — i.e. user hasn't configured
+    // channels via the app yet.
+    auto& s = s_slots[0];
+    if (strcmp(s.name, "AirTAK") == 0) {
         strncpy(s.name, "LongFast", 16);
         s.name[16] = '\0';
-        static const uint8_t key[6] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29};
-        memcpy(s.psk, key, 6);
-        s.psk_len = 6;
+        s.psk[0] = 0x01;
+        s.psk_len = 1;
         s.role = ChannelRole::PRIMARY;
         s.uplink_enabled = true;
         s.downlink_enabled = true;
@@ -153,30 +154,41 @@ void ChannelManager::init() {
 void ChannelManager::rekey() {
     loadConfiguredSlots();
 
-    static const uint8_t MESHTASTIC_DEFAULT_PSK[6] = {
-        0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29
+    static const uint8_t MESHTASTIC_DEFAULT_PSK[16] = {
+        0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
+        0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01
     };
 
     for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
         auto& slot = s_slots[i];
         if (slot.role == ChannelRole::DISABLED) continue;
 
-        if (slot.psk_len == 1 && slot.psk[0] == 0x01) {
-            memcpy(slot.psk, MESHTASTIC_DEFAULT_PSK, sizeof(MESHTASTIC_DEFAULT_PSK));
-            slot.psk_len = sizeof(MESHTASTIC_DEFAULT_PSK);
+        // Expand single-byte PSK index to 16-byte default key first
+        // (like Meshtastic getKey), then compute hash and derive AES key
+        // from the expanded result.  Both hash and crypto use the
+        // expanded key.
+        const uint8_t* effective_psk = slot.psk;
+        size_t         effective_len = slot.psk_len;
+        if (effective_len == 1 && effective_psk[0] != 0) {
+            static uint8_t expanded[16];
+            memcpy(expanded, MESHTASTIC_DEFAULT_PSK, sizeof(expanded));
+            expanded[15] += (uint8_t)(effective_psk[0] - 1);
+            effective_psk = expanded;
+            effective_len = sizeof(expanded);
+        } else if (effective_len == 1 && effective_psk[0] == 0) {
+            effective_len = 0;
         }
 
-        if (slot.psk_len == 0) {
+        // Compute channel hash from the effective (expanded) key.
+        if (effective_len == 0) {
             slot.channel_hash = Crypto::channelHash(
                 reinterpret_cast<const uint8_t*>(slot.name),
                 strnlen(slot.name, sizeof(slot.name)), i);
-            memset(slot.aes_key, 0, sizeof(slot.aes_key));
-            slot.aes_key_len = 16;
-            continue;
+        } else {
+            slot.channel_hash = Crypto::channelHash(effective_psk, effective_len, i,
+                (i == 0) ? slot.name : nullptr);
         }
-        slot.channel_hash = Crypto::channelHash(slot.psk, slot.psk_len, i,
-            (i == 0) ? slot.name : nullptr);
-        Crypto::deriveKey(slot.psk, slot.psk_len, slot.aes_key, slot.aes_key_len);
+        Crypto::deriveKey(effective_psk, effective_len, slot.aes_key, slot.aes_key_len);
     }
 }
 

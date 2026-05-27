@@ -26,10 +26,14 @@ void Crypto::deriveKey(const uint8_t* psk, size_t psk_len,
 
     memset(key_out, 0, AES_MAX_KEY_BYTES);
 
+    // Match Meshtastic's default CryptoEngine key-length logic:
+    //   key.length == 16  → AES-128 (16-byte key)
+    //   key.length == 0   → no encryption
+    //   otherwise         → AES-256 (32-byte key, zero-padded)
     if (psk_len == 0) {
-        key_len_out = 16;
-    } else if (psk_len <= 16) {
-        memcpy(key_out, psk, psk_len);
+        key_len_out = 0;
+    } else if (psk_len == 16) {
+        memcpy(key_out, psk, 16);
         key_len_out = 16;
     } else {
         memcpy(key_out, psk, psk_len > 32 ? 32 : psk_len);

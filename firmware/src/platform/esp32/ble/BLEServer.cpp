@@ -206,7 +206,7 @@ void BLEServer::init(QueueHandle_t mesh_rx_queue) {
     NimBLEDevice::startAdvertising();
 }
 
-void BLEServer::process(QueueHandle_t ble_tx_queue, QueueHandle_t /*config_queue*/) {
+void BLEServer::process(QueueHandle_t ble_tx_queue, QueueHandle_t config_queue) {
     PooledPacket* pkt = nullptr;
     while (xQueueReceive(ble_tx_queue, &pkt, 0) == pdTRUE && pkt) {
         if (pkt->length > 1 && s_connected) {
@@ -220,6 +220,13 @@ void BLEServer::process(QueueHandle_t ble_tx_queue, QueueHandle_t /*config_queue
         }
         PacketPool::free(pkt);
     }
+
+    // Handle config commit → rekey channels + restart radio.
+    if (AirTAKService::pendingConfigRestart()) {
+        ChannelManager::init();
+        AirTAKService::completePendingConfigRestart(true);
+    }
+
     tick();
 }
 
