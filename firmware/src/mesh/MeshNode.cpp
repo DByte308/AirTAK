@@ -226,15 +226,20 @@ static uint32_t    s_known_ids[MAX_KNOWN_NODES];
 static uint8_t     s_known_id_count = 0;
 
 void MeshNode::onNodeInfoReceived(uint32_t src_node_id) {
-    if (src_node_id == s_node_id || src_node_id == 0) return;
+    if (src_node_id == 0) return;
     for (uint8_t i = 0; i < s_known_id_count; i++) {
-        if (s_known_ids[i] == src_node_id) return; // already known
+        if (s_known_ids[i] == src_node_id) {
+            Serial.printf("[NODE] known %u\n", src_node_id);
+            return;
+        }
     }
     if (s_known_id_count < MAX_KNOWN_NODES) {
         s_known_ids[s_known_id_count++] = src_node_id;
     }
     s_known_node_count = s_known_id_count;
     Display::markDirty(DISPLAY_DIRTY_RADIO);
+    Serial.printf("[NODE] added %u count=%u\n", src_node_id, s_known_id_count);
+    Serial.flush();
 }
 
 } // namespace airtak

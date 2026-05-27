@@ -465,14 +465,23 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     uint32_t now_ms  = millis();
 
     uint32_t portnum_value = data_valid ? static_cast<uint32_t>(data_meta.portnum) : 0;
+    {
+        static uint32_t pc = 0;
+        if (++pc <= 10) {
+            Serial.printf("[PCKT] portnum=%u valid=%d src=%08X relay=%02X\n",
+                (unsigned)portnum_value, data_valid, hdr.src_node_id, hdr.relay_node_low);
+            Serial.flush();
+        }
+    }
 
     // Implicit ACK: if we overhear a relay of our own ACKNOWLEDGED packet,
     // cancel the pending retry for the logical Data.request_id (§8.9).
-    if (hdr.src_node_id == MeshNode::nodeId()) {
-        if (data_valid && data_meta.request_id != 0) {
-            handleAck(data_meta.request_id);
-        }
-        return;
+    // ACK handling for relays of our own packets (if any).  Node-ID collision
+    // with another device is handled by MeshNode::onNodeInfoReceived accepting
+    // all received NODEINFO_APP packets; self-loop relays are caught by the
+    // duplicate-suppression cache below.
+    if (hdr.src_node_id == MeshNode::nodeId() && data_valid && data_meta.request_id != 0) {
+        handleAck(data_meta.request_id);
     }
 
     // Check duplicate-suppression cache (§8.7).
@@ -541,6 +550,13 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     // ── NODEINFO_APP dispatch (§2.2) ──────────────────────────────────────────
     // Track remote node IDs so knownNodeCount() stays accurate for the display.
     if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::NODEINFO_APP)) {
+        static uint32_t nic = 0;
+        if (++nic <= 5) {
+            Serial.printf("[NODEINFO] src=%08X appDup=%d pv=%u ni=%u\n",
+                hdr.src_node_id, app_duplicate, (unsigned)portnum_value,
+                (unsigned)static_cast<uint32_t>(Portnum::NODEINFO_APP));
+            Serial.flush();
+        }
         MeshNode::onNodeInfoReceived(hdr.src_node_id);
     }
 

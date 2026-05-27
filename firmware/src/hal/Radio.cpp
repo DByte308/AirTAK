@@ -193,8 +193,13 @@ void Radio::init() {
     s_active_radio->setPacketReceivedAction(on_packet_received);
     s_active_radio->setPacketSentAction(on_packet_sent);
     s_radio_sx1262.standby();
+    s_radio_sx1262.setDio1Action(on_packet_received);
     s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
     s_radio_sx1262.setDio1Action(on_packet_received);
+    if (s_radio_type != RadioType::NONE) {
+        Serial.println("[RADIO] init OK");
+        Serial.flush();
+    }
 }
 
 // ── Radio::reinit() ───────────────────────────────────────────────────────────
@@ -258,6 +263,7 @@ void Radio::reinit() {
     s_active_radio->setPacketReceivedAction(on_packet_received);
     s_active_radio->setPacketSentAction(on_packet_sent);
     s_radio_sx1262.standby();
+    s_radio_sx1262.setDio1Action(on_packet_received);
     s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
     s_radio_sx1262.setDio1Action(on_packet_received);
 }
@@ -332,6 +338,7 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
             size_t pkt_len = s_active_radio->getPacketLength();
             if (pkt_len == 0 || pkt_len > LORA_MAX_PAYLOAD_BYTES) {
                 s_radio_sx1262.standby();
+    s_radio_sx1262.setDio1Action(on_packet_received);
     s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
     s_radio_sx1262.setDio1Action(on_packet_received);
             } else {
@@ -354,11 +361,13 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
                     }
                 }
                 s_radio_sx1262.standby();
+    s_radio_sx1262.setDio1Action(on_packet_received);
     s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
     s_radio_sx1262.setDio1Action(on_packet_received);
             }
         } else {
             s_radio_sx1262.standby();
+    s_radio_sx1262.setDio1Action(on_packet_received);
     s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
     s_radio_sx1262.setDio1Action(on_packet_received);
 }
@@ -410,6 +419,7 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
     int16_t err = s_active_radio->transmit(const_cast<uint8_t*>(data), length);
     uint32_t tx_elapsed_ms = millis() - tx_start_ms;
     s_radio_sx1262.standby();
+    s_radio_sx1262.setDio1Action(on_packet_received);
     s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
     s_radio_sx1262.setDio1Action(on_packet_received);
 

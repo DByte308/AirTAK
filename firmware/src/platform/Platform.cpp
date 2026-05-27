@@ -63,9 +63,8 @@ uint32_t nodeId() {
 #if defined(AIRTAK_PLATFORM_NRF52)
     return NRF_FICR_DEVICEID0;
 #elif defined(AIRTAK_PLATFORM_ESP32)
-    // Lower 32 bits of the chip's unique eFuse MAC address.
     uint64_t mac = ESP.getEfuseMac();
-    return static_cast<uint32_t>(mac & 0xFFFFFFFFUL);
+    return static_cast<uint32_t>((mac ^ (mac >> 32)) & 0xFFFFFFFFUL);
 #elif defined(AIRTAK_PLATFORM_NATIVE)
     return 0x4D415348UL;
 #else
