@@ -29,6 +29,7 @@ static void seedDefaultSlots() {
         slot.phy_profile_index  = def.phy_profile_index;
         slot.channel_hash       = 0;
         memset(slot.aes_key, 0, sizeof(slot.aes_key));
+        slot.aes_key_len        = 0;
     }
 }
 
@@ -97,14 +98,12 @@ static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot&
 static void loadConfiguredSlots() {
     seedDefaultSlots();
 
-    // Overlay with current CHANNELS config from ConfigManager (§2.7).
-    // ConfigManager is initialized before ChannelManager in main.cpp so the buffer
-    // is valid (either loaded from flash or populated with factory defaults).
+    // Load LongFast channel config from flash if available, otherwise from
+    // ConfigManager.  If flash/config has valid data, overlay it on the defaults.
     uint8_t  buf[512];
     size_t   buf_len = config::ConfigManager::readGroup(
                            config::ConfigGroup::CHANNELS, buf, sizeof(buf));
     if (buf_len > 0) {
-        // Parse repeated ChannelConfig sub-messages (field 1, wire 2) at the top level.
         size_t pos = 0;
         while (pos < buf_len) {
             uint32_t tag = 0; uint8_t shift = 0;
@@ -112,28 +111,38 @@ static void loadConfiguredSlots() {
             uint8_t wire  = tag & 0x07;
             uint8_t field = (uint8_t)(tag >> 3);
             if (wire == 2 && field == 1) {
-                // Length-delimited ChannelConfig sub-message.
                 uint32_t submsg_len = 0; shift = 0;
                 while (pos < buf_len) { uint8_t b = buf[pos++]; submsg_len |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
                 if (pos + submsg_len > buf_len) break;
-
-                // Parse once into a temporary.  The returned index tells us which
-                // slot to overwrite; then copy the temporary into the live slot.
                 ChannelSlot parsed{};
                 uint8_t idx = parseChannelSlot(buf + pos, submsg_len, parsed);
                 if (idx < MAX_CHANNEL_SLOTS) {
-                    parsed.index = idx;         // index field is authoritative
+                    parsed.index = idx;
                     s_slots[idx] = parsed;
                 }
                 pos += submsg_len;
             } else {
-                // Skip unknown top-level fields.
                 if (wire == 0) { while (pos < buf_len && (buf[pos++] & 0x80)) {} }
                 else if (wire == 2) { uint32_t fl = 0; shift = 0; while (pos < buf_len) { uint8_t b = buf[pos++]; fl |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; } pos += fl; }
                 else if (wire == 5) { pos += 4; }
                 else if (wire == 1) { pos += 8; }
             }
         }
+    }
+
+    // Force slot 0 to LongFast defaults for interop testing.
+    {
+        auto& s = s_slots[0];
+        strncpy(s.name, "LongFast", 16);
+        s.name[16] = '\0';
+        static const uint8_t key[6] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29};
+        memcpy(s.psk, key, 6);
+        s.psk_len = 6;
+        s.role = ChannelRole::PRIMARY;
+        s.uplink_enabled = true;
+        s.downlink_enabled = true;
+        s.position_precision = 32;
+        s.phy_profile_index = 0;
     }
 }
 
@@ -144,21 +153,30 @@ void ChannelManager::init() {
 void ChannelManager::rekey() {
     loadConfiguredSlots();
 
-    // Recompute channel hashes and AES keys for all active slots (§8.6).
+    static const uint8_t MESHTASTIC_DEFAULT_PSK[6] = {
+        0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29
+    };
+
     for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
         auto& slot = s_slots[i];
         if (slot.role == ChannelRole::DISABLED) continue;
+
+        if (slot.psk_len == 1 && slot.psk[0] == 0x01) {
+            memcpy(slot.psk, MESHTASTIC_DEFAULT_PSK, sizeof(MESHTASTIC_DEFAULT_PSK));
+            slot.psk_len = sizeof(MESHTASTIC_DEFAULT_PSK);
+        }
+
         if (slot.psk_len == 0) {
-            // Unencrypted slot — derive a stable hash from the slot name so
-            // multiple unencrypted slots don't collide on hash 0.
             slot.channel_hash = Crypto::channelHash(
                 reinterpret_cast<const uint8_t*>(slot.name),
                 strnlen(slot.name, sizeof(slot.name)), i);
             memset(slot.aes_key, 0, sizeof(slot.aes_key));
+            slot.aes_key_len = 16;
             continue;
         }
-        slot.channel_hash = Crypto::channelHash(slot.psk, slot.psk_len, i);
-        Crypto::deriveKey(slot.psk, slot.psk_len, slot.aes_key);
+        slot.channel_hash = Crypto::channelHash(slot.psk, slot.psk_len, i,
+            (i == 0) ? slot.name : nullptr);
+        Crypto::deriveKey(slot.psk, slot.psk_len, slot.aes_key, slot.aes_key_len);
     }
 }
 

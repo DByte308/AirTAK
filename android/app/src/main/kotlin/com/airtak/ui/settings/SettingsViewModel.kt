@@ -495,10 +495,30 @@ class SettingsViewModel @Inject constructor(
                 return PskParseResult(ByteArray(0), "Hex PSK contains a non-hex character.")
             }
             ByteArray(hex.length / 2) { i -> hex.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
+        } else if (isBase64(trimmed)) {
+            try {
+                val decoded = Base64.decode(trimmed, Base64.DEFAULT)
+                if (decoded.size > 32) return PskParseResult(decoded, "PSK must be 32 bytes or fewer.")
+                decoded
+            } catch (_: IllegalArgumentException) {
+                trimmed.toByteArray(Charsets.UTF_8)
+            }
         } else {
             trimmed.toByteArray(Charsets.UTF_8)
         }
         if (bytes.size > 32) return PskParseResult(bytes, "PSK must be 32 bytes or fewer.")
         return PskParseResult(bytes, null)
+    }
+
+    private fun isBase64(s: String): Boolean {
+        if (s.isEmpty()) return false
+        if (!s.any { it == '+' || it == '/' || it == '=' }) return false
+        if (s.length % 4 != 0) return false
+        val validChars = s.dropLast(s.count { it == '=' }).all { c ->
+            c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '+' || c == '/'
+        }
+        if (!validChars) return false
+        val padding = s.takeLastWhile { it == '=' }.length
+        return padding <= 2
     }
 }

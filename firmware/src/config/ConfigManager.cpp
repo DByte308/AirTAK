@@ -232,7 +232,6 @@ void ConfigManager::init() {
         ConfigGroup g = static_cast<ConfigGroup>(i);
         size_t n = FlashStore::read(g, s_buffers[i], CONFIG_BUF_SIZE);
         if (n == 0 || !proto::isValid(s_buffers[i], n)) {
-            // First boot or corrupted file — encode factory defaults in-memory.
             s_sizes[i] = encodeFactoryDefaults(g, s_buffers[i], CONFIG_BUF_SIZE);
         } else {
             s_sizes[i] = n;

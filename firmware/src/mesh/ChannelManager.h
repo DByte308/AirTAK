@@ -36,7 +36,8 @@ struct ChannelSlot {
     uint8_t      position_precision;
     uint8_t      phy_profile_index;
     uint8_t      channel_hash;          // computed by rekey(); cached here
-    uint8_t      aes_key[16];           // derived from psk by rekey(); cached here
+    uint8_t      aes_key[32];           // derived from psk by rekey(); 16 or 32 bytes
+    uint8_t      aes_key_len;           // 16 (AES-128) or 32 (AES-256)
 };
 
 class ChannelManager {

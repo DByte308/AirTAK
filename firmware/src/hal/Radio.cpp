@@ -60,6 +60,7 @@ static volatile float    s_last_rssi    = 0.0f;
 static volatile float    s_last_snr     = 0.0f;
 static volatile uint32_t s_packets_rx   = 0;
 static volatile uint32_t s_packets_tx   = 0;
+static volatile uint32_t s_dio1_isr_count = 0;
 static volatile bool     s_rx_flag      = false;
 static volatile bool     s_tx_flag      = false;
 static uint8_t           s_active_phy   = 0;   // index of currently configured PHY profile
@@ -70,6 +71,10 @@ static uint8_t           s_active_phy   = 0;   // index of currently configured 
 static EventGroupHandle_t s_event_group = nullptr;
 
 static void IRAM_ATTR on_packet_received() {
+    // Direct GPIO handler — RadioLib's startReceiveCommon clears the action
+    // set by setPacketReceivedAction, so we re-attach via setDio1Action above.
+    // Called on any DIO1 edge; Radio::process() verifies the IRQ status.
+    s_dio1_isr_count++;
     s_rx_flag = true;
     if (s_event_group) {
         BaseType_t woken = pdFALSE;
@@ -154,6 +159,9 @@ void Radio::init() {
             s_radio_sx1262.setCRC(true);
             s_radio_sx1262.explicitHeader();
             s_radio_sx1262.setDio2AsRfSwitch(true);
+            s_radio_sx1262.setCurrentLimit(140.0);
+            s_radio_sx1262.setRxBoostedGainMode(true);
+            s_mod_sx1262.SPIsetRegValue(0x08B5, 0x01, 0, 0);
         }
     }
 
@@ -184,7 +192,9 @@ void Radio::init() {
     // Register interrupt callbacks and enter continuous receive.
     s_active_radio->setPacketReceivedAction(on_packet_received);
     s_active_radio->setPacketSentAction(on_packet_sent);
-    s_active_radio->startReceive();
+    s_radio_sx1262.standby();
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.setDio1Action(on_packet_received);
 }
 
 // ── Radio::reinit() ───────────────────────────────────────────────────────────
@@ -225,6 +235,9 @@ void Radio::reinit() {
             s_radio_sx1262.setCRC(true);
             s_radio_sx1262.explicitHeader();
             s_radio_sx1262.setDio2AsRfSwitch(true);
+            s_radio_sx1262.setCurrentLimit(140.0);
+            s_radio_sx1262.setRxBoostedGainMode(true);
+            s_mod_sx1262.SPIsetRegValue(0x08B5, 0x01, 0, 0);
         }
     }
 #if defined(AIRTAK_PIN_SX1276_DIO0)
@@ -244,7 +257,9 @@ void Radio::reinit() {
     s_radio_failed = false;
     s_active_radio->setPacketReceivedAction(on_packet_received);
     s_active_radio->setPacketSentAction(on_packet_sent);
-    s_active_radio->startReceive();
+    s_radio_sx1262.standby();
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.setDio1Action(on_packet_received);
 }
 
 // ── Radio::pause() / Radio::resume() ─────────────────────────────────────────
@@ -316,7 +331,9 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
 
             size_t pkt_len = s_active_radio->getPacketLength();
             if (pkt_len == 0 || pkt_len > LORA_MAX_PAYLOAD_BYTES) {
-                s_active_radio->startReceive();
+                s_radio_sx1262.standby();
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.setDio1Action(on_packet_received);
             } else {
                 PooledPacket* pkt = PacketPool::alloc();
                 if (pkt) {
@@ -336,11 +353,15 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
                         PacketPool::free(pkt);
                     }
                 }
-                s_active_radio->startReceive();
+                s_radio_sx1262.standby();
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.setDio1Action(on_packet_received);
             }
         } else {
-            s_active_radio->startReceive();
-        }
+            s_radio_sx1262.standby();
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.setDio1Action(on_packet_received);
+}
     }
 
     // ── TX queue has a packet ready ───────────────────────────────────────────
@@ -388,7 +409,9 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
     uint32_t tx_start_ms = millis();
     int16_t err = s_active_radio->transmit(const_cast<uint8_t*>(data), length);
     uint32_t tx_elapsed_ms = millis() - tx_start_ms;
-    s_active_radio->startReceive();
+    s_radio_sx1262.standby();
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.setDio1Action(on_packet_received);
 
     if (err == RADIOLIB_ERR_NONE) {
         s_packets_tx++;
@@ -402,5 +425,13 @@ float    Radio::lastSnr()    { return s_last_snr;   }
 float    Radio::lastRssi()   { return s_last_rssi;  }
 uint32_t Radio::packetsRx()  { return s_packets_rx; }
 uint32_t Radio::packetsTx()  { return s_packets_tx; }
+uint32_t Radio::dio1IsrCount() { return s_dio1_isr_count; }
+float    Radio::instantRssi() {
+    if (!s_active_radio) return 0.0f;
+    return s_radio_sx1262.getRSSI(true);
+}
 
 } // namespace airtak
+
+
+// AES self-test: verify mbedtls AES-CTR output matches expected

@@ -71,6 +71,8 @@ public:
     // Packet counters (reported in DeviceStatus, §10.4).
     static uint32_t packetsRx();
     static uint32_t packetsTx();
+    static uint32_t dio1IsrCount();
+    static float    instantRssi();
 };
 
 } // namespace airtak
