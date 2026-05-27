@@ -448,7 +448,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         if (candidate->psk_len > 0) {
             uint8_t nonce[AES_NONCE_BYTES];
             Crypto::buildNonce(hdr.packet_id, hdr.src_node_id, nonce);
-            Crypto::crypt(candidate->aes_key, nonce, decrypted, payload_len);
+            Crypto::crypt(candidate->aes_key, candidate->aes_key_len, nonce, decrypted, payload_len);
         }
 
         DataMetadata candidate_meta;
@@ -604,7 +604,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             if (slot->psk_len > 0) {
                 uint8_t nonce2[AES_NONCE_BYTES];
                 Crypto::buildNonce(ack_hdr.packet_id, ack_hdr.src_node_id, nonce2);
-                Crypto::crypt(slot->aes_key, nonce2, ack_enc, ap);
+                Crypto::crypt(slot->aes_key, slot->aes_key_len, nonce2, ack_enc, ap);
             }
             PooledPacket* ack_pkt = PacketPool::alloc();
             if (ack_pkt) {
@@ -749,7 +749,7 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
     if (slot->psk_len > 0) {
         uint8_t nonce[16];
         Crypto::buildNonce(hdr.packet_id, hdr.src_node_id, nonce);
-        Crypto::crypt(slot->aes_key, nonce, enc, data_len);
+        Crypto::crypt(slot->aes_key, slot->aes_key_len, nonce, enc, data_len);
     }
 
     PooledPacket* pkt = PacketPool::alloc();
@@ -959,7 +959,7 @@ static bool retransmitEntry(AckRetryEntry& e, QueueHandle_t tx_queue, uint32_t n
     if (slot->psk_len > 0) {
         uint8_t nonce[16];
         Crypto::buildNonce(hdr.packet_id, MeshNode::nodeId(), nonce);
-        Crypto::crypt(slot->aes_key, nonce, enc, e.payload_len);
+        Crypto::crypt(slot->aes_key, slot->aes_key_len, nonce, enc, e.payload_len);
     }
 
     PooledPacket* pkt = PacketPool::alloc();

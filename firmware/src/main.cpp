@@ -223,9 +223,16 @@ void task_radio_rxtx(void* params) {
     airtak::MeshNode::init();
     airtak::Router::init();
     airtak::DcTracker::init();
+    {
+        const auto* s = airtak::ChannelManager::primarySlot();
+        Serial.printf("[INIT] %s hash=0x%02X psk=%u\n",
+            s?s->name:"?", s?s->channel_hash:0, s?(unsigned)s->psk_len:0);
+        Serial.flush();
+    }
     airtak::MeshNode::broadcastNodeInfo(g_radio_tx_queue);
     for (;;) {
         airtak::Radio::process(g_radio_rx_queue, g_radio_tx_queue, g_radio_event_group);
+        vTaskDelay(1);
 
         // Drain the RX queue and pass packets through the flood router (§8.7).
         airtak::PooledPacket* pkt = nullptr;
@@ -240,8 +247,19 @@ void task_radio_rxtx(void* params) {
         airtak::Router::tickRelayQueue(g_radio_tx_queue);
         airtak::Router::tickRetryQueue(g_radio_tx_queue);
 
-        // Smart beaconing and NODEINFO schedule.
         airtak::MeshNode::tick(g_radio_tx_queue);
+
+        {
+            static uint32_t ls = 0;
+            if (millis() - ls > 10000) {
+                ls = millis();
+                Serial.printf("[STATS] tx=%lu rx=%lu rssi=%.1f snr=%.1f dio=%lu\n",
+                    airtak::Radio::packetsTx(), airtak::Radio::packetsRx(),
+                    airtak::Radio::lastRssi(), airtak::Radio::lastSnr(),
+                    airtak::Radio::dio1IsrCount());
+                Serial.flush();
+            }
+        }
     }
 }
 
