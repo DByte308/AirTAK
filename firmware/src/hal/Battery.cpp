@@ -22,15 +22,29 @@ constexpr uint32_t ADC_MAX_COUNTS   = 4095;
 #ifndef AIRTAK_ADC_MULTIPLIER
 #define AIRTAK_ADC_MULTIPLIER 1.0f
 #endif
-
 void Battery::init() {
-    analogReadResolution(12);
-#ifdef AIRTAK_PLATFORM_ESP32
-    analogSetAttenuation(ADC_11db);
+   analogReadResolution(12);
+#if defined(AIRTAK_PLATFORM_ESP32)
+#if defined(AIRTAK_ADC_ATTENUATION)
+    analogSetAttenuation(AIRTAK_ADC_ATTENUATION);
+#else
+   analogSetAttenuation(ADC_11db);
 #endif
-    pinMode(AIRTAK_PIN_VBAT_SENSE, INPUT);
+#endif
+   pinMode(AIRTAK_PIN_VBAT_SENSE, INPUT);
 #if AIRTAK_PIN_CHG_STAT >= 0
-    pinMode(AIRTAK_PIN_CHG_STAT,   INPUT_PULLUP);
+   pinMode(AIRTAK_PIN_CHG_STAT,   INPUT_PULLUP);
+#endif
+#if defined(AIRTAK_PIN_ADC_CTRL) && AIRTAK_PIN_ADC_CTRL >= 0
+    pinMode(AIRTAK_PIN_ADC_CTRL, OUTPUT);
+    // Drive active to enable the voltage divider.  The Heltec V3 uses active
+    // LOW (ADC_CTRL pulls the divider to GND); boards that need active HIGH
+    // (e.g. T114) handle ADC_CTRL in their Display::init() instead.
+#ifdef AIRTAK_POWER_EN_ACTIVE_LOW
+    digitalWrite(AIRTAK_PIN_ADC_CTRL, LOW);
+#else
+    digitalWrite(AIRTAK_PIN_ADC_CTRL, HIGH);
+#endif
 #endif
 }
 
