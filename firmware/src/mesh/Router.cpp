@@ -581,6 +581,14 @@ static void queueDeliveryFailure(uint32_t portnum, uint32_t msg_id) {
     ble::queueAdminError(error);
 }
 
+static void queueDeliverySuccess(uint32_t portnum, uint32_t msg_id) {
+    char msg[96];
+    snprintf(msg, sizeof(msg), "delivery_ok port=%lu request_id=%lu",
+             static_cast<unsigned long>(portnum),
+             static_cast<unsigned long>(msg_id));
+    ble::queueAdminError(msg);
+}
+
 static bool isPacketAddressedToMe(const OtaHeader& hdr, const DataMetadata& data_meta) {
     uint32_t my_id = MeshNode::nodeId();
     bool ota_ok = (hdr.dest_node_id == my_id || hdr.dest_node_id == 0xFFFFFFFF);
@@ -596,7 +604,11 @@ void Router::init() {
     memset(s_app_dedup,   0, sizeof(s_app_dedup));
     // Seed packet ID with a pseudorandom value derived from millis() to reduce
     // collisions with other nodes that also boot close in time.
-    s_next_packet_id = (millis() & 0xFFFF) | (MeshNode::nodeId() << 8);
+    // Mix in a random byte to prevent deterministic ID reuse across reboots,
+    // which Meshtastic's wasSeenRecently dedup (by sender+id, ~45 min TTL)
+    // would otherwise reject after a quick power-cycle.
+    s_next_packet_id = ((millis() & 0xFFFF) | (MeshNode::nodeId() << 8))
+                     ^ ((uint32_t)random(0, 256) << 16);
 }
 
 // ── buildOtaHeader() ─────────────────────────────────────────────────────────
@@ -1066,6 +1078,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         && portnum_value != static_cast<uint32_t>(Portnum::TEXT_MESSAGE_APP)
         && portnum_value != static_cast<uint32_t>(Portnum::TRACEROUTE_APP)
         && portnum_value != static_cast<uint32_t>(Portnum::ADMIN_APP)
+        && portnum_value != static_cast<uint32_t>(Portnum::ROUTING_APP)
         && portnum_value != static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
         static uint32_t unc = 0;
         if (++unc <= 20) {
@@ -1090,14 +1103,23 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     }
 
     // ── AIRTAK_ACK receive: cancel pending retry queue entry (§8.9) ───────────
-    // Correlation is via Data.request_id (field 6, tag 0x30) which the ACK sender
-    // sets to the ack_request_id so the original sender can match it.
-    // Only process if the ACK is addressed to us (OTA dest is us or broadcast).
     if (portnum_value == static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
         if (data_meta.request_id != 0 && isPacketAddressedToMe(hdr, data_meta)) {
             handleAck(data_meta.request_id);
         }
         // Still relay AIRTAK_ACK so it can reach back to the original sender.
+    }
+
+    // ── ROUTING_APP receive: Meshtastic ReliableRouter ACKs (§Mesh PKI) ──
+    if (portnum_value == static_cast<uint32_t>(Portnum::ROUTING_APP)
+        && data_valid && isPacketAddressedToMe(hdr, data_meta)) {
+        const uint8_t* inner = nullptr; uint16_t inner_len = 0;
+        if (extractDataPayload(decrypted, payload_len, inner, inner_len)) {
+            uint32_t error_reason = 0;
+            readVarintField(inner, inner_len, 3, error_reason);
+            if (error_reason == 0 && data_meta.request_id != 0)
+                handleAck(data_meta.request_id);
+        }
     }
 
     // ── Generate ACK when sender requested acknowledgment (§8.9) ─────────
@@ -1109,6 +1131,11 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     if (hdr.wantAck() && data_valid && isPacketAddressedToMe(hdr, data_meta)
         && portnum_value != static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
         uint32_t req_id = data_meta.request_id;
+        // Meshtastic often omits Data.request_id; its ReliableRouter
+        // keys pending retries by OTA packet_id.  Use that as fallback.
+        if (req_id == 0 && hdr.packet_id != 0)
+            req_id = hdr.packet_id;
+
         if (req_id != 0) {
             bool is_meshtastic_dm = (portnum_value == static_cast<uint32_t>(Portnum::TEXT_MESSAGE_APP) ||
                                      portnum_value == static_cast<uint32_t>(Portnum::POSITION_APP) ||
@@ -1121,10 +1148,14 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                 // Build Routing ACK: Data{portnum=8, payload=Routing{error_reason=0}}
                 // Routing NONE: field 3 (varint) = 0 → 0x18 0x00
                 uint8_t ack_data[32]; uint8_t ap = 0;
-                ack_data[ap++] = 0x08; ack_data[ap++] = 0x08;               // portnum=8 (ROUTING_APP)
+                ack_data[ap++] = 0x08; ack_data[ap++] = 0x05;               // portnum=5 (ROUTING_APP)
                 ack_data[ap++] = 0x12; ack_data[ap++] = 0x02;               // Data.payload tag+len=2
                 ack_data[ap++] = 0x18; ack_data[ap++] = 0x00;               // error_reason=NONE
                 ack_data[ap++] = 0x30; ap += writeVarU32(ack_data + ap, req_id); // Data.request_id
+#ifndef AIRTAK_NATIVE_TEST
+                Serial.printf("[ACK] routing NONE → %08X req=%08X\n", hdr.src_node_id, req_id);
+                Serial.flush();
+#endif
 
                 uint8_t ack_hop = hdr.hopStart();
                 if (ack_hop == 0) ack_hop = defaults::ACK_HOP_START_FALLBACK;
@@ -1133,7 +1164,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                 // ACKs go on the primary, AES-encrypted with its PSK).
                 const ChannelSlot* ack_slot = ChannelManager::primarySlot();
                 if (!ack_slot) ack_slot = slot;
-                if (!ack_slot) return;
+                if (ack_slot) {
 
                 OtaHeader ack_hdr;
                 ack_hdr.dest_node_id  = hdr.src_node_id;
@@ -1164,6 +1195,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                         xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
                     }
                 }
+            }
             } else {
             // AirTAK internal ACK (portnum 261) for game traffic.
             uint8_t ack_data[64]; uint8_t ap = 0;
@@ -1590,6 +1622,13 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
     uint32_t packet_id = nextPacketId();
     uint32_t msg_id = meta.has_request_id ? meta.request_id : packet_id;
 
+    // For PKI DMs, Meshtastic's Routing ACK carries the OTA packet_id
+    // (p->id in its ReliableRouter), not the Data.request_id.  Align
+    // the retry-entry msg_id to the OTA packet_id so handleAck can match.
+    bool will_use_pki = (meta.dest != 0xFFFFFFFF && meta.portnum == Portnum::TEXT_MESSAGE_APP
+                         && MeshNode::remotePublicKey(meta.dest) && MeshNode::pkiPrivateKey());
+    if (will_use_pki) msg_id = packet_id;
+
     uint8_t outgoing[MESH_MAX_PAYLOAD_BYTES];
     uint16_t outgoing_len = 0;
     if (!buildDataMessage(meta.portnum, meta.dest, MeshNode::nodeId(),
@@ -1600,9 +1639,52 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
     }
 
     uint8_t hop_limit = defaultHopLimit(meta.portnum);
+
+    // ── PKI DM path: unicast TEXT_MESSAGE_APP to Meshtastic node → PKI on ch=0x00
+    bool use_pki = false;
+    if (meta.dest != 0xFFFFFFFF && meta.portnum == Portnum::TEXT_MESSAGE_APP) {
+        const uint8_t* remote_pubkey = MeshNode::remotePublicKey(meta.dest);
+        const uint8_t* our_privkey   = MeshNode::pkiPrivateKey();
+        if (remote_pubkey && our_privkey) {
+            uint8_t pki_out[MESH_MAX_PAYLOAD_BYTES];
+            size_t pki_len = outgoing_len + Crypto::PKI_OVERHEAD_BYTES;
+            if (pki_len <= MESH_MAX_PAYLOAD_BYTES &&
+                Crypto::pkiEncrypt(our_privkey, remote_pubkey,
+                                   MeshNode::nodeId(), packet_id,
+                                   outgoing_len, outgoing, pki_out)) {
+                OtaHeader pki_hdr;
+                pki_hdr.dest_node_id  = meta.dest;
+                pki_hdr.src_node_id   = MeshNode::nodeId();
+                pki_hdr.packet_id     = packet_id;
+                pki_hdr.flags         = ((hop_limit & 0x07) << 5)
+                                     | (want_ack ? (1 << 3) : 0)
+                                     | (hop_limit & 0x07);
+                pki_hdr.channel_hash  = 0x00;
+                pki_hdr.next_hop_low  = 0;
+                pki_hdr.relay_node_low = 0;
+                PooledPacket* pkt = PacketPool::alloc();
+                if (pkt) {
+                    buildOtaHeader(pkt->data, pki_hdr);
+                    memcpy(pkt->data + OTA_HEADER_BYTES, pki_out, pki_len);
+                    pkt->length = OTA_HEADER_BYTES + pki_len;
+                    const ChannelSlot* primary = ChannelManager::primarySlot();
+                    pkt->phy_profile_index = primary ? primary->phy_profile_index : slot->phy_profile_index;
+                    if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
+                        PacketPool::free(pkt);
+                        return false;
+                    }
+                    xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
+                    use_pki = true;
+                }
+            }
+        }
+    }
+
+    if (!use_pki) {
     if (!queueOtaFrame(slot, meta.dest, hop_limit, want_ack, packet_id,
                        outgoing, outgoing_len, tx_queue)) {
         return false;
+    }
     }
 
 #ifndef AIRTAK_NATIVE_TEST
@@ -1714,11 +1796,30 @@ void Router::tickRetryQueue(QueueHandle_t tx_queue) {
 // ── Router::handleAck() ──────────────────────────────────────────────────────
 void Router::handleAck(uint32_t ack_request_id) {
     for (size_t i = 0; i < defaults::ACK_RETRY_QUEUE_SIZE; i++) {
+        if (s_retry_queue[i].in_use) {
+#ifndef AIRTAK_NATIVE_TEST
+            Serial.printf("[RTDBG] slot=%u msg_id=%08X dest=%08X pn=%u hlim=%d\n",
+                (unsigned)i, s_retry_queue[i].msg_id, s_retry_queue[i].dest_node_id,
+                (unsigned)s_retry_queue[i].portnum, s_retry_queue[i].hop_start);
+            Serial.flush();
+#endif
+        }
+    }
+    for (size_t i = 0; i < defaults::ACK_RETRY_QUEUE_SIZE; i++) {
         if (s_retry_queue[i].in_use && s_retry_queue[i].msg_id == ack_request_id) {
+#ifndef AIRTAK_NATIVE_TEST
+            Serial.printf("[ACKCLR] req=%08X idx=%u\n", ack_request_id, (unsigned)i);
+            Serial.flush();
+#endif
+            queueDeliverySuccess(s_retry_queue[i].portnum, s_retry_queue[i].msg_id);
             s_retry_queue[i].in_use = false;
             return;
         }
     }
+#ifndef AIRTAK_NATIVE_TEST
+    Serial.printf("[ACKMIS] req=%08X not found\n", ack_request_id);
+    Serial.flush();
+#endif
 }
 
 // ── Router::handleOverheardRelay() ───────────────────────────────────────────
