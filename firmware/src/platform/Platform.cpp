@@ -44,7 +44,14 @@ void initBoard() {
 #if !defined(AIRTAK_NATIVE_TEST)
 #if defined(AIRTAK_PIN_POWER_EN) && AIRTAK_PIN_POWER_EN >= 0
     pinMode(AIRTAK_PIN_POWER_EN, OUTPUT);
+    // Drive to the active state.  Most boards use active HIGH (T-Echo, T114,
+    // T-Deck).  Heltec V3 uses active LOW (Vext) — the board config signals
+    // this by defining AIRTAK_POWER_EN_ACTIVE_LOW.
+#ifdef AIRTAK_POWER_EN_ACTIVE_LOW
+    digitalWrite(AIRTAK_PIN_POWER_EN, LOW);
+#else
     digitalWrite(AIRTAK_PIN_POWER_EN, HIGH);
+#endif
 #if defined(AIRTAK_PLATFORM_ESP32)
     delay(100); // peripherals need time to stabilise after the rail comes up
 #endif
@@ -53,6 +60,11 @@ void initBoard() {
     // Initialise the shared SPI bus for T-Deck (TFT + SX1262 share SCK/MOSI/MISO).
     SPI.begin(AIRTAK_PIN_SX1262_SCK, AIRTAK_PIN_SX1262_MISO,
               AIRTAK_PIN_SX1262_MOSI, AIRTAK_PIN_SX1262_NSS);
+    // Initialise the shared I2C bus when needed.  Skip if the board's OLED
+    // already uses a different I2C bus (Heltec V3: OLED on 17/18, shared I2C
+    // on 41/42 — both need initialisation but only the OLED bus is started here;
+    // the shared bus is unused by the standard firmware and started in
+    // Display::init() for its own pins).
 #if defined(AIRTAK_PIN_I2C_SDA) && AIRTAK_PIN_I2C_SDA >= 0
     Wire.begin(AIRTAK_PIN_I2C_SDA, AIRTAK_PIN_I2C_SCL);
 #endif

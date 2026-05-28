@@ -5,6 +5,7 @@
 # Firmware targets:
 #   t_echo_plus  — nRF52840 (Adafruit BSP) → firmware.hex
 #   heltec_t114  — nRF52840 (Adafruit BSP) → firmware.hex
+#   heltec_v3    — ESP32-S3  (ESP-IDF)     → firmware.bin
 #   t_deck       — ESP32-S3  (ESP-IDF)     → firmware.bin
 #   t3s3         — ESP32-S3  (ESP-IDF)     → firmware.bin
 #   native       — host unit tests (Unity)
@@ -62,6 +63,9 @@ jobs:
       - name: Build heltec_t114 (nRF52840)
         run: bash ./tools/pio_firmware.sh run -e heltec_t114
 
+      - name: Build heltec_v3 (ESP32-S3)
+        run: bash ./tools/pio_firmware.sh run -e heltec_v3
+
       - name: Build t_deck (ESP32-S3)
         run: bash ./tools/pio_firmware.sh run -e t_deck
 
@@ -81,7 +85,7 @@ jobs:
 
       - name: Collect firmware artifacts
         run: |
-          for board in t_echo t_echo_plus heltec_t114 t_deck t3s3; do
+          for board in t_echo t_echo_plus heltec_t114 heltec_v3 t_deck t3s3; do
             mkdir -p "artifacts/${board}"
             src="firmware/.pio/build/${board}"
             [ -f "${src}/firmware.hex" ] && cp "${src}/firmware.hex" "artifacts/${board}/"
@@ -111,6 +115,13 @@ jobs:
         with:
           name: firmware-heltec_t114
           path: artifacts/heltec_t114/
+          retention-days: 30
+
+      - name: Upload heltec_v3
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware-heltec_v3
+          path: artifacts/heltec_v3/
           retention-days: 30
 
       - name: Upload t_deck
