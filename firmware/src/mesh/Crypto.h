@@ -1,13 +1,10 @@
 // AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/Crypto.h — AES-CTR channel encryption (AES-128 / AES-256)
-// Planning: §15.1, §8.3 | Roadmap: 2.1
-//
 // Key derivation (Meshtastic-compatible, matches Channels::getKey()):
-//   - PSK == 0 bytes: all-zero key, key_len=16 (unencrypted)
-//   - PSK == 1 byte with value 0x01: expanded to 6-byte default key by
-//     ChannelManager::rekey() then padded to 16 (AES-128)
-//   - PSK 1–16 bytes: zero-padded to 16 bytes, used directly as AES-128 key
-//   - PSK 17–32 bytes: zero-padded to 32 bytes, used directly as AES-256 key
+//   - PSK == 0 bytes: no encryption
+//   - PSK 1–16 bytes (incl. 1-byte index expanded by ChannelManager):
+//     zero-padded to 16 bytes (AES-128)
+//   - PSK 17–32 bytes: zero-padded to 32 bytes (AES-256)
 //
 // CTR nonce: packet_id (32 bits LE) || from_node_id (32 bits LE) || 0x00... (padded to 128 bits)
 //
@@ -58,14 +55,14 @@ public:
                         uint32_t packet_id, uint32_t from_node_id,
                         uint8_t* data, size_t length);
 
-    // Compute channel hash (§8.6).
-    // Slot 0 (Meshtastic-compatible): XOR of channel name bytes, then XOR of
-    // all 32 zero-padded PSK bytes.  Matches Meshtastic's Channels::generateHash().
-    // Slots 1–7: SHA256(psk)[0].
-    // channel_name is only used for slot 0; pass nullptr if not applicable.
-    static uint8_t channelHash(const uint8_t* psk, size_t psk_len,
-                               uint8_t slot_index,
-                               const char* channel_name = nullptr);
+   // Compute channel hash (§8.6).
+    // XOR of channel name bytes ^ XOR of zero-padded PSK bytes, matching
+    // Meshtastic's Channels::generateHash() for all slots.
+    // channel_name participates only for the primary slot;
+    // pass nullptr for secondary slots.
+   static uint8_t channelHash(const uint8_t* psk, size_t psk_len,
+                              uint8_t slot_index,
+                              const char* channel_name = nullptr);
 };
 
 } // namespace airtak

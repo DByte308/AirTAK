@@ -16,7 +16,6 @@ static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__,
               "AirTAK Crypto nonce construction requires little-endian host");
 
 #include <mbedtls/aes.h>
-#include <mbedtls/sha256.h>
 
 namespace airtak {
 
@@ -29,12 +28,13 @@ void Crypto::deriveKey(const uint8_t* psk, size_t psk_len,
     // Match Meshtastic's default CryptoEngine key-length logic:
     //   key.length == 16  → AES-128 (16-byte key)
     //   key.length == 0   → no encryption
-    //   otherwise         → AES-256 (32-byte key, zero-padded)
+    //   key.length 1–16   → AES-128 (zero-padded to 16 bytes)
+    //   key.length 17–32  → AES-256 (zero-padded to 32 bytes)
     if (psk_len == 0) {
         key_len_out = 0;
-    } else if (psk_len == 16) {
-        memcpy(key_out, psk, 16);
-        key_len_out = 16;
+    } else if (psk_len <= 16) {
+        memcpy(key_out, psk, psk_len);
+        key_len_out = 16;   // AES-128 (zero-padded via memset above)
     } else {
         memcpy(key_out, psk, psk_len > 32 ? 32 : psk_len);
         key_len_out = 32;
@@ -91,21 +91,19 @@ void Crypto::decrypt(const uint8_t* psk, size_t psk_len,
 
 uint8_t Crypto::channelHash(const uint8_t* psk, size_t psk_len,
                               uint8_t slot_index, const char* channel_name) {
-    if (slot_index == 0) {
-        uint8_t padded[PSK_MAX_BYTES] = {};
-        if (psk_len > PSK_MAX_BYTES) psk_len = PSK_MAX_BYTES;
-        memcpy(padded, psk, psk_len);
-        uint8_t hash = 0;
-        if (channel_name) {
-            for (size_t i = 0; channel_name[i]; i++) hash ^= (uint8_t)channel_name[i];
-        }
-        for (size_t i = 0; i < PSK_MAX_BYTES; i++) hash ^= padded[i];
-        return hash;
-    } else {
-        uint8_t digest[32];
-        mbedtls_sha256(psk, psk_len, digest, 0);
-        return digest[0];
+    // XOR hash for ALL channel slots, matching Meshtastic's
+    // Channels::generateHash() (xorHash(name) ^ xorHash(psk)).
+    // There is no SHA256 variant upstream.
+    (void)slot_index;
+    uint8_t padded[PSK_MAX_BYTES] = {};
+    if (psk_len > PSK_MAX_BYTES) psk_len = PSK_MAX_BYTES;
+    memcpy(padded, psk, psk_len);
+    uint8_t hash = 0;
+    if (channel_name) {
+        for (size_t i = 0; channel_name[i]; i++) hash ^= (uint8_t)channel_name[i];
     }
+    for (size_t i = 0; i < PSK_MAX_BYTES; i++) hash ^= padded[i];
+    return hash;
 }
 
 } // namespace airtak

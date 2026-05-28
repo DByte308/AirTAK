@@ -230,11 +230,10 @@ void test_channel_hash_slot1_differs_from_slot0_xor() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    uint8_t hash0 = Crypto::channelHash(LONGFAST_PSK, 32, 0);
-    uint8_t hash1 = Crypto::channelHash(LONGFAST_PSK, 32, 1);
-    TEST_ASSERT_NOT_EQUAL(hash0, hash1);
+   uint8_t hash0 = Crypto::channelHash(LONGFAST_PSK, 32, 0);
+   uint8_t hash1 = Crypto::channelHash(LONGFAST_PSK, 32, 1);
+    TEST_ASSERT_EQUAL(hash0, hash1); // XOR is used for ALL slots (Meshtastic-compatible)
 }
-
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_key_derivation_aes128_zero_pad);

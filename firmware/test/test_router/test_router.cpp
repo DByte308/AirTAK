@@ -96,9 +96,9 @@ static uint8_t build_ota(uint8_t* out, uint32_t src_node_id, uint32_t packet_id,
     memcpy(out + 0, &dest_node_id, 4);
     memcpy(out + 4, &src_node_id, 4);
     memcpy(out + 8, &packet_id, 4);
-    out[12] = static_cast<uint8_t>(((hop_limit & 0x07) << 5)
-                                   | (want_ack ? (1 << 4) : 0)
-                                   | (hop_limit & 0x07));
+   out[12] = static_cast<uint8_t>(((hop_limit & 0x07) << 5)
+                                   | (want_ack ? (1 << 3) : 0)
+                                  | (hop_limit & 0x07));
     out[13] = 0; // native ChannelManager stub primary slot hash
     out[14] = 0;
     out[15] = 0;
@@ -281,8 +281,8 @@ void test_incoming_packet_queues_snr_delayed_relay() {
     float relay_snr = 0.0f;
     TEST_ASSERT_TRUE(Router::testFirstRelay(relay, relay_len, send_after_ms, relay_snr));
     TEST_ASSERT_EQUAL(raw_len, relay_len);
-    TEST_ASSERT_EQUAL_UINT8(2, (relay[12] >> 5) & 0x07);
-    TEST_ASSERT_EQUAL_UINT8(3, relay[12] & 0x07);
+    TEST_ASSERT_EQUAL_UINT8(3, (relay[12] >> 5) & 0x07); // hop_start preserved
+    TEST_ASSERT_EQUAL_UINT8(2, relay[12] & 0x07);         // hop_limit decremented
     TEST_ASSERT_EQUAL_UINT32(1100, send_after_ms); // (10 - 8) * 50 + random(0, 50=0)
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 8.0f, relay_snr);
 }

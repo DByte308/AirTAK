@@ -26,19 +26,19 @@ constexpr uint8_t OTA_HEADER_BYTES = 16;
 
 // Parsed representation of the OTA wire header (§8.2).
 struct OtaHeader {
-    uint32_t dest_node_id;   // bytes 0–3
-    uint32_t src_node_id;    // bytes 4–7
-    uint32_t packet_id;      // bytes 8–11
-    uint8_t  flags;          // byte 12: [7:5]=hop_limit [4]=want_ack [3]=via_mqtt [2:0]=hop_start
-    uint8_t  channel_hash;   // byte 13
-    uint8_t  next_hop_low;   // byte 14
-    uint8_t  relay_node_low; // byte 15
-
-    // Helpers
-    uint8_t hopLimit()  const { return (flags >> 5) & 0x07; }
-    uint8_t hopStart()  const { return flags & 0x07; }
-    bool    wantAck()   const { return (flags >> 4) & 0x01; }
-    void setHopLimit(uint8_t v) { flags = (flags & ~0xE0) | ((v & 0x07) << 5); }
+   uint32_t dest_node_id;   // bytes 0–3
+   uint32_t src_node_id;    // bytes 4–7
+   uint32_t packet_id;      // bytes 8–11
+    uint8_t  flags;          // byte 12 — Meshtastic layout (RadioInterface.h):
+                             //   [7:5]=hop_start  [4]=via_mqtt  [3]=want_ack  [2:0]=hop_limit
+   uint8_t  channel_hash;   // byte 13
+   uint8_t  next_hop_low;   // byte 14
+   uint8_t  relay_node_low; // byte 15
+   // Helpers
+    uint8_t hopLimit() const { return flags & 0x07; }
+    uint8_t hopStart() const { return (flags >> 5) & 0x07; }
+    bool    wantAck()  const { return (flags & 0x08) != 0; }
+    void    setHopLimit(uint8_t v) { flags = (flags & ~0x07) | (v & 0x07); }
 };
 
 // Entry in the application-layer ACK retry queue (§8.9).

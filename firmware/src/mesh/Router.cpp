@@ -864,7 +864,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             ack_hdr.src_node_id   = MeshNode::nodeId();
             uint32_t ack_pkt_id   = nextPacketId();
             ack_hdr.packet_id     = ack_pkt_id;
-            ack_hdr.flags         = ((ack_hop & 0x07) << 5) | (ack_hop & 0x07); // no want_ack on ACK
+            ack_hdr.flags         = ((ack_hop & 0x07) << 5) | (ack_hop & 0x07); // hop_start=hop_limit=ack_hop, no want_ack
             ack_hdr.channel_hash  = slot->channel_hash;
             ack_hdr.next_hop_low  = 0;
             ack_hdr.relay_node_low = 0;
@@ -1006,9 +1006,9 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
     hdr.dest_node_id  = dest;
     hdr.src_node_id   = MeshNode::nodeId();
     hdr.packet_id     = packet_id;
-    hdr.flags         = ((hop_limit & 0x07) << 5)   // [7:5] hop_limit
-                      | (want_ack ? (1 << 4) : 0)    // [4]   want_ack
-                      | (hop_limit & 0x07);           // [2:0] hop_start (= hop_limit for origin)
+    hdr.flags         = ((hop_limit & 0x07) << 5)   // [7:5] hop_start
+                     | (want_ack ? (1 << 3) : 0)    // [3]   want_ack
+                     | (hop_limit & 0x07);           // [2:0] hop_limit
     hdr.channel_hash  = slot->channel_hash;
     hdr.next_hop_low  = 0;
     hdr.relay_node_low = 0;
@@ -1224,9 +1224,9 @@ static bool retransmitEntry(AckRetryEntry& e, QueueHandle_t tx_queue, uint32_t n
     hdr.dest_node_id  = e.dest_node_id;
     hdr.src_node_id   = MeshNode::nodeId();
     hdr.packet_id     = new_packet_id;
-    hdr.flags         = ((e.hop_start & 0x07) << 5)
-                      | (1 << 4)           // want_ack=true
-                      | (e.hop_start & 0x07);
+    hdr.flags         = ((e.hop_start & 0x07) << 5)  // [7:5] hop_start
+                     | (1 << 3)           // want_ack=true
+                      | (e.hop_start & 0x07);         // [2:0] hop_limit
     hdr.channel_hash  = slot->channel_hash;
     hdr.next_hop_low  = 0;
     hdr.relay_node_low = 0;

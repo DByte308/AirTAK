@@ -94,9 +94,8 @@ static uint16_t serializeUser(uint8_t* buf, uint16_t buf_len) {
 
 // ── serializePosition() ───────────────────────────────────────────────────────
 // Serializes a meshtastic.Position proto for POSITION_APP (§8.8).
-// Fields: latitude_i(1,fixed32), longitude_i(2,fixed32), altitude(3,varint),
-//         time(4,fixed32), pdop(8,varint), gps_accuracy(9,varint),
-//         precision_bits(14,varint).
+// Fields: latitude_i(1,sfixed32), longitude_i(2,sfixed32), altitude(3,sint32),
+//         time(4,fixed32), precision_bits(23,uint32).
 static uint16_t serializePosition(uint8_t* buf, uint16_t buf_len) {
     const GpsFix& fix = GPS::currentFix();
 
@@ -118,9 +117,8 @@ static uint16_t serializePosition(uint8_t* buf, uint16_t buf_len) {
     // setting.  The per-slot ChannelSlot.position_precision field is reserved
     // for a future per-slot override (not yet implemented).  If both are set,
     // the per-slot value should take precedence when transmitting on that slot.
-    // For now, the global value is used for all slots.
-    pos = encodeTag    (buf, pos, 14, 0); pos = encodeVarint(buf, pos, precision_bits);
-
+   // For now, the global value is used for all slots.
+    pos = encodeTag    (buf, pos, 23, 0); pos = encodeVarint(buf, pos, precision_bits);
     (void)buf_len;
     return pos;
 }
