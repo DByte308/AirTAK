@@ -67,6 +67,17 @@ jobs:
 
       - name: Build t3s3 (ESP32-S3)
         run: bash ./tools/pio_firmware.sh run -e t3s3
+        
+      - name: Generate UF2 files (nRF52 targets)
+        run: |
+          curl -sSfLo /tmp/uf2conv.py https://raw.githubusercontent.com/microsoft/uf2/master/utils/uf2conv.py
+          curl -sSfLo /tmp/uf2families.json https://raw.githubusercontent.com/microsoft/uf2/master/utils/uf2families.json
+          for board in t_echo t_echo_plus heltec_t114; do
+            hex="firmware/.pio/build/${board}/firmware.hex"
+            if [ -f "$hex" ]; then
+              python3 /tmp/uf2conv.py "$hex" -c -f 0xADA52840 -o "firmware/.pio/build/${board}/firmware.uf2"
+            fi
+          done
 
       - name: Collect firmware artifacts
         run: |
@@ -75,6 +86,7 @@ jobs:
             src="firmware/.pio/build/${board}"
             [ -f "${src}/firmware.hex" ] && cp "${src}/firmware.hex" "artifacts/${board}/"
             [ -f "${src}/firmware.bin" ] && cp "${src}/firmware.bin" "artifacts/${board}/"
+            [ -f "${src}/firmware.uf2" ] && cp "${src}/firmware.uf2" "artifacts/${board}/"
             [ -f "${src}/firmware.elf" ] && cp "${src}/firmware.elf" "artifacts/${board}/"
           done
           echo "Firmware artifacts:"

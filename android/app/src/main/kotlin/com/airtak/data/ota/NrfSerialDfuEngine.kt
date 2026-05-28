@@ -101,11 +101,25 @@ class NrfSerialDfuEngine(
             return Result.failure(Exception("CDC bulk endpoints not found"))
         }
         dbg("endpoints OK")
-        if (!connection.claimInterface(intf, true)) {
-            dbgErr("claimInterface failed")
-            return Result.failure(Exception("Could not claim CDC interface"))
+       if (!connection.claimInterface(intf, true)) {
+            dbgErr("claimInterface data failed")
+            return Result.failure(Exception("Could not claim CDC data interface"))
+       }
+        dbg("data interface claimed")
+
+        // The Adafruit nRF52 bootloader is a composite device: interface 0
+        // is CDC Control (class 0x02, receives SET_LINE_CODING + DTR/RTS),
+        // interface 1 is CDC Data (class 0x0A, has BULK endpoints).
+        // We already claimed the data interface; now claim the control one
+        // so the controlTransfer calls in configureCdcAcm can reach it.
+        val ctrlIntf = findControlInterface()
+        if (ctrlIntf != null && ctrlIntf.id != intf.id) {
+            if (!connection.claimInterface(ctrlIntf, true)) {
+                dbgErr("claimInterface control failed")
+                return Result.failure(Exception("Could not claim CDC control interface"))
+            }
+            dbg("control interface claimed")
         }
-        dbg("interface claimed")
 
         // Configure the Adafruit bootloader CDC endpoint for 115200 8N1 +
         // DTR/RTS asserted (the bootloader gates serial RX on DTR).
