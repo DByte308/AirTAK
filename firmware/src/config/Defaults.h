@@ -156,7 +156,16 @@ constexpr uint32_t ROUTER_DUP_CACHE_SIZE    = 100;  // (source_id, packet_id) pa
 constexpr uint32_t ROUTER_DUP_CACHE_TTL_MS = 60000; // 60 s expiry per entry
 
 // ── NODEINFO broadcast interval ───────────────────────────────────────────────
-constexpr uint32_t NODEINFO_BROADCAST_INTERVAL_SECS = 10800; // 3 hours (§13.2)
+// Meshtastic default is 900 s (15 min); AirTAK was 10800 s (3 h) which is far
+// too long — the node appears stale in the Meshtastic app's node list.
+constexpr uint32_t NODEINFO_BROADCAST_INTERVAL_SECS = 900;  // 15 minutes
+
+// ── Startup announce burst ────────────────────────────────────────────────────
+// After the initial explicit NODEINFO at boot, backdate the periodic timer so
+// tick() fires a follow-up rebroadcast after this many milliseconds.  This
+// ensures the Meshtastic app discovers the device quickly even if it connected
+// after the very first broadcast.
+constexpr uint32_t STARTUP_ANNOUNCE_DELAY_MS = 10000;  // 10 seconds
 
 // ── Telemetry broadcast interval ──────────────────────────────────────────────
 constexpr uint32_t TELEMETRY_BROADCAST_INTERVAL_SECS = 900;   // 15 minutes

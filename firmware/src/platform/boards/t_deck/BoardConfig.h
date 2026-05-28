@@ -38,7 +38,7 @@
 #define AIRTAK_PIN_SX1262_RESET            17
 #define AIRTAK_PIN_SX1262_DIO1             45
 #define AIRTAK_PIN_SX1262_BUSY             13
-#define AIRTAK_SX1262_TCXO_VOLTAGE         1.6   // RadioLib default; SX1262 TCXO reference
+#define AIRTAK_SX1262_TCXO_VOLTAGE         1.8   // matches Meshtastic variant SX126X_DIO3_TCXO_VOLTAGE
 
 // ST7789 TFT display (shared SPI bus with radio)
 #define AIRTAK_PIN_TFT_SCK                 40   // shared with radio

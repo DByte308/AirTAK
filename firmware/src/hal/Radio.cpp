@@ -418,6 +418,14 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
     uint32_t tx_start_ms = millis();
     int16_t err = s_active_radio->transmit(const_cast<uint8_t*>(data), length);
     uint32_t tx_elapsed_ms = millis() - tx_start_ms;
+
+#ifndef AIRTAK_NATIVE_TEST
+    Serial.printf("[TXRAW] len=%u err=%d toa=%lu ms | hdr: ", length, err, (unsigned long)tx_elapsed_ms);
+    for (int i = 0; i < 16 && i < length; i++) Serial.printf("%02X", data[i]);
+    Serial.println();
+    Serial.flush();
+#endif
+
     s_radio_sx1262.standby();
     s_radio_sx1262.setDio1Action(on_packet_received);
     s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);

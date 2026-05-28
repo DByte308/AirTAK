@@ -15,7 +15,9 @@ enum class Portnum : uint32_t {
     TEXT_MESSAGE_APP = 1,
     POSITION_APP     = 3,
     NODEINFO_APP     = 4,
+    ROUTING_APP      = 8,
     TELEMETRY_APP    = 67,
+    ADMIN_APP        = 69,
     TRACEROUTE_APP   = 70,
     NEIGHBORINFO_APP = 71,
 

@@ -52,6 +52,8 @@ size_t PacketPool::usedCount() { return 0; }
 
 void MeshNode::init() {}
 void MeshNode::broadcastNodeInfo(QueueHandle_t) {}
+void MeshNode::scheduleStartupBurst() {}
+void MeshNode::broadcastTelemetry(QueueHandle_t) {}
 void MeshNode::tick(QueueHandle_t) {}
 uint32_t MeshNode::nodeId() { return 0x12345678; }
 void MeshNode::maybeTransmitPosition(QueueHandle_t, EventGroupHandle_t) {}

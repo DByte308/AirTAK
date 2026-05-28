@@ -24,6 +24,12 @@ public:
     // Phase 2.2: Broadcast a NODEINFO_APP meshtastic.User packet to all nodes.
     static void broadcastNodeInfo(QueueHandle_t tx_queue);
 
+    // Backdate the NODEINFO periodic timer so tick() will rebroadcast soon after
+    // startup (within ~30 s) instead of waiting the full broadcast interval.
+    // Call this AFTER the initial explicit broadcastNodeInfo() so the follow-up
+    // burst still fires quickly.
+    static void scheduleStartupBurst();
+
     // Phase 2.13: Broadcast TELEMETRY_APP with battery level to the mesh.
     static void broadcastTelemetry(QueueHandle_t tx_queue);
 

@@ -240,6 +240,7 @@ void task_radio_rxtx(void* params) {
         Serial.flush();
     }
     airtak::MeshNode::broadcastNodeInfo(g_radio_tx_queue);
+    airtak::MeshNode::scheduleStartupBurst();  // rebroadcast ~10 s later
     for (;;) {
         airtak::Radio::process(g_radio_rx_queue, g_radio_tx_queue, g_radio_event_group);
         vTaskDelay(1);

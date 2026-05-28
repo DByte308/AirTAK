@@ -36,6 +36,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.ParcelUuid
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.airtak.data.prefs.AppPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -93,6 +94,7 @@ class BleRepository @Inject constructor(
         (appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
 
     private var gatt: BluetoothGatt? = null
+    private var lastMeshTxMs: Long = 0L
     private var reconnectJob: Job? = null
     private var scanJob: Job? = null
     private var currentMtu: Int = 23
@@ -222,6 +224,13 @@ class BleRepository @Inject constructor(
      *  - All other channels go through the chunk-framed envelope. */
     fun send(channel: OutboundChannel, payload: ByteArray) {
         if (_linkState.value !is LinkState.Connected) return
+        // Throttle MeshTx to 1 packet per 500ms — prevents BLE reconnect flood
+        // from congesting the LoRa channel and suppressing peer transmissions.
+        if (channel == OutboundChannel.MeshTx) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastMeshTxMs < 500) return
+            lastMeshTxMs = now
+        }
         val uuid = when (channel) {
             OutboundChannel.ConfigRw   -> BleConstants.CHR_CONFIG_RW
             OutboundChannel.MeshTx     -> BleConstants.CHR_MESH_TX

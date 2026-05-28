@@ -223,7 +223,6 @@ static void parseNodeInfoPayload(const uint8_t* data_pb, uint16_t data_len,
     long_name = nullptr;
     short_name = nullptr;
     node_id_str = nullptr;
-    // Extract Data.payload (field 2) — the NodeInfo message bytes
     const uint8_t* inner = nullptr;
     uint16_t inner_len = 0;
     if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return;
@@ -232,54 +231,40 @@ static void parseNodeInfoPayload(const uint8_t* data_pb, uint16_t data_len,
     static char sn_buf[5];
     static char id_buf[16];
 
-    // Parse NodeInfo fields. The User message is inside NodeInfo field 2.
+    // The over-the-air NodeInfo used by Meshtastic devices has flat string
+    // fields at the top level: id(1), long_name(2), short_name(3).  This is
+    // distinct from the proto definition which nests them inside User(2);
+    // real-world Meshtastic firmware (≥2.0) sends the flat layout on the
+    // NODEINFO_APP portnum.
     uint16_t pos = 0;
     while (pos < inner_len) {
         uint32_t tag;
         if (!readVarint(inner, inner_len, pos, tag)) break;
         uint8_t wire = tag & 0x07;
         uint32_t field = tag >> 3;
-        if (wire == 2 && field == 2) {  // NodeInfo.user (sub-message)
-            uint32_t sublen = 0; uint8_t shift = 0;
-            while (pos < inner_len) { uint8_t b = inner[pos++]; sublen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
-            uint16_t sub_end = (uint16_t)(pos + sublen);
-            if (sub_end > inner_len) break;
-            // Parse User fields: id(1), long_name(2), short_name(3)
-            while (pos < sub_end) {
-                uint32_t utag;
-                if (!readVarint(inner, sub_end, pos, utag)) break;
-                uint8_t uwire = utag & 0x07;
-                uint32_t ufield = utag >> 3;
-                if (uwire == 2) {
-                    uint32_t flen = 0; uint8_t fshift = 0;
-                    while (pos < sub_end) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << fshift; if (!(b & 0x80)) break; fshift += 7; }
-                    if (ufield == 1 && flen > 0 && flen < sizeof(id_buf)) {
-                        memcpy(id_buf, inner + pos, flen);
-                        id_buf[flen] = '\0';
-                        node_id_str = id_buf;
-                    } else if (ufield == 2 && flen > 0 && flen < sizeof(ln_buf)) {
-                        memcpy(ln_buf, inner + pos, flen);
-                        ln_buf[flen] = '\0';
-                        long_name = ln_buf;
-                    } else if (ufield == 3 && flen > 0 && flen < sizeof(sn_buf)) {
-                        memcpy(sn_buf, inner + pos, flen);
-                        sn_buf[flen] = '\0';
-                        short_name = sn_buf;
-                    }
-                    pos += flen;
-                } else {
-                    if (!skipField(inner, sub_end, pos, uwire)) break;
-                }
-            }
-        } else if (wire == 2) {  // skip other length-delimited NodeInfo fields
+        if (wire == 2) {
             uint32_t flen = 0; uint8_t shift = 0;
             while (pos < inner_len) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            if (field == 1 && flen > 0 && flen < sizeof(id_buf)) {
+                memcpy(id_buf, inner + pos, flen);
+                id_buf[flen] = '\0';
+                node_id_str = id_buf;
+            } else if (field == 2 && flen > 0 && flen < sizeof(ln_buf)) {
+                memcpy(ln_buf, inner + pos, flen);
+                ln_buf[flen] = '\0';
+                long_name = ln_buf;
+            } else if (field == 3 && flen > 0 && flen < sizeof(sn_buf)) {
+                memcpy(sn_buf, inner + pos, flen);
+                sn_buf[flen] = '\0';
+                short_name = sn_buf;
+            }
             pos += flen;
         } else {
             if (!skipField(inner, inner_len, pos, wire)) break;
         }
     }
 }
+
 static void parsePositionPayload(const uint8_t* data_pb, uint16_t data_len,
                                   double& lat, double& lon, int32_t& alt_m,
                                   uint32_t& timestamp_secs, bool& valid) {
@@ -637,6 +622,40 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     hdr.next_hop_low   = raw[14];
     hdr.relay_node_low = raw[15];
 
+    // Structured hex dump of every foreign packet for debugging.
+#ifndef AIRTAK_NATIVE_TEST
+    if (hdr.src_node_id != MeshNode::nodeId()) {
+        static uint32_t last_pkt_dump = 0;
+        // Throttle only if the same packet_id arrives again (relay dupe).
+        // Show every distinct incoming packet.
+        if (hdr.packet_id != (last_pkt_dump & 0xFFFFFFFF)) {
+            last_pkt_dump = (last_pkt_dump & ~0xFFFFFFFFULL) | hdr.packet_id;
+            Serial.print("[PKTHEX] ");
+            for (int ri = 0; ri < raw_len && ri < 32; ri++)
+                Serial.printf("%02X", raw[ri]);
+            Serial.printf(" | dest=%08X src=%08X id=%08X fl=0x%02X(h=%d/%d a=%d m=%d) ch=0x%02X nh=%02X rl=%02X\n",
+                hdr.dest_node_id, hdr.src_node_id, hdr.packet_id,
+                hdr.flags,
+                hdr.hopLimit(), hdr.hopStart(),
+                hdr.wantAck() ? 1 : 0,
+                (hdr.flags >> 4) & 1,
+                hdr.channel_hash,
+                hdr.next_hop_low, hdr.relay_node_low);
+            Serial.flush();
+        }
+    }
+#endif
+
+    // ── Self-source bypass ────────────────────────────────────────────────────
+    // Packets originating from our own node ID are relays of our own
+    // transmissions.  We already know our own state; processing them would
+    // waste CPU and can produce spurious [DECFAIL] noise when the relayed
+    // ciphertext fails to round-trip through the decryption path (the
+    // implicit-ACK optimisation is covered by the retry timeout).
+    if (hdr.src_node_id == MeshNode::nodeId()) {
+        return;
+    }
+
     const uint8_t* payload     = raw + OTA_HEADER_BYTES;
     uint8_t        payload_len = raw_len - OTA_HEADER_BYTES;
 
@@ -675,8 +694,8 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             last_hash_log = millis();
 #ifndef AIRTAK_NATIVE_TEST
             if (hash_matched) {
-                Serial.printf("[DECFAIL] hash=0x%02X matched but decrypt fail src=%08X\n",
-                    hdr.channel_hash, hdr.src_node_id);
+                Serial.printf("[DECFAIL] hash=0x%02X matched but decrypt fail src=%08X len=%u\n",
+                    hdr.channel_hash, hdr.src_node_id, payload_len);
             } else {
                 Serial.printf("[HASH] no slot for hash=0x%02X src=%08X\n",
                     hdr.channel_hash, hdr.src_node_id);
@@ -700,16 +719,6 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             Serial.flush();
 #endif
         }
-    }
-
-    // Implicit ACK: if we overhear a relay of our own ACKNOWLEDGED packet,
-    // cancel the pending retry for the logical Data.request_id (§8.9).
-    // ACK handling for relays of our own packets (if any).  Node-ID collision
-    // with another device is handled by MeshNode::onNodeInfoReceived accepting
-    // all received NODEINFO_APP packets; self-loop relays are caught by the
-    // duplicate-suppression cache below.
-    if (hdr.src_node_id == MeshNode::nodeId() && data_valid && data_meta.request_id != 0) {
-        handleAck(data_meta.request_id);
     }
 
     // Check duplicate-suppression cache (§8.7).
@@ -830,6 +839,158 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                 Serial.flush();
 #endif
             }
+        }
+    }
+
+    // ── TRACEROUTE_APP dispatch (§13.1) ───────────────────────────────────────
+    // Meshtastic traceroute (RouteDiscovery).  Only respond when this node is
+    // the target (OTA dest is us or broadcast).  Parse the inner RouteDiscovery
+    // message, append our node ID, and send back the completed route.
+    if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::TRACEROUTE_APP)
+        && data_valid && isPacketAddressedToMe(hdr, data_meta)) {
+        const uint8_t* inner = nullptr;
+        uint16_t inner_len = 0;
+        if (extractDataPayload(decrypted, payload_len, inner, inner_len)) {
+            // Parse RouteDiscovery: field 2 = repeated fixed32 route entries
+            uint32_t route_nodes[16];
+            uint8_t  route_count = 0;
+            uint16_t ip = 0;
+            while (ip < inner_len && route_count < 16) {
+                uint32_t tag;
+                if (!readVarint(inner, inner_len, ip, tag)) break;
+                uint8_t wire = tag & 0x07;
+                uint32_t field = tag >> 3;
+                if (wire == 5 && field == 2 && ip + 4 <= inner_len) {
+                    memcpy(&route_nodes[route_count], inner + ip, 4);
+                    ip += 4;
+                    route_count++;
+                } else {
+                    if (!skipField(inner, inner_len, ip, wire)) break;
+                }
+            }
+            // Append our node ID (if not already the last entry and room permits).
+            if (route_count == 0 || route_nodes[route_count - 1] != MeshNode::nodeId()) {
+                if (route_count < 16) {
+                    route_nodes[route_count++] = MeshNode::nodeId();
+                }
+            }
+            // Build response RouteDiscovery: field 2 = repeated fixed32
+            uint8_t resp[80];
+            uint16_t rp = 0;
+            for (uint8_t i = 0; i < route_count; i++) {
+                if (!appendTag(resp, rp, sizeof(resp), 2, 5)) break;
+                if (rp + 4U > sizeof(resp)) break;
+                memcpy(resp + rp, &route_nodes[i], 4);
+                rp += 4;
+            }
+            if (rp > 0) {
+                Router::sendPacket(Portnum::TRACEROUTE_APP, hdr.src_node_id,
+                                   resp, rp, false, tx_queue);
+            }
+        }
+        static uint32_t trc = 0;
+        if (++trc <= 5) {
+#ifndef AIRTAK_NATIVE_TEST
+            Serial.printf("[TRACERT] src=%08X dest=%08X len=%u\n",
+                hdr.src_node_id, hdr.dest_node_id, payload_len);
+            Serial.flush();
+#endif
+        }
+    }
+
+    // ── ADMIN_APP dispatch (§13.1) ────────────────────────────────────────────
+    // Handle Meshtastic admin requests (device metrics, power metrics).
+    // Only respond when the request is addressed to us.
+    if (!app_duplicate && portnum_value == static_cast<uint32_t>(Portnum::ADMIN_APP)
+        && data_valid && isPacketAddressedToMe(hdr, data_meta)) {
+        const uint8_t* inner = nullptr;
+        uint16_t inner_len = 0;
+        bool is_admin_request = false;
+        if (extractDataPayload(decrypted, payload_len, inner, inner_len)) {
+            // AdminMessage oneof fields: get_device_metrics_request (26),
+            // get_power_metrics_request (35), etc.  Any varint field ≥ 26
+            // in the AdminMessage signals a request.
+            uint16_t ip = 0;
+            while (ip < inner_len) {
+                uint32_t tag;
+                if (!readVarint(inner, inner_len, ip, tag)) break;
+                uint8_t wire = tag & 0x07;
+                uint32_t field = tag >> 3;
+                if (wire == 0 && field >= 26 && field <= 40) {
+                    is_admin_request = true;
+                    break;
+                }
+                if (!skipField(inner, inner_len, ip, wire)) break;
+            }
+        }
+        if (is_admin_request || inner_len == 0) {
+            // Respond with our telemetry if we have battery data.
+            MeshNode::broadcastTelemetry(tx_queue);
+        }
+        static uint32_t adc = 0;
+        if (++adc <= 5) {
+#ifndef AIRTAK_NATIVE_TEST
+            Serial.printf("[ADMIN] src=%08X dest=%08X len=%u req=%d\n",
+                hdr.src_node_id, hdr.dest_node_id, payload_len, is_admin_request);
+            Serial.flush();
+#endif
+        }
+    }
+
+    // ── Meshtastic want_response dispatch (§13.1) ────────────────────────────
+    // Standard Meshtastic behaviour: when a Data packet has want_response=true
+    // AND is addressed to us, respond with the same portnum type.
+    // Handles: NODEINFO_APP (4), POSITION_APP (3), TELEMETRY_APP (67).
+    if (!app_duplicate && data_valid && data_meta.want_response &&
+        isPacketAddressedToMe(hdr, data_meta) &&
+        portnum_value != static_cast<uint32_t>(Portnum::TRACEROUTE_APP) &&
+        portnum_value != static_cast<uint32_t>(Portnum::ADMIN_APP)) {
+        switch (data_meta.portnum) {
+            case Portnum::NODEINFO_APP:
+#ifndef AIRTAK_NATIVE_TEST
+                Serial.printf("[RESP] NODEINFO want_response from=%08X\n", hdr.src_node_id);
+                Serial.flush();
+#endif
+                MeshNode::broadcastNodeInfo(tx_queue);
+                break;
+            case Portnum::POSITION_APP:
+#ifndef AIRTAK_NATIVE_TEST
+                Serial.printf("[RESP] POSITION want_response from=%08X\n", hdr.src_node_id);
+                Serial.flush();
+#endif
+                // Force-send our position, bypassing the beaconing timer (same as
+                // handlePositionRequest which ignores the requester_id arg).
+                MeshNode::handlePositionRequest(hdr.src_node_id, tx_queue);
+                break;
+            case Portnum::TELEMETRY_APP:
+#ifndef AIRTAK_NATIVE_TEST
+                Serial.printf("[RESP] TELEMETRY want_response from=%08X\n", hdr.src_node_id);
+                Serial.flush();
+#endif
+                MeshNode::broadcastTelemetry(tx_queue);
+                break;
+            default:
+                break;
+        }
+    }
+
+    // ── Unhandled portnums ────────────────────────────────────────────────────
+    // Log remaining portnums we don't explicitly handle so we know what's being
+    // requested from us.
+    if (!app_duplicate && portnum_value != static_cast<uint32_t>(Portnum::NODEINFO_APP)
+        && portnum_value != static_cast<uint32_t>(Portnum::POSITION_APP)
+        && portnum_value != static_cast<uint32_t>(Portnum::TELEMETRY_APP)
+        && portnum_value != static_cast<uint32_t>(Portnum::TEXT_MESSAGE_APP)
+        && portnum_value != static_cast<uint32_t>(Portnum::TRACEROUTE_APP)
+        && portnum_value != static_cast<uint32_t>(Portnum::ADMIN_APP)
+        && portnum_value != static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
+        static uint32_t unc = 0;
+        if (++unc <= 20) {
+#ifndef AIRTAK_NATIVE_TEST
+            Serial.printf("[UNHAND] portnum=%u src=%08X dest=%08X len=%u\n",
+                (unsigned)portnum_value, hdr.src_node_id, hdr.dest_node_id, payload_len);
+            Serial.flush();
+#endif
         }
     }
 
@@ -1052,6 +1213,32 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
     pkt->length = OTA_HEADER_BYTES + data_len;
     pkt->phy_profile_index = slot->phy_profile_index;
 
+#ifndef AIRTAK_NATIVE_TEST
+    {
+        static uint32_t last_tx_dump = 0;
+        if (millis() - last_tx_dump > 2000) {
+            last_tx_dump = millis();
+            // Diagnostic: print the raw struct bytes to detect layout issues
+            const uint8_t* raw_hdr = (const uint8_t*)&hdr;
+            Serial.print("[HDRRAW] ");
+            for (int ti = 0; ti < 16; ti++)
+                Serial.printf("%02X", raw_hdr[ti]);
+            Serial.println();
+            Serial.print("[TXHEX] ");
+            for (int ti = 0; ti < pkt->length && ti < 32; ti++)
+                Serial.printf("%02X", pkt->data[ti]);
+            Serial.printf(" | dest=%08X src=%08X id=%08X fl=0x%02X(h=%d/%d a=%d) ch=0x%02X len=%u\n",
+                hdr.dest_node_id, hdr.src_node_id, hdr.packet_id,
+                hdr.flags,
+                hdr.hopLimit(), hdr.hopStart(),
+                hdr.wantAck() ? 1 : 0,
+                hdr.channel_hash,
+                pkt->length);
+            Serial.flush();
+        }
+    }
+#endif
+
     if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
         PacketPool::free(pkt);
         return false;
@@ -1173,6 +1360,16 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
 
     const ChannelSlot* slot = override_slot ? override_slot : selectTxSlot(meta.portnum, true);
     if (!slot) return false;
+
+    // Startup hold-off for flood-prone portnums (AIRTAK_PLAYER etc).
+    // The Android app auto-reconnects immediately and floods packets,
+    // spiking channel utilization past 25% and suppressing Meshtastic TX.
+    // Skip TEXT_MESSAGE_APP, NODEINFO_APP, POSITION_APP — those are
+    // essential and low-rate.
+    if (millis() < 10000 &&
+        meta.portnum != Portnum::TEXT_MESSAGE_APP &&
+        meta.portnum != Portnum::NODEINFO_APP &&
+        meta.portnum != Portnum::POSITION_APP) return false;
 
     // Determine whether this packet requires ACKNOWLEDGED delivery.
     // The authoritative sources are the per-portnum rules below and the

@@ -128,6 +128,31 @@ void MeshNode::init() {
     // Derive node ID from the selected platform's hardware identity source (§8.8).
     s_node_id = platform::nodeId();
     s_last_nodeinfo_ms = millis();
+    s_last_telemetry_ms = millis();
+}
+
+// ── MeshNode::scheduleStartupBurst() ──────────────────────────────────────────
+void MeshNode::scheduleStartupBurst() {
+    // Backdate the periodic timers so tick() triggers a NODEINFO rebroadcast
+    // and a TELEMETRY broadcast shortly after startup (within ~30 s), rather
+    // than waiting the full 15-minute interval.  The initial explicit
+    // broadcastNodeInfo() already sent the first announcement; this ensures a
+    // follow-up burst so the Meshtastic app picks up the device reliably.
+    uint32_t now = millis();
+    uint32_t interval_ms = defaults::NODEINFO_BROADCAST_INTERVAL_SECS * 1000UL;
+    uint32_t early_delay_ms = defaults::STARTUP_ANNOUNCE_DELAY_MS;
+    if (early_delay_ms >= interval_ms) early_delay_ms = interval_ms - 1000;
+    s_last_nodeinfo_ms = now - interval_ms + early_delay_ms;
+
+    uint32_t tele_interval_ms = defaults::TELEMETRY_BROADCAST_INTERVAL_SECS * 1000UL;
+    if (early_delay_ms >= tele_interval_ms) early_delay_ms = tele_interval_ms - 1000;
+    s_last_telemetry_ms = now - tele_interval_ms + early_delay_ms;
+
+#ifndef AIRTAK_NATIVE_TEST
+    Serial.printf("[BURST] next NODEINFO rebroadcast in ~%lu ms\n",
+        (unsigned long)early_delay_ms);
+    Serial.flush();
+#endif
 }
 
 // ── MeshNode::broadcastNodeInfo() ────────────────────────────────────────────
@@ -156,6 +181,10 @@ void MeshNode::broadcastNodeInfo(QueueHandle_t tx_queue) {
     }
 
     if (pos > 0) {
+#ifndef AIRTAK_NATIVE_TEST
+        Serial.printf("[BCAST] NODEINFO len=%u\n", pos);
+        Serial.flush();
+#endif
         Router::sendPacket(Portnum::NODEINFO_APP, 0xFFFFFFFF, buf, pos, false, tx_queue);
     }
     s_last_nodeinfo_ms = millis();

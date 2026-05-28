@@ -40,6 +40,7 @@ struct OtaHeader {
     bool    wantAck()  const { return (flags & 0x08) != 0; }
     void    setHopLimit(uint8_t v) { flags = (flags & ~0x07) | (v & 0x07); }
 };
+static_assert(sizeof(OtaHeader) == 16, "OtaHeader must be exactly 16 bytes");
 
 // Entry in the application-layer ACK retry queue (§8.9).
 //
