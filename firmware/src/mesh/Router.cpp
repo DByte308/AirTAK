@@ -911,12 +911,16 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     }
 
     if (hdr.hopLimit() > 0) {
-        // Check portnum to block audio relay (already parsed above as portnum_value).
+        // Suppress relaying until we've successfully transmitted at least once.
+        // A freshly-booted device has no SNR history, no topology knowledge —
+        // its relays add unnecessary airtime and can cause cascades against
+        // its own boot broadcasts being relayed back.
+#ifndef AIRTAK_NATIVE_TEST
+       if (Radio::packetsTx() == 0) return;
+#endif
         bool is_audio = (portnum_value == static_cast<uint32_t>(Portnum::AIRTAK_AUDIO));
-
         if (!is_audio) {
-            // SNR-based relay delay: delay_ms = (SNR_max - SNR_received) × 50 + random(0, 50) (§8.7).
-            // SNR_max varies by PHY profile (higher SF tolerates lower SNR).
+           // SNR-based relay delay: delay_ms = (SNR_max - SNR_received) × 50 + random(0, 50) (§8.7).
             float snr_max = defaults::PHY_SNR_MAX[0]; // fallback: Long/Mesh
             if (slot->phy_profile_index < 5) {
                 snr_max = defaults::PHY_SNR_MAX[slot->phy_profile_index];
