@@ -4,16 +4,8 @@
 #
 # Generates:
 #   1. nanopb C/C++ bindings → firmware/src/proto/
-#      Sources: proto/airtak/*.proto (NOT proto/meshtastic/ — those are vendored, do not regenerate)
+#      Sources: proto/airtak/*.proto
 #   2. Kotlin/Java lite bindings → android/app/src/main/kotlin/com/airtak/proto/
-#      Sources are also copied to android/app/src/main/proto/ for review/reference.
-#
-# Requirements:
-#   - protoc in PATH (https://github.com/protocolbuffers/protobuf/releases)
-#   - nanopb generator: pip install nanopb  (or use nanopb from lib/nanopb/)
-#
-# CRITICAL: proto/meshtastic/ protos are VENDORED at the commit pinned in
-# proto/meshtastic/VERSION. Do NOT regenerate them — edit manually if needed.
 
 param(
     [switch]$FirmwareOnly = $false,

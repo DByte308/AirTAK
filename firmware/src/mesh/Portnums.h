@@ -16,8 +16,8 @@ enum class Portnum : uint32_t {
     POSITION_APP     = 3,
     NODEINFO_APP     = 4,
     TELEMETRY_APP    = 67,
-    TRACEROUTE_APP   = 71,
-    NEIGHBORINFO_APP = 73,
+    TRACEROUTE_APP   = 70,
+    NEIGHBORINFO_APP = 71,
 
     // ── AirTAK private range (256–511) ─────────────────────────────────────────
     // Relayed by Meshtastic nodes but not decryptable without the game channel PSK.
