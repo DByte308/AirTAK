@@ -1198,6 +1198,14 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
         return false;
     }
 
+#ifndef AIRTAK_NATIVE_TEST
+    if (meta.portnum == Portnum::TEXT_MESSAGE_APP) {
+        Serial.printf("[MSG] queued pn=1 dest=%08X len=%u hop=%u ack=%d\n",
+            meta.dest, outgoing_len, hop_limit, want_ack);
+        Serial.flush();
+    }
+#endif
+
     if (want_ack && isAcknowledgedPortnum(meta.portnum)) {
         addRetryEntry(meta.portnum, meta.dest, msg_id, slot->index, hop_limit, outgoing, outgoing_len);
     }

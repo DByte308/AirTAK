@@ -257,6 +257,8 @@ int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t 
         return 0;
     }
 
+    Serial.printf("[CFG] commit group=%u size=%u\n", (unsigned)group, (unsigned)pb_len);
+
     bool restart_required = false;
     bool persist_failed = false;
     for (uint8_t i = 0; i < CONFIG_GROUP_COUNT; i++) {
@@ -264,8 +266,10 @@ int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t 
         ConfigGroup dirty_group = static_cast<ConfigGroup>(i);
         if (!FlashStore::write(dirty_group, s_staged_buffers[i], s_staged_sizes[i])) {
             persist_failed = true;
+            Serial.printf("[CFG] write FAIL group=%u\n", (unsigned)dirty_group);
             continue;
         }
+        Serial.printf("[CFG] write OK group=%u size=%u\n", (unsigned)dirty_group, (unsigned)s_staged_sizes[i]);
         memcpy(s_buffers[i], s_staged_buffers[i], s_staged_sizes[i]);
         s_sizes[i] = s_staged_sizes[i];
         if (config::groupRequiresRadioRestart(dirty_group)) {

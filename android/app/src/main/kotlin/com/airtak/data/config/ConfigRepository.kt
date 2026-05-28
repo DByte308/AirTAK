@@ -87,9 +87,6 @@ class ConfigRepository @Inject constructor(
     }
 
     fun apply(group: ConfigGroup, data: ByteArray) {
-        // Local cache reflects the staged value immediately so the UI feels
-        // responsive; an authoritative refresh happens on the next read.
-        _groupBytes.value = _groupBytes.value.toMutableMap().apply { put(group, data) }
         send(ConfigPayload.newBuilder()
             .setGroup(group)
             .setData(ByteString.copyFrom(data))

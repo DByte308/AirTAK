@@ -6,6 +6,7 @@
 #include "mesh/Router.h"
 #include "mesh/Portnums.h"
 #include "hal/GPS.h"
+#include "hal/Battery.h"
 #include "hal/Display.h"
 #include "game/PlayerState.h"
 #include "config/ConfigManager.h"
@@ -20,6 +21,7 @@ namespace airtak {
 
 static uint32_t s_node_id           = 0;
 static uint32_t s_last_nodeinfo_ms  = 0;
+static uint32_t s_last_telemetry_ms = 0;
 static uint32_t s_last_position_ms  = 0;
 static uint32_t s_known_node_count  = 0;
 
@@ -140,20 +142,52 @@ void MeshNode::broadcastNodeInfo(QueueHandle_t tx_queue) {
     s_last_nodeinfo_ms = millis();
 }
 
+static uint16_t serializeTelemetry(uint8_t* buf, uint16_t buf_len) {
+    uint16_t pos = 0;
+    float bat = Battery::level();
+    bool  has_bat = (bat >= 0.0f);
+    if (!has_bat) return 0;
+
+    // meshtastic.Telemetry: field 2 = device_metrics (sub-message)
+    // DeviceMetrics: field 2 = battery_level (fixed32)
+    uint8_t dm[16];
+    uint16_t dm_pos = 0;
+    dm_pos = encodeFixed32(dm, dm_pos, 2, *(uint32_t*)&bat);
+    uint16_t dm_len = dm_pos;
+
+    // field 2: device_metrics (length-delimited sub-message)
+    pos = encodeTag(buf, pos, 2, 2);
+    pos = encodeVarint(buf, pos, dm_len);
+    memcpy(buf + pos, dm, dm_len); pos += dm_len;
+
+    (void)buf_len;
+    return pos;
+}
+
+// ── MeshNode::broadcastTelemetry() ────────────────────────────────────────────
+void MeshNode::broadcastTelemetry(QueueHandle_t tx_queue) {
+    uint8_t buf[64];
+    uint16_t len = serializeTelemetry(buf, sizeof(buf));
+    if (len > 0) {
+        Router::sendPacket(Portnum::TELEMETRY_APP, 0xFFFFFFFF, buf, len, false, tx_queue);
+    }
+    s_last_telemetry_ms = millis();
+}
+
 // ── MeshNode::tick() ─────────────────────────────────────────────────────────
 void MeshNode::tick(QueueHandle_t tx_queue) {
     uint32_t now = millis();
 
-    // Periodic NODEINFO_APP every 3 hours (§13.2).
     if ((now - s_last_nodeinfo_ms) >= (defaults::NODEINFO_BROADCAST_INTERVAL_SECS * 1000UL)) {
         broadcastNodeInfo(tx_queue);
     }
 
-    // Smart beaconing heartbeat check.
+    if ((now - s_last_telemetry_ms) >= (defaults::TELEMETRY_BROADCAST_INTERVAL_SECS * 1000UL)) {
+        broadcastTelemetry(tx_queue);
+    }
+
     maybeTransmitPosition(tx_queue, nullptr);
 }
-
-// ── MeshNode::maybeTransmitPosition() ────────────────────────────────────────
 void MeshNode::maybeTransmitPosition(QueueHandle_t tx_queue, EventGroupHandle_t events) {
     if (!GPS::hasFix()) return;
 

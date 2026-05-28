@@ -158,6 +158,9 @@ constexpr uint32_t ROUTER_DUP_CACHE_TTL_MS = 60000; // 60 s expiry per entry
 // ── NODEINFO broadcast interval ───────────────────────────────────────────────
 constexpr uint32_t NODEINFO_BROADCAST_INTERVAL_SECS = 10800; // 3 hours (§13.2)
 
+// ── Telemetry broadcast interval ──────────────────────────────────────────────
+constexpr uint32_t TELEMETRY_BROADCAST_INTERVAL_SECS = 900;   // 15 minutes
+
 // ── Display ───────────────────────────────────────────────────────────────────
 constexpr uint32_t DISPLAY_MIN_REFRESH_MS = 60000; // 60 s min between full refreshes (§9.6)
 

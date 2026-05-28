@@ -142,21 +142,15 @@ void setup() {
 #endif
     Serial.flush();
     if (!airtak::config::FlashStore::init()) {
-#ifdef AIRTAK_FLASH_TEST
-        Serial.println("FLASH TEST: FlashStore init failed; using volatile defaults");
-#else
-        Serial.println("AirTAK: FlashStore init failed; using volatile defaults");
-#endif
+        Serial.println("[BOOT] FlashStore init FAILED - config changes won't persist!");
+        delay(2000);
     } else {
-#ifdef AIRTAK_FLASH_TEST
-        Serial.println("FLASH TEST: FlashStore OK");
-#else
-        Serial.println("AirTAK: FlashStore OK");
-#endif
-#if defined(AIRTAK_PLATFORM_ESP32) && defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
-        esp_ota_mark_app_valid_cancel_rollback();
-#endif
+        Serial.println("[BOOT] FlashStore init OK");
     }
+    Serial.flush();
+#if defined(AIRTAK_PLATFORM_ESP32) && defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
+    esp_ota_mark_app_valid_cancel_rollback();
+#endif
     Serial.flush();
     ledOn();
     wdtFeed();
@@ -199,7 +193,7 @@ void setup() {
     configASSERT(xTaskCreate(task_gps_parser,      "gps",      4096, nullptr, 3, nullptr) == pdPASS);
     configASSERT(xTaskCreate(task_ble_server,      "ble",      4096, nullptr, 3, nullptr) == pdPASS);
     configASSERT(xTaskCreate(task_config_apply,    "config",   2048, nullptr, 2, nullptr) == pdPASS);
-    configASSERT(xTaskCreate(task_display_refresh, "display",  2048, nullptr, 1, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_display_refresh, "display",  4096, nullptr, 1, nullptr) == pdPASS);
     configASSERT(xTaskCreate(task_battery_monitor, "battery",  2048, nullptr, 0, nullptr) == pdPASS);
 
 #ifdef AIRTAK_PHASE7_AUDIO

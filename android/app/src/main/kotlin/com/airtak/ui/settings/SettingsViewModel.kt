@@ -116,7 +116,8 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             config.groupBytes.collect { map ->
                 map[ConfigGroup.DEVICE]?.let { b -> tryDecode { DeviceConfig.parseFrom(b) } }?.let {
-                    _device.value = DeviceState(it.longName, it.shortName)
+                    val ns = DeviceState(it.longName, it.shortName)
+                    if (ns != _device.value) _device.value = ns
                 }
                 map[ConfigGroup.LORA]?.let { b -> tryDecode { LoraConfig.parseFrom(b) } }?.let {
                     _lora.value = LoraState(it.region, it.txPowerDbm, it.profilesList.toList())
@@ -129,13 +130,14 @@ class SettingsViewModel @Inject constructor(
                     )
                 }
                 map[ConfigGroup.POSITION]?.let { b -> tryDecode { PositionConfig.parseFrom(b) } }?.let {
-                    _position.value = PositionState(it.broadcastIntervalSecs, it.minTxIntervalSecs, it.smartBroadcast, it.gpsSource, it.positionChannelIndex)
+                    val ns = PositionState(it.broadcastIntervalSecs, it.minTxIntervalSecs, it.smartBroadcast, it.gpsSource, it.positionChannelIndex)
+                    if (ns != _position.value) _position.value = ns
                 }
                 map[ConfigGroup.POWER]?.let { b -> tryDecode { PowerConfig.parseFrom(b) } }?.let {
                     _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs, it.brightnessPct)
                 }
                 map[ConfigGroup.GAME]?.let { b -> tryDecode { GameConfig.parseFrom(b) } }?.let {
-                    _game.value = GameState(
+                    val ns = GameState(
                         it.callsign,
                         it.fireteamId,
                         it.squadId,
@@ -148,6 +150,7 @@ class SettingsViewModel @Inject constructor(
                         platoonChannelSlot = prefs.unitChannelSlot("platoon"),
                         companyChannelSlot = prefs.unitChannelSlot("company"),
                     )
+                    if (ns != _game.value) _game.value = ns
                 }
                 map[ConfigGroup.SECURITY]?.let { b -> tryDecode { SecurityConfig.parseFrom(b) } }?.let {
                     _security.value = SecurityState(it.maxBondedDevices)

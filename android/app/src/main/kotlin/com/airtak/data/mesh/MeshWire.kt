@@ -122,13 +122,13 @@ object MeshWire {
             writeTag(out, 3, WIRETYPE_VARINT); writeVarint(out, 1)
         }
         destNodeId?.let {
-            writeTag(out, 4, WIRETYPE_VARINT); writeVarint(out, it and 0xFFFF_FFFFL)
+            writeTag(out, 4, WIRETYPE_FIXED32); writeFixed32(out, it)
         }
         sourceNodeId?.let {
-            writeTag(out, 5, WIRETYPE_VARINT); writeVarint(out, it and 0xFFFF_FFFFL)
+            writeTag(out, 5, WIRETYPE_FIXED32); writeFixed32(out, it)
         }
         requestId?.let {
-            writeTag(out, 6, WIRETYPE_VARINT); writeVarint(out, it and 0xFFFF_FFFFL)
+            writeTag(out, 6, WIRETYPE_FIXED32); writeFixed32(out, it)
         }
         return out.toByteArray()
     }
@@ -323,7 +323,17 @@ object MeshWire {
                     if (field == 2) payload = buf.copyOfRange(i, end)
                     i = end
                 }
-                WIRETYPE_FIXED32 -> i += 4
+                WIRETYPE_FIXED32 -> {
+                    if (i + 4 > buf.size) return null
+                    val v = ByteBuffer.wrap(buf, i, 4).order(ByteOrder.LITTLE_ENDIAN).int.toLong() and 0xFFFF_FFFFL
+                    i += 4
+                    when (field) {
+                        4 -> destNodeId = if (v == 0L) 0xFFFF_FFFFL else v
+                        5 -> sourceNodeId = v
+                        6 -> requestId = v
+                        else -> { /* skip */ }
+                    }
+                }
                 WIRETYPE_FIXED64 -> i += 8
                 else -> return null
             }
@@ -349,6 +359,11 @@ object MeshWire {
             x = x ushr 7
         }
         out.add((x and 0x7FL).toByte())
+    }
+
+    private fun writeFixed32(out: MutableList<Byte>, v: Long) {
+        val buf = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(v.toInt())
+        out.addAll(buf.array().toList())
     }
 
     /** Returns (value, newIndex) or null on truncation. */

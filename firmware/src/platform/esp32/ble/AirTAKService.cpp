@@ -188,9 +188,22 @@ class ConfigRwCallbacks : public NimBLECharacteristicCallbacks {
 
         if (result == 0 && request.commit &&
             config::ConfigManager::isRadioRestartPending()) {
-            s_pending_config_restart      = true;
-            s_pending_config_group        = request.group;
-            s_pending_config_started_ms   = s_config_apply_started_ms;
+            ChannelManager::init();
+
+            // Send back updated config data so the app sees authoritative values.
+            {
+                airtak_ConfigPayload resp = airtak_ConfigPayload_init_zero;
+                resp.group = request.group;
+                resp.data.size = config::ConfigManager::readGroup(
+                    group, resp.data.bytes, sizeof(resp.data.bytes));
+                resp.commit = false;
+                uint8_t rbuf[sizeof(s_config_assembly)];
+                pb_ostream_t rs = pb_ostream_from_buffer(rbuf, sizeof(rbuf));
+                if (pb_encode(&rs, airtak_ConfigPayload_fields, &resp)) {
+                    sendFramed(s_config_rw, rbuf,
+                               static_cast<uint16_t>(rs.bytes_written), true);
+                }
+            }
             return;
         }
 
