@@ -63,6 +63,42 @@ public:
    static uint8_t channelHash(const uint8_t* psk, size_t psk_len,
                               uint8_t slot_index,
                               const char* channel_name = nullptr);
+
+    // ── PKI (public-key infrastructure) for DM encryption/decryption ──────
+    // Generate a Curve25519 keypair using a cryptographic RNG.
+    // pubkey_out and privkey_out must each point to 32-byte buffers.
+    static bool pkikeypair(uint8_t pubkey_out[32], uint8_t privkey_out[32]);
+
+    static constexpr size_t PKI_OVERHEAD_BYTES = 12; // MAC (8) + extraNonce (4)
+
+    // Encrypt a payload for a recipient using Curve25519 ECDH + AES-CCM.
+    //   our_privkey:    our 32-byte private key
+    //   remote_pubkey:  recipient's 32-byte public key
+    //   from_node:      our node ID
+    //   packet_id:      packet ID (from OTA header)
+    //   plaintext_len:  length of plaintext in bytes
+    //   plaintext:      plaintext payload
+    //   ciphertext_out: output buffer (must be plaintext_len + PKI_OVERHEAD_BYTES)
+    // Returns true on success.
+    static bool pkiEncrypt(const uint8_t our_privkey[32],
+                           const uint8_t remote_pubkey[32],
+                           uint32_t from_node, uint32_t packet_id,
+                           size_t plaintext_len, const uint8_t* plaintext,
+                           uint8_t* ciphertext_out);
+
+    // Decrypt a PKI-encrypted payload using Curve25519 ECDH + AES-CCM.
+    // Matches Meshtastic CryptoEngine::decryptCurve25519.
+    //   our_privkey:   our 32-byte private key
+    //   remote_pubkey: sender's 32-byte public key
+    //   from_node:     sender's node ID (from OTA header)
+    //   packet_id:     packet ID (from OTA header)
+    //   num_bytes:     total encrypted payload (includes PKI_OVERHEAD_BYTES)
+    //   bytes:         encrypted payload (in/out, decrypted in-place)
+    // Returns true on success.
+    static bool pkiDecrypt(const uint8_t our_privkey[32],
+                           const uint8_t remote_pubkey[32],
+                           uint32_t from_node, uint32_t packet_id,
+                           size_t num_bytes, uint8_t* bytes);
 };
 
 } // namespace airtak

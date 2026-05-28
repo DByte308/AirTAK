@@ -19,6 +19,7 @@ class MeshNode {
 public:
     // Phase 2.2: Initialize node — read platform identity, load callsign
     // from GameConfig, broadcast initial NODEINFO_APP on channel 0.
+    // Also loads or generates the Curve25519 PKI keypair.
     static void init();
 
     // Phase 2.2: Broadcast a NODEINFO_APP meshtastic.User packet to all nodes.
@@ -85,6 +86,19 @@ public:
     };
     static const RemoteNodeInfo* getRemoteNode(uint8_t index);
     static uint8_t remoteNodeCount();
+
+    // ── PKI keystore ───────────────────────────────────────────────────────
+    // Returns our 32-byte Curve25519 public key (generated at init).
+    static const uint8_t* pkiPublicKey();
+
+    // Returns our 32-byte Curve25519 private key.
+    static const uint8_t* pkiPrivateKey();
+
+    // Returns the remote node's public key if stored, or nullptr.
+    static const uint8_t* remotePublicKey(uint32_t node_id);
+
+    // Stores a remote node's public key (32 bytes).
+    static void storeRemotePublicKey(uint32_t node_id, const uint8_t pubkey[32]);
 };
 
 } // namespace airtak

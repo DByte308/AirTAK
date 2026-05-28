@@ -4,6 +4,7 @@
 
 #include "mesh/Router.h"
 #include "mesh/Crypto.h"
+#include "mesh/x25519.h"
 // NOTE: <Arduino.h> MUST be included before ChannelManager.h on ESP32.
 // esp32-hal-gpio.h defines the macro DISABLED=0x00; ChannelManager.h
 // issues #undef DISABLED before the ChannelRole enum class so the member
@@ -219,10 +220,13 @@ static bool readPositionRequestTarget(const uint8_t* data_pb, uint16_t data_len,
 
 static void parseNodeInfoPayload(const uint8_t* data_pb, uint16_t data_len,
                                   const char*& long_name, const char*& short_name,
-                                  const char*& node_id_str) {
+                                  const char*& node_id_str,
+                                  const uint8_t*& public_key, uint16_t& public_key_len) {
     long_name = nullptr;
     short_name = nullptr;
     node_id_str = nullptr;
+    public_key = nullptr;
+    public_key_len = 0;
     const uint8_t* inner = nullptr;
     uint16_t inner_len = 0;
     if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return;
@@ -257,6 +261,9 @@ static void parseNodeInfoPayload(const uint8_t* data_pb, uint16_t data_len,
                 memcpy(sn_buf, inner + pos, flen);
                 sn_buf[flen] = '\0';
                 short_name = sn_buf;
+            } else if (field == 8 && flen > 0) {
+                public_key = inner + pos;
+                public_key_len = static_cast<uint16_t>(flen);
             }
             pos += flen;
         } else {
@@ -689,21 +696,91 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         }
     }
     if (!slot) {
-        static uint32_t last_hash_log = 0;
-        if (millis() - last_hash_log > 3000) {
-            last_hash_log = millis();
+        // PKI fallback: if we have the sender's public key, try Curve25519 DM decrypt.
+        const uint8_t* remote_pub = MeshNode::remotePublicKey(hdr.src_node_id);
+        const uint8_t* our_priv   = MeshNode::pkiPrivateKey();
+        bool pki_eligible = (remote_pub && our_priv && payload_len >= Crypto::PKI_OVERHEAD_BYTES);
 #ifndef AIRTAK_NATIVE_TEST
-            if (hash_matched) {
-                Serial.printf("[DECFAIL] hash=0x%02X matched but decrypt fail src=%08X len=%u\n",
-                    hdr.channel_hash, hdr.src_node_id, payload_len);
-            } else {
-                Serial.printf("[HASH] no slot for hash=0x%02X src=%08X\n",
-                    hdr.channel_hash, hdr.src_node_id);
+        {
+            static uint32_t last_pki_diag = 0;
+            if (millis() - last_pki_diag > 3000) {
+                last_pki_diag = millis();
+                Serial.printf("[PKIDIAG] src=%08X ch=0x%02X rpub=%d priv=%d plen=%u pki_ok=%zu → eligible=%d\n",
+                    hdr.src_node_id, hdr.channel_hash,
+                    remote_pub ? 1 : 0, our_priv ? 1 : 0,
+                    payload_len, (size_t)Crypto::PKI_OVERHEAD_BYTES,
+                    pki_eligible ? 1 : 0);
+                Serial.flush();
             }
-            Serial.flush();
-#endif
         }
-        return;
+#endif
+        if (pki_eligible) {
+            uint8_t pki_decrypted[MESH_MAX_PAYLOAD_BYTES];
+            memcpy(pki_decrypted, payload, payload_len);
+            if (Crypto::pkiDecrypt(our_priv, remote_pub,
+                                   hdr.src_node_id, hdr.packet_id,
+                                   payload_len, pki_decrypted)) {
+                DataMetadata pki_meta;
+                size_t pki_ct_len = payload_len - Crypto::PKI_OVERHEAD_BYTES;
+                if (parseDataMetadata(pki_decrypted, pki_ct_len, pki_meta)) {
+                    // Re-route through the normal dispatch with PKI-decrypted payload.
+                    memcpy(decrypted, pki_decrypted, pki_ct_len);
+                    uint8_t saved_payload_len = static_cast<uint8_t>(pki_ct_len);
+                    payload_len = saved_payload_len;
+                    data_meta = pki_meta;
+                    data_valid = true;
+                    // Set a dummy slot so we don't trigger "no slot" again.
+                    slot = ChannelManager::primarySlot();
+                    if (!slot) {
+                        static uint32_t last_pki_log = 0;
+                        if (millis() - last_pki_log > 3000) {
+                            last_pki_log = millis();
+#ifndef AIRTAK_NATIVE_TEST
+                            Serial.printf("[PKIDEC] OK portnum=%u src=%08X len=%u\n",
+                                (unsigned)static_cast<uint32_t>(pki_meta.portnum),
+                                hdr.src_node_id, saved_payload_len);
+                            Serial.flush();
+#endif
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!data_valid) {
+            // Plaintext fallback: if the channel hash doesn't match any slot
+            // AND PKI decrypt also failed (or keys unavailable), try parsing
+            // the raw payload as an unencrypted Data protobuf.  This handles
+            // interop with Meshtastic devices that use channel hash 0x00
+            // (no PSK) — their NODEINFO_APP broadcasts arrive unencrypted
+            // and we need to extract the public key before PKI DMs can work.
+            DataMetadata pt_meta;
+            if (parseDataMetadata(payload, payload_len, pt_meta)) {
+                memcpy(decrypted, payload, payload_len);
+                data_meta = pt_meta;
+                data_valid = true;
+                slot = ChannelManager::primarySlot();
+                if (!slot) slot = ChannelManager::slotByIndex(0);
+            }
+        }
+
+        if (!data_valid) {
+            static uint32_t last_hash_log = 0;
+            if (millis() - last_hash_log > 3000) {
+                last_hash_log = millis();
+#ifndef AIRTAK_NATIVE_TEST
+                if (hash_matched) {
+                    Serial.printf("[DECFAIL] hash=0x%02X matched but decrypt fail src=%08X len=%u\n",
+                        hdr.channel_hash, hdr.src_node_id, payload_len);
+                } else {
+                    Serial.printf("[HASH] no slot for hash=0x%02X src=%08X\n",
+                        hdr.channel_hash, hdr.src_node_id);
+                }
+                Serial.flush();
+#endif
+            }
+            return;
+        }
     }
 
     uint32_t dup_key = hdr.packet_id;
@@ -791,16 +868,22 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         const char* long_name = nullptr;
         const char* short_name = nullptr;
         const char* id_str = nullptr;
-        parseNodeInfoPayload(decrypted, payload_len, long_name, short_name, id_str);
+        const uint8_t* pubkey = nullptr;
+        uint16_t pubkey_len = 0;
+        parseNodeInfoPayload(decrypted, payload_len, long_name, short_name, id_str, pubkey, pubkey_len);
         if (++nic <= 5) {
 #ifndef AIRTAK_NATIVE_TEST
-            Serial.printf("[NODEINFO] src=%08X id=%s name=%s short=%s\n",
+            Serial.printf("[NODEINFO] src=%08X id=%s name=%s short=%s pk=%s\n",
                 hdr.src_node_id,
                 id_str ? id_str : "?",
                 long_name ? long_name : "?",
-                short_name ? short_name : "?");
+                short_name ? short_name : "?",
+                (pubkey && pubkey_len >= 32) ? "yes" : "no");
             Serial.flush();
 #endif
+        }
+        if (pubkey && pubkey_len >= 32) {
+            MeshNode::storeRemotePublicKey(hdr.src_node_id, pubkey);
         }
         MeshNode::onNodeInfoReceived(hdr.src_node_id, long_name, short_name);
     }
@@ -1017,15 +1100,72 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         // Still relay AIRTAK_ACK so it can reach back to the original sender.
     }
 
-    // ── Generate AIRTAK_ACK when sender requested acknowledgment (§8.9) ───────
+    // ── Generate ACK when sender requested acknowledgment (§8.9) ─────────
     // Never ACK a AIRTAK_ACK itself (prevents infinite ACK loops).
     // Only ACK if this packet is addressed to us — intermediate relays must not
     // ACK unicast packets destined for another node (§8.9).
+    // For Meshtastic DMs (standard portnums + PKI decrypted), send a
+    // Routing/Error NONE ACK which Meshtastic's ReliableRouter understands.
     if (hdr.wantAck() && data_valid && isPacketAddressedToMe(hdr, data_meta)
         && portnum_value != static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
         uint32_t req_id = data_meta.request_id;
         if (req_id != 0) {
-            // Build Data proto bytes for AIRTAK_ACK (portnum 261 = 0x85 0x02 as varint).
+            bool is_meshtastic_dm = (portnum_value == static_cast<uint32_t>(Portnum::TEXT_MESSAGE_APP) ||
+                                     portnum_value == static_cast<uint32_t>(Portnum::POSITION_APP) ||
+                                     portnum_value == static_cast<uint32_t>(Portnum::NODEINFO_APP) ||
+                                     portnum_value == static_cast<uint32_t>(Portnum::TELEMETRY_APP) ||
+                                     portnum_value == static_cast<uint32_t>(Portnum::ADMIN_APP) ||
+                                     portnum_value == static_cast<uint32_t>(Portnum::TRACEROUTE_APP));
+
+            if (is_meshtastic_dm) {
+                // Build Routing ACK: Data{portnum=8, payload=Routing{error_reason=0}}
+                // Routing NONE: field 3 (varint) = 0 → 0x18 0x00
+                uint8_t ack_data[32]; uint8_t ap = 0;
+                ack_data[ap++] = 0x08; ack_data[ap++] = 0x08;               // portnum=8 (ROUTING_APP)
+                ack_data[ap++] = 0x12; ack_data[ap++] = 0x02;               // Data.payload tag+len=2
+                ack_data[ap++] = 0x18; ack_data[ap++] = 0x00;               // error_reason=NONE
+                ack_data[ap++] = 0x30; ap += writeVarU32(ack_data + ap, req_id); // Data.request_id
+
+                uint8_t ack_hop = hdr.hopStart();
+                if (ack_hop == 0) ack_hop = defaults::ACK_HOP_START_FALLBACK;
+
+                // Send ACK on the primary channel (Meshtastic convention:
+                // ACKs go on the primary, AES-encrypted with its PSK).
+                const ChannelSlot* ack_slot = ChannelManager::primarySlot();
+                if (!ack_slot) ack_slot = slot;
+                if (!ack_slot) return;
+
+                OtaHeader ack_hdr;
+                ack_hdr.dest_node_id  = hdr.src_node_id;
+                ack_hdr.src_node_id   = MeshNode::nodeId();
+                ack_hdr.packet_id     = nextPacketId();
+                ack_hdr.flags         = ((ack_hop & 0x07) << 5) | (ack_hop & 0x07);
+                ack_hdr.channel_hash  = ack_slot->channel_hash;
+                ack_hdr.next_hop_low  = 0;
+                ack_hdr.relay_node_low = 0;
+
+                uint8_t ack_enc[64];
+                memcpy(ack_enc, ack_data, ap);
+                if (ack_slot->psk_len > 0) {
+                    uint8_t nonce2[AES_NONCE_BYTES];
+                    Crypto::buildNonce(ack_hdr.packet_id, ack_hdr.src_node_id, nonce2);
+                    Crypto::crypt(ack_slot->aes_key, ack_slot->aes_key_len, nonce2, ack_enc, ap);
+                }
+
+                PooledPacket* ack_pkt = PacketPool::alloc();
+                if (ack_pkt) {
+                    buildOtaHeader(ack_pkt->data, ack_hdr);
+                    memcpy(ack_pkt->data + OTA_HEADER_BYTES, ack_enc, ap);
+                    ack_pkt->length = OTA_HEADER_BYTES + ap;
+                    ack_pkt->phy_profile_index = ack_slot->phy_profile_index;
+                    if (xQueueSendToBack(tx_queue, &ack_pkt, 0) != pdTRUE) {
+                        PacketPool::free(ack_pkt);
+                    } else {
+                        xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
+                    }
+                }
+            } else {
+            // AirTAK internal ACK (portnum 261) for game traffic.
             uint8_t ack_data[64]; uint8_t ap = 0;
             ack_data[ap++] = 0x08; ack_data[ap++] = 0x85; ack_data[ap++] = 0x02; // portnum=261
             // Build inner AirTAKAck sub-message.
@@ -1068,6 +1208,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                     xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
                 }
             }
+            } // end AirTAK ACK branch
         }
     }
 
@@ -1313,9 +1454,54 @@ void Router::sendPacket(Portnum portnum, uint32_t dest,
         return;
     }
 
+    // ── PKI DM path: if unicast to a Meshtastic node whose public key we
+    //    have, use Curve25519 ECDH encryption on ch=0x00 (§Meshtastic DM spec).
+    bool use_pki = false;
+    if (dest != 0xFFFFFFFF && portnum == Portnum::TEXT_MESSAGE_APP) {
+        const uint8_t* remote_pubkey = MeshNode::remotePublicKey(dest);
+        const uint8_t* our_privkey   = MeshNode::pkiPrivateKey();
+        if (remote_pubkey && our_privkey) {
+            uint8_t pki_out[MESH_MAX_PAYLOAD_BYTES];
+            size_t pki_len = data_len + Crypto::PKI_OVERHEAD_BYTES;
+            if (pki_len <= MESH_MAX_PAYLOAD_BYTES &&
+                Crypto::pkiEncrypt(our_privkey, remote_pubkey,
+                                   MeshNode::nodeId(), packet_id,
+                                   data_len, data_pb, pki_out)) {
+                // Build OTA header with ch=0x00 (Meshtastic PKI convention)
+                OtaHeader pki_hdr;
+                pki_hdr.dest_node_id  = dest;
+                pki_hdr.src_node_id   = MeshNode::nodeId();
+                pki_hdr.packet_id     = packet_id;
+                pki_hdr.flags         = ((hop_limit & 0x07) << 5)
+                                     | (want_ack ? (1 << 3) : 0)
+                                     | (hop_limit & 0x07);
+                pki_hdr.channel_hash  = 0x00;
+                pki_hdr.next_hop_low  = 0;
+                pki_hdr.relay_node_low = 0;
+
+                PooledPacket* pkt = PacketPool::alloc();
+                if (pkt) {
+                    buildOtaHeader(pkt->data, pki_hdr);
+                    memcpy(pkt->data + OTA_HEADER_BYTES, pki_out, pki_len);
+                    pkt->length = OTA_HEADER_BYTES + pki_len;
+                    const ChannelSlot* primary = ChannelManager::primarySlot();
+                    pkt->phy_profile_index = primary ? primary->phy_profile_index : slot->phy_profile_index;
+                    if (xQueueSendToBack(tx_queue, &pkt, 0) != pdTRUE) {
+                        PacketPool::free(pkt);
+                        return;
+                    }
+                    xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
+                    use_pki = true;
+                }
+            }
+        }
+    }
+
+    if (!use_pki) {
     if (!queueOtaFrame(slot, dest, hop_limit, want_ack, packet_id,
                        data_pb, data_len, tx_queue)) {
         return;
+    }
     }
 
     if (want_ack && isAcknowledgedPortnum(portnum)) {

@@ -11,13 +11,55 @@
 
 #include "mesh/Crypto.h"
 #include <cstring>
+#include <Arduino.h>
 
 static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__,
               "AirTAK Crypto nonce construction requires little-endian host");
 
+#define MBEDTLS_ALLOW_PRIVATE_ACCESS
 #include <mbedtls/aes.h>
+#include <mbedtls/sha256.h>
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/ccm.h>
+#include "mesh/x25519.h"
+
+#if defined(AIRTAK_PLATFORM_ESP32)
+#include <esp_random.h>
+#endif
 
 namespace airtak {
+
+// ── RNG wrapper for mbedTLS CTR_DRBG (PKI keygen) ──────────────────────────
+#if defined(AIRTAK_PLATFORM_ESP32)
+static int hwRngCallback(void*, unsigned char* out, size_t len) {
+    while (len >= 4) {
+        uint32_t r = esp_random();
+        memcpy(out, &r, 4);
+        out += 4; len -= 4;
+    }
+    if (len) {
+        uint32_t r = esp_random();
+        memcpy(out, &r, len);
+    }
+    return 0;
+}
+#define PKI_RNG_CALLBACK hwRngCallback
+#define PKI_RNG_CTX       nullptr
+#else
+static mbedtls_ctr_drbg_context s_drbg;
+static mbedtls_entropy_context  s_entropy;
+static bool s_drbg_ready = false;
+static void ensureDrbg() {
+    if (s_drbg_ready) return;
+    mbedtls_ctr_drbg_init(&s_drbg);
+    mbedtls_entropy_init(&s_entropy);
+    mbedtls_ctr_drbg_seed(&s_drbg, mbedtls_entropy_func, &s_entropy, nullptr, 0);
+    s_drbg_ready = true;
+}
+#define PKI_RNG_CALLBACK mbedtls_ctr_drbg_random
+#define PKI_RNG_CTX      (&s_drbg)
+#endif
 
 void Crypto::deriveKey(const uint8_t* psk, size_t psk_len,
                        uint8_t key_out[AES_MAX_KEY_BYTES], uint8_t& key_len_out) {
@@ -104,6 +146,111 @@ uint8_t Crypto::channelHash(const uint8_t* psk, size_t psk_len,
     }
     for (size_t i = 0; i < PSK_MAX_BYTES; i++) hash ^= padded[i];
     return hash;
+}
+
+// ── PKI: Curve25519 keypair generation and encryption/decryption ──────────
+
+bool Crypto::pkikeypair(uint8_t pubkey_out[32], uint8_t privkey_out[32]) {
+#if !defined(AIRTAK_PLATFORM_ESP32)
+    ensureDrbg();
+#endif
+    uint8_t seed[32];
+    int ret = PKI_RNG_CALLBACK(PKI_RNG_CTX, seed, 32);
+    if (ret != 0) return false;
+    return x25519_keypair(pubkey_out, privkey_out, seed);
+}
+
+bool Crypto::pkiEncrypt(const uint8_t our_privkey[32],
+                        const uint8_t remote_pubkey[32],
+                        uint32_t from_node, uint32_t packet_id,
+                        size_t plaintext_len, const uint8_t* plaintext,
+                        uint8_t* ciphertext_out) {
+    uint8_t shared_secret[32];
+    if (!x25519_shared_secret(shared_secret, our_privkey, remote_pubkey))
+        return false;
+
+    uint8_t shared_key[32];
+    mbedtls_sha256(shared_secret, 32, shared_key, 0);
+
+    uint32_t extraNonce;
+#if !defined(AIRTAK_PLATFORM_ESP32)
+    ensureDrbg();
+#endif
+    if (PKI_RNG_CALLBACK(PKI_RNG_CTX, reinterpret_cast<uint8_t*>(&extraNonce), 4) != 0)
+        return false;
+
+    // Meshtastic CCM uses L=2 → 13-byte nonce.  The 13-byte field is
+    //   nonce[0..3]  = packet_id (LE)
+    //   nonce[4..7]  = extraNonce (LE)  — overwrites packet_id high bytes
+    //   nonce[8..11] = from_node (LE)
+    //   nonce[12]    = 0
+    uint8_t nonce13[13];
+    memset(nonce13, 0, sizeof(nonce13));
+    memcpy(nonce13, &packet_id, 4);
+    memcpy(nonce13 + 4, &extraNonce, 4);
+    memcpy(nonce13 + 8, &from_node, 4);
+
+    mbedtls_ccm_context ccm;
+    mbedtls_ccm_init(&ccm);
+    int ret = mbedtls_ccm_setkey(&ccm, MBEDTLS_CIPHER_ID_AES, shared_key, 256);
+    if (ret != 0) { mbedtls_ccm_free(&ccm); return false; }
+
+    if (plaintext_len > 0 && plaintext) {
+        memcpy(ciphertext_out, plaintext, plaintext_len);
+    }
+
+    uint8_t mac[8];
+    ret = mbedtls_ccm_encrypt_and_tag(&ccm, plaintext_len,
+                                       nonce13, 13,
+                                       nullptr, 0,
+                                       ciphertext_out, ciphertext_out,
+                                       mac, 8);
+    mbedtls_ccm_free(&ccm);
+    if (ret != 0) return false;
+
+    memcpy(ciphertext_out + plaintext_len, mac, 8);
+    memcpy(ciphertext_out + plaintext_len + 8, &extraNonce, 4);
+
+    return true;
+}
+
+bool Crypto::pkiDecrypt(const uint8_t our_privkey[32],
+                        const uint8_t remote_pubkey[32],
+                        uint32_t from_node, uint32_t packet_id,
+                        size_t num_bytes, uint8_t* bytes) {
+    if (num_bytes < PKI_OVERHEAD_BYTES) return false;
+
+    const uint8_t* mac_ptr    = bytes + num_bytes - PKI_OVERHEAD_BYTES;
+    uint32_t extraNonce;
+    memcpy(&extraNonce, mac_ptr + 8, 4);
+    size_t ct_len = num_bytes - PKI_OVERHEAD_BYTES;
+
+    uint8_t shared_secret[32];
+    if (!x25519_shared_secret(shared_secret, our_privkey, remote_pubkey))
+        return false;
+
+    uint8_t shared_key[32];
+    mbedtls_sha256(shared_secret, 32, shared_key, 0);
+
+    // Meshtastic CCM L=2 → 13-byte nonce matching initNonce layout.
+    uint8_t nonce13[13];
+    memset(nonce13, 0, sizeof(nonce13));
+    memcpy(nonce13, &packet_id, 4);
+    memcpy(nonce13 + 4, &extraNonce, 4);
+    memcpy(nonce13 + 8, &from_node, 4);
+
+    mbedtls_ccm_context ccm;
+    mbedtls_ccm_init(&ccm);
+    int ret = mbedtls_ccm_setkey(&ccm, MBEDTLS_CIPHER_ID_AES, shared_key, 256);
+    if (ret != 0) { mbedtls_ccm_free(&ccm); return false; }
+
+    ret = mbedtls_ccm_auth_decrypt(&ccm, ct_len,
+                                    nonce13, 13,
+                                    nullptr, 0,
+                                    bytes, bytes,
+                                    mac_ptr, 8);
+    mbedtls_ccm_free(&ccm);
+    return (ret == 0);
 }
 
 } // namespace airtak

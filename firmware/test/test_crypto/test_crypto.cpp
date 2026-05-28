@@ -14,6 +14,7 @@
 
 #include <unity.h>
 #include "mesh/Crypto.h"
+#include "mesh/x25519.h"
 #include "config.h"
 #include <cstring>
 
@@ -234,6 +235,170 @@ void test_channel_hash_slot1_differs_from_slot0_xor() {
    uint8_t hash1 = Crypto::channelHash(LONGFAST_PSK, 32, 1);
     TEST_ASSERT_EQUAL(hash0, hash1); // XOR is used for ALL slots (Meshtastic-compatible)
 }
+
+// ── X25519 keypair tests ────────────────────────────────────────────────────
+
+void test_x25519_keypair_generates_valid_keys() {
+    uint8_t seed[32];
+    for (int i = 0; i < 32; i++) seed[i] = (uint8_t)(i + 1);
+    uint8_t pub[32], priv[32];
+    TEST_ASSERT_TRUE(x25519_keypair(pub, priv, seed));
+
+    uint8_t zero[32] = {};
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(pub, zero, 32));
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(priv, zero, 32));
+}
+
+void test_x25519_keypair_deterministic() {
+    uint8_t seed[32];
+    for (int i = 0; i < 32; i++) seed[i] = 0xAA;
+    uint8_t pub1[32], priv1[32], pub2[32], priv2[32];
+    TEST_ASSERT_TRUE(x25519_keypair(pub1, priv1, seed));
+    TEST_ASSERT_TRUE(x25519_keypair(pub2, priv2, seed));
+    TEST_ASSERT_EQUAL_MEMORY(pub1, pub2, 32);
+    TEST_ASSERT_EQUAL_MEMORY(priv1, priv2, 32);
+}
+
+void test_x25519_ecdh_symmetric() {
+    uint8_t seed_a[32], seed_b[32];
+    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
+    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32];
+    TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
+    TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
+
+    uint8_t shared_ab[32], shared_ba[32];
+    TEST_ASSERT_TRUE(x25519_shared_secret(shared_ab, priv_a, pub_b));
+    TEST_ASSERT_TRUE(x25519_shared_secret(shared_ba, priv_b, pub_a));
+    TEST_ASSERT_EQUAL_MEMORY(shared_ab, shared_ba, 32);
+
+    uint8_t zero[32] = {};
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(shared_ab, zero, 32));
+}
+
+void test_x25519_rejects_zero_shared_secret() {
+    // All-zero public key produces all-zero shared secret → rejected
+    uint8_t priv[32];
+    for (int i = 0; i < 32; i++) priv[i] = 0x01;
+    uint8_t zero_pub[32] = {};
+    uint8_t shared[32];
+    TEST_ASSERT_FALSE(x25519_shared_secret(shared, priv, zero_pub));
+}
+
+// ── PKI encrypt/decrypt tests ───────────────────────────────────────────────
+
+void test_pki_encrypt_decrypt_roundtrip() {
+    uint8_t seed_a[32], seed_b[32];
+    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
+    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32];
+    TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
+    TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
+
+    uint8_t plaintext[64];
+    for (size_t i = 0; i < sizeof(plaintext); i++) plaintext[i] = (uint8_t)(i * 7 + 13);
+
+    uint8_t ciphertext[sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES];
+    TEST_ASSERT_TRUE(Crypto::pkiEncrypt(priv_a, pub_b, 0xDEADBEEF, 0x00000042,
+                                         sizeof(plaintext), plaintext, ciphertext));
+
+    uint8_t recovered[sizeof(plaintext)];
+    memcpy(recovered, ciphertext, sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES);
+    TEST_ASSERT_TRUE(Crypto::pkiDecrypt(priv_b, pub_a, 0xDEADBEEF, 0x00000042,
+                                         sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES, recovered));
+    TEST_ASSERT_EQUAL_MEMORY(plaintext, recovered, sizeof(plaintext));
+}
+
+void test_pki_decrypt_fails_with_wrong_key() {
+    uint8_t seed_a[32], seed_b[32], seed_c[32];
+    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); seed_c[i] = (uint8_t)0xFF; }
+    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32], pub_c[32], priv_c[32];
+    TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
+    TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
+    TEST_ASSERT_TRUE(x25519_keypair(pub_c, priv_c, seed_c));
+
+    uint8_t plaintext[32];
+    for (size_t i = 0; i < sizeof(plaintext); i++) plaintext[i] = (uint8_t)i;
+
+    uint8_t ciphertext[sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES];
+    TEST_ASSERT_TRUE(Crypto::pkiEncrypt(priv_a, pub_b, 0x11111111, 1,
+                                         sizeof(plaintext), plaintext, ciphertext));
+
+    // Decrypt with wrong key (C's keypair instead of B's)
+    uint8_t recovered[sizeof(plaintext)];
+    memcpy(recovered, ciphertext, sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES);
+    TEST_ASSERT_FALSE(Crypto::pkiDecrypt(priv_c, pub_a, 0x11111111, 1,
+                                          sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES, recovered));
+}
+
+void test_pki_decrypt_detects_bad_mac() {
+    uint8_t seed_a[32], seed_b[32];
+    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
+    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32];
+    TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
+    TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
+
+    uint8_t plaintext[16];
+    memset(plaintext, 0x42, 16);
+
+    size_t total = 16 + Crypto::PKI_OVERHEAD_BYTES;
+    uint8_t ciphertext[16 + Crypto::PKI_OVERHEAD_BYTES];
+    TEST_ASSERT_TRUE(Crypto::pkiEncrypt(priv_a, pub_b, 0xAAAA, 99,
+                                         16, plaintext, ciphertext));
+
+    // Corrupt the last byte (extraNonce)
+    ciphertext[total - 1] ^= 0xFF;
+
+    uint8_t recovered[16];
+    memcpy(recovered, ciphertext, total);
+    TEST_ASSERT_FALSE(Crypto::pkiDecrypt(priv_b, pub_a, 0xAAAA, 99, total, recovered));
+}
+
+void test_pki_encrypt_produces_different_output_for_different_inputs() {
+    uint8_t seed_a[32], seed_b[32];
+    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
+    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32];
+    TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
+    TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
+
+    uint8_t plaintext[16];
+    memset(plaintext, 0x13, 16);
+
+    uint8_t ct1[16 + Crypto::PKI_OVERHEAD_BYTES];
+    uint8_t ct2[16 + Crypto::PKI_OVERHEAD_BYTES];
+    TEST_ASSERT_TRUE(Crypto::pkiEncrypt(priv_a, pub_b, 0x1111, 1, 16, plaintext, ct1));
+    TEST_ASSERT_TRUE(Crypto::pkiEncrypt(priv_a, pub_b, 0x1111, 2, 16, plaintext, ct2));
+
+    // Different packet IDs should produce different ciphertext
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(ct1, ct2, sizeof(ct1)));
+}
+
+void test_pki_encrypt_empty_payload() {
+    uint8_t seed_a[32], seed_b[32];
+    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
+    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32];
+    TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
+    TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
+
+    uint8_t ciphertext[Crypto::PKI_OVERHEAD_BYTES];
+    TEST_ASSERT_TRUE(Crypto::pkiEncrypt(priv_a, pub_b, 0xDEAD, 42, 0, nullptr, ciphertext));
+
+    uint8_t recovered[Crypto::PKI_OVERHEAD_BYTES];
+    memcpy(recovered, ciphertext, Crypto::PKI_OVERHEAD_BYTES);
+    TEST_ASSERT_TRUE(Crypto::pkiDecrypt(priv_b, pub_a, 0xDEAD, 42, Crypto::PKI_OVERHEAD_BYTES, recovered));
+    // Empty payload: nothing to compare
+}
+
+void test_pki_decrypt_rejects_too_short() {
+    uint8_t buf[1] = {0};
+    TEST_ASSERT_FALSE(Crypto::pkiDecrypt(nullptr, nullptr, 0, 0, 1, buf));
+}
+
+void test_crypto_pkikeypair_produces_valid_keys() {
+    uint8_t pub[32], priv[32];
+    TEST_ASSERT_TRUE(Crypto::pkikeypair(pub, priv));
+    uint8_t zero[32] = {};
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(pub, zero, 32));
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(priv, zero, 32));
+}
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_key_derivation_aes128_zero_pad);
@@ -253,5 +418,16 @@ int main(int argc, char** argv) {
     RUN_TEST(test_channel_hash_slot0_meshtastic_longfast_interop);
     RUN_TEST(test_channel_hash_slot0_name_changes_hash);
     RUN_TEST(test_channel_hash_slot1_differs_from_slot0_xor);
+    RUN_TEST(test_x25519_keypair_generates_valid_keys);
+    RUN_TEST(test_x25519_keypair_deterministic);
+    RUN_TEST(test_x25519_ecdh_symmetric);
+    RUN_TEST(test_x25519_rejects_zero_shared_secret);
+    RUN_TEST(test_pki_encrypt_decrypt_roundtrip);
+    RUN_TEST(test_pki_decrypt_fails_with_wrong_key);
+    RUN_TEST(test_pki_decrypt_detects_bad_mac);
+    RUN_TEST(test_pki_encrypt_produces_different_output_for_different_inputs);
+    RUN_TEST(test_pki_encrypt_empty_payload);
+    RUN_TEST(test_pki_decrypt_rejects_too_short);
+    RUN_TEST(test_crypto_pkikeypair_produces_valid_keys);
     return UNITY_END();
 }

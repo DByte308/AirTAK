@@ -5,12 +5,15 @@
 #include "mesh/MeshNode.h"
 #include "mesh/Router.h"
 #include "mesh/Portnums.h"
+#include "mesh/Crypto.h"
+#include "mesh/x25519.h"
 #include "hal/GPS.h"
 #include "hal/Battery.h"
 #include "hal/Display.h"
 #include "game/PlayerState.h"
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
+#include "config/FlashStore.h"
 #include "platform/Platform.h"
 #include "config.h"
 #include <Arduino.h>
@@ -18,6 +21,11 @@
 #include <cstdio>
 
 namespace airtak {
+
+// PKI keypair — loaded from flash or generated at init.
+static uint8_t s_pki_public_key[32]  = {};
+static uint8_t s_pki_private_key[32] = {};
+static bool    s_pki_ready           = false;
 
 static uint32_t s_node_id           = 0;
 static uint32_t s_last_nodeinfo_ms  = 0;
@@ -60,7 +68,7 @@ static uint16_t encodeFixed32(uint8_t* buf, uint16_t pos, uint32_t field, uint32
 // ── serializeUser() ───────────────────────────────────────────────────────────
 // Serializes a meshtastic.User proto for NODEINFO_APP (§13.2).
 // Fields: id(1), long_name(2), short_name(3), macaddr(4),
-//         hw_model(5), is_licensed(6), role(7).
+//         hw_model(5), is_licensed(6), role(7), public_key(8).
 static uint16_t serializeUser(uint8_t* buf, uint16_t buf_len) {
     // id: "!XXXXXXXX" where X = lower 8 hex digits of node_id (Meshtastic convention).
     char id_str[12];
@@ -87,6 +95,9 @@ static uint16_t serializeUser(uint8_t* buf, uint16_t buf_len) {
     pos = encodeTag   (buf, pos, 6, 0); pos = encodeVarint(buf, pos, 0);
     // field 7: role = 0 (CLIENT)
     pos = encodeTag   (buf, pos, 7, 0); pos = encodeVarint(buf, pos, 0);
+    // field 8: public_key — 32-byte placeholder. Any non-zero bytes unblock
+    // Meshtastic PKI DM check; proper Curve25519 keygen is future work.
+    pos = encodeBytes(buf, pos, 8, s_pki_public_key, sizeof(s_pki_public_key));
 
     (void)buf_len;
     return pos;
@@ -129,6 +140,24 @@ void MeshNode::init() {
     s_node_id = platform::nodeId();
     s_last_nodeinfo_ms = millis();
     s_last_telemetry_ms = millis();
+
+    // Load or generate Curve25519 PKI keypair.
+    uint8_t kp_buf[64];
+    config::FlashStore::init();
+    size_t stored = config::FlashStore::read(config::ConfigGroup::PKI_KEYPAIR,
+                                             kp_buf, sizeof(kp_buf));
+    if (stored == 64) {
+        memcpy(s_pki_private_key, kp_buf, 32);
+        memcpy(s_pki_public_key,  kp_buf + 32, 32);
+        s_pki_ready = true;
+    } else {
+        if (Crypto::pkikeypair(s_pki_public_key, s_pki_private_key)) {
+            memcpy(kp_buf, s_pki_private_key, 32);
+            memcpy(kp_buf + 32, s_pki_public_key, 32);
+            config::FlashStore::write(config::ConfigGroup::PKI_KEYPAIR, kp_buf, 64);
+            s_pki_ready = true;
+        }
+    }
 }
 
 // ── MeshNode::scheduleStartupBurst() ──────────────────────────────────────────
@@ -157,36 +186,14 @@ void MeshNode::scheduleStartupBurst() {
 
 // ── MeshNode::broadcastNodeInfo() ────────────────────────────────────────────
 void MeshNode::broadcastNodeInfo(QueueHandle_t tx_queue) {
-    uint8_t buf[256];
-    uint16_t pos = 0;
-
-    // NodeInfo field 1: num (uint32, our node ID)
-    pos = encodeTag(buf, pos, 1, 0);
-    pos = encodeVarint(buf, pos, s_node_id);
-
-    // NodeInfo field 2: user (length-delimited sub-message)
+    // The NODEINFO_APP portnum expects a bare meshtastic.User protobuf as
+    // the Data.payload — NOT a meshtastic.NodeInfo wrapping it.
+    // (Meshtastic NodeInfoModule registers with &meshtastic_User_msg.)
     uint8_t user_buf[128];
     uint16_t user_len = serializeUser(user_buf, sizeof(user_buf));
-    if (user_len > 0) {
-        pos = encodeBytes(buf, pos, 2, user_buf, user_len);
-    }
+    if (user_len == 0) return;
 
-    // NodeInfo field 3: position (length-delimited sub-message, if we have a fix)
-    if (GPS::hasFix()) {
-        uint8_t pos_buf[64];
-        uint16_t pos_len = serializePosition(pos_buf, sizeof(pos_buf));
-        if (pos_len > 0) {
-            pos = encodeBytes(buf, pos, 3, pos_buf, pos_len);
-        }
-    }
-
-    if (pos > 0) {
-#ifndef AIRTAK_NATIVE_TEST
-        Serial.printf("[BCAST] NODEINFO len=%u\n", pos);
-        Serial.flush();
-#endif
-        Router::sendPacket(Portnum::NODEINFO_APP, 0xFFFFFFFF, buf, pos, false, tx_queue);
-    }
+    Router::sendPacket(Portnum::NODEINFO_APP, 0xFFFFFFFF, user_buf, user_len, false, tx_queue);
     s_last_nodeinfo_ms = millis();
 }
 
@@ -327,6 +334,8 @@ struct RemoteNode {
     float    battery_level;
     bool     has_battery;
     uint32_t last_seen_ms;
+    uint8_t  public_key[32];
+    bool     has_public_key;
 };
 
 static RemoteNode s_remote_nodes[MAX_KNOWN_NODES];
@@ -344,6 +353,7 @@ static RemoteNode* findOrCreateRemote(uint32_t src_node_id) {
     memset(&node, 0, sizeof(node));
     node.node_id = src_node_id;
     node.battery_level = -1.0f;
+    node.has_public_key = false;
     node.last_seen_ms = millis();
     s_known_id_count++;
     s_known_node_count = s_known_id_count;
@@ -422,6 +432,30 @@ const MeshNode::RemoteNodeInfo* MeshNode::getRemoteNode(uint8_t index) {
 
 uint8_t MeshNode::remoteNodeCount() {
     return s_known_id_count;
+}
+
+const uint8_t* MeshNode::pkiPublicKey() {
+    return s_pki_ready ? s_pki_public_key : nullptr;
+}
+
+const uint8_t* MeshNode::pkiPrivateKey() {
+    return s_pki_ready ? s_pki_private_key : nullptr;
+}
+
+const uint8_t* MeshNode::remotePublicKey(uint32_t node_id) {
+    for (uint8_t i = 0; i < s_known_id_count; i++) {
+        if (s_remote_nodes[i].node_id == node_id && s_remote_nodes[i].has_public_key) {
+            return s_remote_nodes[i].public_key;
+        }
+    }
+    return nullptr;
+}
+
+void MeshNode::storeRemotePublicKey(uint32_t node_id, const uint8_t pubkey[32]) {
+    RemoteNode* node = findOrCreateRemote(node_id);
+    if (!node) return;
+    memcpy(node->public_key, pubkey, 32);
+    node->has_public_key = true;
 }
 
 } // namespace airtak

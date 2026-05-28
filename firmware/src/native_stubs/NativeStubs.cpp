@@ -64,6 +64,10 @@ void MeshNode::onPositionReceived(uint32_t, double, double, int32_t, uint32_t) {
 void MeshNode::onTelemetryReceived(uint32_t, float) {}
 const MeshNode::RemoteNodeInfo* MeshNode::getRemoteNode(uint8_t) { return nullptr; }
 uint8_t MeshNode::remoteNodeCount() { return 0; }
+const uint8_t* MeshNode::pkiPublicKey() { return nullptr; }
+const uint8_t* MeshNode::pkiPrivateKey() { return nullptr; }
+const uint8_t* MeshNode::remotePublicKey(uint32_t) { return nullptr; }
+void MeshNode::storeRemotePublicKey(uint32_t, const uint8_t*) {}
 
 void ChannelManager::init() {}
 void ChannelManager::rekey() {}

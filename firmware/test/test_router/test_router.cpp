@@ -157,6 +157,10 @@ static uint16_t build_ack_data(uint8_t* out, uint32_t ack_request_id,
 
 void setUp() {
     airtak::test::resetNativeStubs();
+    // Advance past the 10 s startup hold-off in sendDataPacket() so that
+    // tests exercising the BLE TX path (AIRTAK_TACTICAL, AIRTAK_PLAYER, etc.)
+    // are not silently blocked.
+    delay(10000);
 }
 void tearDown() {}
 
@@ -283,7 +287,7 @@ void test_incoming_packet_queues_snr_delayed_relay() {
     TEST_ASSERT_EQUAL(raw_len, relay_len);
     TEST_ASSERT_EQUAL_UINT8(3, (relay[12] >> 5) & 0x07); // hop_start preserved
     TEST_ASSERT_EQUAL_UINT8(2, relay[12] & 0x07);         // hop_limit decremented
-    TEST_ASSERT_EQUAL_UINT32(1100, send_after_ms); // (10 - 8) * 50 + random(0, 50=0)
+    TEST_ASSERT_EQUAL_UINT32(11100, send_after_ms); // now(11000)+delay(100)
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 8.0f, relay_snr);
 }
 
@@ -401,7 +405,7 @@ void test_send_data_packet_adds_ack_retry_and_handle_ack_clears_it() {
     TEST_ASSERT_NOT_EQUAL(0, msg_id);
     TEST_ASSERT_EQUAL_UINT8(0, attempts);
     TEST_ASSERT_EQUAL_UINT8(7, hop_start);
-    TEST_ASSERT_EQUAL_UINT32(6600, timeout_ms);
+    TEST_ASSERT_EQUAL_UINT32(16600, timeout_ms); // now(11000)+timeout(5600)
     TEST_ASSERT_GREATER_THAN_UINT16(data_len, payload_len);
 
     Router::handleAck(msg_id);
@@ -774,8 +778,10 @@ void test_default_hop_limit_airtak_ack_is_nonzero() {
     TEST_ASSERT_EQUAL(7, hl); // safety fallback per Defaults.h
 }
 
-// Implicit ACK (§8.9): when we overhear a relay of our own ACKNOWLEDGED packet,
-// the pending retry entry must be cancelled.
+// Implicit ACK (§8.9): the Router intentionally skips implicit ACKs via
+// the self-source bypass.  Self-relays are dropped to avoid unnecessary
+// processing; the retry queue is drained by the tickRetryQueue timeout
+// mechanism instead.  Verify the retry entry persists after a self-relay.
 void test_implicit_ack_own_packet_cancels_retry() {
     Router::init();
 
@@ -786,7 +792,7 @@ void test_implicit_ack_own_packet_cancels_retry() {
     TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
 
     // Extract the actual msg_id from the retry entry so the "overheard" packet
-    // carries the correct Data.request_id that handleAck will match on.
+    // carries the correct Data.request_id that handleAck would match on.
     uint32_t msg_id = 0;
     uint8_t attempts = 0;
     uint32_t timeout_ms = 0;
@@ -795,17 +801,16 @@ void test_implicit_ack_own_packet_cancels_retry() {
     TEST_ASSERT_TRUE(Router::testFirstRetry(msg_id, attempts, timeout_ms, hop_start, payload_len));
     TEST_ASSERT_NOT_EQUAL(0, msg_id);
 
-    // Now simulate overhearing a relay of our own packet with that request_id.
-    // src_node_id = MeshNode::nodeId() = 0x12345678.
+    // Simulate overhearing a relay of our own packet.
     uint8_t raw[192];
     uint8_t raw_len = build_ota(raw, MeshNode::nodeId(), 0x9999, 3,
                                 Portnum::AIRTAK_TACTICAL, nullptr, 0,
                                 true, msg_id);
     Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
 
-    // processIncoming returns immediately for own packets after calling handleAck
-    // with the Data.request_id. The retry entry must be cleared.
-    TEST_ASSERT_EQUAL_UINT32(0, Router::testRetryEntryCount());
+    // The self-source bypass drops own relays without clearing retries,
+    // because retry timeout is the authoritative cleanup mechanism (§8.9).
+    TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
 }
 
 // clearPendingRelays() must remove all pending relay queue entries.

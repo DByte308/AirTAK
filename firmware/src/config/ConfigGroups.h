@@ -18,9 +18,10 @@ enum class ConfigGroup : uint8_t {
     POSITION = 3,   // PositionConfig       → /config/position.pb
     POWER    = 4,   // PowerConfig          → /config/power.pb
     GAME     = 5,   // GameConfig           → /config/game.pb
-    SECURITY = 6,   // SecurityConfig       → /config/security.pb
-    AUDIO    = 7,   // AudioConfig (Phase 7)→ /config/audio.pb
-    _COUNT   = 8,
+    SECURITY    = 6,   // SecurityConfig       → /config/security.pb
+    AUDIO       = 7,   // AudioConfig (Phase 7)→ /config/audio.pb
+    PKI_KEYPAIR = 100, // PKI keypair storage  → /config/pki_keypair.bin (raw 64 B)
+    _COUNT      = 8,
 };
 
 constexpr uint8_t CONFIG_GROUP_COUNT = static_cast<uint8_t>(ConfigGroup::_COUNT);
@@ -35,8 +36,9 @@ inline const char* configGroupPath(ConfigGroup g) {
         case ConfigGroup::POWER:     return "/config/power.pb";
         case ConfigGroup::GAME:      return "/config/game.pb";
         case ConfigGroup::SECURITY:  return "/config/security.pb";
-        case ConfigGroup::AUDIO:     return "/config/audio.pb";
-        default:                     return "/config/unknown.pb";
+        case ConfigGroup::AUDIO:       return "/config/audio.pb";
+        case ConfigGroup::PKI_KEYPAIR: return "/config/pki_keypair.bin";
+        default:                       return "/config/unknown.pb";
     }
 }
 
