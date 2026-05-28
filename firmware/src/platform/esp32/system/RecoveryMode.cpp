@@ -53,7 +53,11 @@ bool RecoveryMode::requestedAtBoot() {
     // Power on peripherals (Display needs the power rail)
 #if defined(AIRTAK_PIN_POWER_EN) && AIRTAK_PIN_POWER_EN >= 0
     pinMode(AIRTAK_PIN_POWER_EN, OUTPUT);
+#ifdef AIRTAK_POWER_EN_ACTIVE_LOW
+    digitalWrite(AIRTAK_PIN_POWER_EN, LOW);
+#else
     digitalWrite(AIRTAK_PIN_POWER_EN, HIGH);
+#endif
     delay(50);
 #endif
 
