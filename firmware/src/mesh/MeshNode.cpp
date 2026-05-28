@@ -132,28 +132,55 @@ void MeshNode::init() {
 
 // ── MeshNode::broadcastNodeInfo() ────────────────────────────────────────────
 void MeshNode::broadcastNodeInfo(QueueHandle_t tx_queue) {
-    uint8_t buf[128];
-    uint16_t len = serializeUser(buf, sizeof(buf));
-    if (len > 0) {
-        Router::sendPacket(Portnum::NODEINFO_APP, 0xFFFFFFFF, buf, len, false, tx_queue);
+    uint8_t buf[256];
+    uint16_t pos = 0;
+
+    // NodeInfo field 1: num (uint32, our node ID)
+    pos = encodeTag(buf, pos, 1, 0);
+    pos = encodeVarint(buf, pos, s_node_id);
+
+    // NodeInfo field 2: user (length-delimited sub-message)
+    uint8_t user_buf[128];
+    uint16_t user_len = serializeUser(user_buf, sizeof(user_buf));
+    if (user_len > 0) {
+        pos = encodeBytes(buf, pos, 2, user_buf, user_len);
+    }
+
+    // NodeInfo field 3: position (length-delimited sub-message, if we have a fix)
+    if (GPS::hasFix()) {
+        uint8_t pos_buf[64];
+        uint16_t pos_len = serializePosition(pos_buf, sizeof(pos_buf));
+        if (pos_len > 0) {
+            pos = encodeBytes(buf, pos, 3, pos_buf, pos_len);
+        }
+    }
+
+    if (pos > 0) {
+        Router::sendPacket(Portnum::NODEINFO_APP, 0xFFFFFFFF, buf, pos, false, tx_queue);
     }
     s_last_nodeinfo_ms = millis();
 }
 
 static uint16_t serializeTelemetry(uint8_t* buf, uint16_t buf_len) {
-    uint16_t pos = 0;
     float bat = Battery::level();
-    bool  has_bat = (bat >= 0.0f);
-    if (!has_bat) return 0;
+    if (bat < 0.0f) return 0;
 
-    // meshtastic.Telemetry: field 2 = device_metrics (sub-message)
-    // DeviceMetrics: field 2 = battery_level (fixed32)
-    uint8_t dm[16];
+    // DeviceMetrics sub-message
+    uint8_t dm[24];
     uint16_t dm_pos = 0;
-    dm_pos = encodeFixed32(dm, dm_pos, 2, *(uint32_t*)&bat);
+    // DeviceMetrics field 1: battery_level (uint32, 0-100 percentage)
+    dm_pos = encodeTag(dm, dm_pos, 1, 0);
+    dm_pos = encodeVarint(dm, dm_pos, (uint32_t)(bat * 100.0f));
+    // DeviceMetrics field 2: voltage (float, fixed32)
+    uint32_t voltage_mv = Battery::voltageMillivolts();
+    if (voltage_mv > 0) {
+        float volts = (float)voltage_mv / 1000.0f;
+        dm_pos = encodeFixed32(dm, dm_pos, 2, *(uint32_t*)&volts);
+    }
     uint16_t dm_len = dm_pos;
 
-    // field 2: device_metrics (length-delimited sub-message)
+    // Telemetry field 2: device_metrics (oneof, length-delimited sub-message)
+    uint16_t pos = 0;
     pos = encodeTag(buf, pos, 2, 2);
     pos = encodeVarint(buf, pos, dm_len);
     memcpy(buf + pos, dm, dm_len); pos += dm_len;

@@ -223,6 +223,7 @@ static void parseNodeInfoPayload(const uint8_t* data_pb, uint16_t data_len,
     long_name = nullptr;
     short_name = nullptr;
     node_id_str = nullptr;
+    // Extract Data.payload (field 2) — the NodeInfo message bytes
     const uint8_t* inner = nullptr;
     uint16_t inner_len = 0;
     if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return;
@@ -231,35 +232,54 @@ static void parseNodeInfoPayload(const uint8_t* data_pb, uint16_t data_len,
     static char sn_buf[5];
     static char id_buf[16];
 
+    // Parse NodeInfo fields. The User message is inside NodeInfo field 2.
     uint16_t pos = 0;
     while (pos < inner_len) {
         uint32_t tag;
         if (!readVarint(inner, inner_len, pos, tag)) break;
         uint8_t wire = tag & 0x07;
         uint32_t field = tag >> 3;
-        if (wire == 2) {
+        if (wire == 2 && field == 2) {  // NodeInfo.user (sub-message)
+            uint32_t sublen = 0; uint8_t shift = 0;
+            while (pos < inner_len) { uint8_t b = inner[pos++]; sublen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            uint16_t sub_end = (uint16_t)(pos + sublen);
+            if (sub_end > inner_len) break;
+            // Parse User fields: id(1), long_name(2), short_name(3)
+            while (pos < sub_end) {
+                uint32_t utag;
+                if (!readVarint(inner, sub_end, pos, utag)) break;
+                uint8_t uwire = utag & 0x07;
+                uint32_t ufield = utag >> 3;
+                if (uwire == 2) {
+                    uint32_t flen = 0; uint8_t fshift = 0;
+                    while (pos < sub_end) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << fshift; if (!(b & 0x80)) break; fshift += 7; }
+                    if (ufield == 1 && flen > 0 && flen < sizeof(id_buf)) {
+                        memcpy(id_buf, inner + pos, flen);
+                        id_buf[flen] = '\0';
+                        node_id_str = id_buf;
+                    } else if (ufield == 2 && flen > 0 && flen < sizeof(ln_buf)) {
+                        memcpy(ln_buf, inner + pos, flen);
+                        ln_buf[flen] = '\0';
+                        long_name = ln_buf;
+                    } else if (ufield == 3 && flen > 0 && flen < sizeof(sn_buf)) {
+                        memcpy(sn_buf, inner + pos, flen);
+                        sn_buf[flen] = '\0';
+                        short_name = sn_buf;
+                    }
+                    pos += flen;
+                } else {
+                    if (!skipField(inner, sub_end, pos, uwire)) break;
+                }
+            }
+        } else if (wire == 2) {  // skip other length-delimited NodeInfo fields
             uint32_t flen = 0; uint8_t shift = 0;
             while (pos < inner_len) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
-            if (field == 1 && flen > 0 && flen < sizeof(id_buf)) {
-                memcpy(id_buf, inner + pos, flen);
-                id_buf[flen] = '\0';
-                node_id_str = id_buf;
-            } else if (field == 2 && flen > 0 && flen < sizeof(ln_buf)) {
-                memcpy(ln_buf, inner + pos, flen);
-                ln_buf[flen] = '\0';
-                long_name = ln_buf;
-            } else if (field == 3 && flen > 0 && flen < sizeof(sn_buf)) {
-                memcpy(sn_buf, inner + pos, flen);
-                sn_buf[flen] = '\0';
-                short_name = sn_buf;
-            }
             pos += flen;
         } else {
             if (!skipField(inner, inner_len, pos, wire)) break;
         }
     }
 }
-
 static void parsePositionPayload(const uint8_t* data_pb, uint16_t data_len,
                                   double& lat, double& lon, int32_t& alt_m,
                                   uint32_t& timestamp_secs, bool& valid) {
@@ -309,31 +329,32 @@ static void parseTelemetryPayload(const uint8_t* data_pb, uint16_t data_len,
     uint16_t inner_len = 0;
     if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return;
 
+    // Parse Telemetry wrapper; extract device_metrics from field 2 (oneof).
     uint16_t pos = 0;
     while (pos < inner_len) {
         uint32_t tag;
         if (!readVarint(inner, inner_len, pos, tag)) break;
         uint8_t wire = tag & 0x07;
         uint32_t field = tag >> 3;
-        if (wire == 2 && field == 2) {
+        if (wire == 2 && field == 2) {  // Telemetry.device_metrics (sub-message)
             uint32_t sublen = 0; uint8_t shift = 0;
             while (pos < inner_len) { uint8_t b = inner[pos++]; sublen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
             uint16_t sub_end = (uint16_t)(pos + sublen);
             if (sub_end > inner_len) break;
+            // Parse DeviceMetrics: battery_level(1, uint32)
             while (pos < sub_end) {
                 uint32_t stag;
                 if (!readVarint(inner, sub_end, pos, stag)) break;
                 uint8_t swire = stag & 0x07;
                 uint32_t sfield = stag >> 3;
-                if (swire == 5 && sfield == 2) {
+                if (swire == 0 && sfield == 1) {
                     uint32_t v = 0;
-                    memcpy(&v, inner + pos, 4);
-                    pos += 4;
-                    float bat;
-                    memcpy(&bat, &v, sizeof(bat));
-                    battery_level = bat;
+                    if (!readVarint(inner, sub_end, pos, v)) break;
+                    battery_level = (float)v / 100.0f;  // convert percentage to 0.0–1.0
                     has_battery = true;
                     break;
+                } else if (swire == 5 && sfield == 2) {  // voltage (float, skip)
+                    pos += 4;
                 } else if (swire == 0) {
                     uint32_t ignored;
                     if (!readVarint(inner, sub_end, pos, ignored)) break;
@@ -349,7 +370,6 @@ static void parseTelemetryPayload(const uint8_t* data_pb, uint16_t data_len,
         }
     }
 }
-
 // Parse a TEXT_MESSAGE_APP protobuf to get the message text.
 // Returns a pointer to a static buffer; empty string if no text found.
 static const char* parseTextMessagePayload(const uint8_t* data_pb, uint16_t data_len) {
