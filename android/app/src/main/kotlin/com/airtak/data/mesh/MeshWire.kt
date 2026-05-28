@@ -26,6 +26,7 @@ object Portnum {
     const val TEXT_MESSAGE_APP = 1
     const val POSITION_APP     = 3
     const val NODEINFO_APP     = 4
+    const val ROUTING_APP      = 5
     const val TELEMETRY_APP    = 67
     const val AIRTAK_PLAYER      = 256
     const val AIRTAK_TACTICAL    = 257
@@ -339,6 +340,30 @@ object MeshWire {
             }
         }
         return DecodedData(portnum, payload, wantResponse, destNodeId, sourceNodeId, requestId)
+    }
+
+    /**
+     * Parse `error_reason` (field 3, varint) from a Meshtastic Routing protobuf.
+     * Returns null if the payload cannot be parsed.  error_reason 0 = NONE (ACK);
+     * non-zero = NAK (delivery failure).
+     */
+    fun decodeRoutingErrorReason(payload: ByteArray?): Long? {
+        if (payload == null || payload.isEmpty()) return null
+        var i = 0
+        while (i < payload.size) {
+            val (tag, ni) = readVarint(payload, i) ?: return null
+            i = ni
+            val field = (tag shr 3).toInt()
+            val wire = (tag and 0x07L).toInt()
+            if (wire == WIRETYPE_VARINT) {
+                val (v, n2) = readVarint(payload, i) ?: return null
+                i = n2
+                if (field == 3) return v
+            } else {
+                i = skipField(payload, i, wire) ?: return null
+            }
+        }
+        return null
     }
 
     // ── Protobuf wire primitives ──────────────────────────────────────────────

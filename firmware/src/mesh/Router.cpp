@@ -1151,7 +1151,8 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                 ack_data[ap++] = 0x08; ack_data[ap++] = 0x05;               // portnum=5 (ROUTING_APP)
                 ack_data[ap++] = 0x12; ack_data[ap++] = 0x02;               // Data.payload tag+len=2
                 ack_data[ap++] = 0x18; ack_data[ap++] = 0x00;               // error_reason=NONE
-                ack_data[ap++] = 0x30; ap += writeVarU32(ack_data + ap, req_id); // Data.request_id
+                ack_data[ap++] = 0x35;                                      // Data.request_id tag (field 6, FIXED32)
+                memcpy(ack_data + ap, &req_id, 4); ap += 4;                 // Data.request_id value
 #ifndef AIRTAK_NATIVE_TEST
                 Serial.printf("[ACK] routing NONE → %08X req=%08X\n", hdr.src_node_id, req_id);
                 Serial.flush();
@@ -1160,40 +1161,71 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                 uint8_t ack_hop = hdr.hopStart();
                 if (ack_hop == 0) ack_hop = defaults::ACK_HOP_START_FALLBACK;
 
-                // Send ACK on the primary channel (Meshtastic convention:
-                // ACKs go on the primary, AES-encrypted with its PSK).
                 const ChannelSlot* ack_slot = ChannelManager::primarySlot();
                 if (!ack_slot) ack_slot = slot;
                 if (ack_slot) {
 
+                // When the original message arrived on ch=0x00 (PKI DM), PKI-encrypt
+                // the ACK back to the sender so the Meshtastic radio can decode it
+                // with its own PKI key — the radio does not share our primary-channel PSK.
+                const uint8_t* sender_pubkey = (hdr.channel_hash == 0x00)
+                    ? MeshNode::remotePublicKey(hdr.src_node_id) : nullptr;
+                const uint8_t* our_privkey   = (sender_pubkey)
+                    ? MeshNode::pkiPrivateKey() : nullptr;
+                const bool pki_ack = (sender_pubkey && our_privkey);
+
+                uint32_t ack_pkt_id = nextPacketId();
+
                 OtaHeader ack_hdr;
                 ack_hdr.dest_node_id  = hdr.src_node_id;
                 ack_hdr.src_node_id   = MeshNode::nodeId();
-                ack_hdr.packet_id     = nextPacketId();
+                ack_hdr.packet_id     = ack_pkt_id;
                 ack_hdr.flags         = ((ack_hop & 0x07) << 5) | (ack_hop & 0x07);
-                ack_hdr.channel_hash  = ack_slot->channel_hash;
+                ack_hdr.channel_hash  = pki_ack ? 0x00 : ack_slot->channel_hash;
                 ack_hdr.next_hop_low  = 0;
                 ack_hdr.relay_node_low = 0;
 
                 uint8_t ack_enc[64];
-                memcpy(ack_enc, ack_data, ap);
-                if (ack_slot->psk_len > 0) {
-                    uint8_t nonce2[AES_NONCE_BYTES];
-                    Crypto::buildNonce(ack_hdr.packet_id, ack_hdr.src_node_id, nonce2);
-                    Crypto::crypt(ack_slot->aes_key, ack_slot->aes_key_len, nonce2, ack_enc, ap);
+                uint16_t ack_pkt_len;
+                if (pki_ack) {
+                    size_t pki_len = ap + Crypto::PKI_OVERHEAD_BYTES;
+                    if (pki_len <= sizeof(ack_enc) &&
+                        Crypto::pkiEncrypt(our_privkey, sender_pubkey,
+                                           MeshNode::nodeId(), ack_pkt_id,
+                                           ap, ack_data, ack_enc)) {
+                        ack_pkt_len = static_cast<uint16_t>(pki_len);
+                    } else {
+                        ack_pkt_len = 0;
+                    }
+                } else {
+                    memcpy(ack_enc, ack_data, ap);
+                    if (ack_slot->psk_len > 0) {
+                        uint8_t nonce2[AES_NONCE_BYTES];
+                        Crypto::buildNonce(ack_hdr.packet_id, ack_hdr.src_node_id, nonce2);
+                        Crypto::crypt(ack_slot->aes_key, ack_slot->aes_key_len, nonce2, ack_enc, ap);
+                    }
+                    ack_pkt_len = ap;
                 }
 
-                PooledPacket* ack_pkt = PacketPool::alloc();
-                if (ack_pkt) {
-                    buildOtaHeader(ack_pkt->data, ack_hdr);
-                    memcpy(ack_pkt->data + OTA_HEADER_BYTES, ack_enc, ap);
-                    ack_pkt->length = OTA_HEADER_BYTES + ap;
-                    ack_pkt->phy_profile_index = ack_slot->phy_profile_index;
-                    if (xQueueSendToBack(tx_queue, &ack_pkt, 0) != pdTRUE) {
-                        PacketPool::free(ack_pkt);
-                    } else {
-                        xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
+                if (ack_pkt_len > 0) {
+                    PooledPacket* ack_pkt = PacketPool::alloc();
+                    if (ack_pkt) {
+                        buildOtaHeader(ack_pkt->data, ack_hdr);
+                        memcpy(ack_pkt->data + OTA_HEADER_BYTES, ack_enc, ack_pkt_len);
+                        ack_pkt->length = OTA_HEADER_BYTES + ack_pkt_len;
+                        ack_pkt->phy_profile_index = ack_slot->phy_profile_index;
+                        if (xQueueSendToBack(tx_queue, &ack_pkt, 0) != pdTRUE) {
+                            PacketPool::free(ack_pkt);
+                        } else {
+                            xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
+                        }
                     }
+                }
+                if (pki_ack) {
+#ifndef AIRTAK_NATIVE_TEST
+                    Serial.printf("[ACK] routing PKI → %08X req=%08X\n", hdr.src_node_id, req_id);
+                    Serial.flush();
+#endif
                 }
             }
             } else {
@@ -1207,37 +1239,61 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             inner[ip++] = 0x18; inner[ip++] = hdr.hopStart();                     // original_hop_start (field 3)
             ack_data[ap++] = 0x12; ack_data[ap++] = ip;                           // Data.payload tag + length
             memcpy(ack_data + ap, inner, ip); ap += ip;
-            ack_data[ap++] = 0x30; ap += writeVarU32(ack_data + ap, req_id);      // Data.request_id = ack_req_id
+            ack_data[ap++] = 0x35;                                      // Data.request_id tag (field 6, FIXED32)
+            memcpy(ack_data + ap, &req_id, 4); ap += 4;                 // Data.request_id value
             // ACK hop_limit = original packet's hop_start (§8.9); fall back to 7 if zero.
             uint8_t ack_hop = hdr.hopStart();
             if (ack_hop == 0) ack_hop = defaults::ACK_HOP_START_FALLBACK;
+
+            const uint8_t* sender_pubkey = (hdr.channel_hash == 0x00)
+                ? MeshNode::remotePublicKey(hdr.src_node_id) : nullptr;
+            const uint8_t* our_privkey   = (sender_pubkey)
+                ? MeshNode::pkiPrivateKey() : nullptr;
+            const bool pki_ack = (sender_pubkey && our_privkey);
+
             // Build OTA header for ACK (uses hop_start-derived hop_limit, not defaultHopLimit).
             OtaHeader ack_hdr;
             ack_hdr.dest_node_id  = hdr.src_node_id;
             ack_hdr.src_node_id   = MeshNode::nodeId();
             uint32_t ack_pkt_id   = nextPacketId();
             ack_hdr.packet_id     = ack_pkt_id;
-            ack_hdr.flags         = ((ack_hop & 0x07) << 5) | (ack_hop & 0x07); // hop_start=hop_limit=ack_hop, no want_ack
-            ack_hdr.channel_hash  = slot->channel_hash;
+            ack_hdr.flags         = ((ack_hop & 0x07) << 5) | (ack_hop & 0x07);
+            ack_hdr.channel_hash  = pki_ack ? 0x00 : slot->channel_hash;
             ack_hdr.next_hop_low  = 0;
             ack_hdr.relay_node_low = 0;
             uint8_t ack_enc[64];
-            memcpy(ack_enc, ack_data, ap);
-            if (slot->psk_len > 0) {
-                uint8_t nonce2[AES_NONCE_BYTES];
-                Crypto::buildNonce(ack_hdr.packet_id, ack_hdr.src_node_id, nonce2);
-                Crypto::crypt(slot->aes_key, slot->aes_key_len, nonce2, ack_enc, ap);
-            }
-            PooledPacket* ack_pkt = PacketPool::alloc();
-            if (ack_pkt) {
-                buildOtaHeader(ack_pkt->data, ack_hdr);
-                memcpy(ack_pkt->data + OTA_HEADER_BYTES, ack_enc, ap);
-                ack_pkt->length = OTA_HEADER_BYTES + ap;
-                ack_pkt->phy_profile_index = slot->phy_profile_index;
-                if (xQueueSendToBack(tx_queue, &ack_pkt, 0) != pdTRUE) {
-                    PacketPool::free(ack_pkt);
+            uint16_t ack_pkt_len;
+            if (pki_ack) {
+                size_t pki_len = ap + Crypto::PKI_OVERHEAD_BYTES;
+                if (pki_len <= sizeof(ack_enc) &&
+                    Crypto::pkiEncrypt(our_privkey, sender_pubkey,
+                                       MeshNode::nodeId(), ack_pkt_id,
+                                       ap, ack_data, ack_enc)) {
+                    ack_pkt_len = static_cast<uint16_t>(pki_len);
                 } else {
-                    xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
+                    ack_pkt_len = 0;
+                }
+            } else {
+                memcpy(ack_enc, ack_data, ap);
+                if (slot->psk_len > 0) {
+                    uint8_t nonce2[AES_NONCE_BYTES];
+                    Crypto::buildNonce(ack_hdr.packet_id, ack_hdr.src_node_id, nonce2);
+                    Crypto::crypt(slot->aes_key, slot->aes_key_len, nonce2, ack_enc, ap);
+                }
+                ack_pkt_len = ap;
+            }
+            if (ack_pkt_len > 0) {
+                PooledPacket* ack_pkt = PacketPool::alloc();
+                if (ack_pkt) {
+                    buildOtaHeader(ack_pkt->data, ack_hdr);
+                    memcpy(ack_pkt->data + OTA_HEADER_BYTES, ack_enc, ack_pkt_len);
+                    ack_pkt->length = OTA_HEADER_BYTES + ack_pkt_len;
+                    ack_pkt->phy_profile_index = slot->phy_profile_index;
+                    if (xQueueSendToBack(tx_queue, &ack_pkt, 0) != pdTRUE) {
+                        PacketPool::free(ack_pkt);
+                    } else {
+                        xEventGroupSetBits(::g_radio_event_group, RADIO_EVENT_TX_READY);
+                    }
                 }
             }
             } // end AirTAK ACK branch

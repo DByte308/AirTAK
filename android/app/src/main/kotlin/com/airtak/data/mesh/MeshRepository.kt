@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedDeque
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -87,6 +88,13 @@ class MeshRepository @Inject constructor(
 
     /** requestId → DB message row id; populated on send, removed when ACK arrives. */
     private val pendingAcks = ConcurrentHashMap<Long, Long>()
+    /**
+     * FIFO-ordered journal of pending sent messages.  Used as a fallback when
+     * the radio (e.g. Meshtastic) replaces Data.request_id with the OTA packet_id
+     * before forwarding the ROUTING_APP ACK, so the request-id map lookup misses.
+     * Entries are dequeued oldest-first when an unmatched ACK arrives.
+     */
+    private val pendingAckJournal = ConcurrentLinkedDeque<Long>()  // msgId
 
     /** MRU cache of recently-handled sync_ids for message rebroadcast
      *  dedup. Same policy as TacticalMarkerRepository's cache. */
@@ -120,10 +128,24 @@ class MeshRepository @Inject constructor(
                     if (pkt.portnum == Portnum.TEXT_MESSAGE_APP && pkt.payload != null) {
                         persistIncomingText(pkt)
                     }
-                    if (pkt.portnum == Portnum.AIRTAK_ACK) {
+                    if (pkt.portnum == Portnum.AIRTAK_ACK ||
+                        pkt.portnum == Portnum.ROUTING_APP) {
                         val reqId = pkt.requestId ?: return@collect
-                        val msgId = pendingAcks.remove(reqId) ?: return@collect
-                        messageDao.markDelivered(msgId)
+                        if (pkt.portnum == Portnum.ROUTING_APP) {
+                            val err = MeshWire.decodeRoutingErrorReason(pkt.payload)
+                            if (err != null && err != 0L) {
+                                return@collect
+                            }
+                        }
+                        var msgId = pendingAcks.remove(reqId)
+                        if (msgId != null) {
+                            pendingAckJournal.remove(msgId)
+                        } else {
+                            msgId = pendingAckJournal.poll()
+                        }
+                        if (msgId != null) {
+                            messageDao.markDelivered(msgId)
+                        }
                     }
                 }
         }
@@ -176,6 +198,7 @@ class MeshRepository @Inject constructor(
                 ),
             )
             pendingAcks[requestId] = msgId
+            pendingAckJournal.add(msgId)
         }
         return SendResult.Ok()
     }
@@ -217,6 +240,7 @@ class MeshRepository @Inject constructor(
             )
             if (wantResponse && requestId != null) {
                 pendingAcks[requestId] = msgId
+                pendingAckJournal.add(msgId)
             }
             messageDao.pruneOldest(channel, MESSAGE_WINDOW)
         }
