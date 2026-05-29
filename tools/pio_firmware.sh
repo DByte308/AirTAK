@@ -49,4 +49,15 @@ fi
 ARGS+=("${EXTRA_ARGS[@]}")
 
 pushd "$FIRMWARE_DIR" > /dev/null
+
+# ESP32-S3 targets need a pre-build TFT_eSPI header fix (TFT_eSPI#3925).
+# The extra_scripts hook runs after library compilation, too late for the
+# first build.  Download deps and patch before the main build command.
+ESP32S3_ENVS="t_deck t3s3 heltec_v3"
+if [ -n "$ENVIRONMENT" ] && echo " $ESP32S3_ENVS " | grep -q " $ENVIRONMENT "; then
+    echo "[pio_firmware] Pre-patching TFT_eSPI for $ENVIRONMENT..."
+    "$PLATFORMIO" pkg install -e "$ENVIRONMENT" --silent 2>&1 || true
+    python3 "$FIRMWARE_DIR/scripts/patch_tft_espi_standalone.py" "$ENVIRONMENT" || true
+fi
+
 exec "$PLATFORMIO" "${ARGS[@]}"

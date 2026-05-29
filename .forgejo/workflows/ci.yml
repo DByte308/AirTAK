@@ -66,13 +66,22 @@ jobs:
         run: bash ./tools/pio_firmware.sh run -e heltec_t114
 
       - name: Build heltec_v3 (ESP32-S3)
-        run: bash ./tools/pio_firmware.sh run -e heltec_v3
+        run: |
+          firmware/.venv/bin/platformio pkg install -d firmware -e heltec_v3 --silent
+          python3 firmware/scripts/patch_tft_espi_standalone.py heltec_v3
+          bash ./tools/pio_firmware.sh run -e heltec_v3
 
       - name: Build t_deck (ESP32-S3)
-        run: bash ./tools/pio_firmware.sh run -e t_deck
+        run: |
+          firmware/.venv/bin/platformio pkg install -d firmware -e t_deck --silent
+          python3 firmware/scripts/patch_tft_espi_standalone.py t_deck
+          bash ./tools/pio_firmware.sh run -e t_deck
 
       - name: Build t3s3 (ESP32-S3)
-        run: bash ./tools/pio_firmware.sh run -e t3s3
+        run: |
+          firmware/.venv/bin/platformio pkg install -d firmware -e t3s3 --silent
+          python3 firmware/scripts/patch_tft_espi_standalone.py t3s3
+          bash ./tools/pio_firmware.sh run -e t3s3
         
       - name: Generate UF2 files (nRF52 targets)
         run: |

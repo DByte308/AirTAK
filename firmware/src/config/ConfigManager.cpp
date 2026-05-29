@@ -233,8 +233,10 @@ void ConfigManager::init() {
         size_t n = FlashStore::read(g, s_buffers[i], CONFIG_BUF_SIZE);
         if (n == 0 || !proto::isValid(s_buffers[i], n)) {
             s_sizes[i] = encodeFactoryDefaults(g, s_buffers[i], CONFIG_BUF_SIZE);
+            Serial.printf("[CFG] init group=%u using FACTORY DEFAULTS (flash read=%u bytes)\n", (unsigned)g, (unsigned)n);
         } else {
             s_sizes[i] = n;
+            Serial.printf("[CFG] init group=%u loaded from flash (%u bytes)\n", (unsigned)g, (unsigned)n);
         }
     }
 }

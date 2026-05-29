@@ -9,6 +9,7 @@
 #include "config/ConfigGroups.h"
 #include "config/Defaults.h"
 #include <cstring>
+#include <cstdio>
 
 namespace airtak {
 
@@ -58,7 +59,10 @@ static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot&
         else if (wire == PROTO_WIRE_I32) { sp += 4; }
         else if (wire == PROTO_WIRE_I64) { sp += 8; }
     }
-    if (idx >= MAX_CHANNEL_SLOTS) return 0xFF;
+    if (idx >= MAX_CHANNEL_SLOTS) {
+        // Slot index was omitted from the protobuf — default to slot 0.
+        idx = 0;
+    }
 
     // Second pass: populate slot fields.
     sp = 0;
@@ -105,6 +109,11 @@ static void loadConfiguredSlots() {
     size_t   buf_len = config::ConfigManager::readGroup(
                            config::ConfigGroup::CHANNELS, buf, sizeof(buf));
     if (buf_len > 0) {
+        // Debug: hex dump first 64 bytes of the CHANNELS config buffer
+        printf("[CHAN] config loaded: %u bytes <- ", (unsigned)buf_len);
+        for (size_t di = 0; di < (buf_len < 64 ? buf_len : 64); di++)
+            printf("%02X", buf[di]);
+        printf("\n");
         size_t pos = 0;
         while (pos < buf_len) {
             uint32_t tag = 0; uint8_t shift = 0;
@@ -135,7 +144,10 @@ static void loadConfiguredSlots() {
     // default ("AirTAK" from Defaults.h) — i.e. user hasn't configured
     // channels via the app yet.
     auto& s = s_slots[0];
+    printf("[CHAN] slot0 after load: name='%s' phy=%u role=%u\n",
+           s.name, s.phy_profile_index, (unsigned)s.role);
     if (strcmp(s.name, CHANNEL_DEFAULT_NAME_OLD) == 0) {
+        printf("[CHAN] slot0 matched AirTAK — applying Meshtastic defaults\n");
         strncpy(s.name, CHANNEL_NAME_LONGFAST, CHANNEL_NAME_MAX_BYTES);
         s.name[CHANNEL_NAME_MAX_BYTES] = '\0';
         s.psk[0] = PSK_INDEX_BYTE;
