@@ -83,8 +83,8 @@ void task_audio_codec(void* params);
 
 #ifdef NRF52840_XXAA
 static inline void wdtInit() {
-    NRF_WDT->CONFIG = 3;           // SLEEP=Run(1) | HALT=Run(2)
-    NRF_WDT->CRV = 32768 * airtak::WDT_TIMEOUT_SECS;      // 8 seconds @ 32.768 kHz
+    NRF_WDT->CONFIG = 3;           // WDT: SLEEP=Run(1) | HALT=Run(2) = 3 — hardware register config
+    NRF_WDT->CRV = 32768 * airtak::WDT_TIMEOUT_SECS;      // 32.768 kHz LFCLK, 8 seconds timeout
     NRF_WDT->RREN = 0x01;          // Enable reload channel 0
     NRF_WDT->TASKS_START = 1;
 }
@@ -231,7 +231,7 @@ void task_radio_rxtx(void* params) {
             (unsigned)sf, (unsigned long)bw, (unsigned)cr,
             LORA_SYNC_WORD,
             airtak::platform::nodeId());
-        for (uint8_t si = 0; si < 8; si++) {
+        for (uint8_t si = 0; si < MAX_CHANNEL_SLOTS; si++) {
             auto* cs = airtak::ChannelManager::slotByIndex(si);
             if (cs && cs->role != airtak::ChannelRole::DISABLED) {
                 Serial.printf("  slot%u %s hash=0x%02X psk=%u\n", si, cs->name, cs->channel_hash, cs->psk_len);
@@ -381,7 +381,7 @@ void task_display_refresh(void* params) {
 
         // Display sleep timeout
         uint32_t off_secs = airtak::config::ConfigManager::powerDisplayOffSecs();
-        if (!display_asleep && off_secs > 0 && (now - last_interaction_ms) >= off_secs * 1000) {
+        if (!display_asleep && off_secs > 0 && (now - last_interaction_ms) >= off_secs * SECS_TO_MS) {
             airtak::Display::sleep();
             display_asleep = true;
         }

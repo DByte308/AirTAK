@@ -54,7 +54,7 @@ void Battery::sample(EventGroupHandle_t system_event_group) {
         delay(BATTERY_ADC_DELAY_MS);
     }
     uint32_t raw_adc = raw_acc / BATTERY_ADC_OVERSAMPLE;
-    s_voltage_mv = (uint32_t)(raw_adc * BATTERY_ADC_REFERENCE_MV * 2.0f * AIRTAK_ADC_MULTIPLIER
+    s_voltage_mv = (uint32_t)(raw_adc * BATTERY_ADC_REFERENCE_MV * BATTERY_VOLTAGE_DIVIDER_RATIO * AIRTAK_ADC_MULTIPLIER
                  / BATTERY_ADC_MAX_COUNTS);
 
     // Clamp and normalise

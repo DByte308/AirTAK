@@ -84,4 +84,38 @@ constexpr uint32_t WDT_TIMEOUT_SECS           = 8;
 /// Magic value written to the WDT reload register (NRF_WDT->RR[0])
 constexpr uint32_t WDT_RELOAD_MAGIC           = 0x6E524635UL;
 
+// ── Config File Base Paths ────────────────────────────────────────────────
+constexpr const char* CONFIG_PATH_PREFIX     = "/config/";
+constexpr const char* CONFIG_PATH_DEVICE     = "/config/device.pb";
+constexpr const char* CONFIG_PATH_LORA       = "/config/lora.pb";
+constexpr const char* CONFIG_PATH_CHANNELS   = "/config/channels.pb";
+constexpr const char* CONFIG_PATH_POSITION   = "/config/position.pb";
+constexpr const char* CONFIG_PATH_POWER      = "/config/power.pb";
+constexpr const char* CONFIG_PATH_GAME       = "/config/game.pb";
+constexpr const char* CONFIG_PATH_SECURITY   = "/config/security.pb";
+constexpr const char* CONFIG_PATH_AUDIO      = "/config/audio.pb";
+constexpr const char* CONFIG_PATH_PKI_KEYPAIR = "/config/pki_keypair.bin";
+constexpr const char* CONFIG_PATH_UNKNOWN    = "/config/unknown.pb";
+
+// ── Config Group Identifiers ──────────────────────────────────────────────
+// (Enum is in ConfigGroups.h; these are explicit value constants)
+constexpr uint8_t  CONFIG_GROUP_ID_DEVICE      = 0;
+constexpr uint8_t  CONFIG_GROUP_ID_LORA        = 1;
+constexpr uint8_t  CONFIG_GROUP_ID_CHANNELS    = 2;
+constexpr uint8_t  CONFIG_GROUP_ID_POSITION    = 3;
+constexpr uint8_t  CONFIG_GROUP_ID_POWER       = 4;
+constexpr uint8_t  CONFIG_GROUP_ID_GAME        = 5;
+constexpr uint8_t  CONFIG_GROUP_ID_SECURITY    = 6;
+constexpr uint8_t  CONFIG_GROUP_ID_AUDIO       = 7;
+constexpr uint8_t  CONFIG_GROUP_ID_PKI_KEYPAIR = 100;
+
+// ── Channel Role Identifiers ──────────────────────────────────────────────
+// (Enum is in ChannelManager.h; these are explicit value constants)
+constexpr uint8_t  CHANNEL_ROLE_DISABLED   = 0;
+constexpr uint8_t  CHANNEL_ROLE_PRIMARY    = 1;
+constexpr uint8_t  CHANNEL_ROLE_SECONDARY  = 2;
+
+// ── Meshtastic Device Role ─────────────────────────────────────────────────
+constexpr uint32_t MESHTASTIC_ROLE_CLIENT  = 0;
+
 } // namespace airtak

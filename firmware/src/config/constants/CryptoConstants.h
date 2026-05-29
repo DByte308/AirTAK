@@ -48,4 +48,13 @@ constexpr size_t  NONCE_EXTRANONCE_BYTES    = 4;     // extraNonce field width (
 constexpr size_t  NONCE_FROM_NODE_OFFSET    = 8;    // Offset of from_node in nonce
 constexpr size_t  NONCE_FROM_NODE_BYTES     = 4;     // from_node field width (uint32_t)
 
+// ── Meshtastic Default PSK ("AQ==", 16-byte AES-128 key) ─────────────────
+constexpr size_t   MESHTASTIC_DEFAULT_PSK_BYTES  = 16;  // 16-byte default key
+// The actual default PSK key bytes (Meshtastic LONG_FAST channel key)
+// Defined as constexpr inline to allow compile-time use
+inline constexpr uint8_t MESHTASTIC_DEFAULT_PSK[16] = {
+    0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
+    0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01
+};
+
 } // namespace airtak

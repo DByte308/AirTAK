@@ -58,12 +58,12 @@
 #define AIRTAK_PIN_SX1280_BUSY             36
 #define AIRTAK_PIN_SX1280_RXEN             21
 #define AIRTAK_PIN_SX1280_TXEN             10
-#define AIRTAK_PIN_SX1280_MAX_POWER         3   // 0–3 (0 = min, 3 = max)
+#define AIRTAK_PIN_SX1280_MAX_POWER         3   // 0–3 (0 = min, 3 = max); centralized: airtak::SX1280_MAX_POWER (RadioConstants.h)
 
 // ── LR1121 sub-GHz + 2.4 GHz dual-band ───────────────────────────────────────
 #define AIRTAK_PIN_LR1121_IRQ              36
 #define AIRTAK_PIN_LR1121_BUSY             34
-#define AIRTAK_PIN_LR1121_TCXO_VOLTAGE     3.0f
+#define AIRTAK_PIN_LR1121_TCXO_VOLTAGE     3.0f   // centralized: airtak::LR1121_TCXO_VOLTAGE (RadioConstants.h)
 
 // ── SX1262-compatible fallback pins (used by Radio.cpp for single-radio init) ─
 // These map the primary/default radio (SX1262 variant).  When runtime detection
@@ -78,9 +78,11 @@
 // ── SSD1306 OLED display (I2C, 128×64) ───────────────────────────────────────
 #define AIRTAK_PIN_OLED_SDA                18
 #define AIRTAK_PIN_OLED_SCL                17
+// centralized: airtak::DISP_WIDTH / airtak::DISP_HEIGHT (DisplayConstants.h)
 #define AIRTAK_OLED_WIDTH                 128
 #define AIRTAK_OLED_HEIGHT                 64
 // SSD1306 I2C address — usually 0x3C; some modules use 0x3D
+// centralized: airtak::SSD1306_I2C_ADDR_DEFAULT (DisplayConstants.h)
 #define AIRTAK_OLED_I2C_ADDRESS           0x3C
 
 // ── Battery ADC ───────────────────────────────────────────────────────────────

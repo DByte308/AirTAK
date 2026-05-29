@@ -22,7 +22,8 @@
 //   GameConstants.h     — Player hit window, player color, status enum
 //   AudioConstants.h    — Codec2 frame sizes, sample counts
 //   RecoveryConstants.h — Recovery mode button hold timings
-//   FlashConstants.h    — Flash block sizes, file paths, buffer sizes
+//   FlashConstants.h     — Flash block sizes, file paths, buffer sizes
+//   FirmwareConstants.h — Firmware version and identity
 
 #pragma once
 
@@ -43,3 +44,4 @@
 #include "config/constants/AudioConstants.h"
 #include "config/constants/RecoveryConstants.h"
 #include "config/constants/FlashConstants.h"
+#include "config/constants/FirmwareConstants.h"

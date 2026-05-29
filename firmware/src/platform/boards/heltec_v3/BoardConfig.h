@@ -52,9 +52,11 @@
 #define AIRTAK_PIN_OLED_SDA                17
 #define AIRTAK_PIN_OLED_SCL                18
 #define AIRTAK_PIN_OLED_RST                21
+// centralized: airtak::DISP_WIDTH / airtak::DISP_HEIGHT (DisplayConstants.h)
 #define AIRTAK_OLED_WIDTH                 128
 #define AIRTAK_OLED_HEIGHT                 64
 // SSD1306 I2C address — Heltec V3 uses 0x3C
+// centralized: airtak::SSD1306_I2C_ADDR_DEFAULT (DisplayConstants.h)
 #define AIRTAK_OLED_I2C_ADDRESS           0x3C
 
 // ── Battery ADC ─────────────────────────────────────────────────────────────

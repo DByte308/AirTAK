@@ -31,4 +31,9 @@ constexpr uint32_t DC_LIMIT_EU868_G1_MS_PER_HOUR = 360000;
 // Duty cycle accumulation window: 1 hour in milliseconds
 constexpr uint32_t DC_TRAILING_HOUR_MS        = 3600000; // 1 hour = 3,600,000 ms
 
+// ── DC Calculation Factors ───────────────────────────────────────────────
+constexpr uint32_t DC_PERCENTAGE_SCALE           = 100;    // Multiplier for integer percentage (→ 2 decimal)
+constexpr uint32_t DC_SUBPERCENT_SCALE           = 10000;  // Multiplier for 0.01% precision
+constexpr uint32_t DC_TICK_INTERVAL_MS           = 1000;   // Recalculate DC at most once per second
+
 } // namespace airtak

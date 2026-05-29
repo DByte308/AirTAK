@@ -64,8 +64,7 @@ constexpr uint8_t  MAX_KNOWN_NODES            = 50;    // Max nodes tracked in m
 constexpr size_t   REMOTE_NODE_LONG_NAME_MAX  = 40;    // Long name buffer for remote nodes
 constexpr size_t   REMOTE_NODE_SHORT_NAME_MAX = 5;     // Short name buffer for remote nodes
 
-// ── Default PSK (Meshtastic-compatible default "1") ─────────────────────────
-constexpr size_t   MESHTASTIC_DEFAULT_PSK_BYTES = 16;  // 16-byte default key "AQ=="
+// MESHTASTIC_DEFAULT_PSK_BYTES — now in CryptoConstants.h (§15.1)
 
 // ── Position Config Defaults (§8.7 smart beaconing) ─────────────────────────
 constexpr uint32_t POSITION_BROADCAST_INTERVAL_SECS  = 90;   // Max heartbeat interval
@@ -109,7 +108,122 @@ constexpr uint32_t DEVICEMETRICS_FIELD_BATTERY   = 1;   // varint battery_level
 // Telemetry wrapper field (used when wrapping DeviceMetrics for TX)
 constexpr uint32_t TELEMETRY_FIELD_DEVICE_METRICS = 2; // length-delimited device_metrics
 
-// Client role constant
-constexpr uint32_t MESHTASTIC_ROLE_CLIENT         = 0;  // CLIENT device role
+// MESHTASTIC_ROLE_CLIENT — now in SystemConstants.h
+
+// ── Router Relay Queue ────────────────────────────────────────────────────
+constexpr uint8_t  ROUTER_RELAY_QUEUE_SIZE     = 16;    // Pending relay queue
+
+// ── Mesh Addressing ────────────────────────────────────────────────────────
+constexpr uint32_t MESH_BROADCAST_ADDR         = 0xFFFFFFFF; // Broadcast destination
+
+// ── Initial Packet ID ──────────────────────────────────────────────────────
+constexpr uint32_t PACKET_ID_INITIAL           = 1;     // First packet ID after boot
+
+// ── Channel Slot Migration ────────────────────────────────────────────────
+// Default slot name for the primary channel (Meshtastic LONG_FAST)
+constexpr const char* CHANNEL_NAME_LONGFAST    = "LongFast";
+// Index into PSK where the single-byte PSK index is placed
+constexpr uint8_t  PSK_INDEX_BYTE              = 0x01;  // Default PSK index "1"
+constexpr size_t   PSK_INDEX_BYTE_LEN          = 1;     // Single-byte PSK index length
+// Byte offset for PSK expansion (last byte of 16-byte default key)
+constexpr uint8_t  PSK_EXPANSION_BYTE_OFFSET   = 15;
+
+// ── Position Defaults ──────────────────────────────────────────────────────
+constexpr uint8_t  POSITION_GPS_SOURCE_DEF     = 0;     // 0=DEVICE_GPS, 1=PHONE_GPS
+constexpr uint8_t  POSITION_CHANNEL_INDEX_DEF  = 0;     // Default channel for POSITION_APP
+constexpr bool     POSITION_SMART_BROADCAST_DEF = true; // Smart beaconing default
+
+// ── Security Defaults ─────────────────────────────────────────────────────
+constexpr uint32_t SECURITY_MAX_BONDED_DEF     = 1;     // Default max bonded devices
+
+// ── Channel Slot Protobuf Field Numbers (§8.5) ─────────────────────────────
+constexpr uint32_t CHANNELCONFIG_FIELD_SLOTS   = 1;     // repeated ChannelSlot slots
+constexpr uint32_t CHANNELSLOT_FIELD_INDEX     = 1;     // uint32 index
+constexpr uint32_t CHANNELSLOT_FIELD_NAME      = 2;     // string name
+constexpr uint32_t CHANNELSLOT_FIELD_PSK       = 3;     // bytes psk
+constexpr uint32_t CHANNELSLOT_FIELD_ROLE      = 4;     // ChannelRole role
+constexpr uint32_t CHANNELSLOT_FIELD_UPLINK    = 5;     // bool uplink_enabled
+constexpr uint32_t CHANNELSLOT_FIELD_DOWNLINK  = 6;     // bool downlink_enabled
+constexpr uint32_t CHANNELSLOT_FIELD_PRECISION = 7;     // uint32 position_precision
+constexpr uint32_t CHANNELSLOT_FIELD_PHY       = 8;     // uint32 phy_profile_index
+
+// ── Channel Buffer Size ────────────────────────────────────────────────────
+// CHANNEL_NAME_MAX_BYTES (16) + 1 for null terminator
+constexpr size_t   CHANNEL_NAME_BUFFER_SIZE    = 17;
+
+// ── MESHTASTIC_ROLE_CLIENT is now in SystemConstants.h ─────────────────
+// (already defined above)
+
+// ── NodeInfo Protobuf Field Numbers ──────────────────────────────────────
+constexpr uint32_t NODEINFO_FIELD_ID_STR        = 1;     // (same as NODEINFO_FIELD_ID, alias)
+constexpr uint32_t NODEINFO_FIELD_LONG_NAME_STR = 2;     // (same as NODEINFO_FIELD_LONG_NAME)
+constexpr uint32_t NODEINFO_FIELD_SHORT_NAME_STR= 3;     // (same as NODEINFO_FIELD_SHORT_NAME)
+constexpr uint32_t NODEINFO_FIELD_PUBLIC_KEY_BYTES= 8;   // (same as NODEINFO_FIELD_PUBLIC_KEY)
+
+// ── Position Protobuf Field Numbers ──────────────────────────────────────
+constexpr uint32_t POSITION_FIELD_LATITUDE       = 1;
+constexpr uint32_t POSITION_FIELD_LONGITUDE      = 2;
+constexpr uint32_t POSITION_FIELD_TIME           = 4;
+
+// ── DeviceMetrics Protobuf Field Numbers ─────────────────────────────────
+constexpr uint32_t DEVICEMETRICS_FIELD_VOLTAGE   = 2;
+
+// ── PlayerStatePacket Protobuf Field Numbers ─────────────────────────────
+constexpr uint32_t PLAYERSTATE_FIELD_IS_STATE_TRANSITION = 7;
+
+// ── TextMessage Protobuf Field Numbers ───────────────────────────────────
+constexpr uint32_t TEXTMSG_FIELD_TEXT                    = 1;     // TextMessage.text
+
+// ── Config Protobuf Field Numbers ────────────────────────────────────────
+constexpr uint32_t DEVICECONFIG_FIELD_LONG_NAME    = 1;
+constexpr uint32_t DEVICECONFIG_FIELD_SHORT_NAME   = 2;
+constexpr uint32_t GAMECONFIG_FIELD_CALLSIGN       = 1;
+constexpr uint32_t POWERCONFIG_FIELD_DISPLAY_OFF   = 4;
+constexpr uint32_t POWERCONFIG_FIELD_BRIGHTNESS    = 5;
+constexpr uint32_t POSITIONCONFIG_FIELD_INTERVAL   = 1;
+constexpr uint32_t POSITIONCONFIG_FIELD_MIN_TX     = 5;
+constexpr uint32_t POSITIONCONFIG_FIELD_MOVEMENT   = 4;
+constexpr uint32_t POSITIONCONFIG_FIELD_GPS_PREC   = 2;
+constexpr uint32_t POSITIONCONFIG_FIELD_HOP_LIMIT  = 6;
+constexpr uint32_t POSITIONCONFIG_FIELD_GPS_SRC    = 7;
+constexpr uint32_t POSITIONCONFIG_FIELD_CH_INDEX   = 8;
+constexpr uint32_t LORACONFIG_FIELD_REGION        = 1;
+constexpr uint32_t LORACONFIG_FIELD_TX_POWER       = 2;
+
+// ── Buffer Sizes ─────────────────────────────────────────────────────────
+constexpr size_t   NODEINFO_BUF_SIZE             = 128;   // Serialized NodeInfo proto buffer
+constexpr size_t   DEVICEMETRICS_BUF_SIZE        = 24;    // Serialized DeviceMetrics buffer
+constexpr size_t   CURVE25519_KEYPAIR_TOTAL_BYTES = 64;   // pubkey(32) + privkey(32)
+constexpr size_t   TEXT_MESSAGE_MAX_BYTES        = 256;   // Text message payload buffer
+constexpr size_t   ADMIN_ERROR_MSG_MAX_BYTES     = 96;    // Admin error message buffer
+constexpr size_t   TRACEROUTE_RESP_BUF_SIZE      = 80;    // Traceroute response buffer
+constexpr size_t   ACK_BUF_SIZE                  = 64;    // ACK message buffer
+constexpr size_t   ACK_INNER_BUF_SIZE            = 32;    // ACK inner payload buffer
+
+// ── Conversion/Scaling ───────────────────────────────────────────────────
+constexpr float    BATTERY_LEVEL_TO_PCT          = 100.0f; // Float 0.0-1.0 → integer percentage
+constexpr float    MV_TO_VOLTS                   = 1000.0f;// Millivolts to volts
+constexpr uint32_t STARTUP_BURST_SAFETY_MARGIN_MS = 1000;  // Safety margin for startup burst
+
+// ── SNR Relay Delay ──────────────────────────────────────────────────────
+constexpr float    SNR_RELAY_DELAY_FACTOR        = 50.0f;  // Ms per 1.0 dB below SNR max
+constexpr uint32_t SNR_RELAY_DELAY_JITTER_MAX_MS = 50;     // Random jitter added to relay delay
+
+// ── ACK Timeout ──────────────────────────────────────────────────────────
+constexpr uint32_t ACK_TIMEOUT_HOP_MULTIPLIER    = 2;      // Per-hop multiplier for ACK timeout
+
+// ── Packet ID Seeding ────────────────────────────────────────────────────
+constexpr uint32_t PACKET_ID_SEED_NODEID_SHIFT   = 8;     // node_id shift for packet ID seed
+constexpr uint32_t PACKET_ID_SEED_RANDOM_RANGE   = 256;   // Random byte range for packet ID seed
+
+// ── Admin Message Field Range ────────────────────────────────────────────
+constexpr uint32_t ADMIN_MSG_REQ_FIELD_MIN       = 26;
+constexpr uint32_t ADMIN_MSG_REQ_FIELD_MAX       = 40;
+
+// ── Message Screen ───────────────────────────────────────────────────────
+constexpr uint8_t  MSG_RING_BUFFER_SIZE          = 8;     // Message history capacity
+constexpr uint8_t  MSG_DISPLAY_COUNT             = 3;     // Messages shown on screen
+constexpr uint8_t  MSG_CALLSIGN_DISPLAY_CHARS    = 8;     // Callsign chars shown
+constexpr uint8_t  MSG_TEXT_DISPLAY_CHARS        = 47;    // Message text chars shown
 
 } // namespace airtak

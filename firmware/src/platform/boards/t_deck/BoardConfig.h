@@ -50,6 +50,7 @@
 #define AIRTAK_PIN_TFT_BL                  42   // backlight, active HIGH
 
 // TFT display geometry (landscape orientation, rotation 1)
+// centralized: airtak::DISP_WIDTH / airtak::DISP_HEIGHT (DisplayConstants.h)
 #define AIRTAK_TFT_WIDTH                  320
 #define AIRTAK_TFT_HEIGHT                 240
 
@@ -66,7 +67,7 @@
 // Explicit RX/TX pins for ESP32 HardwareSerial.begin()
 #define AIRTAK_GPS_SERIAL_RX_PIN           AIRTAK_PIN_GPS_RX_MCU
 #define AIRTAK_GPS_SERIAL_TX_PIN           AIRTAK_PIN_GPS_TX_MCU
-#define GPS_BAUD_INITIAL                   38400
+#define GPS_BAUD_INITIAL                   38400   // centralized: airtak::GPS_BAUD_CANDIDATE_1 (GpsConstants.h)
 
 // Battery ADC
 #define AIRTAK_PIN_VBAT_SENSE               4   // voltage divider output, 12-bit ADC
@@ -82,8 +83,8 @@
 
 // Touchscreen (I2C CST328 or GT911, INT on GPIO 16)
 #define AIRTAK_PIN_TOUCH_INT                16
-#define AIRTAK_TOUCH_I2C_ADDR_CST328        0x15
-#define AIRTAK_TOUCH_I2C_ADDR_GT911         0x5D
+#define AIRTAK_TOUCH_I2C_ADDR_CST328        0x15   // centralized: airtak::CST328_ADDR (TouchConstants.h)
+#define AIRTAK_TOUCH_I2C_ADDR_GT911         0x5D   // centralized: airtak::GT911_ADDR_PRIMARY (TouchConstants.h)
 
 // Trackball (GPIO matrix)
 #define AIRTAK_PIN_TBALL_UP                 3

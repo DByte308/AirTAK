@@ -29,12 +29,12 @@ extern QueueHandle_t g_ble_tx_queue;
 namespace airtak {
 namespace ble {
 
-static BLEService        s_svc       (AIRTAK_SERVICE_UUID);
-static BLECharacteristic s_config_rw (CHAR_CONFIG_RW_UUID);
-static BLECharacteristic s_mesh_tx   (CHAR_MESH_TX_UUID);
-static BLECharacteristic s_mesh_rx   (CHAR_MESH_RX_UUID);
-static BLECharacteristic s_status    (CHAR_DEVICE_STATUS_UUID);
-static BLECharacteristic s_admin     (CHAR_ADMIN_UUID);
+static BLEService        s_svc       (BLE_SERVICE_UUID);
+static BLECharacteristic s_config_rw (BLE_CHAR_CONFIG_RW_UUID);
+static BLECharacteristic s_mesh_tx   (BLE_CHAR_MESH_TX_UUID);
+static BLECharacteristic s_mesh_rx   (BLE_CHAR_MESH_RX_UUID);
+static BLECharacteristic s_status    (BLE_CHAR_DEVICE_STATUS_UUID);
+static BLECharacteristic s_admin     (BLE_CHAR_ADMIN_UUID);
 
 static QueueHandle_t    s_mesh_rx_queue = nullptr;
 static QueueHandle_t    s_radio_tx_queue = nullptr;

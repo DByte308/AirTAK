@@ -122,9 +122,9 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         s_conn_hdl   = desc->conn_handle;
         s_connected  = true;
         Display::markDirty(DISPLAY_DIRTY_BLE);
-        pServer->updateConnParams(desc->conn_handle, 6, 24, 0, 300);
+        pServer->updateConnParams(desc->conn_handle, BLE_CONN_MIN_INTERVAL, BLE_CONN_MAX_INTERVAL, 0, BLE_CONN_SUPERVISION_TIMEOUT);
 
-        uint8_t buf[256];
+        uint8_t buf[BLE_STATUS_BUFFER_SIZE];
         uint16_t len = buildDeviceStatus(buf, sizeof(buf));
         if (len > 0) AirTAKService::notifyDeviceStatus(buf, len);
     }
@@ -180,8 +180,8 @@ class SecurityCallbacks : public NimBLESecurityCallbacks {
 
 void BLEServer::init(QueueHandle_t mesh_rx_queue) {
     NimBLEDevice::init(defaults::DEVICE_LONG_NAME);
-    NimBLEDevice::setMTU(517);                 // negotiate 517-byte MTU on all connections (§10.2)
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);   // +9 dBm (closest allowed to +4 for BLE)
+    NimBLEDevice::setMTU(BLE_MTU);                 // negotiate 517-byte MTU on all connections (§10.2)
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);   // ESP_PWR_LVL_P9 = +9 dBm, see BLE_TX_POWER_ESP32
 
     // LE Secure Connections + MITM (Numeric Comparison, §10.6)
     NimBLEDevice::setSecurityAuth(BLE_SM_PAIR_AUTHREQ_SC |
@@ -198,11 +198,11 @@ void BLEServer::init(QueueHandle_t mesh_rx_queue) {
     DFUService::init();
 
     NimBLEAdvertising* pAdv = NimBLEDevice::getAdvertising();
-    pAdv->addServiceUUID(AIRTAK_SERVICE_UUID);
+    pAdv->addServiceUUID(BLE_SERVICE_UUID);
     pAdv->setScanResponse(true);
     pAdv->setName(defaults::DEVICE_LONG_NAME);
-    pAdv->setMinPreferred(0x06);
-    pAdv->setMaxPreferred(0x12);
+    pAdv->setMinPreferred(BLE_ADV_MIN_INTERVAL_RAW);
+    pAdv->setMaxPreferred(BLE_ADV_MAX_INTERVAL_RAW);
     NimBLEDevice::startAdvertising();
 }
 
@@ -226,10 +226,10 @@ void BLEServer::process(QueueHandle_t ble_tx_queue, QueueHandle_t /*config_queue
 void BLEServer::tick() {
     if (!s_connected) return;
     uint32_t now = millis();
-    if ((now - s_last_status) < 5000) return;
+    if ((now - s_last_status) < BLE_DEVICE_STATUS_INTERVAL_MS) return;
     s_last_status = now;
 
-    uint8_t buf[256];
+    uint8_t buf[BLE_STATUS_BUFFER_SIZE];
     uint16_t len = buildDeviceStatus(buf, sizeof(buf));
     if (len > 0) AirTAKService::notifyDeviceStatus(buf, len);
 }

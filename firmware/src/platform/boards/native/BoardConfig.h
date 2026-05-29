@@ -27,8 +27,6 @@
 #define AIRTAK_PIN_EINK_RST                -1
 #define AIRTAK_PIN_EINK_BUSY               -1
 #define AIRTAK_PIN_EINK_EN                 -1
-#define EINK_MIN_REFRESH_MS              60000
-
 #define AIRTAK_PIN_GPS_RX_MCU              -1
 #define AIRTAK_PIN_GPS_TX_MCU              -1
 #define AIRTAK_PIN_GPS_PPS                 -1

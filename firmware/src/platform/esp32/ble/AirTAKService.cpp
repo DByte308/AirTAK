@@ -436,11 +436,11 @@ void AirTAKService::init(QueueHandle_t mesh_rx_queue) {
     s_mesh_rx_queue = mesh_rx_queue;
 
     NimBLEServer* pServer = NimBLEDevice::getServer();
-    NimBLEService* pSvc   = pServer->createService(AIRTAK_SERVICE_UUID);
+    NimBLEService* pSvc   = pServer->createService(BLE_SERVICE_UUID);
 
     // CONFIG_RW — read/write/indicate, authenticated (ENC_WITH_MITM)
     s_config_rw = pSvc->createCharacteristic(
-        CHAR_CONFIG_RW_UUID,
+        BLE_CHAR_CONFIG_RW_UUID,
         NIMBLE_PROPERTY::READ  | NIMBLE_PROPERTY::READ_AUTHEN  |
         NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN |
         NIMBLE_PROPERTY::INDICATE);
@@ -448,23 +448,23 @@ void AirTAKService::init(QueueHandle_t mesh_rx_queue) {
 
     // MESH_TX — write-without-response, authenticated write
     s_mesh_tx = pSvc->createCharacteristic(
-        CHAR_MESH_TX_UUID,
+        BLE_CHAR_MESH_TX_UUID,
         NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_AUTHEN);
     s_mesh_tx->setCallbacks(new MeshTxCallbacks());
 
     // MESH_RX — notify, authenticated read
     s_mesh_rx = pSvc->createCharacteristic(
-        CHAR_MESH_RX_UUID,
+        BLE_CHAR_MESH_RX_UUID,
         NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_AUTHEN);
 
     // DEVICE_STATUS — read/notify, open (no auth per §10.4)
     s_status = pSvc->createCharacteristic(
-        CHAR_DEVICE_STATUS_UUID,
+        BLE_CHAR_DEVICE_STATUS_UUID,
         NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
     // ADMIN — write/indicate, authenticated
     s_admin = pSvc->createCharacteristic(
-        CHAR_ADMIN_UUID,
+        BLE_CHAR_ADMIN_UUID,
         NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN |
         NIMBLE_PROPERTY::INDICATE);
     s_admin->setCallbacks(new AdminCallbacks());
@@ -472,7 +472,7 @@ void AirTAKService::init(QueueHandle_t mesh_rx_queue) {
 #if defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
     // OTA_COMMAND — write/notify, authenticated (ENC_WITH_MITM)
     s_ota_cmd = pSvc->createCharacteristic(
-        CHAR_OTA_COMMAND_UUID,
+        BLE_CHAR_OTA_COMMAND_UUID,
         NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN |
         NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_AUTHEN);
     s_ota_cmd->setCallbacks(new OtaCommandCallbacks());
@@ -481,7 +481,7 @@ void AirTAKService::init(QueueHandle_t mesh_rx_queue) {
     // authenticated write. Write-without-response would let the host flood
     // chunks faster than esp_ota_write can absorb them.
     s_ota_data = pSvc->createCharacteristic(
-        CHAR_OTA_DATA_UUID,
+        BLE_CHAR_OTA_DATA_UUID,
         NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN);
     s_ota_data->setCallbacks(new OtaDataCallbacks());
 #endif

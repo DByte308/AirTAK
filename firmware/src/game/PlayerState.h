@@ -16,13 +16,7 @@
 
 namespace airtak {
 
-enum class PlayerStatus : uint8_t {
-    ACTIVE       = 0,
-    INACTIVE     = 1,
-    HIT          = 2,   // optional, manually toggled
-    RESPAWNING   = 3,   // optional, manually toggled
-    ELIMINATED   = 4,   // optional, manually toggled
-};
+// PlayerStatus enum is centralized in config/constants/GameConstants.h
 
 class PlayerState {
 public:

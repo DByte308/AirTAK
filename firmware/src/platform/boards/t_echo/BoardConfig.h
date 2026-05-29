@@ -23,7 +23,7 @@
 #define AIRTAK_PIN_SX1262_BUSY             17   // P0.17
 #define AIRTAK_PIN_SX1262_DIO2             -1   // internal RF switch, not a physical pin
 #define AIRTAK_PIN_SX1262_DIO3             21   // P0.21, 1.8V TCXO control
-#define AIRTAK_SX1262_TCXO_VOLTAGE         1.8
+#define AIRTAK_SX1262_TCXO_VOLTAGE         1.8   // centralized: airtak::TCXO_VOLTAGE_DEFAULT (RadioConstants.h)
 
 // SSD1681 E-Ink display
 #define AIRTAK_PIN_EINK_SCK                31   // P0.31
@@ -34,7 +34,6 @@
 #define AIRTAK_PIN_EINK_BUSY                3   // P0.03
 #define AIRTAK_PIN_EINK_EN                 43   // P1.11
 #define AIRTAK_EINK_SPI_INSTANCE           NRF_SPIM2
-#define EINK_MIN_REFRESH_MS              60000
 
 // L76K GPS
 #define AIRTAK_PIN_GPS_RX_MCU              41   // P1.09

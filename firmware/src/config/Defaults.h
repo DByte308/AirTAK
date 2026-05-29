@@ -32,7 +32,7 @@ struct PhyProfileDefault {
     uint8_t     coding_rate;   // 5=4/5  6=4/6  7=4/7  8=4/8
 };
 
-constexpr PhyProfileDefault PHY_PROFILES[5] = {
+constexpr PhyProfileDefault PHY_PROFILES[PHY_PROFILE_COUNT] = {
     // [0] Long/Mesh:     ~0.9 kbps, 3–8 km LOS, ~310 ms ToA/50B — Meshtastic LONG_FAST
     { "Long/Mesh",      11, 250000, 5 },
     // [1] Short/Speed:   ~5.5 kbps, 0.5–2 km LOS, ~38 ms ToA/50B — Meshtastic SHORT_FAST; audio-capable
@@ -48,7 +48,7 @@ constexpr PhyProfileDefault PHY_PROFILES[5] = {
 // Per-PHY-profile SNR maxima used by the relay delay formula (§8.7).
 // SNR_max varies with spreading factor — higher SF tolerates more noise.
 // These are conservative estimates for SX1262 at 250 kHz BW.
-constexpr float PHY_SNR_MAX[5] = {
+constexpr float PHY_SNR_MAX[PHY_PROFILE_COUNT] = {
     10.0f,   // [0] SF11 — Long/Mesh
      6.0f,   // [1] SF7  — Short/Speed
     12.0f,   // [2] SF12 — Long/Reliable
@@ -70,31 +70,31 @@ struct ChannelSlotDefault {
     uint8_t     phy_profile_index;
 };
 
-constexpr ChannelSlotDefault CHANNEL_SLOTS[8] = {
+constexpr ChannelSlotDefault CHANNEL_SLOTS[MAX_CHANNEL_SLOTS] = {
     // Slot 0: PRIMARY — Meshtastic-compatible + AirTAK game traffic
-    { 0, "AirTAK",  1, true,  true,  32, 0 },
+    { 0, "AirTAK",   airtak::CHANNEL_ROLE_PRIMARY, true,  true,  airtak::POSITION_GPS_PRECISION_BITS, airtak::PHY_PROFILE_DEFAULT },
     // Slot 1: SECONDARY — AirTAK tactical traffic (separate PSK)
-    { 1, "Tactical",  2, true,  true,  32, 0 },
+    { 1, "Tactical",   airtak::CHANNEL_ROLE_SECONDARY, true,  true,  airtak::POSITION_GPS_PRECISION_BITS, airtak::PHY_PROFILE_DEFAULT },
     // Slot 2: DISABLED — pre-configured for Phase 7 PTT audio (Profile 1: Short/Speed)
-    { 2, "Audio", 0, true,  true,  32, 1 },
+    { 2, "Audio", airtak::CHANNEL_ROLE_DISABLED, true,  true,  airtak::POSITION_GPS_PRECISION_BITS, 1 },
     // Slots 3–7: DISABLED
-    { 3, "Ch 3",  0, false, false, 32, 0 },
-    { 4, "Ch 4",  0, false, false, 32, 0 },
-    { 5, "Ch 5",  0, false, false, 32, 0 },
-    { 6, "Ch 6",  0, false, false, 32, 0 },
-    { 7, "Ch 7",  0, false, false, 32, 0 },
+    { 3, "Ch 3",  airtak::CHANNEL_ROLE_DISABLED, false, false, airtak::POSITION_GPS_PRECISION_BITS, airtak::PHY_PROFILE_DEFAULT },
+    { 4, "Ch 4",  airtak::CHANNEL_ROLE_DISABLED, false, false, airtak::POSITION_GPS_PRECISION_BITS, airtak::PHY_PROFILE_DEFAULT },
+    { 5, "Ch 5",  airtak::CHANNEL_ROLE_DISABLED, false, false, airtak::POSITION_GPS_PRECISION_BITS, airtak::PHY_PROFILE_DEFAULT },
+    { 6, "Ch 6",  airtak::CHANNEL_ROLE_DISABLED, false, false, airtak::POSITION_GPS_PRECISION_BITS, airtak::PHY_PROFILE_DEFAULT },
+    { 7, "Ch 7",  airtak::CHANNEL_ROLE_DISABLED, false, false, airtak::POSITION_GPS_PRECISION_BITS, airtak::PHY_PROFILE_DEFAULT },
 };
 
 // ── PositionConfig — Smart beaconing (§8.7) ───────────────────────────────────
 // Canonical position values: MeshConstants.h
 constexpr uint32_t POSITION_BROADCAST_INTERVAL_SECS = airtak::POSITION_BROADCAST_INTERVAL_SECS;
 constexpr uint32_t POSITION_GPS_PRECISION_BITS       = airtak::POSITION_GPS_PRECISION_BITS;
-constexpr bool     POSITION_SMART_BROADCAST          = true;
+constexpr bool     POSITION_SMART_BROADCAST          = airtak::POSITION_SMART_BROADCAST_DEF;
 constexpr uint32_t POSITION_MOVEMENT_THRESHOLD_M     = airtak::POSITION_MOVEMENT_THRESHOLD_M;
 constexpr uint32_t POSITION_MIN_TX_INTERVAL_SECS     = airtak::POSITION_MIN_TX_INTERVAL_SECS;
 constexpr uint32_t POSITION_HIT_HEARTBEAT_SECS       = airtak::POSITION_HIT_HEARTBEAT_SECS;
-constexpr uint8_t  POSITION_GPS_SOURCE               = 0;     // keep local (config-specific default)
-constexpr uint8_t  POSITION_CHANNEL_INDEX             = 0;     // keep local (config-specific default)
+constexpr uint8_t  POSITION_GPS_SOURCE               = airtak::POSITION_GPS_SOURCE_DEF;
+constexpr uint8_t  POSITION_CHANNEL_INDEX             = airtak::POSITION_CHANNEL_INDEX_DEF;
 
 // ── Per-packet-type default hop limits (§8.7, updated v1.5) ────────────────────
 // All types use HOP_LIMIT_DEFAULT=7 except AIRTAK_AUDIO=HOP_LIMIT_AUDIO=1.
@@ -123,8 +123,8 @@ constexpr uint8_t HOP_LIMIT_MARKER_SNAPSHOT     = HOP_LIMIT_DEFAULT;
 
 // ── PowerConfig ───────────────────────────────────────────────────────────────
 constexpr bool     POWER_GPS_DUTY_CYCLE    = false;  // disabled until Phase 6
-constexpr uint32_t POWER_GPS_ON_SECS       = 30;
-constexpr uint32_t POWER_GPS_OFF_SECS      = 60;
+constexpr uint32_t POWER_GPS_ON_SECS       = airtak::POWER_GPS_ON_SECS_DEF;
+constexpr uint32_t POWER_GPS_OFF_SECS      = airtak::POWER_GPS_OFF_SECS_DEF;
 constexpr uint32_t POWER_DISPLAY_OFF_SECS  = DISPLAY_OFF_SECS_DEFAULT;    // Canonical: DisplayConstants.h
 constexpr uint32_t POWER_BRIGHTNESS_PCT    = DISPLAY_BRIGHTNESS_PCT_DEF;  // Canonical: DisplayConstants.h
 
@@ -135,10 +135,10 @@ constexpr const char* GAME_SQUAD_ID           = "";    // free-text, optional
 constexpr const char* GAME_PLATOON_ID         = "";    // free-text, optional
 constexpr const char* GAME_COMPANY_ID         = "";    // free-text, optional
 constexpr uint32_t    GAME_PLAYER_COLOR_RGB   = GAME_DEFAULT_PLAYER_COLOR; // Canonical: GameConstants.h
-constexpr bool        GAME_HIT_BUTTON_ENABLED = false;   // long-press HIT toggle on device button
+constexpr bool        GAME_HIT_BUTTON_ENABLED = airtak::GAME_HIT_BUTTON_ENABLED_DEF;
 
 // ── SecurityConfig ────────────────────────────────────────────────────────────
-constexpr uint32_t SECURITY_MAX_BONDED_DEVICES = 1;
+constexpr uint32_t SECURITY_MAX_BONDED_DEVICES = airtak::SECURITY_MAX_BONDED_DEF;
 
 // ── AudioConfig (Phase 7) ─────────────────────────────────────────────────────
 constexpr uint32_t AUDIO_CHANNEL_SLOT  = AUDIO_DEFAULT_CHANNEL_SLOT; // Canonical: AudioConstants.h

@@ -23,15 +23,7 @@
 namespace airtak {
 namespace ble {
 
-// UUIDs (128-bit, little-endian byte order as required by BLEService)
-constexpr char AIRTAK_SERVICE_UUID[]         = "4d415348-0000-1000-8000-00805f9b34fb";
-constexpr char CHAR_CONFIG_RW_UUID[]       = "4d415348-0001-1000-8000-00805f9b34fb";
-constexpr char CHAR_MESH_TX_UUID[]         = "4d415348-0002-1000-8000-00805f9b34fb";
-constexpr char CHAR_MESH_RX_UUID[]         = "4d415348-0003-1000-8000-00805f9b34fb";
-constexpr char CHAR_DEVICE_STATUS_UUID[]   = "4d415348-0004-1000-8000-00805f9b34fb";
-constexpr char CHAR_ADMIN_UUID[]           = "4d415348-0005-1000-8000-00805f9b34fb";
-constexpr char CHAR_OTA_COMMAND_UUID[]     = "4d415348-0006-1000-8000-00805f9b34fb";
-constexpr char CHAR_OTA_DATA_UUID[]        = "4d415348-0007-1000-8000-00805f9b34fb";
+// BLE UUIDs are centralized in config/constants/BleConstants.h
 
 class AirTAKService {
 public:

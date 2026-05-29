@@ -11,7 +11,7 @@
 
 namespace airtak {
 
-TouchPoint  Touch::s_points[MAX_POINTS];
+TouchPoint  Touch::s_points[TOUCH_MAX_POINTS];
 uint8_t     Touch::s_count          = 0;
 uint8_t     Touch::s_i2c_addr       = 0;
 bool        Touch::s_initialized    = false;
@@ -141,10 +141,10 @@ TouchGesture Touch::poll() {
         }
         uint8_t buf[GT911_CONFIG_SIZE] = {0};
         Wire.beginTransmission(s_i2c_addr);
-        Wire.write(0x00);
+        Wire.write(0x00); // CST328_REG_TOUCH_INFO — keep 0x00 as-is for protocol clarity
         if (Wire.endTransmission(false) != 0) return TouchGesture::NONE;
-        if (Wire.requestFrom(s_i2c_addr, (uint8_t)7) < 7) return TouchGesture::NONE;
-        for (int i = 0; i < 7; i++) buf[i] = Wire.read();
+        if (Wire.requestFrom(s_i2c_addr, (uint8_t)CST328_TOUCH_DATA_SIZE) < CST328_TOUCH_DATA_SIZE) return TouchGesture::NONE;
+        for (int i = 0; i < CST328_TOUCH_DATA_SIZE; i++) buf[i] = Wire.read();
 
         s_count = (buf[0] & 0x04) ? 1 : 0;
         if (s_count) {
@@ -204,7 +204,7 @@ const TouchPoint& Touch::point(uint8_t i) { return s_points[i]; }
 #else
 
 namespace airtak {
-TouchPoint  Touch::s_points[MAX_POINTS] = {};
+TouchPoint  Touch::s_points[TOUCH_MAX_POINTS] = {};
 uint8_t     Touch::s_count          = 0;
 uint8_t     Touch::s_i2c_addr       = 0;
 bool        Touch::s_initialized    = false;

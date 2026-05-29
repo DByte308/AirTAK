@@ -35,7 +35,7 @@
 #define AIRTAK_PIN_SX1262_RESET            25   // P0.25
 #define AIRTAK_PIN_SX1262_DIO1             20   // P0.20
 #define AIRTAK_PIN_SX1262_BUSY             17   // P0.17
-#define AIRTAK_SX1262_TCXO_VOLTAGE         1.8
+#define AIRTAK_SX1262_TCXO_VOLTAGE         1.8   // centralized: airtak::TCXO_VOLTAGE_DEFAULT (RadioConstants.h)
 
 // ST7789 TFT display (SPI1, separate bus from radio)
 #define AIRTAK_PIN_TFT_SCK                 40   // P1.08
@@ -50,6 +50,7 @@
 #define AIRTAK_TFT_SPI_INSTANCE            NRF_SPIM2
 
 // TFT display geometry (portrait 240×135, rotation 0)
+// centralized: airtak::DISP_WIDTH / airtak::DISP_HEIGHT (DisplayConstants.h)
 #define AIRTAK_TFT_WIDTH                  240
 #define AIRTAK_TFT_HEIGHT                 135
 

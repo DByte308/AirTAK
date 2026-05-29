@@ -56,4 +56,29 @@ constexpr size_t   BLE_DEVICE_LONG_NAME_MAX   = 65;
 /// Maximum bytes for the device short name (per ConfigManager)
 constexpr size_t   BLE_DEVICE_SHORT_NAME_MAX  = 8;
 
+// ── BLE GATT UUIDs (128-bit, Meshtastic-compatible) ──────────────────────
+// Service UUID: 4d415348-0000-1000-8000-00805f9b34fb  ("MASH" = 0x4d415348)
+constexpr const char* BLE_SERVICE_UUID            = "4d415348-0000-1000-8000-00805f9b34fb";
+constexpr const char* BLE_CHAR_CONFIG_RW_UUID     = "4d415348-0001-1000-8000-00805f9b34fb";
+constexpr const char* BLE_CHAR_MESH_TX_UUID       = "4d415348-0002-1000-8000-00805f9b34fb";
+constexpr const char* BLE_CHAR_MESH_RX_UUID       = "4d415348-0003-1000-8000-00805f9b34fb";
+constexpr const char* BLE_CHAR_DEVICE_STATUS_UUID = "4d415348-0004-1000-8000-00805f9b34fb";
+constexpr const char* BLE_CHAR_ADMIN_UUID         = "4d415348-0005-1000-8000-00805f9b34fb";
+constexpr const char* BLE_CHAR_OTA_COMMAND_UUID   = "4d415348-0006-1000-8000-00805f9b34fb";
+constexpr const char* BLE_CHAR_OTA_DATA_UUID      = "4d415348-0007-1000-8000-00805f9b34fb";
+
+// ── BLE Connection Parameters ────────────────────────────────────────────
+constexpr uint16_t BLE_CONN_MIN_INTERVAL         = 6;      // ×1.25ms = 7.5ms
+constexpr uint16_t BLE_CONN_MAX_INTERVAL         = 24;     // ×1.25ms = 30ms
+constexpr uint16_t BLE_CONN_SUPERVISION_TIMEOUT  = 300;    // ×10ms = 3000ms
+constexpr uint8_t  BLE_TX_POWER_DBM_NRF52        = 4;      // +4 dBm for nRF52
+constexpr uint8_t  BLE_ADV_INTERVAL_MS           = 160;    // ×0.625ms = 100ms advertising interval
+constexpr uint8_t  BLE_FAST_ADV_TIMEOUT_S        = 30;     // 30 seconds fast advertising timeout
+constexpr uint16_t BLE_ADV_MIN_INTERVAL_RAW      = 0x06;   // ×0.625ms = 3.75ms
+constexpr uint16_t BLE_ADV_MAX_INTERVAL_RAW      = 0x12;   // ×0.625ms = 11.25ms
+constexpr uint32_t BLE_DEVICE_STATUS_INTERVAL_MS = 5000;   // 5s throttle between device status notifications
+constexpr size_t   BLE_STATUS_BUFFER_SIZE        = 256;    // Protobuf device status buffer
+constexpr uint8_t  BLE_PASSKEY_DIGIT_COUNT       = 6;      // BLE passkey digit count
+constexpr uint8_t  BLE_TX_POWER_ESP32            = 9;      // ESP_PWR_LVL_P9 = +9 dBm (ESP32)
+
 } // namespace airtak

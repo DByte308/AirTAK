@@ -19,6 +19,9 @@ constexpr uint8_t  GT911_ADDR_SECONDARY      = 0x14;
 // ── CST328 Touch Controller I2C Address ────────────────────────────────────
 constexpr uint8_t  CST328_ADDR              = 0x15;
 
+// ── CST328 Touch Data ─────────────────────────────────────────────────────
+constexpr uint8_t  CST328_TOUCH_DATA_SIZE   = 7;      // CST328 touch data register block size
+
 // ── Touch Gesture Detection ────────────────────────────────────────────────
 constexpr int16_t  TOUCH_SWIPE_THRESHOLD_PX  = 8;      // Minimum pixels for swipe vs tap
 constexpr uint8_t  TOUCH_MAX_POINTS          = 2;      // Max simultaneous touch points

@@ -34,10 +34,10 @@ namespace airtak {
 // ── RNG wrapper for mbedTLS CTR_DRBG (PKI keygen) ──────────────────────────
 #if defined(AIRTAK_PLATFORM_ESP32)
 static int hwRngCallback(void*, unsigned char* out, size_t len) {
-    while (len >= 4) {
+    while (len >= sizeof(uint32_t)) {
         uint32_t r = esp_random();
-        memcpy(out, &r, 4);
-        out += 4; len -= 4;
+        memcpy(out, &r, sizeof(uint32_t));
+        out += sizeof(uint32_t); len -= sizeof(uint32_t);
     }
     if (len) {
         uint32_t r = esp_random();
@@ -193,24 +193,24 @@ bool Crypto::pkiEncrypt(const uint8_t our_privkey[CURVE25519_PRIVKEY_BYTES],
 
     mbedtls_ccm_context ccm;
     mbedtls_ccm_init(&ccm);
-    int ret = mbedtls_ccm_setkey(&ccm, MBEDTLS_CIPHER_ID_AES, shared_key, 256);
+    int ret = mbedtls_ccm_setkey(&ccm, MBEDTLS_CIPHER_ID_AES, shared_key, AES256_KEY_BYTES * 8);
     if (ret != 0) { mbedtls_ccm_free(&ccm); return false; }
 
     if (plaintext_len > 0 && plaintext) {
         memcpy(ciphertext_out, plaintext, plaintext_len);
     }
 
-    uint8_t mac[PKI_OVERHEAD_BYTES - 4];
+    uint8_t mac[PKI_OVERHEAD_BYTES - NONCE_EXTRANONCE_BYTES];
     ret = mbedtls_ccm_encrypt_and_tag(&ccm, plaintext_len,
                                        nonce13, AES_CCM_NONCE_BYTES,
                                        nullptr, 0,
                                        ciphertext_out, ciphertext_out,
-                                       mac, PKI_OVERHEAD_BYTES - 4);
+                                       mac, PKI_OVERHEAD_BYTES - NONCE_EXTRANONCE_BYTES);
     mbedtls_ccm_free(&ccm);
     if (ret != 0) return false;
 
-    memcpy(ciphertext_out + plaintext_len, mac, PKI_OVERHEAD_BYTES - 4);
-    memcpy(ciphertext_out + plaintext_len + (PKI_OVERHEAD_BYTES - 4), &extraNonce, 4);
+    memcpy(ciphertext_out + plaintext_len, mac, PKI_OVERHEAD_BYTES - NONCE_EXTRANONCE_BYTES);
+    memcpy(ciphertext_out + plaintext_len + (PKI_OVERHEAD_BYTES - NONCE_EXTRANONCE_BYTES), &extraNonce, NONCE_EXTRANONCE_BYTES);
 
     return true;
 }
@@ -223,7 +223,7 @@ bool Crypto::pkiDecrypt(const uint8_t our_privkey[CURVE25519_PRIVKEY_BYTES],
 
     const uint8_t* mac_ptr    = bytes + num_bytes - PKI_OVERHEAD_BYTES;
     uint32_t extraNonce;
-    memcpy(&extraNonce, mac_ptr + (PKI_OVERHEAD_BYTES - 4), 4);
+    memcpy(&extraNonce, mac_ptr + (PKI_OVERHEAD_BYTES - NONCE_EXTRANONCE_BYTES), NONCE_EXTRANONCE_BYTES);
     size_t ct_len = num_bytes - PKI_OVERHEAD_BYTES;
 
     uint8_t shared_secret[CURVE25519_SHARED_BYTES];
@@ -242,14 +242,14 @@ bool Crypto::pkiDecrypt(const uint8_t our_privkey[CURVE25519_PRIVKEY_BYTES],
 
     mbedtls_ccm_context ccm;
     mbedtls_ccm_init(&ccm);
-    int ret = mbedtls_ccm_setkey(&ccm, MBEDTLS_CIPHER_ID_AES, shared_key, 256);
+    int ret = mbedtls_ccm_setkey(&ccm, MBEDTLS_CIPHER_ID_AES, shared_key, AES256_KEY_BYTES * 8);
     if (ret != 0) { mbedtls_ccm_free(&ccm); return false; }
 
     ret = mbedtls_ccm_auth_decrypt(&ccm, ct_len,
                                     nonce13, AES_CCM_NONCE_BYTES,
                                     nullptr, 0,
                                     bytes, bytes,
-                                    mac_ptr, PKI_OVERHEAD_BYTES - 4);
+                                    mac_ptr, PKI_OVERHEAD_BYTES - NONCE_EXTRANONCE_BYTES);
     mbedtls_ccm_free(&ccm);
     return (ret == 0);
 }

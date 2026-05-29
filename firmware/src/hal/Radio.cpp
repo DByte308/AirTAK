@@ -29,14 +29,7 @@
 
 namespace airtak {
 
-// ── Radio type ─────────────────────────────────────────────────────────────────
-enum class RadioType : uint8_t {
-    NONE     = 0,
-    SX1262   = 1,
-    SX1276   = 2,
-    SX1280   = 3,   // reserved — pins defined, driver pending
-    LR1121   = 4,   // reserved — pins defined, driver pending
-};
+// RadioType enum is centralized in config/constants/RadioConstants.h
 
 // ── SX1262 state ───────────────────────────────────────────────────────────────
 // Module and radio objects for the SX1262 variant.  These are used when the probe
@@ -100,7 +93,7 @@ static void IRAM_ATTR on_packet_sent() {
 // Does NOT write SX1262 registers — caller must do that after begin().
 static bool resolvePhyProfile(uint8_t& profile_idx,
                               uint8_t& sf, uint32_t& bw_hz, uint8_t& cr) {
-    if (profile_idx >= 5) profile_idx = 0;
+    if (profile_idx >= PHY_PROFILE_COUNT) profile_idx = PHY_PROFILE_DEFAULT;
 
     // Start from compile-time defaults.  loraPhyProfile() overlays the committed
     // LORA config on top when available; keep the defaults if it fails.
@@ -111,7 +104,7 @@ static bool resolvePhyProfile(uint8_t& profile_idx,
         // Config is missing or malformed for this profile.  If the defaults are
         // also unusable (profile 4 User Defined = all zeros), fall back to
         // profile 0 Long/Mesh so the radio stays operational.
-        if (sf < 7 || sf > 12 || bw_hz == 0 || cr < 5 || cr > 8) {
+        if (sf < LORA_SF_MIN || sf > LORA_SF_MAX || bw_hz == 0 || cr < LORA_CR_MIN || cr > LORA_CR_MAX) {
             profile_idx = 0;
             sf    = defaults::PHY_PROFILES[0].spreading_factor;
             bw_hz = defaults::PHY_PROFILES[0].bandwidth_hz;
@@ -120,7 +113,7 @@ static bool resolvePhyProfile(uint8_t& profile_idx,
     }
 
     s_active_phy = profile_idx;
-    return (sf >= 7 && sf <= 12 && bw_hz > 0 && cr >= 5 && cr <= 8);
+    return (sf >= LORA_SF_MIN && sf <= LORA_SF_MAX && bw_hz > 0 && cr >= LORA_CR_MIN && cr <= LORA_CR_MAX);
 }
 
 // ── Radio::init() ─────────────────────────────────────────────────────────────
@@ -133,7 +126,7 @@ void Radio::init() {
     // The first radio that responds to begin() becomes the active radio.
 
     uint8_t  initial_phy = config::ConfigManager::primarySlotPhyProfileIndex();
-    if (initial_phy >= 5) initial_phy = 0;
+    if (initial_phy >= PHY_PROFILE_COUNT) initial_phy = PHY_PROFILE_DEFAULT;
 
     uint8_t  sf    = 0;
     uint32_t bw_hz = 0;
@@ -144,13 +137,13 @@ void Radio::init() {
     }
 
     float freq_mhz = config::ConfigManager::loraFrequencyMhz();
-    if (freq_mhz < 100.0f) freq_mhz = (float)LORA_FREQ_EU868;
+    if (freq_mhz < LORA_FREQ_MIN_MHZ) freq_mhz = LORA_FREQ_EU868;
     uint8_t tx_power = config::ConfigManager::loraTxPowerDbm();
 
     // ── Probe SX1262 ──────────────────────────────────────────────────────────
     {
         int16_t result = s_radio_sx1262.begin(
-            freq_mhz, bw_hz / 1000.0f, sf, cr,
+            freq_mhz, bw_hz / HZ_TO_KHZ, sf, cr,
             LORA_SYNC_WORD, tx_power, LORA_PREAMBLE_LENGTH,
             AIRTAK_SX1262_TCXO_VOLTAGE);
 
@@ -170,7 +163,7 @@ void Radio::init() {
 #if defined(AIRTAK_PIN_SX1276_DIO0)
     if (s_radio_type == RadioType::NONE) {
         int16_t result = s_radio_sx1276.begin(
-            freq_mhz, bw_hz / 1000.0f, sf, cr,
+            freq_mhz, bw_hz / HZ_TO_KHZ, sf, cr,
             LORA_SYNC_WORD, tx_power, LORA_PREAMBLE_LENGTH);
 
         if (result == RADIOLIB_ERR_NONE) {
@@ -195,7 +188,7 @@ void Radio::init() {
     s_active_radio->setPacketSentAction(on_packet_sent);
     s_radio_sx1262.standby();
     s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
     s_radio_sx1262.setDio1Action(on_packet_received);
     if (s_radio_type != RadioType::NONE) {
         Serial.println("[RADIO] init OK");
@@ -216,7 +209,7 @@ void Radio::reinit() {
     delay(RADIO_RESET_RECOVERY_MS);
 
     uint8_t  new_phy = config::ConfigManager::primarySlotPhyProfileIndex();
-    if (new_phy >= 5) new_phy = 0;
+    if (new_phy >= PHY_PROFILE_COUNT) new_phy = PHY_PROFILE_DEFAULT;
     uint8_t  sf    = 0;
     uint32_t bw_hz = 0;
     uint8_t  cr    = 0;
@@ -227,14 +220,14 @@ void Radio::reinit() {
     }
 
     float   freq_mhz = config::ConfigManager::loraFrequencyMhz();
-    if (freq_mhz < 100.0f) freq_mhz = (float)LORA_FREQ_EU868;
+    if (freq_mhz < LORA_FREQ_MIN_MHZ) freq_mhz = LORA_FREQ_EU868;
     uint8_t tx_power = config::ConfigManager::loraTxPowerDbm();
 
     int16_t result = RADIOLIB_ERR_UNKNOWN;
 
     if (s_radio_type == RadioType::SX1262) {
         result = s_radio_sx1262.begin(
-            freq_mhz, bw_hz / 1000.0f, sf, cr,
+            freq_mhz, bw_hz / HZ_TO_KHZ, sf, cr,
             LORA_SYNC_WORD, tx_power, LORA_PREAMBLE_LENGTH,
             AIRTAK_SX1262_TCXO_VOLTAGE);
         if (result == RADIOLIB_ERR_NONE) {
@@ -249,7 +242,7 @@ void Radio::reinit() {
 #if defined(AIRTAK_PIN_SX1276_DIO0)
     else if (s_radio_type == RadioType::SX1276) {
         result = s_radio_sx1276.begin(
-            freq_mhz, bw_hz / 1000.0f, sf, cr,
+            freq_mhz, bw_hz / HZ_TO_KHZ, sf, cr,
             LORA_SYNC_WORD, tx_power, LORA_PREAMBLE_LENGTH);
     }
 #endif
@@ -265,7 +258,7 @@ void Radio::reinit() {
     s_active_radio->setPacketSentAction(on_packet_sent);
     s_radio_sx1262.standby();
     s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
     s_radio_sx1262.setDio1Action(on_packet_received);
 }
 
@@ -340,7 +333,7 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
             if (pkt_len == 0 || pkt_len > LORA_MAX_PAYLOAD_BYTES) {
                 s_radio_sx1262.standby();
     s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
     s_radio_sx1262.setDio1Action(on_packet_received);
             } else {
                 PooledPacket* pkt = PacketPool::alloc();
@@ -363,13 +356,13 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
                 }
                 s_radio_sx1262.standby();
     s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
     s_radio_sx1262.setDio1Action(on_packet_received);
             }
         } else {
             s_radio_sx1262.standby();
     s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
     s_radio_sx1262.setDio1Action(on_packet_received);
 }
     }
@@ -398,7 +391,7 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
 
         int16_t err = RADIOLIB_ERR_NONE;
         if (s_radio_type == RadioType::SX1262) {
-            err = s_radio_sx1262.setBandwidth(bw_hz / 1000.0f);
+            err = s_radio_sx1262.setBandwidth(bw_hz / HZ_TO_KHZ);
             if (err == RADIOLIB_ERR_NONE)
                 err = s_radio_sx1262.setSpreadingFactor(sf);
             if (err == RADIOLIB_ERR_NONE)
@@ -406,7 +399,7 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
         }
 #if defined(AIRTAK_PIN_SX1276_DIO0)
         else if (s_radio_type == RadioType::SX1276) {
-            err = s_radio_sx1276.setBandwidth(bw_hz / 1000.0f);
+            err = s_radio_sx1276.setBandwidth(bw_hz / HZ_TO_KHZ);
             if (err == RADIOLIB_ERR_NONE)
                 err = s_radio_sx1276.setSpreadingFactor(sf);
             if (err == RADIOLIB_ERR_NONE)
@@ -422,14 +415,14 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
 
 #ifndef AIRTAK_NATIVE_TEST
     Serial.printf("[TXRAW] len=%u err=%d toa=%lu ms | hdr: ", length, err, (unsigned long)tx_elapsed_ms);
-    for (int i = 0; i < 16 && i < length; i++) Serial.printf("%02X", data[i]);
+    for (int i = 0; i < DEBUG_PRINT_LIMIT_TXHEX && i < length; i++) Serial.printf("%02X", data[i]);
     Serial.println();
     Serial.flush();
 #endif
 
     s_radio_sx1262.standby();
     s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, 8);
+    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
     s_radio_sx1262.setDio1Action(on_packet_received);
 
     if (err == RADIOLIB_ERR_NONE) {

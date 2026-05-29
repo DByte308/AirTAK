@@ -192,7 +192,7 @@ void GPS::process(EventGroupHandle_t system_event_group) {
             // minimum safe gap is ~100 ms — longer than the 20 ms delay that was
             // here previously.  At 9600 baud, two NMEA sentences (GGA + RMC) at
             // 1 Hz occupy ~150 ms out of every 1000 ms, well within capacity.
-            if (!s_baud_upgraded && s_gps.charsProcessed() > 10) {
+            if (!s_baud_upgraded && s_gps.charsProcessed() > GPS_MIN_CHARS_BEFORE_CONFIG) {
                 // Restrict output to GNGGA + GNRMC only (saves ~80 % of UART traffic).
                 // PMTK314 field order: GLL, RMC, VTG, GGA, GSA, GSV, ... (17 more) = 19 fields.
                 send_pmtk("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28");
@@ -205,13 +205,13 @@ void GPS::process(EventGroupHandle_t system_event_group) {
 
             if (s_gps.location.isValid() && s_gps.hdop.isValid()) {
                 float hdop = s_gps.hdop.hdop();
-                s_current_fix.valid      = (hdop <= 5.0f && s_gps.satellites.value() >= 4);
+                s_current_fix.valid      = (hdop <= GPS_FIX_HDOP_MAX && s_gps.satellites.value() >= GPS_FIX_MIN_SATELLITES);
                 s_current_fix.latitude   = s_gps.location.lat();
                 s_current_fix.longitude  = s_gps.location.lng();
                 s_current_fix.altitude_m = s_gps.altitude.meters();
                 s_current_fix.hdop       = hdop;
                 s_current_fix.satellites = s_gps.satellites.value();
-                s_current_fix.accuracy_m = hdop * 5.0f; // rough estimate
+                s_current_fix.accuracy_m = hdop * GPS_HDOP_TO_ACCURACY_MULT; // rough estimate
                 s_current_fix.timestamp_ms = millis();
 
                 if (s_current_fix.valid && system_event_group) {
@@ -243,10 +243,10 @@ void GPS::process(EventGroupHandle_t system_event_group) {
 
 #ifdef AIRTAK_GPS_DEBUG
     // Print diagnostics once every 10 seconds regardless of fix status.
-    if (now - s_debug_last_print_ms >= 10000u) {
+    if (now - s_debug_last_print_ms >= GPS_DEBUG_PRINT_INTERVAL_MS) {
         s_debug_last_print_ms = now;
         Serial.printf("[GPS] uptime=%lus baud=%lu raw_bytes=%lu chars_parsed=%lu passed=%lu bad_checksums=%lu\n",
-                      (unsigned long)(now / 1000u),
+                      (unsigned long)(now / MS_TO_SECS),
                       (unsigned long)s_current_baud,
                       (unsigned long)s_debug_raw_bytes,
                       (unsigned long)s_gps.charsProcessed(),
@@ -292,7 +292,7 @@ void GPS::setExternalFix(double lat, double lng, float alt_m, float acc_m) {
     s_external_fix.longitude   = lng;
     s_external_fix.altitude_m  = alt_m;
     s_external_fix.accuracy_m  = acc_m;
-    s_external_fix.hdop        = (acc_m > 0.0f) ? (acc_m / 5.0f) : 1.0f;
+    s_external_fix.hdop        = (acc_m > 0.0f) ? (acc_m / GPS_HDOP_TO_ACCURACY_MULT) : GPS_HDOP_DEFAULT_FALLBACK;
     s_external_fix.satellites  = 0;   // not applicable for phone GPS
     s_external_fix.timestamp_ms = millis();
 }
@@ -314,7 +314,7 @@ bool GPS::usingExternalFix() {
 static double haversine_m(double lat1, double lon1, double lat2, double lon2);
 
 float GPS::displacementFromLastTxMeters() {
-    if (s_last_tx_lat == 0.0 && s_last_tx_lng == 0.0) return 9999.0f; // force first TX
+    if (s_last_tx_lat == 0.0 && s_last_tx_lng == 0.0) return GPS_DISPLACEMENT_FORCE_TX_M; // force first TX
     const GpsFix& fix = currentFix();
     return (float)haversine_m(s_last_tx_lat, s_last_tx_lng,
                                fix.latitude, fix.longitude);

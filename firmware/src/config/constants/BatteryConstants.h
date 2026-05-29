@@ -29,4 +29,9 @@ constexpr uint32_t BATTERY_VOLTAGE_MIN_MV      = 3200;   // Empty / cutoff (3.2V
 // Defined as uint32_t for portability (EventBits_t is uint32_t on all platforms).
 constexpr uint32_t BATTERY_EVENT_UPDATED       = (1 << 12);
 
+// ── Voltage Divider ──────────────────────────────────────────────────────
+constexpr float    BATTERY_VOLTAGE_DIVIDER_RATIO = 2.0f;   // Resistive divider factor
+// ── Display Helpers ──────────────────────────────────────────────────────
+constexpr float    BATTERY_PCT_SCALE             = 100.0f; // Float 0.0-1.0 → display percentage
+
 } // namespace airtak

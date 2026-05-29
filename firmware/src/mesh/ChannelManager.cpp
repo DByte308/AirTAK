@@ -49,7 +49,7 @@ static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot&
         while (sp < sub_len) { uint8_t b = sub[sp++]; tag |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
         uint8_t wire  = tag & 0x07;
         uint8_t field = (uint8_t)(tag >> 3);
-        if (wire == 0 && field == 1) {
+        if (wire == 0 && field == CHANNELSLOT_FIELD_INDEX) {
             uint32_t v = 0; shift = 0;
             while (sp < sub_len) { uint8_t b = sub[sp++]; v |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
             idx = (uint8_t)v;
@@ -71,21 +71,21 @@ static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot&
             uint32_t v = 0; shift = 0;
             while (sp < sub_len) { uint8_t b = sub[sp++]; v |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
             switch (field) {
-                case 4: slot.role               = static_cast<ChannelRole>(v); break;
-                case 5: slot.uplink_enabled     = (v != 0); break;
-                case 6: slot.downlink_enabled   = (v != 0); break;
-                case 7: slot.position_precision = (uint8_t)v; break;
-                case 8: slot.phy_profile_index  = (uint8_t)v; break;
+                case CHANNELSLOT_FIELD_ROLE:      slot.role               = static_cast<ChannelRole>(v); break;
+                case CHANNELSLOT_FIELD_UPLINK:    slot.uplink_enabled     = (v != 0); break;
+                case CHANNELSLOT_FIELD_DOWNLINK:  slot.downlink_enabled   = (v != 0); break;
+                case CHANNELSLOT_FIELD_PRECISION: slot.position_precision = (uint8_t)v; break;
+                case CHANNELSLOT_FIELD_PHY:       slot.phy_profile_index  = (uint8_t)v; break;
                 default: break;
             }
         } else if (wire == 2) {
             uint32_t flen = 0; shift = 0;
             while (sp < sub_len) { uint8_t b = sub[sp++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
-            if (field == 2 && flen > 0) { // name
+            if (field == CHANNELSLOT_FIELD_NAME && flen > 0) { // name
                 uint8_t cplen = (uint8_t)(flen < CHANNEL_NAME_MAX_BYTES ? flen : CHANNEL_NAME_MAX_BYTES);
                 memcpy(slot.name, sub + sp, cplen);
                 slot.name[cplen] = '\0';
-            } else if (field == 3 && flen > 0 && flen <= PSK_MAX_BYTES) { // psk
+            } else if (field == CHANNELSLOT_FIELD_PSK && flen > 0 && flen <= PSK_MAX_BYTES) { // psk
                 memcpy(slot.psk, sub + sp, flen);
                 slot.psk_len = (uint8_t)flen;
             }
@@ -101,7 +101,7 @@ static void loadConfiguredSlots() {
 
     // Load LongFast channel config from flash if available, otherwise from
     // ConfigManager.  If flash/config has valid data, overlay it on the defaults.
-    uint8_t  buf[512];
+    uint8_t  buf[CONFIG_BUF_SIZE];
     size_t   buf_len = config::ConfigManager::readGroup(
                            config::ConfigGroup::CHANNELS, buf, sizeof(buf));
     if (buf_len > 0) {
@@ -111,7 +111,7 @@ static void loadConfiguredSlots() {
             while (pos < buf_len) { uint8_t b = buf[pos++]; tag |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
             uint8_t wire  = tag & 0x07;
             uint8_t field = (uint8_t)(tag >> 3);
-            if (wire == 2 && field == 1) {
+            if (wire == 2 && field == CHANNELCONFIG_FIELD_SLOTS) {
                 uint32_t submsg_len = 0; shift = 0;
                 while (pos < buf_len) { uint8_t b = buf[pos++]; submsg_len |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
                 if (pos + submsg_len > buf_len) break;
@@ -136,15 +136,15 @@ static void loadConfiguredSlots() {
     // channels via the app yet.
     auto& s = s_slots[0];
     if (strcmp(s.name, "AirTAK") == 0) {
-        strncpy(s.name, "LongFast", CHANNEL_NAME_MAX_BYTES);
+        strncpy(s.name, CHANNEL_NAME_LONGFAST, CHANNEL_NAME_MAX_BYTES);
         s.name[CHANNEL_NAME_MAX_BYTES] = '\0';
-        s.psk[0] = 0x01;
-        s.psk_len = 1;
+        s.psk[0] = PSK_INDEX_BYTE;
+        s.psk_len = PSK_INDEX_BYTE_LEN;
         s.role = ChannelRole::PRIMARY;
         s.uplink_enabled = true;
         s.downlink_enabled = true;
-        s.position_precision = 32;
-        s.phy_profile_index = 0;
+        s.position_precision = POSITION_GPS_PRECISION_BITS;
+        s.phy_profile_index = PHY_PROFILE_DEFAULT;
     }
 }
 
@@ -155,10 +155,6 @@ void ChannelManager::init() {
 void ChannelManager::rekey() {
     loadConfiguredSlots();
 
-    static const uint8_t MESHTASTIC_DEFAULT_PSK[MESHTASTIC_DEFAULT_PSK_BYTES] = {
-        0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
-        0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01
-    };
 
     for (uint8_t i = 0; i < MAX_CHANNEL_SLOTS; i++) {
         auto& slot = s_slots[i];
@@ -173,7 +169,7 @@ void ChannelManager::rekey() {
         if (effective_len == 1 && effective_psk[0] != 0) {
             static uint8_t expanded[MESHTASTIC_DEFAULT_PSK_BYTES];
             memcpy(expanded, MESHTASTIC_DEFAULT_PSK, sizeof(expanded));
-            expanded[15] += (uint8_t)(effective_psk[0] - 1);
+            expanded[PSK_EXPANSION_BYTE_OFFSET] += (uint8_t)(effective_psk[0] - 1);
             effective_psk = expanded;
             effective_len = sizeof(expanded);
         } else if (effective_len == 1 && effective_psk[0] == 0) {

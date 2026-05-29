@@ -56,8 +56,8 @@ struct RelayEntry {
 
 static DupEntry    s_dup_cache[defaults::ROUTER_DUP_CACHE_SIZE];
 static AckRetryEntry s_retry_queue[defaults::ACK_RETRY_QUEUE_SIZE];
-static RelayEntry  s_relay_queue[16];  // pending relay slots
-static uint32_t    s_next_packet_id = 1; // local packet ID counter
+static RelayEntry  s_relay_queue[ROUTER_RELAY_QUEUE_SIZE];  // pending relay slots
+static uint32_t    s_next_packet_id = PACKET_ID_INITIAL; // local packet ID counter
 
 struct AppDedupEntry {
     uint32_t src_id;
@@ -108,7 +108,7 @@ static bool appendBytes(uint8_t* buf, uint16_t& pos, uint16_t max_len,
 
 struct DataMetadata {
     Portnum  portnum = Portnum::UNKNOWN_APP;
-    uint32_t dest = 0xFFFFFFFF;
+    uint32_t dest = MESH_BROADCAST_ADDR;
     uint32_t source = 0;
     uint32_t request_id = 0;
     bool     want_response = false;
@@ -233,7 +233,7 @@ static void parseNodeInfoPayload(const uint8_t* data_pb, uint16_t data_len,
     if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return;
 
     static char ln_buf[40];
-    static char sn_buf[5];
+    static char sn_buf[REMOTE_NODE_SHORT_NAME_MAX];
     static char id_buf[16];
 
     // The over-the-air NodeInfo used by Meshtastic devices has flat string
@@ -250,19 +250,19 @@ static void parseNodeInfoPayload(const uint8_t* data_pb, uint16_t data_len,
         if (wire == 2) {
             uint32_t flen = 0; uint8_t shift = 0;
             while (pos < inner_len) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
-            if (field == 1 && flen > 0 && flen < sizeof(id_buf)) {
+            if (field == NODEINFO_FIELD_ID && flen > 0 && flen < sizeof(id_buf)) {
                 memcpy(id_buf, inner + pos, flen);
                 id_buf[flen] = '\0';
                 node_id_str = id_buf;
-            } else if (field == 2 && flen > 0 && flen < sizeof(ln_buf)) {
+            } else if (field == NODEINFO_FIELD_LONG_NAME && flen > 0 && flen < sizeof(ln_buf)) {
                 memcpy(ln_buf, inner + pos, flen);
                 ln_buf[flen] = '\0';
                 long_name = ln_buf;
-            } else if (field == 3 && flen > 0 && flen < sizeof(sn_buf)) {
+            } else if (field == NODEINFO_FIELD_SHORT_NAME && flen > 0 && flen < sizeof(sn_buf)) {
                 memcpy(sn_buf, inner + pos, flen);
                 sn_buf[flen] = '\0';
                 short_name = sn_buf;
-            } else if (field == 8 && flen > 0) {
+            } else if (field == NODEINFO_FIELD_PUBLIC_KEY && flen > 0) {
                 public_key = inner + pos;
                 public_key_len = static_cast<uint16_t>(flen);
             }
@@ -296,13 +296,13 @@ static void parsePositionPayload(const uint8_t* data_pb, uint16_t data_len,
             uint32_t v = 0;
             memcpy(&v, inner + pos, 4);
             pos += 4;
-            if (field == 1) { lat_i = (int32_t)v; has_lat = true; }
-            else if (field == 2) { lon_i = (int32_t)v; has_lon = true; }
-            else if (field == 4) { timestamp_secs = v; }
+            if (field == POSITION_FIELD_LATITUDE) { lat_i = (int32_t)v; has_lat = true; }
+            else if (field == POSITION_FIELD_LONGITUDE) { lon_i = (int32_t)v; has_lon = true; }
+            else if (field == POSITION_FIELD_TIME) { timestamp_secs = v; }
         } else if (wire == 0) {
             uint32_t v = 0;
             if (!readVarint(inner, inner_len, pos, v)) break;
-            if (field == 3) alt_m = (int32_t)v;
+            if (field == POSITION_FIELD_ALTITUDE) alt_m = (int32_t)v;
         } else {
             if (!skipField(inner, inner_len, pos, wire)) break;
         }
@@ -329,7 +329,7 @@ static void parseTelemetryPayload(const uint8_t* data_pb, uint16_t data_len,
         if (!readVarint(inner, inner_len, pos, tag)) break;
         uint8_t wire = tag & 0x07;
         uint32_t field = tag >> 3;
-        if (wire == 2 && field == 2) {  // Telemetry.device_metrics (sub-message)
+        if (wire == 2 && field == TELEMETRY_FIELD_DEVICE_METRICS) {  // Telemetry.device_metrics (sub-message)
             uint32_t sublen = 0; uint8_t shift = 0;
             while (pos < inner_len) { uint8_t b = inner[pos++]; sublen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
             uint16_t sub_end = (uint16_t)(pos + sublen);
@@ -370,14 +370,14 @@ static const char* parseTextMessagePayload(const uint8_t* data_pb, uint16_t data
     uint16_t inner_len = 0;
     if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return "";
 
-    static char msg_buf[256];
+    static char msg_buf[TEXT_MESSAGE_MAX_BYTES];
     uint16_t pos = 0;
     while (pos < inner_len) {
         uint32_t tag;
         if (!readVarint(inner, inner_len, pos, tag)) break;
         uint8_t wire = tag & 0x07;
         uint32_t field = tag >> 3;
-        if (wire == 2 && field == 1) {
+        if (wire == 2 && field == TEXTMSG_FIELD_TEXT) {
             uint32_t flen = 0; uint8_t shift = 0;
             while (pos < inner_len) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
             uint32_t copy = flen < sizeof(msg_buf) - 1 ? flen : sizeof(msg_buf) - 1;
@@ -430,7 +430,7 @@ static bool parseDataMetadata(const uint8_t* data, uint16_t data_len, DataMetada
                     out.want_response = (value != 0);
                     break;
                 case 4:
-                    out.dest = (value == 0) ? 0xFFFFFFFF : value;
+                    out.dest = (value == 0) ? MESH_BROADCAST_ADDR : value;
                     break;
                 case 5:
                     out.source = value;
@@ -449,7 +449,7 @@ static bool parseDataMetadata(const uint8_t* data, uint16_t data_len, DataMetada
             pos += 4;
             switch (field) {
                 case 4:
-                    out.dest = (value == 0) ? 0xFFFFFFFF : value;
+                    out.dest = (value == 0) ? MESH_BROADCAST_ADDR : value;
                     break;
                 case 5:
                     out.source = value;
@@ -480,7 +480,7 @@ static bool buildDataMessage(Portnum portnum, uint32_t dest, uint32_t src,
         if (!appendTag(out, pos, max_len, 3, 0)) return false;
         if (!appendVarU32(out, pos, max_len, 1)) return false;
     }
-    if (dest != 0xFFFFFFFF) {
+    if (dest != MESH_BROADCAST_ADDR) {
         if (!appendTag(out, pos, max_len, 4, 5)) return false;
         memcpy(out + pos, &dest, 4); pos += 4;
     }
@@ -575,7 +575,7 @@ static bool isAppDuplicate(uint32_t src_id, uint32_t request_id, uint32_t now_ms
 }
 
 static void queueDeliveryFailure(uint32_t portnum, uint32_t msg_id) {
-    char error[96];
+    char error[ADMIN_ERROR_MSG_MAX_BYTES];
     snprintf(error, sizeof(error), "delivery_failed port=%lu request_id=%lu",
              static_cast<unsigned long>(portnum),
              static_cast<unsigned long>(msg_id));
@@ -583,7 +583,7 @@ static void queueDeliveryFailure(uint32_t portnum, uint32_t msg_id) {
 }
 
 static void queueDeliverySuccess(uint32_t portnum, uint32_t msg_id) {
-    char msg[96];
+    char msg[ADMIN_ERROR_MSG_MAX_BYTES];
     snprintf(msg, sizeof(msg), "delivery_ok port=%lu request_id=%lu",
              static_cast<unsigned long>(portnum),
              static_cast<unsigned long>(msg_id));
@@ -592,8 +592,8 @@ static void queueDeliverySuccess(uint32_t portnum, uint32_t msg_id) {
 
 static bool isPacketAddressedToMe(const OtaHeader& hdr, const DataMetadata& data_meta) {
     uint32_t my_id = MeshNode::nodeId();
-    bool ota_ok = (hdr.dest_node_id == my_id || hdr.dest_node_id == 0xFFFFFFFF);
-    bool data_ok = (data_meta.dest == my_id || data_meta.dest == 0xFFFFFFFF);
+    bool ota_ok = (hdr.dest_node_id == my_id || hdr.dest_node_id == MESH_BROADCAST_ADDR);
+    bool data_ok = (data_meta.dest == my_id || data_meta.dest == MESH_BROADCAST_ADDR);
     return ota_ok && data_ok;
 }
 
@@ -609,7 +609,7 @@ void Router::init() {
     // which Meshtastic's wasSeenRecently dedup (by sender+id, ~45 min TTL)
     // would otherwise reject after a quick power-cycle.
     s_next_packet_id = ((millis() & 0xFFFF) | (MeshNode::nodeId() << 8))
-                     ^ ((uint32_t)random(0, 256) << 16);
+                     ^ ((uint32_t)random(0, PACKET_ID_SEED_RANDOM_RANGE) << 16);
 }
 
 // ── buildOtaHeader() ─────────────────────────────────────────────────────────
@@ -651,7 +651,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         if (hdr.packet_id != (last_pkt_dump & 0xFFFFFFFF)) {
             last_pkt_dump = (last_pkt_dump & ~0xFFFFFFFFULL) | hdr.packet_id;
             Serial.print("[PKTHEX] ");
-            for (int ri = 0; ri < raw_len && ri < 32; ri++)
+            for (int ri = 0; ri < raw_len && ri < DEBUG_PRINT_LIMIT_RXHEX; ri++)
                 Serial.printf("%02X", raw[ri]);
             Serial.printf(" | dest=%08X src=%08X id=%08X fl=0x%02X(h=%d/%d a=%d m=%d) ch=0x%02X nh=%02X rl=%02X\n",
                 hdr.dest_node_id, hdr.src_node_id, hdr.packet_id,
@@ -802,7 +802,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
     uint32_t portnum_value = data_valid ? static_cast<uint32_t>(data_meta.portnum) : 0;
     {
         static uint32_t pc = 0;
-        if (++pc <= 10) {
+        if (++pc <= DEBUG_PRINT_LIMIT_PACKET) {
 #ifndef AIRTAK_NATIVE_TEST
             Serial.printf("[PCKT] portnum=%u valid=%d src=%08X relay=%02X\n",
                 (unsigned)portnum_value, data_valid, hdr.src_node_id, hdr.relay_node_low);
@@ -884,7 +884,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         const uint8_t* pubkey = nullptr;
         uint16_t pubkey_len = 0;
         parseNodeInfoPayload(decrypted, payload_len, long_name, short_name, id_str, pubkey, pubkey_len);
-        if (++nic <= 5) {
+        if (++nic <= DEBUG_PRINT_LIMIT_NODEINFO) {
 #ifndef AIRTAK_NATIVE_TEST
             Serial.printf("[NODEINFO] src=%08X id=%s name=%s short=%s pk=%s\n",
                 hdr.src_node_id,
@@ -929,7 +929,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         const char* text = parseTextMessagePayload(decrypted, payload_len);
         if (text && text[0]) {
             static uint32_t tmc = 0;
-            if (++tmc <= 5) {
+            if (++tmc <= DEBUG_PRINT_LIMIT_TEXTMSG) {
 #ifndef AIRTAK_NATIVE_TEST
                 Serial.printf("[TEXT] from=%08X text=%.60s\n", hdr.src_node_id, text);
                 Serial.flush();
@@ -948,10 +948,10 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         uint16_t inner_len = 0;
         if (extractDataPayload(decrypted, payload_len, inner, inner_len)) {
             // Parse RouteDiscovery: field 2 = repeated fixed32 route entries
-            uint32_t route_nodes[16];
+            uint32_t route_nodes[ROUTER_RELAY_QUEUE_SIZE];
             uint8_t  route_count = 0;
             uint16_t ip = 0;
-            while (ip < inner_len && route_count < 16) {
+            while (ip < inner_len && route_count < ROUTER_RELAY_QUEUE_SIZE) {
                 uint32_t tag;
                 if (!readVarint(inner, inner_len, ip, tag)) break;
                 uint8_t wire = tag & 0x07;
@@ -966,12 +966,12 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             }
             // Append our node ID (if not already the last entry and room permits).
             if (route_count == 0 || route_nodes[route_count - 1] != MeshNode::nodeId()) {
-                if (route_count < 16) {
+                if (route_count < ROUTER_RELAY_QUEUE_SIZE) {
                     route_nodes[route_count++] = MeshNode::nodeId();
                 }
             }
             // Build response RouteDiscovery: field 2 = repeated fixed32
-            uint8_t resp[80];
+            uint8_t resp[TRACEROUTE_RESP_BUF_SIZE];
             uint16_t rp = 0;
             for (uint8_t i = 0; i < route_count; i++) {
                 if (!appendTag(resp, rp, sizeof(resp), 2, 5)) break;
@@ -985,7 +985,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             }
         }
         static uint32_t trc = 0;
-        if (++trc <= 5) {
+        if (++trc <= DEBUG_PRINT_LIMIT_TRACEROUTE) {
 #ifndef AIRTAK_NATIVE_TEST
             Serial.printf("[TRACERT] src=%08X dest=%08X len=%u\n",
                 hdr.src_node_id, hdr.dest_node_id, payload_len);
@@ -1024,7 +1024,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             MeshNode::broadcastTelemetry(tx_queue);
         }
         static uint32_t adc = 0;
-        if (++adc <= 5) {
+        if (++adc <= DEBUG_PRINT_LIMIT_ADMIN) {
 #ifndef AIRTAK_NATIVE_TEST
             Serial.printf("[ADMIN] src=%08X dest=%08X len=%u req=%d\n",
                 hdr.src_node_id, hdr.dest_node_id, payload_len, is_admin_request);
@@ -1082,7 +1082,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         && portnum_value != static_cast<uint32_t>(Portnum::ROUTING_APP)
         && portnum_value != static_cast<uint32_t>(Portnum::AIRTAK_ACK)) {
         static uint32_t unc = 0;
-        if (++unc <= 20) {
+        if (++unc <= DEBUG_PRINT_LIMIT_UNHANDLED) {
 #ifndef AIRTAK_NATIVE_TEST
             Serial.printf("[UNHAND] portnum=%u src=%08X dest=%08X len=%u\n",
                 (unsigned)portnum_value, hdr.src_node_id, hdr.dest_node_id, payload_len);
@@ -1311,13 +1311,13 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
 #endif
         bool is_audio = (portnum_value == static_cast<uint32_t>(Portnum::AIRTAK_AUDIO));
         if (!is_audio) {
-           // SNR-based relay delay: delay_ms = (SNR_max - SNR_received) × 50 + random(0, 50) (§8.7).
+           // SNR-based relay delay: delay_ms = (SNR_max - SNR_received) × SNR_RELAY_DELAY_FACTOR + random(0, SNR_RELAY_DELAY_JITTER_MAX_MS) (§8.7).
             float snr_max = defaults::PHY_SNR_MAX[0]; // fallback: Long/Mesh
             if (slot->phy_profile_index < PHY_PROFILE_COUNT) {
                 snr_max = defaults::PHY_SNR_MAX[slot->phy_profile_index];
             }
-            uint32_t delay_ms = (uint32_t)(max(0.0f, snr_max - snr) * 50.0f)
-                                + (uint32_t)(random(0, 50));
+            uint32_t delay_ms = (uint32_t)(max(0.0f, snr_max - snr) * SNR_RELAY_DELAY_FACTOR)
+                                + (uint32_t)(random(0, SNR_RELAY_DELAY_JITTER_MAX_MS));
 
             // Build relay packet: decrement hop_limit, preserve hop_start.
             uint8_t relay_buf[LORA_MAX_PAYLOAD_BYTES];
@@ -1355,13 +1355,13 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             // send_after_ms (oldest queued relay) so the most recent packet — likely
             // more relevant — stays queued.
             {
-                size_t target = 16;
-                for (size_t j = 0; j < 16; j++) {
+                size_t target = ROUTER_RELAY_QUEUE_SIZE;
+                for (size_t j = 0; j < ROUTER_RELAY_QUEUE_SIZE; j++) {
                     if (!s_relay_queue[j].in_use) { target = j; break; }
                 }
-                if (target == 16) {
+                if (target == ROUTER_RELAY_QUEUE_SIZE) {
                     uint32_t earliest = UINT32_MAX;
-                    for (size_t j = 0; j < 16; j++) {
+                    for (size_t j = 0; j < ROUTER_RELAY_QUEUE_SIZE; j++) {
                         if (s_relay_queue[j].send_after_ms < earliest) {
                             earliest = s_relay_queue[j].send_after_ms;
                             target = j;
@@ -1385,7 +1385,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
 // ── Router::tickRelayQueue() ─────────────────────────────────────────────────
 void Router::tickRelayQueue(QueueHandle_t tx_queue) {
     uint32_t now_ms = millis();
-    for (size_t i = 0; i < 16; i++) {
+    for (size_t i = 0; i < ROUTER_RELAY_QUEUE_SIZE; i++) {
         auto& e = s_relay_queue[i];
         if (!e.in_use) continue;
         // Signed-difference comparison is safe across millis() wrap for
@@ -1446,7 +1446,7 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
 #ifndef AIRTAK_NATIVE_TEST
     {
         static uint32_t last_tx_dump = 0;
-        if (millis() - last_tx_dump > 2000) {
+        if (millis() - last_tx_dump > TX_DUMP_THROTTLE_MS) {
             last_tx_dump = millis();
             // Diagnostic: print the raw struct bytes to detect layout issues
             const uint8_t* raw_hdr = (const uint8_t*)&hdr;
@@ -1503,7 +1503,7 @@ static void addRetryEntry(Portnum portnum, uint32_t dest, uint32_t msg_id,
     if (slot_idx == defaults::ACK_RETRY_QUEUE_SIZE) slot_idx = oldest_idx;
 
     uint32_t timeout = max(defaults::ACK_TIMEOUT_MIN_MS,
-                           2u * static_cast<uint32_t>(hop_start) * defaults::ACK_TIMEOUT_PER_HOP_MS);
+                            ACK_TIMEOUT_HOP_MULTIPLIER * static_cast<uint32_t>(hop_start) * defaults::ACK_TIMEOUT_PER_HOP_MS);
     s_retry_queue[slot_idx] = {
         msg_id,
         dest,
@@ -1546,7 +1546,7 @@ void Router::sendPacket(Portnum portnum, uint32_t dest,
     // ── PKI DM path: if unicast to a Meshtastic node whose public key we
     //    have, use Curve25519 ECDH encryption on ch=0x00 (§Meshtastic DM spec).
     bool use_pki = false;
-    if (dest != 0xFFFFFFFF && portnum == Portnum::TEXT_MESSAGE_APP) {
+    if (dest != MESH_BROADCAST_ADDR && portnum == Portnum::TEXT_MESSAGE_APP) {
         const uint8_t* remote_pubkey = MeshNode::remotePublicKey(dest);
         const uint8_t* our_privkey   = MeshNode::pkiPrivateKey();
         if (remote_pubkey && our_privkey) {
@@ -1641,7 +1641,7 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
     // spiking channel utilization past 25% and suppressing Meshtastic TX.
     // Skip TEXT_MESSAGE_APP, NODEINFO_APP, POSITION_APP — those are
     // essential and low-rate.
-    if (millis() < 10000 &&
+    if (millis() < STARTUP_ANNOUNCE_DELAY_MS &&
         meta.portnum != Portnum::TEXT_MESSAGE_APP &&
         meta.portnum != Portnum::NODEINFO_APP &&
         meta.portnum != Portnum::POSITION_APP) return false;
@@ -1654,7 +1654,7 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
     bool want_ack = false;
     switch (meta.portnum) {
         case Portnum::TEXT_MESSAGE_APP:
-            want_ack = meta.want_response || (meta.dest != 0xFFFFFFFF);
+            want_ack = meta.want_response || (meta.dest != MESH_BROADCAST_ADDR);
             break;
         case Portnum::AIRTAK_TACTICAL:
         case Portnum::AIRTAK_MODERATION:
@@ -1682,7 +1682,7 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
     // For PKI DMs, Meshtastic's Routing ACK carries the OTA packet_id
     // (p->id in its ReliableRouter), not the Data.request_id.  Align
     // the retry-entry msg_id to the OTA packet_id so handleAck can match.
-    bool will_use_pki = (meta.dest != 0xFFFFFFFF && meta.portnum == Portnum::TEXT_MESSAGE_APP
+    bool will_use_pki = (meta.dest != MESH_BROADCAST_ADDR && meta.portnum == Portnum::TEXT_MESSAGE_APP
                          && MeshNode::remotePublicKey(meta.dest) && MeshNode::pkiPrivateKey());
     if (will_use_pki) msg_id = packet_id;
 
@@ -1699,7 +1699,7 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
 
     // ── PKI DM path: unicast TEXT_MESSAGE_APP to Meshtastic node → PKI on ch=0x00
     bool use_pki = false;
-    if (meta.dest != 0xFFFFFFFF && meta.portnum == Portnum::TEXT_MESSAGE_APP) {
+    if (meta.dest != MESH_BROADCAST_ADDR && meta.portnum == Portnum::TEXT_MESSAGE_APP) {
         const uint8_t* remote_pubkey = MeshNode::remotePublicKey(meta.dest);
         const uint8_t* our_privkey   = MeshNode::pkiPrivateKey();
         if (remote_pubkey && our_privkey) {
@@ -1800,7 +1800,7 @@ static bool retransmitEntry(AckRetryEntry& e, QueueHandle_t tx_queue, uint32_t n
 
     e.attempts++;
     uint32_t ack_timeout = max(defaults::ACK_TIMEOUT_MIN_MS,
-                               2u * (uint32_t)e.hop_start * defaults::ACK_TIMEOUT_PER_HOP_MS);
+                               ACK_TIMEOUT_HOP_MULTIPLIER * (uint32_t)e.hop_start * defaults::ACK_TIMEOUT_PER_HOP_MS);
     e.timeout_ms = now_ms + ack_timeout;
     return true;
 }
@@ -1885,7 +1885,7 @@ void Router::handleOverheardRelay(uint32_t src_id, uint32_t dup_key, float overh
     // and its SNR was >= ours (they have a better path, §8.7).
     // Match on BOTH src_id AND the reconstructed dup_key so that two simultaneously
     // pending relays from the same source node are not incorrectly conflated.
-    for (size_t i = 0; i < 16; i++) {
+    for (size_t i = 0; i < ROUTER_RELAY_QUEUE_SIZE; i++) {
         auto& e = s_relay_queue[i];
         if (!e.in_use) continue;
         uint32_t relay_src;
@@ -1901,7 +1901,7 @@ void Router::handleOverheardRelay(uint32_t src_id, uint32_t dup_key, float overh
 
 // ── Router::clearPendingRelays() ─────────────────────────────────────────────
 void Router::clearPendingRelays() {
-    for (size_t i = 0; i < 16; i++) {
+    for (size_t i = 0; i < ROUTER_RELAY_QUEUE_SIZE; i++) {
         s_relay_queue[i].in_use = false;
     }
 }
@@ -1960,7 +1960,7 @@ size_t Router::testAppDedupCount() {
 bool Router::testIsPacketAddressedToMe(const OtaHeader& hdr,
                                        uint32_t data_dest) {
     DataMetadata meta;
-    meta.dest = (data_dest == 0) ? 0xFFFFFFFF : data_dest;
+    meta.dest = (data_dest == 0) ? MESH_BROADCAST_ADDR : data_dest;
     return isPacketAddressedToMe(hdr, meta);
 }
 

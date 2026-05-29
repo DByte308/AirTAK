@@ -188,4 +188,14 @@ constexpr uint8_t  BL_STEPS                  = 16;
     constexpr uint16_t COL_DIM       = 0x7BEF;
 #endif
 
+// ── OLED I2C Address ─────────────────────────────────────────────────────
+constexpr uint8_t  SSD1306_I2C_ADDR_DEFAULT  = 0x3C;  // Default I2C address for SSD1306
+
+// ── Shared Display Constants ─────────────────────────────────────────────
+constexpr uint32_t DISP_BRIGHTNESS_MAX_PCT       = 100;    // Max brightness percentage
+constexpr uint8_t  DISP_BAT_WARN_THRESHOLD_PCT   = 20;     // Battery % below which = warning color
+constexpr uint8_t  DISP_PASSCODE_STR_LEN         = 8;      // Passcode display buffer
+constexpr float    BATTERY_PCT_SCALE_DISP        = 100.0f; // Battery level → percentage
+constexpr uint8_t  OLED_NO_RST_PIN               = 255;    // Adafruit convention for no RST pin (use -1 as int)
+
 } // namespace airtak

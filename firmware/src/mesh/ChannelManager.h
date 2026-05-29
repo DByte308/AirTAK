@@ -25,8 +25,8 @@ enum class ChannelRole : uint8_t { DISABLED = 0, PRIMARY = 1, SECONDARY = 2 };
 
 struct ChannelSlot {
     uint8_t      index;
-    char         name[17];              // max 16 + null terminator
-    uint8_t      psk[32];
+    char         name[CHANNEL_NAME_BUFFER_SIZE];
+    uint8_t      psk[PSK_MAX_BYTES];
     size_t       psk_len;
     ChannelRole  role;
     bool         uplink_enabled;
@@ -34,8 +34,8 @@ struct ChannelSlot {
     uint8_t      position_precision;
     uint8_t      phy_profile_index;
     uint8_t      channel_hash;          // computed by rekey(); cached here
-    uint8_t      aes_key[32];           // derived from psk by rekey(); 16 or 32 bytes
-    uint8_t      aes_key_len;           // 16 (AES-128) or 32 (AES-256)
+    uint8_t      aes_key[AES_MAX_KEY_BYTES];  // derived from psk by rekey()
+    uint8_t      aes_key_len;           // AES128_KEY_BYTES or AES256_KEY_BYTES
 };
 
 class ChannelManager {

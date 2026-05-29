@@ -53,7 +53,43 @@ constexpr uint32_t RADIO_EVENT_POLL_MS       = 100;    // Radio event poll inter
 // These CANNOT move (they must be accessible without including Radio.h due to FreeRTOS deps)
 // They remain in Radio.h for now; referenced here for documentation.
 
-// ── Radio Type Enum (kept in Radio.h for RadioLib includes) ──────────────────
-// enum class RadioType : uint8_t { NONE=0, SX1262=1, SX1276=2, SX1280=3, LR1121=4 };
+// ── Radio Type Enumeration (§7.3) ──────────────────────────────────────────
+enum class RadioType : uint8_t {
+    NONE     = 0,
+    SX1262   = 1,
+    SX1276   = 2,
+    SX1280   = 3,   // reserved — pins defined, driver pending
+    LR1121   = 4,   // reserved — pins defined, driver pending
+};
+
+// ── LoRa Global Parameters (§8.1) ────────────────────────────────────────
+constexpr uint8_t  LORA_PREAMBLE_LENGTH     = 16;     // Preamble symbols
+constexpr uint8_t  LORA_MAX_PAYLOAD_BYTES    = 255;    // SX1262 hardware maximum
+constexpr uint8_t  LORA_RX_DUTY_CYCLE_PERIOD = 8;      // RX duty cycle period in symbols
+
+// ── Regional Frequency Defaults (MHz) ────────────────────────────────────
+constexpr float    LORA_FREQ_EU868          = 869.525f;
+constexpr float    LORA_FREQ_US915          = 906.875f;
+constexpr float    LORA_FREQ_AU915          = 917.000f;
+constexpr float    LORA_FREQ_CN470          = 486.800f;
+constexpr float    LORA_FREQ_JP920          = 922.000f;
+constexpr float    LORA_FREQ_KR920          = 922.000f;
+constexpr float    LORA_FREQ_IN865          = 865.200f;
+
+// ── Frequency Sanity Check ───────────────────────────────────────────────
+constexpr float    LORA_FREQ_MIN_MHZ        = 100.0f;  // Below this = unconfigured
+
+// ── Default PHY Profile Index ─────────────────────────────────────────────
+constexpr uint8_t  PHY_PROFILE_DEFAULT      = 0;       // Long/Mesh (Profile 0)
+
+// ── SX1280-Specific ──────────────────────────────────────────────────────
+constexpr uint8_t  SX1280_MAX_POWER         = 3;       // Max power amp level (0-3)
+
+// ── LR1121-Specific ──────────────────────────────────────────────────────
+constexpr float    LR1121_TCXO_VOLTAGE       = 3.0f;    // LR1121 TCXO voltage
+
+// ── Region Frequency Boundaries ───────────────────────────────────────────
+constexpr float    DC_REGION_EU868_MIN_MHZ       = 863.0f;  // EU868 sub-band g1 lower bound
+constexpr float    DC_REGION_EU868_MAX_MHZ       = 870.0f;  // EU868 sub-band g1 upper bound
 
 } // namespace airtak

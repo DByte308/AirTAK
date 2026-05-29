@@ -143,11 +143,11 @@ void MeshNode::init() {
     s_last_telemetry_ms = millis();
 
     // Load or generate Curve25519 PKI keypair.
-    uint8_t kp_buf[64];
+    uint8_t kp_buf[CURVE25519_KEYPAIR_TOTAL_BYTES];
     config::FlashStore::init();
     size_t stored = config::FlashStore::read(config::ConfigGroup::PKI_KEYPAIR,
                                              kp_buf, sizeof(kp_buf));
-    if (stored == 64) {
+    if (stored == CURVE25519_KEYPAIR_TOTAL_BYTES) {
         memcpy(s_pki_private_key, kp_buf, CURVE25519_PRIVKEY_BYTES);
         memcpy(s_pki_public_key,  kp_buf + CURVE25519_PRIVKEY_BYTES, CURVE25519_PUBKEY_BYTES);
         s_pki_ready = true;
@@ -155,7 +155,7 @@ void MeshNode::init() {
         if (Crypto::pkikeypair(s_pki_public_key, s_pki_private_key)) {
             memcpy(kp_buf, s_pki_private_key, CURVE25519_PRIVKEY_BYTES);
             memcpy(kp_buf + CURVE25519_PRIVKEY_BYTES, s_pki_public_key, CURVE25519_PUBKEY_BYTES);
-            config::FlashStore::write(config::ConfigGroup::PKI_KEYPAIR, kp_buf, 64);
+            config::FlashStore::write(config::ConfigGroup::PKI_KEYPAIR, kp_buf, CURVE25519_KEYPAIR_TOTAL_BYTES);
             s_pki_ready = true;
         }
     }
@@ -169,13 +169,13 @@ void MeshNode::scheduleStartupBurst() {
     // broadcastNodeInfo() already sent the first announcement; this ensures a
     // follow-up burst so the Meshtastic app picks up the device reliably.
     uint32_t now = millis();
-    uint32_t interval_ms = defaults::NODEINFO_BROADCAST_INTERVAL_SECS * 1000UL;
+    uint32_t interval_ms = defaults::NODEINFO_BROADCAST_INTERVAL_SECS * SECS_TO_MS;
     uint32_t early_delay_ms = defaults::STARTUP_ANNOUNCE_DELAY_MS;
-    if (early_delay_ms >= interval_ms) early_delay_ms = interval_ms - 1000;
+    if (early_delay_ms >= interval_ms) early_delay_ms = interval_ms - STARTUP_BURST_SAFETY_MARGIN_MS;
     s_last_nodeinfo_ms = now - interval_ms + early_delay_ms;
 
-    uint32_t tele_interval_ms = defaults::TELEMETRY_BROADCAST_INTERVAL_SECS * 1000UL;
-    if (early_delay_ms >= tele_interval_ms) early_delay_ms = tele_interval_ms - 1000;
+    uint32_t tele_interval_ms = defaults::TELEMETRY_BROADCAST_INTERVAL_SECS * SECS_TO_MS;
+    if (early_delay_ms >= tele_interval_ms) early_delay_ms = tele_interval_ms - STARTUP_BURST_SAFETY_MARGIN_MS;
     s_last_telemetry_ms = now - tele_interval_ms + early_delay_ms;
 
 #ifndef AIRTAK_NATIVE_TEST
@@ -190,7 +190,7 @@ void MeshNode::broadcastNodeInfo(QueueHandle_t tx_queue) {
     // The NODEINFO_APP portnum expects a bare meshtastic.User protobuf as
     // the Data.payload — NOT a meshtastic.NodeInfo wrapping it.
     // (Meshtastic NodeInfoModule registers with &meshtastic_User_msg.)
-    uint8_t user_buf[128];
+    uint8_t user_buf[NODEINFO_BUF_SIZE];
     uint16_t user_len = serializeUser(user_buf, sizeof(user_buf));
     if (user_len == 0) return;
 
@@ -203,15 +203,15 @@ static uint16_t serializeTelemetry(uint8_t* buf, uint16_t buf_len) {
     if (bat < 0.0f) return 0;
 
     // DeviceMetrics sub-message
-    uint8_t dm[24];
+    uint8_t dm[DEVICEMETRICS_BUF_SIZE];
     uint16_t dm_pos = 0;
     // DeviceMetrics field 1: battery_level (uint32, 0-100 percentage)
     dm_pos = encodeTag(dm, dm_pos, DEVICEMETRICS_FIELD_BATTERY, 0);
-    dm_pos = encodeVarint(dm, dm_pos, (uint32_t)(bat * 100.0f));
+    dm_pos = encodeVarint(dm, dm_pos, (uint32_t)(bat * BATTERY_LEVEL_TO_PCT));
     // DeviceMetrics field 2: voltage (float, fixed32)
     uint32_t voltage_mv = Battery::voltageMillivolts();
     if (voltage_mv > 0) {
-        float volts = (float)voltage_mv / 1000.0f;
+        float volts = (float)voltage_mv / MV_TO_VOLTS;
         dm_pos = encodeFixed32(dm, dm_pos, 2, *(uint32_t*)&volts);
     }
     uint16_t dm_len = dm_pos;
@@ -240,11 +240,11 @@ void MeshNode::broadcastTelemetry(QueueHandle_t tx_queue) {
 void MeshNode::tick(QueueHandle_t tx_queue) {
     uint32_t now = millis();
 
-    if ((now - s_last_nodeinfo_ms) >= (defaults::NODEINFO_BROADCAST_INTERVAL_SECS * 1000UL)) {
+    if ((now - s_last_nodeinfo_ms) >= (defaults::NODEINFO_BROADCAST_INTERVAL_SECS * SECS_TO_MS)) {
         broadcastNodeInfo(tx_queue);
     }
 
-    if ((now - s_last_telemetry_ms) >= (defaults::TELEMETRY_BROADCAST_INTERVAL_SECS * 1000UL)) {
+    if ((now - s_last_telemetry_ms) >= (defaults::TELEMETRY_BROADCAST_INTERVAL_SECS * SECS_TO_MS)) {
         broadcastTelemetry(tx_queue);
     }
 
@@ -269,15 +269,15 @@ void MeshNode::maybeTransmitPosition(QueueHandle_t tx_queue, EventGroupHandle_t 
     if (movement_threshold_m == 0) movement_threshold_m = defaults::POSITION_MOVEMENT_THRESHOLD_M;
 
     uint32_t heartbeat_ms = reduced_rate
-        ? (defaults::POSITION_HIT_HEARTBEAT_SECS * 1000UL)
-        : (heartbeat_secs * 1000UL);
+        ? (defaults::POSITION_HIT_HEARTBEAT_SECS * SECS_TO_MS)
+        : (heartbeat_secs * SECS_TO_MS);
 
     bool should_tx = false;
     // Movement trigger: ≥ 10 m displacement AND ≥ 15 s since last TX.
     // Suppress movement-triggered TX for players who are not actively moving (HIT/ELIMINATED).
     if (!reduced_rate &&
         displacement >= movement_threshold_m &&
-        (now - s_last_position_ms) >= (min_tx_secs * 1000UL)) {
+        (now - s_last_position_ms) >= (min_tx_secs * SECS_TO_MS)) {
         should_tx = true;
     }
     // Heartbeat trigger.

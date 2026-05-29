@@ -130,7 +130,7 @@ static size_t encodeLoraConfig(uint8_t* buf, size_t buf_len) {
     airtak_LoraConfig msg = airtak_LoraConfig_init_zero;
     msg.region = static_cast<airtak_LoraRegion>(defaults::LORA_REGION);
     msg.tx_power_dbm = defaults::LORA_TX_POWER_DBM;
-    msg.profiles_count = 5;
+    msg.profiles_count = PHY_PROFILE_COUNT;
     for (uint8_t i = 0; i < msg.profiles_count; i++) {
         const auto& ph = defaults::PHY_PROFILES[i];
         copyString(msg.profiles[i].name, sizeof(msg.profiles[i].name), ph.name);
@@ -184,7 +184,7 @@ static size_t encodePowerConfig(uint8_t* buf, size_t buf_len) {
 
 static size_t encodeGameConfig(uint8_t* buf, size_t buf_len) {
     airtak_GameConfig msg = airtak_GameConfig_init_zero;
-    randomHexString(msg.callsign, sizeof(msg.callsign), 6);
+    randomHexString(msg.callsign, sizeof(msg.callsign), RANDOM_HEX_CALLSIGN_LEN);
     copyString(msg.fireteam_id, sizeof(msg.fireteam_id), defaults::GAME_FIRETEAM_ID);
     copyString(msg.squad_id, sizeof(msg.squad_id), defaults::GAME_SQUAD_ID);
     copyString(msg.platoon_id, sizeof(msg.platoon_id), defaults::GAME_PLATOON_ID);
@@ -336,7 +336,7 @@ void ConfigManager::radioRestartProcedure() {
     // still completes well under any user-perceptible BLE timeout (§9.4.2).
     constexpr uint32_t PAUSE_TIMEOUT_MS = RADIO_RESTART_PAUSE_MS;
     while (!Radio::isPaused() && (millis() - started_ms) < PAUSE_TIMEOUT_MS) {
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(RADIO_RESTART_POLL_MS));
     }
 
     if (!Radio::isPaused()) {
@@ -442,12 +442,12 @@ static const char* readDeviceStringField(uint32_t wanted_field, const char* fall
 }
 
 const char* ConfigManager::deviceLongName() {
-    return readDeviceStringField(1, defaults::DEVICE_LONG_NAME,
+    return readDeviceStringField(DEVICECONFIG_FIELD_LONG_NAME, defaults::DEVICE_LONG_NAME,
                                  s_device_long_name, sizeof(s_device_long_name));
 }
 
 const char* ConfigManager::deviceShortName() {
-    return readDeviceStringField(2, defaults::DEVICE_SHORT_NAME,
+    return readDeviceStringField(DEVICECONFIG_FIELD_SHORT_NAME, defaults::DEVICE_SHORT_NAME,
                                  s_device_short_name, sizeof(s_device_short_name));
 }
 
@@ -468,7 +468,7 @@ const char* ConfigManager::gameCallsign() {
             uint32_t slen;
             if (!readProtoVarint(buf, n, pos, slen)) break;
             if (pos + slen > n) break;
-            if (field == 1) { // callsign is field 1 in GameConfig
+            if (field == GAMECONFIG_FIELD_CALLSIGN) { // callsign is field 1 in GameConfig
                 size_t clen = (slen < sizeof(s_game_callsign) - 1) ? slen : sizeof(s_game_callsign) - 1;
                 memcpy(s_game_callsign, buf + pos, clen);
                 s_game_callsign[clen] = '\0';
@@ -493,7 +493,7 @@ uint32_t ConfigManager::powerDisplayOffSecs() {
         uint32_t field = tag >> 3;
         if (wire == 0) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
-            if (field == 4) return v;  // display_off_secs = field 4
+            if (field == POWERCONFIG_FIELD_DISPLAY_OFF) return v;  // display_off_secs = field 4
         } else {
             if (!skipProtoField(buf, n, pos, wire)) break;
         }
@@ -512,7 +512,7 @@ uint8_t ConfigManager::powerBrightnessPct() {
         uint32_t field = tag >> 3;
         if (wire == 0) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
-            if (field == 5) {  // brightness_pct = field 5
+            if (field == POWERCONFIG_FIELD_BRIGHTNESS) {  // brightness_pct = field 5
                 if (v > CONFIG_MAX_BRIGHTNESS_PCT) v = CONFIG_MAX_BRIGHTNESS_PCT;
                 return static_cast<uint8_t>(v);
             }
@@ -543,35 +543,35 @@ static uint32_t readPositionVarintField(uint32_t wanted_field, uint32_t fallback
 }
 
 uint32_t ConfigManager::positionBroadcastIntervalSecs() {
-    return readPositionVarintField(1, defaults::POSITION_BROADCAST_INTERVAL_SECS);
+    return readPositionVarintField(POSITIONCONFIG_FIELD_INTERVAL, defaults::POSITION_BROADCAST_INTERVAL_SECS);
 }
 
 uint32_t ConfigManager::positionMinTxIntervalSecs() {
-    return readPositionVarintField(5, defaults::POSITION_MIN_TX_INTERVAL_SECS);
+    return readPositionVarintField(POSITIONCONFIG_FIELD_MIN_TX, defaults::POSITION_MIN_TX_INTERVAL_SECS);
 }
 
 uint32_t ConfigManager::positionMovementThresholdM() {
-    return readPositionVarintField(4, defaults::POSITION_MOVEMENT_THRESHOLD_M);
+    return readPositionVarintField(POSITIONCONFIG_FIELD_MOVEMENT, defaults::POSITION_MOVEMENT_THRESHOLD_M);
 }
 
 uint32_t ConfigManager::positionPrecisionBits() {
-    return readPositionVarintField(2, defaults::POSITION_GPS_PRECISION_BITS);
+    return readPositionVarintField(POSITIONCONFIG_FIELD_GPS_PREC, defaults::POSITION_GPS_PRECISION_BITS);
 }
 
 uint8_t ConfigManager::positionHopLimitOverride() {
-    uint32_t value = readPositionVarintField(6, 0);
+    uint32_t value = readPositionVarintField(POSITIONCONFIG_FIELD_HOP_LIMIT, 0);
     if (value > CONFIG_MAX_HOP_LIMIT) value = CONFIG_MAX_HOP_LIMIT;
     return static_cast<uint8_t>(value);
 }
 
 uint8_t ConfigManager::positionGpsSource() {
-    uint32_t value = readPositionVarintField(7, defaults::POSITION_GPS_SOURCE);
+    uint32_t value = readPositionVarintField(POSITIONCONFIG_FIELD_GPS_SRC, defaults::POSITION_GPS_SOURCE);
     if (value > CONFIG_MAX_GPS_SOURCE) value = 0;  // clamp to valid enum range
     return static_cast<uint8_t>(value);
 }
 
 uint8_t ConfigManager::positionChannelIndex() {
-    uint32_t value = readPositionVarintField(8, defaults::POSITION_CHANNEL_INDEX);
+    uint32_t value = readPositionVarintField(POSITIONCONFIG_FIELD_CH_INDEX, defaults::POSITION_CHANNEL_INDEX);
     if (value >= MAX_CHANNEL_SLOTS) value = 0;
     return static_cast<uint8_t>(value);
 }
@@ -587,21 +587,21 @@ float ConfigManager::loraFrequencyMhz() {
         uint32_t field = tag >> 3;
         if (wire == 0) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
-            if (field == 1) {
+            if (field == LORACONFIG_FIELD_REGION) {
                 switch (v) {
-                    case 0:  return (float)LORA_FREQ_EU868;
-                    case 1:  return (float)LORA_FREQ_US915;
-                    case 2:  return (float)LORA_FREQ_AU915;
-                    case 3:  return (float)LORA_FREQ_CN470;
-                    case 4:  return (float)LORA_FREQ_JP920;
-                    case 5:  return (float)LORA_FREQ_KR920;
-                    case 6:  return (float)LORA_FREQ_IN865;
-                    default: return (float)LORA_FREQ_EU868;
+                    case 0:  return LORA_FREQ_EU868;
+                    case 1:  return LORA_FREQ_US915;
+                    case 2:  return LORA_FREQ_AU915;
+                    case 3:  return LORA_FREQ_CN470;
+                    case 4:  return LORA_FREQ_JP920;
+                    case 5:  return LORA_FREQ_KR920;
+                    case 6:  return LORA_FREQ_IN865;
+                    default: return LORA_FREQ_EU868;
                 }
             }
         } else { if (!skipProtoField(buf, n, pos, wire)) break; }
     }
-    return (float)LORA_FREQ_EU868;
+    return LORA_FREQ_EU868;
 }
 
 uint8_t ConfigManager::loraTxPowerDbm() {
@@ -615,7 +615,7 @@ uint8_t ConfigManager::loraTxPowerDbm() {
         uint32_t field = tag >> 3;
         if (wire == 0) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
-            if (field == 2 && v > 0) return (uint8_t)v;
+            if (field == LORACONFIG_FIELD_TX_POWER && v > 0) return (uint8_t)v;
         } else { if (!skipProtoField(buf, n, pos, wire)) break; }
     }
     return defaults::LORA_TX_POWER_DBM;
@@ -633,7 +633,7 @@ uint8_t ConfigManager::primarySlotPhyProfileIndex() {
         uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
         uint8_t wire  = tag & 7;
         uint32_t field = tag >> 3;
-        if (wire == 2 && field == 1) {
+        if (wire == 2 && field == CHANNELCONFIG_FIELD_SLOTS) {
             // Slot sub-message length
             uint32_t slen; if (!readProtoVarint(buf, n, pos, slen)) break;
             size_t end = pos + slen;
@@ -646,8 +646,8 @@ uint8_t ConfigManager::primarySlotPhyProfileIndex() {
                 uint32_t sf = stag >> 3;
                 if (sw == 0) {
                     uint32_t v; if (!readProtoVarint(buf, end, sp, v)) break;
-                    if (sf == 4) slot_role = (uint8_t)v;
-                    if (sf == 8) slot_phy  = (uint8_t)v;
+                    if (sf == CHANNELSLOT_FIELD_ROLE) slot_role = (uint8_t)v;
+                    if (sf == CHANNELSLOT_FIELD_PHY) slot_phy  = (uint8_t)v;
                 } else { if (!skipProtoField(buf, end, sp, sw)) break; }
             }
             if (slot_role == 1 /* PRIMARY */) return slot_phy;

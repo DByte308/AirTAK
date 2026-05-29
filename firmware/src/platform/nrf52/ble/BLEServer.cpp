@@ -83,7 +83,7 @@ static void onConnect(uint16_t conn_hdl) {
     s_connected = true;
     Display::markDirty(DISPLAY_DIRTY_BLE);
 
-    uint8_t buf[256];
+    uint8_t buf[BLE_STATUS_BUFFER_SIZE];
     uint16_t len = buildDeviceStatus(buf, sizeof(buf));
     if (len > 0) AirTAKService::notifyDeviceStatus(buf, len);
 }
@@ -98,10 +98,10 @@ static void onDisconnect(uint16_t conn_hdl, uint8_t reason) {
     Bluefruit.Advertising.start(0);
 }
 
-static bool onPasskeyDisplay(uint16_t conn_hdl, uint8_t const passkey[6], bool match_request) {
+static bool onPasskeyDisplay(uint16_t conn_hdl, uint8_t const passkey[BLE_PASSKEY_DIGIT_COUNT], bool match_request) {
     (void)conn_hdl;
     uint32_t parsed = 0;
-    for (uint8_t i = 0; i < 6; ++i) parsed = (parsed * 10U) + (passkey[i] - '0');
+    for (uint8_t i = 0; i < BLE_PASSKEY_DIGIT_COUNT; ++i) parsed = (parsed * 10U) + (passkey[i] - '0');
     s_pending_passkey = parsed;
     s_has_passkey     = true;
     Display::showPasscode(parsed);
@@ -112,7 +112,7 @@ void BLEServer::init(QueueHandle_t mesh_rx_queue) {
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     Bluefruit.begin();
     Bluefruit.setName(defaults::DEVICE_LONG_NAME);
-    Bluefruit.setTxPower(4);
+    Bluefruit.setTxPower(BLE_TX_POWER_DBM_NRF52);
 
     Bluefruit.Security.setIOCaps(true, false, false);
     Bluefruit.Security.setMITM(true);
@@ -126,11 +126,11 @@ void BLEServer::init(QueueHandle_t mesh_rx_queue) {
 
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
     Bluefruit.Advertising.addTxPower();
-    Bluefruit.Advertising.addUuid(BLEUuid(AIRTAK_SERVICE_UUID));
+    Bluefruit.Advertising.addUuid(BLEUuid(BLE_SERVICE_UUID));
     Bluefruit.ScanResponse.addName();
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(160, 160);
-    Bluefruit.Advertising.setFastTimeout(30);
+    Bluefruit.Advertising.setInterval(BLE_ADV_INTERVAL_MS, BLE_ADV_INTERVAL_MS);
+    Bluefruit.Advertising.setFastTimeout(BLE_FAST_ADV_TIMEOUT_S);
     Bluefruit.Advertising.start(0);
 }
 
@@ -159,10 +159,10 @@ void BLEServer::process(QueueHandle_t ble_tx_queue, QueueHandle_t /*config_queue
 void BLEServer::tick() {
     if (!s_connected) return;
     uint32_t now = millis();
-    if ((now - s_last_status_ms) < 5000) return;
+    if ((now - s_last_status_ms) < BLE_DEVICE_STATUS_INTERVAL_MS) return;
     s_last_status_ms = now;
 
-    uint8_t buf[256];
+    uint8_t buf[BLE_STATUS_BUFFER_SIZE];
     uint16_t len = buildDeviceStatus(buf, sizeof(buf));
     if (len > 0) AirTAKService::notifyDeviceStatus(buf, len);
 }

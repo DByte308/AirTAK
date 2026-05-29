@@ -1,4 +1,5 @@
 // AirTAK — Airsoft Team Awareness Kit
+
 // firmware/src/ble/BLEServer.h — GATT server lifecycle and security
 // Planning: §9.7, §10.6 | Roadmap: 1.5
 
