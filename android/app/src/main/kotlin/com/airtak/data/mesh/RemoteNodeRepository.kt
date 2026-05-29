@@ -40,7 +40,7 @@ class RemoteNodeRepository @Inject constructor(
             }
         }
         scope.launch {
-            dao.deleteOlderThan(System.currentTimeMillis() - NODE_RETENTION_MS)
+            dao.deleteOlderThan(System.currentTimeMillis() - MESH_NODE_RETENTION_MS)
         }
     }
 
@@ -113,8 +113,4 @@ class RemoteNodeRepository @Inject constructor(
         dao.upsert(block(existing, now))
     }
 
-    private companion object {
-        // ── Canonical definition in config/constants/ModerationConstants.kt ────
-        const val NODE_RETENTION_MS = MESH_NODE_RETENTION_MS
     }
-}

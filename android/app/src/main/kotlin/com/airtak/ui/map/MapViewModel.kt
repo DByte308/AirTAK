@@ -317,8 +317,8 @@ class MapViewModel @Inject constructor(
     ) {
         val state = _drawing.value as? DrawingState.Active ?: return
         if (state.points.size !in state.tool.minPoints..state.tool.maxPoints) return
-        val safeLabel = label.trim().take(TacticalMarkerRepository.MAX_LABEL_LEN).ifBlank { state.tool.displayLabel }
-        val safeDesc = description.trim().take(TacticalMarkerRepository.MAX_DESC_LEN)
+        val safeLabel = label.trim().take(UI_MARKER_LABEL_MAX_LEN).ifBlank { state.tool.displayLabel }
+        val safeDesc = description.trim().take(UI_MARKER_DESC_MAX_LEN)
         viewModelScope.launch {
             markerRepo.createMarker(
                 type = state.tool.proto,
@@ -347,8 +347,8 @@ class MapViewModel @Inject constructor(
         controllingTeam: TeamControl = TeamControl.TEAM_CONTROL_UNKNOWN,
         priority: Int = 0,
     ) {
-        val safeLabel = label.trim().take(TacticalMarkerRepository.MAX_LABEL_LEN)
-        val safeDesc = description.trim().take(TacticalMarkerRepository.MAX_DESC_LEN)
+        val safeLabel = label.trim().take(UI_MARKER_LABEL_MAX_LEN)
+        val safeDesc = description.trim().take(UI_MARKER_DESC_MAX_LEN)
         viewModelScope.launch {
             markerRepo.updateMarker(
                 markerId = markerId,
@@ -544,8 +544,8 @@ class MapViewModel @Inject constructor(
             colorRgb = colorRgb.takeIf { it != 0 } ?: defaultPlayerColor(nodeId),
             statusValue = statusValue.takeIf { it != PLAYER_STATUS_UNKNOWN }
                 ?: PlayerStatus.PLAYER_STATUS_ACTIVE_VALUE,
-            positionStale = lastPositionMs == null || now - lastPositionMs > POSITION_STALE_MS,
-            playerOffline = lastPlayerMs == null || now - lastPlayerMs > PLAYER_STALE_MS,
+            positionStale = lastPositionMs == null || now - lastPositionMs > MAP_POSITION_STALE_MS,
+            playerOffline = lastPlayerMs == null || now - lastPlayerMs > MAP_PLAYER_STALE_MS,
         )
     }
 
@@ -562,9 +562,6 @@ class MapViewModel @Inject constructor(
     }
 
     private companion object {
-        // ── Canonical definitions in config/constants/MapConstants.kt ─────────
-        private const val POSITION_STALE_MS = MAP_POSITION_STALE_MS
-        private const val PLAYER_STALE_MS = MAP_PLAYER_STALE_MS
         val DEFAULT_COLORS = intArrayOf(
             0xE63946,
             0x1D9BF0,

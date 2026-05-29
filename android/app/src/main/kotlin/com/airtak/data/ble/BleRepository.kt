@@ -40,6 +40,8 @@ import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.airtak.config.constants.BLE_SCAN_TIMEOUT_MS
 import com.airtak.config.constants.BLE_DEFAULT_MTU
+import com.airtak.config.constants.BLE_FRAMING_ATT_OVERHEAD
+import com.airtak.config.constants.BLE_FRAMING_HEADER_BYTES
 import com.airtak.config.constants.BLE_MAX_MTU_REQUEST
 import com.airtak.config.constants.BLE_MAX_ATTR_VALUE_BYTES
 import com.airtak.config.constants.BLE_INTER_NOTIFY_DELAY_MS
@@ -112,7 +114,7 @@ class BleRepository @Inject constructor(
     private var reconnectJob: Job? = null
     private var scanJob: Job? = null
     private var currentMtu: Int = BLE_DEFAULT_MTU
-    private var chunkPayloadSize: Int = 23 - BleFraming.HEADER_BYTES - BleFraming.ATT_OVERHEAD
+    private var chunkPayloadSize: Int = 23 - BLE_FRAMING_HEADER_BYTES - BLE_FRAMING_ATT_OVERHEAD
 
     /** Per-characteristic reassemblers — chunked notifications must not interleave.
      *  OTA_COMMAND is included so device-side OtaStatus replies are reassembled
@@ -275,7 +277,7 @@ class BleRepository @Inject constructor(
      *  than 512 throw "value should not be longer than max length of an
      *  attribute value" before they ever reach the air. */
     fun otaDataChunkSize(): Int =
-        (currentMtu - BleFraming.ATT_OVERHEAD).coerceIn(1, BLE_MAX_ATTR_VALUE_BYTES)
+        (currentMtu - BLE_FRAMING_ATT_OVERHEAD).coerceIn(1, BLE_MAX_ATTR_VALUE_BYTES)
 
     /** Suspend until the outbound queue has drained (all writes acked) or the
      *  timeout elapses. Returns true if drained, false on timeout. Used by the
@@ -334,7 +336,7 @@ class BleRepository @Inject constructor(
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
             currentMtu = if (status == BluetoothGatt.GATT_SUCCESS) mtu else BLE_DEFAULT_MTU
-            chunkPayloadSize = (currentMtu - BleFraming.HEADER_BYTES - BleFraming.ATT_OVERHEAD)
+            chunkPayloadSize = (currentMtu - BLE_FRAMING_HEADER_BYTES - BLE_FRAMING_ATT_OVERHEAD)
                 .coerceAtLeast(1)
             g.discoverServices()
         }

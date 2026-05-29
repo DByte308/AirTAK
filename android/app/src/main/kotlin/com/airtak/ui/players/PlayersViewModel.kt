@@ -293,7 +293,7 @@ constructor(
             now: Long,
             isSelf: Boolean,
     ): PlayerRow {
-        val online = lastPlayerMs != null && now - lastPlayerMs <= PLAYER_STALE_MS
+        val online = lastPlayerMs != null && now - lastPlayerMs <= MAP_PLAYER_STALE_MS
         val displayName =
                 callsign.ifBlank {
                     shortName.ifBlank { nodeId.toString(16).uppercase().takeLast(4) }
@@ -324,8 +324,6 @@ constructor(
     }
 
     private companion object {
-        // ── Canonical definition in config/constants/MapConstants.kt ──────────
-        private const val PLAYER_STALE_MS = MAP_PLAYER_STALE_MS
         val DEFAULT_COLORS =
                 intArrayOf(
                         0xE63946,

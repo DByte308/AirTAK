@@ -94,10 +94,10 @@ class TileRepository @Inject constructor(
     }
 
     private fun seedBundledOverviewTiles() {
-        val target = File(tileDir, WORLD_OVERVIEW_FILE)
+        val target = File(tileDir, ASSET_WORLD_OVERVIEW_FILE)
         runCatching {
-            val temp = File(tileDir, "$WORLD_OVERVIEW_FILE.tmp")
-            context.assets.open("tiles/$WORLD_OVERVIEW_FILE").use { input ->
+            val temp = File(tileDir, "$ASSET_WORLD_OVERVIEW_FILE.tmp")
+            context.assets.open("tiles/$ASSET_WORLD_OVERVIEW_FILE").use { input ->
                 temp.outputStream().use { output -> input.copyTo(output) }
             }
             if (temp.length() > 0L) {
@@ -141,7 +141,7 @@ class TileRepository @Inject constructor(
         setMetadata(db, "maxzoom", maxZoom.toString())
 
         val tiles = (minZoom..maxZoom).flatMap { z -> tileRange(bounds, z) }
-        if (tiles.size > MAX_TILES_PER_DOWNLOAD) {
+        if (tiles.size > MAP_MAX_TILES_PER_DOWNLOAD) {
             db.close()
             _downloadState.value = TileDownloadState.Failed("Selected area is ${tiles.size} tiles; narrow the map or zoom range.")
             return
@@ -179,7 +179,7 @@ class TileRepository @Inject constructor(
     private fun refreshLocalTiles() {
         mbtilesFiles = tileDir.listFiles { f -> f.extension.equals("mbtiles", ignoreCase = true) }
             ?.sortedWith(
-                compareBy<File> { it.name == WORLD_OVERVIEW_FILE }
+                compareBy<File> { it.name == ASSET_WORLD_OVERVIEW_FILE }
                     .thenByDescending { it.lastModified() },
             )
             .orEmpty()
@@ -190,9 +190,9 @@ class TileRepository @Inject constructor(
     }
 
     private fun downloadedTileMaxZoom(files: List<File>): Int? {
-        val overviewMaxZoom = files.firstOrNull { it.name == WORLD_OVERVIEW_FILE }?.let { readMaxZoom(it) }
+        val overviewMaxZoom = files.firstOrNull { it.name == ASSET_WORLD_OVERVIEW_FILE }?.let { readMaxZoom(it) }
         return files
-            .filterNot { it.name == WORLD_OVERVIEW_FILE }
+            .filterNot { it.name == ASSET_WORLD_OVERVIEW_FILE }
             .mapNotNull { readMaxZoom(it) }
             .maxOrNull()
             ?.takeIf { overviewMaxZoom == null || it > overviewMaxZoom }
@@ -216,7 +216,7 @@ class TileRepository @Inject constructor(
     }
 
     private fun configuredOrDefaultTileUrl(): String =
-        prefs.tileServerUrl()?.trim()?.takeIf { it.isNotBlank() } ?: DEFAULT_TILE_URL
+        prefs.tileServerUrl()?.trim()?.takeIf { it.isNotBlank() } ?: NETWORK_DEFAULT_TILE_URL
 
     private fun ensureServer() {
         if (server != null) return
@@ -330,11 +330,6 @@ class TileRepository @Inject constructor(
     private data class TileXY(val x: Int, val y: Int)
 
     private companion object {
-        // ── Canonical definitions in config/constants/AppConstants.kt & MapConstants.kt ─
         val TILE_PATH = Regex("/tiles/(\\d+)/(\\d+)/(\\d+)\\.png")
-        const val DEFAULT_TILE_URL = NETWORK_DEFAULT_TILE_URL   // Canonical: AppConstants
-        // ── Canonical definition in config/constants/AppConstants.kt ───────────
-        const val WORLD_OVERVIEW_FILE = ASSET_WORLD_OVERVIEW_FILE
-        const val MAX_TILES_PER_DOWNLOAD = MAP_MAX_TILES_PER_DOWNLOAD  // Canonical: MapConstants
     }
 }

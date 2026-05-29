@@ -8,6 +8,7 @@
 
 package com.airtak.data.ble
 
+import com.airtak.config.constants.BLE_FRAMING_HEADER_BYTES
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -37,8 +38,8 @@ class BleFramingTest {
         val payload = Random(2).nextBytes(200)
         val chunks = BleFraming.encode(payload, chunkPayloadSize = 64)
         assertEquals(4, chunks.size)
-        assertEquals(64 + BleFraming.HEADER_BYTES, chunks[0].size)
-        assertEquals( 8 + BleFraming.HEADER_BYTES, chunks[3].size)
+        assertEquals(64 + BLE_FRAMING_HEADER_BYTES, chunks[0].size)
+        assertEquals( 8 + BLE_FRAMING_HEADER_BYTES, chunks[3].size)
 
         val r = BleFraming.Reassembler()
         var out: ByteArray? = null

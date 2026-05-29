@@ -251,8 +251,6 @@ class FirmwareUpdateViewModel @Inject constructor(
     }
 
     companion object {
-        // ── Canonical definitions in config/constants/OtaConstants.kt ──────────
-        const val SUPPORTED_MIME = FW_MIME_OCTET_STREAM
         val SUPPORTED_EXTENSIONS = arrayOf(FW_MIME_OCTET_STREAM, FW_MIME_X_BINARY, FW_MIME_ZIP, FW_MIME_WILDCARD)
     }
 }
