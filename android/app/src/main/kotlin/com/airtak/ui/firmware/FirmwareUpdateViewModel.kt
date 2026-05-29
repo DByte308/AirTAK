@@ -86,6 +86,13 @@ class FirmwareUpdateViewModel @Inject constructor(
                 } ?: throw Exception("BLE GATT not available")
 
                 val status = deviceStatusRepo.status.value
+                val platform = status?.platform ?: "unknown"
+                val resolvedFirmware = if (platform.contains("ESP", ignoreCase = true))
+                    FirmwareUpdateManager.extractEsp32FirmwareBin(firmwareBytes)
+                else firmwareBytes
+                if (resolvedFirmware.size != firmwareBytes.size) {
+                    addDebug("Unwrapped CI ZIP: ${firmwareBytes.size}B → firmware.bin ${resolvedFirmware.size}B")
+                }
                 val transport = FirmwareUpdateManager.Transport.BleGatt(gatt, ble)
                 val deviceInfo = FirmwareUpdateManager.DeviceInfo(
                     boardId = status?.boardId ?: "unknown",
@@ -95,7 +102,7 @@ class FirmwareUpdateViewModel @Inject constructor(
 
                 val session = manager.prepareUpdate(firmwareUri, transport, deviceInfo).getOrThrow()
                 val result = withContext(Dispatchers.IO) {
-                    session.execute(firmwareBytes, { _progress.value = it }, ::addDebug)
+                    session.execute(resolvedFirmware, { _progress.value = it }, ::addDebug)
                 }
                 result.fold(
                     onSuccess = { _state.value = FwUpdateState.Done },
@@ -168,6 +175,13 @@ class FirmwareUpdateViewModel @Inject constructor(
                     firmwareVersion = "unknown",
                 )
 
+                val resolvedFirmware = if (device.vendorId != VID_NRF52840)
+                    FirmwareUpdateManager.extractEsp32FirmwareBin(firmwareBytes)
+                else firmwareBytes
+                if (resolvedFirmware.size != firmwareBytes.size) {
+                    addDebug("Unwrapped CI ZIP: ${firmwareBytes.size}B → firmware.bin ${resolvedFirmware.size}B")
+                }
+
                 val session = manager.prepareUpdate(firmwareUri, transport, deviceInfo).getOrThrow()
                 // USB engines (EspSerialFlasher / NrfSerialDfuEngine) use
                 // blocking UsbDeviceConnection.bulkTransfer / controlTransfer
@@ -176,7 +190,7 @@ class FirmwareUpdateViewModel @Inject constructor(
                 // flash. _progress is a StateFlow which is safe to set
                 // from any thread.
                 val result = withContext(Dispatchers.IO) {
-                    session.execute(firmwareBytes, { _progress.value = it }, ::addDebug)
+                    session.execute(resolvedFirmware, { _progress.value = it }, ::addDebug)
                 }
                 result.fold(
                     onSuccess = { _state.value = FwUpdateState.Done },

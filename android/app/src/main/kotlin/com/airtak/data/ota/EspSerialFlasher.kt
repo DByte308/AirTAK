@@ -92,6 +92,7 @@ import com.airtak.config.constants.ESP_FLASH_DATA
 import com.airtak.config.constants.ESP_FLASH_DATA_TIMEOUT_MS
 import com.airtak.config.constants.ESP_FLASH_END
 import com.airtak.config.constants.ESP_FLASH_END_DELAY_MS
+import com.airtak.config.constants.ESP_FLASH_MMU_DROM_BASE
 import com.airtak.config.constants.ESP_FLASH_OFFSET
 import com.airtak.config.constants.ESP_FLASH_PADDING_BYTE
 import com.airtak.config.constants.ESP_FLASH_SECTOR_SIZE
@@ -195,6 +196,11 @@ class EspSerialFlasher(
             dbg("resetIntoBootloader()...")
             resetIntoBootloader()
             dbg("reset done")
+            // After a hardware reset the bridge may have stale bytes from
+            // the previously-running app. Drain them so they don't pollute
+            // the first SYNC read.
+            drainPendingReplies()
+            ringBuf.clear()
         } else {
             dbg("ESP32 native USB — skipping DTR/RTS reset (user must hold BOOT+RESET)")
         }
@@ -395,12 +401,39 @@ class EspSerialFlasher(
             if (sequence % ESP_PROGRESS_LOG_EVERY_N == 0) dbg("...block $sequence/${numBlocks} OK")
         }
 
+        dbg("Verifying flash commit...")
+        val verifyAddr = ESP_FLASH_MMU_DROM_BASE + flashOffset
+        ringBuf.clear()
+        val actualWord = readReg(verifyAddr)
+        if (actualWord == null) {
+            dbgErr("Flash verification failed — stub did not respond to READ_REG")
+            return Result.failure(Exception("Flash verification failed — cannot read back flash data. Retry, or use esptool.py on a PC to re-flash."))
+        }
+        val expectedWord = if (firmware.size >= 4)
+            ((firmware[0].toInt() and 0xFF)) or
+            ((firmware[1].toInt() and 0xFF) shl 8) or
+            ((firmware[2].toInt() and 0xFF) shl 16) or
+            ((firmware[3].toInt() and 0xFF) shl 24)
+        else 0
+        if (actualWord != expectedWord) {
+            dbgErr("Flash verification FAILED: wrote 0x%08x, read 0x%08x at offset 0x%x".format(
+                expectedWord, actualWord, flashOffset))
+            return Result.failure(Exception(
+                "Flash write was not committed — wrote 0x${expectedWord.toString(16)} " +
+                "but flash still contains 0x${actualWord.toString(16)}. " +
+                "The chip ACKed the writes but did not execute them. " +
+                "Retry, or use esptool.py on a PC to flash a factory image."
+            ))
+        }
+        dbg("Flash verification OK: 0x%08x at offset 0x%x".format(actualWord, flashOffset))
+
         return Result.success(Unit)
     }
 
     override suspend fun finalize(): Result<Unit> {
         // FLASH_END payload: 0 = reboot into app, 1 = stay in bootloader.
-        sendCommand(ESP_FLASH_END, leInt(ESP_REBOOT_APP), expectReply = false)
+        val committed = sendCommand(ESP_FLASH_END, leInt(ESP_REBOOT_APP), expectReply = true,
+            timeoutMs = ESP_FLASH_BEGIN_TIMEOUT_MS)
         // The ROM bootloader needs time to commit the final flash write
         // buffer to physical SPI flash and begin the software reset. If
         // we release the USB interface too quickly, the host USB stack
@@ -409,6 +442,10 @@ class EspSerialFlasher(
         // same window and uses a 1–2 s post-FLASH_END delay.
         delay(ESP_FLASH_END_DELAY_MS)
         runCatching { connection.releaseInterface(intf) }
+        if (!committed) {
+            dbgErr("FLASH_END was not ACKed — stub may not have committed final block")
+            return Result.failure(Exception("FLASH_END not acknowledged — flash may be incomplete"))
+        }
         return Result.success(Unit)
     }
 
@@ -719,5 +756,28 @@ class EspSerialFlasher(
         var c = ESP_XOR_CHECKSUM_SEED
         for (b in data) c = c xor (b.toInt() and 0xFF)
         return c
+    }
+
+    /** Issue ESP_READ_REG (0x0A) to the stub, reading a 32-bit value from
+     *  [address].  Returns the value or null if the stub doesn't respond. */
+    private fun readReg(address: Int): Int? {
+        val payload = leInt(address)
+        val op = ESP_READ_REG
+        val header = byteArrayOf(0x00, op.toByte()) + leShort(payload.size) + leInt(0)
+        val frame = SlipFramer.encode(header + payload)
+        val out = outEndpoint ?: return null
+        if (connection.bulkTransfer(out, frame, frame.size, ESP_BULK_TIMEOUT_MS) < 0) return null
+        ringBuf.clear()
+        val reply = readSlipPacket(ESP_BULK_TIMEOUT_MS) ?: return null
+        if (reply.size < 8) return null
+        if (reply[0] != ESP_ROM_REPLY_OK) return null
+        if (reply[1] != op.toByte()) return null
+        val replySize = ((reply[2].toInt() and 0xFF) or ((reply[3].toInt() and 0xFF) shl 8))
+        if (replySize < 4) return null
+        val v0 = reply[4].toInt() and 0xFF
+        val v1 = reply[5].toInt() and 0xFF
+        val v2 = reply[6].toInt() and 0xFF
+        val v3 = reply[7].toInt() and 0xFF
+        return v0 or (v1 shl 8) or (v2 shl 16) or (v3 shl 24)
     }
 }

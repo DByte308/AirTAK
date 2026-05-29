@@ -46,7 +46,9 @@ const val ESP_APP_MAGIC = 0xE9.toByte()
 const val ESP_DEFAULT_BAUD = 115200
 const val ESP_BULK_TIMEOUT_MS = 3_000
 const val ESP_FLASH_DATA_TIMEOUT_MS = 10_000
-const val ESP_SYNC_TIMEOUT_MS = 100
+/** SYNC read timeout (ms). CP210x/CH340 bridges need 500ms+; native
+ *  USB responds faster but we keep a generous timeout for reliability. */
+const val ESP_SYNC_TIMEOUT_MS = 500
 const val ESP_SYNC_RETRIES = 7
 /** Sleep between flash end and reboot. */
 const val ESP_FLASH_END_DELAY_MS = 2_000L
@@ -194,6 +196,11 @@ const val ESP_IN_EP_HALT_THRESHOLD_MS = 3_000
 
 // ── ESP32 ROM reply magic ───────────────────────────────
 const val ESP_ROM_RETRY_REPLY_MAGIC = 0x01.toByte()
+
+// ── ESP32-S3 flash MMU base address (DROM, read-only) ───
+/** ESP32-S3 DROM MMU window start.  Flash reads through
+ *  READ_REG use this base + flash offset. */
+const val ESP_FLASH_MMU_DROM_BASE = 0x3C000000
 
 // ── ESP32 large erase timeout ───────────────────────────
 const val ESP_FLASH_LARGE_ERASE_TIMEOUT_MS = 30_000

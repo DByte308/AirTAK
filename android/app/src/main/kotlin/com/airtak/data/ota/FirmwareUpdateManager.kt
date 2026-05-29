@@ -12,6 +12,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
 import android.net.Uri
+import android.util.Log
 import com.airtak.config.constants.OTA_RECONNECT_TIMEOUT_MS
 import com.airtak.config.constants.VID_ESP32_NATIVE
 import com.airtak.config.constants.VID_NRF52840
@@ -19,6 +20,8 @@ import com.airtak.config.constants.VID_SILABS_CP210X
 import com.airtak.config.constants.VID_QINHENG_CH340
 import com.airtak.data.ble.BleConstants
 import com.airtak.data.ble.BleRepository
+import java.io.ByteArrayInputStream
+import java.util.zip.ZipInputStream
 import kotlinx.coroutines.flow.Flow
 
 class FirmwareUpdateManager(
@@ -201,5 +204,35 @@ class FirmwareUpdateManager(
         fun isNordicDfuVendor(vendorId: Int): Boolean = vendorId == VID_NRF52840
         fun isEsp32Vendor(vendorId: Int): Boolean =
             vendorId == VID_ESP32_NATIVE || vendorId == VID_SILABS_CP210X || vendorId == VID_QINHENG_CH340
+
+        /** CI artifacts are ZIP-wrapped (upload-artifact). For ESP32 the
+         *  ZIP contains firmware.bin — extract just the .bin payload so we
+         *  don't flash ZIP bytes to flash.  Returns the unmodified [bytes]
+         *  if the input is not a ZIP or no .bin entry is found. */
+        fun extractEsp32FirmwareBin(bytes: ByteArray): ByteArray {
+            // ZIP local file header signature: PK\x03\x04
+            if (bytes.size < 4 ||
+                bytes[0] != 0x50.toByte() || bytes[1] != 0x4B.toByte() ||
+                bytes[2] != 0x03.toByte() || bytes[3] != 0x04.toByte()
+            ) return bytes
+            try {
+                Log.d("FirmwareManager", "Detected ZIP firmware — extracting .bin payload (${bytes.size} B zip)")
+                ZipInputStream(ByteArrayInputStream(bytes)).use { zin ->
+                    while (true) {
+                        val entry = zin.nextEntry ?: break
+                        if (entry.name.endsWith(".bin", ignoreCase = true)) {
+                            val extracted = zin.readBytes()
+                            Log.d("FirmwareManager", "Extracted ${entry.name} (${extracted.size} B) from ZIP")
+                            return extracted
+                        }
+                        zin.closeEntry()
+                    }
+                }
+                Log.w("FirmwareManager", "ZIP contained no .bin entry — falling back to raw bytes")
+            } catch (e: Exception) {
+                Log.e("FirmwareManager", "ZIP extraction failed: ${e.message} — falling back to raw bytes")
+            }
+            return bytes
+        }
     }
 }
