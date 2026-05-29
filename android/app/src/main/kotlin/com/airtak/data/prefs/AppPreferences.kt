@@ -13,6 +13,14 @@ package com.airtak.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.airtak.config.constants.APP_PREFS_FILE
+import com.airtak.config.constants.KEY_BONDED_ADDR
+import com.airtak.config.constants.KEY_MAP_ZOOM
+import com.airtak.config.constants.KEY_THEME
+import com.airtak.config.constants.KEY_TILE_URL
+import com.airtak.config.constants.KEY_PREFIX_UNIT_CHANNEL
+import com.airtak.config.constants.MAP_ZOOM_DEFAULT
+import com.airtak.config.constants.UNIT_CHANNEL_SLOT_DEFAULT
 import com.airtak.ui.theme.ThemeMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
@@ -26,7 +34,7 @@ class AppPreferences @Inject constructor(
     @ApplicationContext context: Context,
 ) {
     private val prefs: SharedPreferences =
-        context.getSharedPreferences("airtak.prefs", Context.MODE_PRIVATE)
+        context.getSharedPreferences(APP_PREFS_FILE, Context.MODE_PRIVATE)
 
     fun themeMode(): ThemeMode = runCatching {
         ThemeMode.valueOf(prefs.getString(KEY_THEME, ThemeMode.System.name) ?: ThemeMode.System.name)
@@ -40,14 +48,14 @@ class AppPreferences @Inject constructor(
     fun bondedAddress(): String? = prefs.getString(KEY_BONDED_ADDR, null)
     fun setBondedAddress(addr: String?) { prefs.edit().putString(KEY_BONDED_ADDR, addr).apply() }
 
-    fun defaultMapZoom(): Double = prefs.getFloat(KEY_MAP_ZOOM, 13f).toDouble()
+    fun defaultMapZoom(): Double = prefs.getFloat(KEY_MAP_ZOOM, MAP_ZOOM_DEFAULT).toDouble()
     fun setDefaultMapZoom(z: Double) { prefs.edit().putFloat(KEY_MAP_ZOOM, z.toFloat()).apply() }
 
     fun unitChannelSlot(level: String): Int =
-        prefs.getInt("unit_channel_$level", -1)
+        prefs.getInt("${KEY_PREFIX_UNIT_CHANNEL}$level", UNIT_CHANNEL_SLOT_DEFAULT)
 
     fun setUnitChannelSlot(level: String, slot: Int) {
-        prefs.edit().putInt("unit_channel_$level", slot).apply()
+        prefs.edit().putInt("${KEY_PREFIX_UNIT_CHANNEL}$level", slot).apply()
     }
 
     fun observe(): Flow<Unit> = callbackFlow {
@@ -55,12 +63,5 @@ class AppPreferences @Inject constructor(
         prefs.registerOnSharedPreferenceChangeListener(listener)
         trySend(Unit)
         awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
-    }
-
-    private companion object {
-        const val KEY_THEME = "theme_mode"
-        const val KEY_TILE_URL = "tile_url"
-        const val KEY_BONDED_ADDR = "bonded_addr"
-        const val KEY_MAP_ZOOM = "map_zoom"
     }
 }

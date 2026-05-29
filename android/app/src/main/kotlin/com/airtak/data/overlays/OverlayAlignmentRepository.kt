@@ -13,7 +13,7 @@ import android.content.Context
 import android.net.Uri
 import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.mesh.MeshRxPacket
-import com.airtak.data.mesh.Portnum
+import com.airtak.config.constants.PORTNUM_AIRTAK_OVERLAY_ALIGNMENT
 import com.airtak.proto.OverlayAlignment
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +28,11 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import com.airtak.config.constants.UI_OVERLAY_HASH_BYTES
+import com.airtak.config.constants.UI_STREAM_COPY_BUFFER_BYTES
+import com.airtak.config.constants.KEY_ALIGNMENTS
+import com.airtak.config.constants.UI_OVERLAY_OPACITY_DEFAULT
+import com.airtak.config.constants.UI_OVERLAY_OPACITY_MIN
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -62,7 +67,7 @@ class OverlayAlignmentRepository @Inject constructor(
     init {
         scope.launch {
             mesh.packets
-                .filter { it.portnum == Portnum.AIRTAK_OVERLAY_ALIGNMENT }
+                .filter { it.portnum == PORTNUM_AIRTAK_OVERLAY_ALIGNMENT }
                 .collect { handleIncoming(it) }
         }
     }
@@ -82,7 +87,7 @@ class OverlayAlignmentRepository @Inject constructor(
             bottomRightLng = proto.bottomRightLng,
             bottomLeftLat = proto.bottomLeftLat,
             bottomLeftLng = proto.bottomLeftLng,
-            opacity = proto.opacity.coerceIn(MIN_MISSION_OVERLAY_OPACITY, 1f),
+            opacity = proto.opacity.coerceIn(UI_OVERLAY_OPACITY_MIN, 1f),
             timestampUnix = proto.timestampUnix.toLong() and 0xFFFF_FFFFL,
         )
         upsertAlignment(received)
@@ -102,7 +107,7 @@ class OverlayAlignmentRepository @Inject constructor(
     suspend fun computeImageHash(uri: Uri): Long = withContext(Dispatchers.IO) {
         val digest = MessageDigest.getInstance("SHA-256")
         context.contentResolver.openInputStream(uri)?.use { input ->
-            val buf = ByteArray(8192)
+            val buf = ByteArray(UI_STREAM_COPY_BUFFER_BYTES)
             var read: Int
             while (input.read(buf).also { read = it } != -1) {
                 digest.update(buf, 0, read)
@@ -110,7 +115,7 @@ class OverlayAlignmentRepository @Inject constructor(
         }
         val full = digest.digest()
         var hash = 0L
-        for (i in 0 until 8) {
+        for (i in 0 until UI_OVERLAY_HASH_BYTES) {
             hash = (hash shl 8) or (full[i].toLong() and 0xFF)
         }
         hash
@@ -166,11 +171,10 @@ class OverlayAlignmentRepository @Inject constructor(
         bottomRightLng = getDouble("bottomRightLng"),
         bottomLeftLat = getDouble("bottomLeftLat"),
         bottomLeftLng = getDouble("bottomLeftLng"),
-        opacity = optDouble("opacity", DEFAULT_MISSION_OVERLAY_OPACITY.toDouble()).toFloat(),
+        opacity = optDouble("opacity", UI_OVERLAY_OPACITY_DEFAULT.toDouble()).toFloat(),
         timestampUnix = getLong("timestampUnix"),
     )
 
     private companion object {
-        const val KEY_ALIGNMENTS = "alignments"
     }
 }

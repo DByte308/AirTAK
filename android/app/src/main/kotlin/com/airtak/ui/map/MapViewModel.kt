@@ -47,6 +47,10 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.stateIn
+import com.airtak.config.constants.MAP_LOCATE_ZOOM
+import com.airtak.config.constants.MAP_PLAYER_STALE_MS
+import com.airtak.config.constants.MAP_POSITION_STALE_MS
+import com.airtak.config.constants.MAP_SELF_ZOOM
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -557,8 +561,9 @@ class MapViewModel @Inject constructor(
     }
 
     private companion object {
-        const val POSITION_STALE_MS = 5 * 60 * 1_000L
-        const val PLAYER_STALE_MS = 5 * 60 * 1_000L
+        // ── Canonical definitions in config/constants/MapConstants.kt ─────────
+        private const val POSITION_STALE_MS = MAP_POSITION_STALE_MS
+        private const val PLAYER_STALE_MS = MAP_PLAYER_STALE_MS
         val DEFAULT_COLORS = intArrayOf(
             0xE63946,
             0x1D9BF0,

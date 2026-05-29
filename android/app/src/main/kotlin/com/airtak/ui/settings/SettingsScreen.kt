@@ -77,6 +77,25 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.airtak.config.constants.MODERATION_BAN_TTL_SEC
+import com.airtak.config.constants.MODERATION_REQUIRED_VOTES
+import com.airtak.config.constants.MS_PER_SECOND
+import com.airtak.config.constants.SECONDS_PER_HOUR
+import com.airtak.config.constants.SECONDS_PER_MINUTE
+import com.airtak.config.constants.UI_BANDWIDTH_HZ_TO_KHZ
+import com.airtak.config.constants.UI_BANDWIDTH_OPTIONS
+import com.airtak.config.constants.UI_LORA_BPS_TO_KBPS
+import com.airtak.config.constants.UI_LORA_RATE_CR_NUMERATOR
+import com.airtak.config.constants.UI_BRIGHTNESS_MAX_PCT
+import com.airtak.config.constants.UI_BRIGHTNESS_MIN_PCT
+import com.airtak.config.constants.UI_BRIGHTNESS_STEPS
+import com.airtak.config.constants.UI_MAX_BONDS_DEFAULT
+import com.airtak.config.constants.UI_MAX_BONDS_MAX
+import com.airtak.config.constants.UI_MAX_BONDS_MIN
+import com.airtak.config.constants.UI_MAX_UNIT_SLOTS
+import com.airtak.config.constants.UI_TX_POWER_MAX_DBM
+import com.airtak.config.constants.UI_TX_POWER_MIN_DBM
+import com.airtak.config.constants.UI_TX_POWER_STEPS
 import com.airtak.proto.AdminCommand
 import com.airtak.proto.ChannelRole
 import com.airtak.proto.GpsSource
@@ -526,8 +545,8 @@ private fun LoraSection(vm: SettingsViewModel) {
         Slider(
                 value = state.txPower.toFloat(),
                 onValueChange = { vm.updateLora { copy(txPower = it.toInt()) } },
-                valueRange = 2f..22f,
-                steps = 19,
+                valueRange = UI_TX_POWER_MIN_DBM..UI_TX_POWER_MAX_DBM,
+                steps = UI_TX_POWER_STEPS,
         )
         Spacer(Modifier.height(8.dp))
         SectionLabel("PHY profiles (${state.profiles.size})")
@@ -606,7 +625,7 @@ private fun ProfileEditor(
         NumberDropdown(
                 label = "Channel width",
                 value = profile.bandwidthHz,
-                options = listOf(125000, 250000, 500000),
+                options = UI_BANDWIDTH_OPTIONS,
                 onValue = onBandwidth,
                 modifier = Modifier.fillMaxWidth(),
         ) { bw ->
@@ -614,7 +633,7 @@ private fun ProfileEditor(
                 125000 -> "125 kHz — narrow (extra range, less interference)"
                 250000 -> "250 kHz — standard"
                 500000 -> "500 kHz — wide (faster, more interference)"
-                else -> "${bw / 1000} kHz"
+                else -> "${bw / UI_BANDWIDTH_HZ_TO_KHZ} kHz"
             }
         }
         // Error correction (Coding Rate)
@@ -963,7 +982,7 @@ private fun profilePreset(index: Int): String =
 private fun phyDescription(sf: Int, bwHz: Int, cr: Int): String {
     if (sf == 0 || bwHz == 0 || cr == 0) return "Not configured — set values below"
     // Approximate on-air data rate (bps) = SF × BW / 2^SF × 4/CR
-    val bitrateKbps = sf.toDouble() * bwHz / (1L shl sf) * (4.0 / cr) / 1000.0
+    val bitrateKbps = sf.toDouble() * bwHz / (1L shl sf) * (UI_LORA_RATE_CR_NUMERATOR / cr) / UI_LORA_BPS_TO_KBPS
     val rangeStr =
             when {
                 sf <= 7 -> "short range (~1–2 km)"
@@ -1132,8 +1151,8 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                 onValueChange = { v ->
                     vm.updatePower { copy(brightnessPct = v.toInt()) }
                 },
-                valueRange = 0f..100f,
-                steps = 19,
+                valueRange = UI_BRIGHTNESS_MIN_PCT..UI_BRIGHTNESS_MAX_PCT,
+                steps = UI_BRIGHTNESS_STEPS,
                 modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))
@@ -1170,10 +1189,10 @@ private fun SecuritySection(vm: SettingsViewModel) {
         Slider(
                 value = state.maxBonds.toFloat(),
                 onValueChange = {
-                    vm.updateSecurity { copy(maxBonds = it.toInt().coerceIn(1, 4)) }
+                    vm.updateSecurity { copy(maxBonds = it.toInt().coerceIn(UI_MAX_BONDS_MIN, UI_MAX_BONDS_MAX)) }
                 },
-                valueRange = 1f..4f,
-                steps = 2,
+                valueRange = UI_MAX_BONDS_MIN.toFloat()..UI_MAX_BONDS_MAX.toFloat(),
+                steps = UI_MAX_BONDS_DEFAULT,
         )
         ApplyRow(
                 onRead = vm::readSecurity,
@@ -1240,16 +1259,16 @@ private fun ModerationSection(vm: SettingsViewModel) {
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     Text(
-                                            "${ban.voteCount} / 3 votes · ${ban.voters.size} distinct voters",
+                                            "${ban.voteCount} / ${MODERATION_REQUIRED_VOTES} votes · ${ban.voters.size} distinct voters",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     val banTtl =
-                                            (ban.lastVoteUnix + 86400) -
-                                                    (System.currentTimeMillis() / 1000L)
+                                            (ban.lastVoteUnix + MODERATION_BAN_TTL_SEC) -
+                                                    (System.currentTimeMillis() / MS_PER_SECOND)
                                     if (banTtl > 0) {
                                         Text(
-                                                "Expires in ${banTtl / 3600}h ${(banTtl % 3600) / 60}m",
+                                                "Expires in ${banTtl / SECONDS_PER_HOUR}h ${(banTtl % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE}m",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color =
                                                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -1731,7 +1750,7 @@ private fun UnitChannelDropdown(
                             onSetupNewChannel()
                         },
                 )
-            } else if (tactical.size < MAX_UNIT_SLOTS) {
+            } else if (tactical.size < UI_MAX_UNIT_SLOTS) {
                 // Should not happen given 5 tactical slots; defensive only.
                 DropdownMenuItem(
                         text = {
@@ -1806,4 +1825,4 @@ private fun DropdownSectionLabel(text: String) {
     )
 }
 
-private const val MAX_UNIT_SLOTS = 5 // slots 3–7
+

@@ -17,6 +17,39 @@ package com.airtak.data.ota
 import com.airtak.data.ble.BleRepository
 import com.airtak.data.ble.InboundChannel
 import com.airtak.data.ble.LinkState
+import com.airtak.config.constants.ESP_APP_MAGIC
+import com.airtak.config.constants.ESP_BLE_OTA_BACKPRESSURE_MS
+import com.airtak.config.constants.ESP_BLE_OTA_FINAL_STATUS_TIMEOUT_MS
+import com.airtak.config.constants.ESP_BLE_OTA_FINISH_TIMEOUT_MS
+import com.airtak.config.constants.ESP_BLE_OTA_LOG_BUF_BYTES
+import com.airtak.config.constants.ESP_BLE_OTA_MAX_QUEUE_DEPTH
+import com.airtak.config.constants.ESP_BLE_OTA_START_ACK_TIMEOUT_MS
+import com.airtak.config.constants.ESP_BLE_OTA_STATE_COMPLETE
+import com.airtak.config.constants.ESP_BLE_OTA_STATE_ERROR
+import com.airtak.config.constants.ESP_BLE_OTA_STATE_RECEIVING
+import com.airtak.config.constants.ESP_BLE_OTA_STATUS_EVERY_N
+import com.airtak.config.constants.ESP_BLE_OTA_STATUS_POLL_MS
+import com.airtak.config.constants.ESP_BLE_OTA_TX_DRAIN_TIMEOUT_MS
+import com.airtak.config.constants.MS_PER_SECOND
+import com.airtak.config.constants.OTA_FINISH_FIELD_CRC32
+import com.airtak.config.constants.OTA_START_FIELD_CRC32
+import com.airtak.config.constants.OTA_START_FIELD_IMAGE_SIZE
+import com.airtak.config.constants.OTA_TAG_OTA_FINISH
+import com.airtak.config.constants.OTA_TAG_OTA_START
+import com.airtak.config.constants.OTA_TAG_STATUS_REQUEST
+import com.airtak.config.constants.OTA_VARINT_TAG_CRC32
+import com.airtak.config.constants.OTA_VARINT_TAG_IMAGE_SIZE
+import com.airtak.config.constants.PROTO_FIXED32_BYTES
+import com.airtak.config.constants.PROTO_FIXED64_BYTES
+import com.airtak.config.constants.PROTO_VARINT_CONTINUE_MASK
+import com.airtak.config.constants.PROTO_VARINT_CONTINUE_MASK_L
+import com.airtak.config.constants.PROTO_VARINT_DATA_MASK
+import com.airtak.config.constants.PROTO_VARINT_DATA_MASK_L
+import com.airtak.config.constants.PROTO_VARINT_MAX_BYTES
+import com.airtak.config.constants.PROTO_VARINT_MAX_SHIFT
+import com.airtak.config.constants.PROTO_VARINT_SHIFT
+import com.airtak.config.constants.PROTO_WIRE_TYPE_MASK
+import com.airtak.config.constants.UINT32_MASK
 import com.airtak.data.ota.FirmwareUpdateManager.DeviceInfo
 import com.airtak.data.ota.FirmwareUpdateManager.UpdateProgress
 import kotlinx.coroutines.CoroutineScope
@@ -39,26 +72,7 @@ class EspBleOtaEngine(
 ) : FirmwareUpdateManager.FirmwareUpdateEngine {
     override var onDebug: ((String) -> Unit)? = null
 
-    companion object {
-        // Status request frequency during chunk streaming.
-        private const val STATUS_EVERY_N_CHUNKS = 50
-        // Maximum wait for device to confirm OTA_COMPLETE (covers ~6 MB of
-        // verification work on slow ESP32-S3 builds).
-        private const val FINISH_TIMEOUT_MS = 30_000L
-        // Maximum number of chunks allowed to sit in the BleRepository tx
-        // queue ahead of the streaming loop. Keeps a moderate-sized pipeline
-        // (so the GATT layer never idles waiting on us) without queuing the
-        // whole image up front and starving OTA_COMMAND status requests.
-        private const val MAX_QUEUE_DEPTH = 8
 
-        // First byte of an ESP32 OTA app image (esp_image_header_t.magic).
-        private const val ESP_APP_MAGIC = 0xE9.toByte()
-
-        // Wire-format constants for airtak.OtaState.
-        private const val STATE_RECEIVING = 1
-        private const val STATE_COMPLETE  = 4
-        private const val STATE_ERROR     = 5
-    }
 
     private var deviceInfo: DeviceInfo = DeviceInfo("unknown", "ESP32-S3", "unknown")
 
@@ -110,12 +124,12 @@ class EspBleOtaEngine(
         // Wait for the firmware to acknowledge with state=RECEIVING. If the
         // firmware never replies the user gets a real error instead of a
         // bogus "Firmware Updated".
-        val startAck = waitForOtaStatus(timeoutMs = 5_000L)
+        val startAck = waitForOtaStatus(timeoutMs = ESP_BLE_OTA_START_ACK_TIMEOUT_MS)
             ?: return Result.failure(Exception("Device did not acknowledge OTA start"))
-        if (startAck.state == STATE_ERROR) {
+        if (startAck.state == ESP_BLE_OTA_STATE_ERROR) {
             return Result.failure(Exception("Device rejected OtaStart (err=${startAck.lastError})"))
         }
-        if (startAck.state != STATE_RECEIVING) {
+        if (startAck.state != ESP_BLE_OTA_STATE_RECEIVING) {
             return Result.failure(Exception("Unexpected OTA state after start: ${startAck.state}"))
         }
 
@@ -125,7 +139,7 @@ class EspBleOtaEngine(
         val reporter = ProgressReporter(
             totalBytes = firmware.size.toLong(),
             onProgress = onProgress,
-            statusEveryNChunks = STATUS_EVERY_N_CHUNKS,
+            statusEveryNChunks = ESP_BLE_OTA_STATUS_EVERY_N,
         )
         reporter.start()
 
@@ -133,7 +147,7 @@ class EspBleOtaEngine(
         var chunkCount = 0
         // Snapshot of the most recent device-reported status. Updated by a
         // collector launched below so the streaming loop can fail fast if the
-        // device reports STATE_ERROR (e.g. esp_ota_write returned an error).
+        // device reports ESP_BLE_OTA_STATE_ERROR (e.g. esp_ota_write returned an error).
         val latestStatus = java.util.concurrent.atomic.AtomicReference<OtaStatus?>(startAck)
         val collectorScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val statusJob = collectorScope.launch {
@@ -156,7 +170,7 @@ class EspBleOtaEngine(
             // trip (~20–40 ms at MTU 517). Without this cap we'd enqueue ~1500
             // chunks instantly, then a status request would sit behind them
             // for ~60 s and the engine's 3 s wait would time out.
-            while (ble.txQueueDepth() > MAX_QUEUE_DEPTH) {
+            while (ble.txQueueDepth() > ESP_BLE_OTA_MAX_QUEUE_DEPTH) {
                 if (ble.linkState.value !is LinkState.Connected) {
                     return Result.failure(Exception("Link dropped mid-transfer at $offset/${firmware.size} bytes"))
                 }
@@ -166,7 +180,7 @@ class EspBleOtaEngine(
                             "(status=${f.status}) at $offset/${firmware.size} bytes"
                     ))
                 }
-                delay(20)
+                delay(ESP_BLE_OTA_BACKPRESSURE_MS)
             }
 
             ble.txFailure.value?.let { f ->
@@ -177,12 +191,12 @@ class EspBleOtaEngine(
             }
 
             // Periodic status request — also lets us fail fast if the device
-            // has gone into STATE_ERROR (e.g. esp_ota_write failed mid-stream).
-            if (chunkCount % STATUS_EVERY_N_CHUNKS == 0) {
+            // has gone into ESP_BLE_OTA_STATE_ERROR (e.g. esp_ota_write failed mid-stream).
+            if (chunkCount % ESP_BLE_OTA_STATUS_EVERY_N == 0) {
                 ble.send(BleRepository.OutboundChannel.OtaCommand, buildOtaStatusRequest())
             }
             val s = latestStatus.get()
-            if (s != null && s.state == STATE_ERROR) {
+            if (s != null && s.state == ESP_BLE_OTA_STATE_ERROR) {
                 return Result.failure(Exception(
                     "Device reported OTA_ERROR after ${s.bytesWritten} bytes " +
                         "(esp_err=0x${s.lastError.toString(16)}). Streaming aborted."
@@ -200,7 +214,7 @@ class EspBleOtaEngine(
 
         // Drain the tx queue so the status request below isn't sitting behind
         // hundreds of pending OTA_DATA writes.
-        if (!ble.awaitTxIdle(timeoutMs = 60_000L)) {
+        if (!ble.awaitTxIdle(timeoutMs = ESP_BLE_OTA_TX_DRAIN_TIMEOUT_MS)) {
             return Result.failure(Exception("Tx queue did not drain before finalize"))
         }
 
@@ -208,7 +222,7 @@ class EspBleOtaEngine(
         // never received any bytes (bytes_written == 0) something is very
         // wrong on the link — fail loudly instead of pretending it worked.
         ble.send(BleRepository.OutboundChannel.OtaCommand, buildOtaStatusRequest())
-        val finalStatus = waitForOtaStatus(timeoutMs = 5_000L)
+        val finalStatus = waitForOtaStatus(timeoutMs = ESP_BLE_OTA_FINAL_STATUS_TIMEOUT_MS)
         if (finalStatus == null) {
             return Result.failure(Exception("Device stopped responding before finalize (no OtaStatus reply)"))
         }
@@ -229,7 +243,7 @@ class EspBleOtaEngine(
         //    reboots (firmware-side delay ≈ 250 ms after the notify is queued)
         //    so an unexplained disconnect with no preceding COMPLETE means
         //    the update did not actually succeed.
-        val terminal = withTimeoutOrNull(FINISH_TIMEOUT_MS) {
+        val terminal = withTimeoutOrNull(ESP_BLE_OTA_FINISH_TIMEOUT_MS) {
             var sawComplete = false
             while (true) {
                 val link = ble.linkState.value
@@ -237,10 +251,10 @@ class EspBleOtaEngine(
                     return@withTimeoutOrNull if (sawComplete)
                         TerminalEvent.Complete else TerminalEvent.DisconnectedWithoutComplete
                 }
-                val status = waitForOtaStatus(timeoutMs = 1_000L) ?: continue
+                val status = waitForOtaStatus(timeoutMs = ESP_BLE_OTA_STATUS_POLL_MS) ?: continue
                 when (status.state) {
-                    STATE_COMPLETE -> { sawComplete = true /* keep looping until link drops */ }
-                    STATE_ERROR    -> return@withTimeoutOrNull TerminalEvent.Error(status.lastError)
+                    ESP_BLE_OTA_STATE_COMPLETE -> { sawComplete = true /* keep looping until link drops */ }
+                    ESP_BLE_OTA_STATE_ERROR    -> return@withTimeoutOrNull TerminalEvent.Error(status.lastError)
                     else           -> { /* VERIFYING / WRITING — keep waiting */ }
                 }
             }
@@ -252,7 +266,7 @@ class EspBleOtaEngine(
             TerminalEvent.DisconnectedWithoutComplete ->
                 Result.failure(Exception("Device disconnected before confirming firmware update — check device logs"))
             is TerminalEvent.Error -> Result.failure(Exception("Device reported OTA error (code=${terminal.code})"))
-            null -> Result.failure(Exception("Device did not confirm firmware update within ${FINISH_TIMEOUT_MS / 1000}s"))
+            null -> Result.failure(Exception("Device did not confirm firmware update within ${ESP_BLE_OTA_FINISH_TIMEOUT_MS / MS_PER_SECOND}s"))
         }
     }
 
@@ -273,7 +287,7 @@ class EspBleOtaEngine(
             }
         }.recoverCatching { e ->
             if (e is TimeoutCancellationException) {
-                throw Exception("Device did not reboot/reconnect within ${timeoutMs / 1000}s")
+                throw Exception("Device did not reboot/reconnect within ${timeoutMs / MS_PER_SECOND}s")
             }
             throw e
         }
@@ -294,25 +308,25 @@ class EspBleOtaEngine(
     private fun buildOtaStart(imageSize: Int, crc32: Long): ByteArray {
         // OtaStart { uint32 image_size = 1; uint32 crc32 = 2; }
         val inner = ByteArrayBuilder().apply {
-            put(0x08.toByte()); putVarint(imageSize.toLong() and 0xFFFFFFFFL)
-            put(0x10.toByte()); putVarint(crc32 and 0xFFFFFFFFL)
+            put(OTA_VARINT_TAG_IMAGE_SIZE); putVarint(imageSize.toLong() and UINT32_MASK)
+            put(OTA_VARINT_TAG_CRC32); putVarint(crc32 and UINT32_MASK)
         }.toByteArray()
         return ByteArrayBuilder().apply {
-            put(0x0A.toByte()); putVarint(inner.size.toLong()); put(inner)
+            put(OTA_TAG_OTA_START); putVarint(inner.size.toLong()); put(inner)
         }.toByteArray()
     }
 
     private fun buildOtaFinish(crc32: Long): ByteArray {
         val inner = ByteArrayBuilder().apply {
-            put(0x08.toByte()); putVarint(crc32 and 0xFFFFFFFFL)
+            put(OTA_VARINT_TAG_CRC32); putVarint(crc32 and UINT32_MASK)
         }.toByteArray()
         return ByteArrayBuilder().apply {
-            put(0x12.toByte()); putVarint(inner.size.toLong()); put(inner)
+            put(OTA_TAG_OTA_FINISH); putVarint(inner.size.toLong()); put(inner)
         }.toByteArray()
     }
 
     private fun buildOtaStatusRequest(): ByteArray =
-        byteArrayOf(0x1A.toByte(), 0x00.toByte()) // empty submessage
+        OTA_TAG_STATUS_REQUEST // empty submessage
 
     // ── Inbound OtaStatus parsing ────────────────────────────────────────────
 
@@ -347,7 +361,7 @@ class EspBleOtaEngine(
         while (r.hasMore()) {
             val tag = r.readVarint()
             val field = (tag ushr 3).toInt()
-            val wire = (tag and 0x7L).toInt()
+            val wire = (tag and PROTO_WIRE_TYPE_MASK).toInt()
             when (wire) {
                 0 -> { // varint
                     val v = r.readVarint()
@@ -362,8 +376,8 @@ class EspBleOtaEngine(
                     val len = r.readVarint().toInt()
                     r.skip(len)
                 }
-                1 -> r.skip(8)  // 64-bit
-                5 -> r.skip(4)  // 32-bit
+                1 -> r.skip(PROTO_FIXED64_BYTES.toLong())  // 64-bit
+                5 -> r.skip(PROTO_FIXED32_BYTES.toLong())  // 32-bit
                 else -> break    // unknown wire type — stop parsing
             }
         }
@@ -373,15 +387,15 @@ class EspBleOtaEngine(
     // ── Tiny varint / buffer helpers ─────────────────────────────────────────
 
     private class ByteArrayBuilder {
-        private val buf = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)
+        private val buf = ByteBuffer.allocate(ESP_BLE_OTA_LOG_BUF_BYTES).order(ByteOrder.LITTLE_ENDIAN)
         fun put(b: Byte) { ensure(1); buf.put(b) }
         fun put(bytes: ByteArray) { ensure(bytes.size); buf.put(bytes) }
         fun putVarint(value: Long) {
             var v = value
-            ensure(10)
-            while (v and 0x7FL.inv() != 0L) {
-                buf.put(((v and 0x7FL) or 0x80L).toByte())
-                v = v ushr 7
+            ensure(PROTO_VARINT_MAX_BYTES)
+            while (v and PROTO_VARINT_DATA_MASK_L.inv() != 0L) {
+                buf.put(((v and PROTO_VARINT_DATA_MASK_L) or PROTO_VARINT_CONTINUE_MASK_L).toByte())
+                v = v ushr PROTO_VARINT_SHIFT
             }
             buf.put(v.toByte())
         }
@@ -403,10 +417,10 @@ class EspBleOtaEngine(
             var shift = 0
             while (pos < buf.size) {
                 val b = buf[pos++].toInt() and 0xFF
-                result = result or ((b and 0x7F).toLong() shl shift)
-                if (b and 0x80 == 0) return result
-                shift += 7
-                if (shift >= 64) break
+                result = result or ((b and PROTO_VARINT_DATA_MASK).toLong() shl shift)
+                if (b and PROTO_VARINT_CONTINUE_MASK == 0) return result
+                shift += PROTO_VARINT_SHIFT
+                if (shift > PROTO_VARINT_MAX_SHIFT) break
             }
             return result
         }

@@ -35,7 +35,7 @@
 //   5. FLASH_BEGIN — declare erase size, block size, offset; ROM erases
 //      the requested region in the background.
 //
-//   6. FLASH_DATA — stream BLOCK_SIZE-byte chunks (last chunk 0xFF-padded)
+//   6. FLASH_DATA — stream ESP_BLOCK_SIZE-byte chunks (last chunk 0xFF-padded)
 //      with monotonic sequence numbers and per-block XOR checksum.
 //
 //   7. FLASH_END — request reboot into the freshly flashed app.
@@ -58,6 +58,87 @@ import com.airtak.data.ota.FirmwareUpdateManager.DeviceInfo
 import com.airtak.data.ota.FirmwareUpdateManager.UpdateProgress
 import kotlinx.coroutines.delay
 import org.json.JSONObject
+import com.airtak.config.constants.CDC_SET_CONTROL_LINE_STATE
+import com.airtak.config.constants.CDC_SET_LINE_CODING
+import com.airtak.config.constants.CH340_BAUD_DIV_READ_HIGH
+import com.airtak.config.constants.CH340_BAUD_DIV_READ_LOW
+import com.airtak.config.constants.CH340_BAUD_DIV_WRITE_HIGH
+import com.airtak.config.constants.CH340_BAUD_DIV_WRITE_LOW
+import com.airtak.config.constants.CH340_LINE_CTRL_HIGH
+import com.airtak.config.constants.CH340_LINE_CTRL_LOW
+import com.airtak.config.constants.CH340_MODEM_DEFAULT
+import com.airtak.config.constants.CH340_MODEM_DTR_NEG
+import com.airtak.config.constants.CH340_MODEM_RTS_NEG
+import com.airtak.config.constants.CH340_REQ_MODEM_CTRL
+import com.airtak.config.constants.CH340_REQ_SERIAL_INIT
+import com.airtak.config.constants.CH340_REQ_WRITE_REG
+import com.airtak.config.constants.CP210X_ENABLE_VALUE
+import com.airtak.config.constants.CP210X_IFC_ENABLE
+import com.airtak.config.constants.CP210X_MHS_DTR
+import com.airtak.config.constants.CP210X_MHS_MASK
+import com.airtak.config.constants.CP210X_SET_BAUDRATE
+import com.airtak.config.constants.CP210X_SET_MHS
+import com.airtak.config.constants.ESP_APP_MAGIC
+import com.airtak.config.constants.ESP_APP1_OFFSET
+import com.airtak.config.constants.ESP_BLOCK_PACING_MS
+import com.airtak.config.constants.ESP_BLOCK_SIZE
+import com.airtak.config.constants.ESP_BULK_TIMEOUT_MS
+import com.airtak.config.constants.ESP_DEFAULT_BAUD
+import com.airtak.config.constants.ESP_DRAIN_TIMEOUT_MS
+import com.airtak.config.constants.ESP_FLASH_BEGIN
+import com.airtak.config.constants.ESP_FLASH_BEGIN_LARGE_TIMEOUT_MS
+import com.airtak.config.constants.ESP_FLASH_BEGIN_TIMEOUT_MS
+import com.airtak.config.constants.ESP_FLASH_DATA
+import com.airtak.config.constants.ESP_FLASH_DATA_TIMEOUT_MS
+import com.airtak.config.constants.ESP_FLASH_END
+import com.airtak.config.constants.ESP_FLASH_END_DELAY_MS
+import com.airtak.config.constants.ESP_FLASH_OFFSET
+import com.airtak.config.constants.ESP_FLASH_PADDING_BYTE
+import com.airtak.config.constants.ESP_FLASH_SECTOR_SIZE
+import com.airtak.config.constants.ESP_GPIO0_RELEASE_MS
+import com.airtak.config.constants.ESP_IFCLAIM_DRAIN_MS
+import com.airtak.config.constants.ESP_IN_EP_HALT_THRESHOLD_MS
+import com.airtak.config.constants.ESP_MEM_BEGIN
+import com.airtak.config.constants.ESP_MEM_BEGIN_TIMEOUT_MS
+import com.airtak.config.constants.ESP_MEM_DATA
+import com.airtak.config.constants.ESP_MEM_END
+import com.airtak.config.constants.ESP_OTA_DATA_OFFSET
+import com.airtak.config.constants.ESP_OTA_DATA_SIZE
+import com.airtak.config.constants.ESP_OTA_MAX_SIZE
+import com.airtak.config.constants.ESP_OHAI_WAIT_MS
+import com.airtak.config.constants.ESP_PROGRESS_LOG_EVERY_N
+import com.airtak.config.constants.ESP_RAM_BLOCK_SIZE
+import com.airtak.config.constants.ESP_READ_REG
+import com.airtak.config.constants.ESP_REBOOT_APP
+import com.airtak.config.constants.ESP_RESET_PULSE_MS
+import com.airtak.config.constants.ESP_RESET_RELEASE_MS
+import com.airtak.config.constants.ESP_ROM_REPLY_OK
+import com.airtak.config.constants.ESP_ROM_REPLY_STATUS_OK_BYTE2
+import com.airtak.config.constants.ESP_ROM_REPLY_STATUS_OK_BYTE4
+import com.airtak.config.constants.ESP_ROM_RETRY_REPLY_MAGIC
+import com.airtak.config.constants.ESP_SHORT_READ_TIMEOUT_MS
+import com.airtak.config.constants.ESP_SPI_ATTACH
+import com.airtak.config.constants.ESP_SPI_ATTACH_PAYLOAD_SIZE
+import com.airtak.config.constants.ESP_SYNC
+import com.airtak.config.constants.ESP_SYNC_FRAME_BYTE
+import com.airtak.config.constants.ESP_SYNC_FRAME_DATA_LEN
+import com.airtak.config.constants.ESP_SYNC_FRAME_PREFIX
+import com.airtak.config.constants.ESP_SYNC_RETRIES
+import com.airtak.config.constants.ESP_SYNC_TIMEOUT_MS
+import com.airtak.config.constants.ESP_XOR_CHECKSUM_SEED
+import com.airtak.config.constants.USB_BMREQ_SET_FEATURE
+import com.airtak.config.constants.USB_CDC_DATA_BITS_8
+import com.airtak.config.constants.USB_CDC_DTR_RTS_ASSERTED
+import com.airtak.config.constants.USB_CDC_PARITY_NONE
+import com.airtak.config.constants.USB_CDC_STOP_BITS_1
+import com.airtak.config.constants.USB_ENDPOINT_HALT
+import com.airtak.config.constants.USB_REQ_CLEAR_FEATURE
+import com.airtak.config.constants.USB_REQ_TYPE_CLASS_OUT
+import com.airtak.config.constants.USB_REQ_TYPE_VENDOR_IN
+import com.airtak.config.constants.USB_REQ_TYPE_VENDOR_OUT
+import com.airtak.config.constants.VID_ESP32_NATIVE
+import com.airtak.config.constants.VID_QINHENG_CH340
+import com.airtak.config.constants.VID_SILABS_CP210X
 
 class EspSerialFlasher(
     private val context: Context,
@@ -72,58 +153,7 @@ class EspSerialFlasher(
     private fun dbgErr(msg: String) { android.util.Log.e("EspFlash", msg); onDebug?.invoke("ERROR: $msg") }
 
     companion object {
-        // SLIP command opcodes — esptool `command.py`.
-        private const val ESP_SYNC          = 0x08
-        private const val ESP_FLASH_BEGIN   = 0x02
-        private const val ESP_FLASH_DATA    = 0x03
-        private const val ESP_FLASH_END     = 0x04
-        private const val ESP_MEM_BEGIN     = 0x05
-        private const val ESP_MEM_END       = 0x06
-        private const val ESP_MEM_DATA      = 0x07
-        private const val ESP_SPI_ATTACH    = 0x0D
-        private const val ESP_READ_REG      = 0x0A
-
-        // Block size that matches the ROM loader's internal SPI write buffer.
-        private const val BLOCK_SIZE        = 0x400  // 1 KiB — safe across all chips
-        private const val FLASH_SECTOR_SIZE = 0x1000 // 4 KiB — ESP32 minimum erase unit
-        private const val FLASH_OFFSET      = 0x10000   // app0 offset in default_16MB.csv
-        private const val OTA_DATA_OFFSET   = 0xE000    // otadata partition offset
-        private const val OTA_DATA_SIZE     = 0x2000    // otadata partition size (sector-aligned)
-        private const val APP1_OFFSET       = 0x650000  // app1 offset in default_16MB.csv
-
-        // First byte of an ESP32 OTA app image (esp_image_header_t.magic).
-        private const val ESP_APP_MAGIC     = 0xE9.toByte()
-
-        // Transfer parameters.
-        private const val DEFAULT_BAUD      = 115200
-        private const val BULK_TIMEOUT_MS   = 3_000
-        private const val FLASH_DATA_TIMEOUT_MS = 10_000  // flash writes can exceed 3s
-        private const val SYNC_TIMEOUT_MS   = 100
-        private const val SYNC_RETRIES      = 7
-
-        // USB CDC class request codes.
-        private const val CDC_SET_LINE_CODING        = 0x20
-        private const val CDC_SET_CONTROL_LINE_STATE = 0x22
-
-        // USB control transfer types.
-        private const val REQ_TYPE_CLASS_OUT  = 0x21  // host→device, class, interface
-        private const val REQ_TYPE_VENDOR_OUT = 0x40  // host→device, vendor, device
-        private const val REQ_TYPE_VENDOR_IN  = 0xC0  // device→host, vendor, device
-
-        // CP210x vendor-specific requests (Silicon Labs AN571).
-        private const val CP210X_IFC_ENABLE  = 0x00
-        private const val CP210X_SET_BAUDRATE = 0x1E
-        private const val CP210X_SET_MHS     = 0x07  // modem handshaking
-
-        // CH340 vendor-specific requests.
-        private const val CH340_REQ_WRITE_REG = 0x9A
-        private const val CH340_REQ_SERIAL_INIT = 0xA1
-        private const val CH340_REQ_MODEM_CTRL  = 0xA4
-
-        // VIDs we explicitly handle.
-        private const val VID_ESP32_NATIVE   = 0x303A
-        private const val VID_SILABS_CP210X  = 0x10C4
-        private const val VID_QINHENG_CH340  = 0x1A86
+        // All constants are canonical in config/constants/OtaConstants.kt
     }
 
     private var outEndpoint: UsbEndpoint? = null
@@ -151,8 +181,8 @@ class EspSerialFlasher(
         dbg("interface claimed")
 
         // ---- Configure baud/line + assert handshaking lines --------------
-        dbg("configureSerial(baud=${DEFAULT_BAUD})...")
-        val cfgOk = configureSerial(DEFAULT_BAUD)
+        dbg("configureSerial(baud=${ESP_DEFAULT_BAUD})...")
+        val cfgOk = configureSerial(ESP_DEFAULT_BAUD)
         if (!cfgOk) {
             dbgErr("configureSerial failed")
             return Result.failure(Exception("Failed to configure USB-serial bridge for vendor 0x${vendorId.toString(16)}"))
@@ -169,10 +199,10 @@ class EspSerialFlasher(
         }
 
         // ---- SYNC handshake ---------------------------------------------
-        dbg("SYNC handshake (retries=$SYNC_RETRIES)...")
-        val syncedAttempt = (0 until SYNC_RETRIES).firstOrNull { trySync() }
+        dbg("SYNC handshake (retries=$ESP_SYNC_RETRIES)...")
+        val syncedAttempt = (0 until ESP_SYNC_RETRIES).firstOrNull { trySync() }
         if (syncedAttempt == null) {
-            dbgErr("SYNC failed after $SYNC_RETRIES attempts")
+            dbgErr("SYNC failed after $ESP_SYNC_RETRIES attempts")
             return Result.failure(Exception(
                 if (vendorId == VID_ESP32_NATIVE)
                     "ESP32 did not respond to SYNC. Hold the BOOT button and tap RESET on the T-Deck, " +
@@ -189,7 +219,7 @@ class EspSerialFlasher(
 
         // ---- SPI_ATTACH --------
         dbg("SPI_ATTACH...")
-        if (!sendCommand(ESP_SPI_ATTACH, ByteArray(8))) {
+        if (!sendCommand(ESP_SPI_ATTACH, ByteArray(ESP_SPI_ATTACH_PAYLOAD_SIZE))) {
             dbgErr("SPI_ATTACH rejected")
             return Result.failure(Exception("SPI_ATTACH rejected by ROM bootloader"))
         }
@@ -212,7 +242,7 @@ class EspSerialFlasher(
      *  driver instead of the buggy ROM (ESP32-S3 rev 0.2 ACKs writes but
      *  does not execute them).  The stub binary is stored in the app assets. */
     private suspend fun uploadStubLoader(): Result<Unit> {
-        val ramBlockSize = 0x1800
+        val ramBlockSize = ESP_RAM_BLOCK_SIZE
         dbg("stub: loading assets...")
 
         // Load stub
@@ -233,7 +263,7 @@ class EspSerialFlasher(
         val textBlocks = (textBytes.size + ramBlockSize - 1) / ramBlockSize
         val textBegin = leInt(textBytes.size) + leInt(textBlocks) + leInt(ramBlockSize) + leInt(textStart)
         dbg("stub: MEM_BEGIN text size=${textBytes.size} blocks=$textBlocks off=0x${textStart.toString(16)}")
-        if (!sendCommand(ESP_MEM_BEGIN, textBegin, timeoutMs = 10_000))
+        if (!sendCommand(ESP_MEM_BEGIN, textBegin, timeoutMs = ESP_MEM_BEGIN_TIMEOUT_MS))
             return Result.failure(Exception("MEM_BEGIN_text rejected"))
         dbg("stub: MEM_BEGIN text OK")
 
@@ -252,7 +282,7 @@ class EspSerialFlasher(
         val dataBlocks = (dataBytes.size + ramBlockSize - 1) / ramBlockSize
         val dataBegin = leInt(dataBytes.size) + leInt(dataBlocks) + leInt(ramBlockSize) + leInt(dataStart)
         dbg("stub: MEM_BEGIN data size=${dataBytes.size} blocks=$dataBlocks off=0x${dataStart.toString(16)}")
-        if (!sendCommand(ESP_MEM_BEGIN, dataBegin, timeoutMs = 10_000))
+        if (!sendCommand(ESP_MEM_BEGIN, dataBegin, timeoutMs = ESP_MEM_BEGIN_TIMEOUT_MS))
             return Result.failure(Exception("MEM_BEGIN_data rejected"))
         dbg("stub: MEM_BEGIN data OK")
 
@@ -273,20 +303,20 @@ class EspSerialFlasher(
             byteArrayOf(0x00, ESP_MEM_END.toByte()) + leShort(memEndPayload.size) + leInt(0) + memEndPayload
         )
         val out = outEndpoint ?: return Result.failure(Exception("MEM_END: no endpoint"))
-        if (connection.bulkTransfer(out, memEndFrame, memEndFrame.size, 200) < 0) {
+        if (connection.bulkTransfer(out, memEndFrame, memEndFrame.size, ESP_DRAIN_TIMEOUT_MS.toInt()) < 0) {
             dbgErr("MEM_END: bulkTransfer failed")
             return Result.failure(Exception("MEM_END: send failed"))
         }
         dbg("stub: MEM_END sent (${memEndFrame.size}B), draining ROM reply...")
 
         // Drain the ROM's MEM_END reply (op=0x06).  Must use SLIP decode here.
-        val romReply = readSlipPacket(500)
+        val romReply = readSlipPacket(ESP_BULK_TIMEOUT_MS)
         dbg("stub: ROM reply: ${romReply?.size ?: 0}B ${if (romReply != null && romReply.size >= 2) "op=0x%02x".format(romReply[1].toInt() and 0xFF) else "none"}")
 
         // Read OHAI — no artificial delay; the stub starts while we read the ROM reply.
         // Use a long timeout since the stub must initialise SPI flash before sending OHAI.
         dbg("stub: waiting for OHAI (10s timeout)...")
-        val hello = readSlipPacket(10_000)
+        val hello = readSlipPacket(ESP_OHAI_WAIT_MS)
         val helloStr = hello?.let { String(it) }
         val rawHex = hello?.joinToString("") { "%02x".format(it) } ?: "null"
         dbg("stub: hello response: $helloStr (raw=$rawHex)")
@@ -306,18 +336,18 @@ class EspSerialFlasher(
 
         // Detect image type: OTA app (starts with 0xE9, typically < 2 MB)
         // or a combined / factory image (flashed at offset 0).
-        val isOta = firmware[0] == ESP_APP_MAGIC && firmware.size < 2_097_152
-        val flashOffset = if (isOta) FLASH_OFFSET else 0
+        val isOta = firmware[0] == ESP_APP_MAGIC && firmware.size < ESP_OTA_MAX_SIZE
+        val flashOffset = if (isOta) ESP_FLASH_OFFSET else 0
         dbg("Image type: ${if (isOta) "OTA app (0x10000)" else "factory (0x0)"} size=${firmware.size}")
 
         // 1. For OTA: erase otadata so the bootloader falls back to app0.
         if (isOta) {
-            val otaBlockCount = OTA_DATA_SIZE / BLOCK_SIZE
-            val otaBegin = leInt(OTA_DATA_SIZE) + leInt(otaBlockCount) + leInt(BLOCK_SIZE) + leInt(OTA_DATA_OFFSET)
-            if (!sendCommand(ESP_FLASH_BEGIN, otaBegin, timeoutMs = 10_000)) {
+            val otaBlockCount = ESP_OTA_DATA_SIZE / ESP_BLOCK_SIZE
+            val otaBegin = leInt(ESP_OTA_DATA_SIZE) + leInt(otaBlockCount) + leInt(ESP_BLOCK_SIZE) + leInt(ESP_OTA_DATA_OFFSET)
+            if (!sendCommand(ESP_FLASH_BEGIN, otaBegin, timeoutMs = ESP_FLASH_BEGIN_TIMEOUT_MS)) {
                 dbg("otadata FLASH_BEGIN failed — continuing")
             } else {
-                val blank = ByteArray(BLOCK_SIZE) { 0xFF.toByte() }
+                val blank = ByteArray(ESP_BLOCK_SIZE) { ESP_FLASH_PADDING_BYTE }
                 for (otaSeq in 0 until otaBlockCount) {
                     val p = leInt(blank.size) + leInt(otaSeq) + leInt(0) + leInt(0) + blank
                     if (!sendCommand(ESP_FLASH_DATA, p, checksumOver = blank)) break
@@ -326,12 +356,12 @@ class EspSerialFlasher(
         }
 
         // 2. Write firmware to a single slot (app0 for OTA, 0x0 for factory).
-        val numBlocks = (firmware.size + BLOCK_SIZE - 1) / BLOCK_SIZE
-        val eraseSize = ((firmware.size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE) * FLASH_SECTOR_SIZE
+        val numBlocks = (firmware.size + ESP_BLOCK_SIZE - 1) / ESP_BLOCK_SIZE
+        val eraseSize = ((firmware.size + ESP_FLASH_SECTOR_SIZE - 1) / ESP_FLASH_SECTOR_SIZE) * ESP_FLASH_SECTOR_SIZE
 
-        val beginPayload = leInt(eraseSize) + leInt(numBlocks) + leInt(BLOCK_SIZE) + leInt(flashOffset)
+        val beginPayload = leInt(eraseSize) + leInt(numBlocks) + leInt(ESP_BLOCK_SIZE) + leInt(flashOffset)
         dbg("FLASH_BEGIN off=0x${flashOffset.toString(16)} erase=0x${eraseSize.toString(16)} blocks=$numBlocks")
-        if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = 30_000)) {
+        if (!sendCommand(ESP_FLASH_BEGIN, beginPayload, timeoutMs = ESP_FLASH_BEGIN_LARGE_TIMEOUT_MS)) {
             return Result.failure(Exception("FLASH_BEGIN rejected at offset 0x${flashOffset.toString(16)} (image size=${firmware.size})"))
         }
 
@@ -345,12 +375,12 @@ class EspSerialFlasher(
         sequence = 0
         while (offset < firmware.size) {
             val remaining = firmware.size - offset
-            val take = BLOCK_SIZE.coerceAtMost(remaining)
+            val take = ESP_BLOCK_SIZE.coerceAtMost(remaining)
             val chunk = firmware.copyOfRange(offset, offset + take)
-            val padded = if (take < BLOCK_SIZE) chunk + ByteArray(BLOCK_SIZE - take) { 0xFF.toByte() } else chunk
+            val padded = if (take < ESP_BLOCK_SIZE) chunk + ByteArray(ESP_BLOCK_SIZE - take) { ESP_FLASH_PADDING_BYTE } else chunk
 
             val payload = leInt(padded.size) + leInt(sequence) + leInt(0) + leInt(0) + padded
-            if (!sendCommand(ESP_FLASH_DATA, payload, checksumOver = padded, timeoutMs = FLASH_DATA_TIMEOUT_MS)) {
+            if (!sendCommand(ESP_FLASH_DATA, payload, checksumOver = padded, timeoutMs = ESP_FLASH_DATA_TIMEOUT_MS)) {
                 return Result.failure(Exception("FLASH_DATA failed at block $sequence (offset=$offset)"))
             }
             reporter.update(take)
@@ -360,8 +390,8 @@ class EspSerialFlasher(
             // 4 pages/block ≈ 3ms).  Without this, the ESP32-S3 USB device
             // NAKs while busy, the Android host controller counts NAKs and
             // eventually stalls the IN endpoint.
-            delay(5)
-            if (sequence % 128 == 0) dbg("...block $sequence/${numBlocks} OK")
+            delay(ESP_BLOCK_PACING_MS)
+            if (sequence % ESP_PROGRESS_LOG_EVERY_N == 0) dbg("...block $sequence/${numBlocks} OK")
         }
 
         return Result.success(Unit)
@@ -369,14 +399,14 @@ class EspSerialFlasher(
 
     override suspend fun finalize(): Result<Unit> {
         // FLASH_END payload: 0 = reboot into app, 1 = stay in bootloader.
-        sendCommand(ESP_FLASH_END, leInt(0), expectReply = false)
+        sendCommand(ESP_FLASH_END, leInt(ESP_REBOOT_APP), expectReply = false)
         // The ROM bootloader needs time to commit the final flash write
         // buffer to physical SPI flash and begin the software reset. If
         // we release the USB interface too quickly, the host USB stack
         // may tear down the connection before the ROM finishes committing,
         // leaving stale data on the flash chip.  esptool.py observes the
         // same window and uses a 1–2 s post-FLASH_END delay.
-        delay(2_000)
+        delay(ESP_FLASH_END_DELAY_MS)
         runCatching { connection.releaseInterface(intf) }
         return Result.success(Unit)
     }
@@ -407,17 +437,17 @@ class EspSerialFlasher(
             ((baud shr 8) and 0xFF).toByte(),
             ((baud shr 16) and 0xFF).toByte(),
             ((baud shr 24) and 0xFF).toByte(),
-            0x00, // 1 stop bit
-            0x00, // no parity
-            0x08, // 8 data bits
+            USB_CDC_STOP_BITS_1, // 1 stop bit
+            USB_CDC_PARITY_NONE, // no parity
+            USB_CDC_DATA_BITS_8, // 8 data bits
         )
         val r1 = connection.controlTransfer(
-            REQ_TYPE_CLASS_OUT, CDC_SET_LINE_CODING, 0, intf.id, data, data.size, BULK_TIMEOUT_MS
+            USB_REQ_TYPE_CLASS_OUT, CDC_SET_LINE_CODING, 0, intf.id, data, data.size, ESP_BULK_TIMEOUT_MS
         )
         // Assert DTR+RTS so the bridge starts clocking data through. The
         // bootloader reset pulse below will re-drive these lines.
         val r2 = connection.controlTransfer(
-            REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, 0x03, intf.id, null, 0, BULK_TIMEOUT_MS
+            USB_REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, USB_CDC_DTR_RTS_ASSERTED, intf.id, null, 0, ESP_BULK_TIMEOUT_MS
         )
         return r1 >= 0 && r2 >= 0
     }
@@ -426,7 +456,7 @@ class EspSerialFlasher(
      *  for [resetIntoBootloader] to drive. */
     private fun configureCp210x(baud: Int): Boolean {
         val enable = connection.controlTransfer(
-            REQ_TYPE_VENDOR_OUT, CP210X_IFC_ENABLE, 0x0001, 0, null, 0, BULK_TIMEOUT_MS
+            USB_REQ_TYPE_VENDOR_OUT, CP210X_IFC_ENABLE, CP210X_ENABLE_VALUE, 0, null, 0, ESP_BULK_TIMEOUT_MS
         )
         val baudBytes = byteArrayOf(
             (baud and 0xFF).toByte(),
@@ -435,7 +465,7 @@ class EspSerialFlasher(
             ((baud shr 24) and 0xFF).toByte(),
         )
         val setBaud = connection.controlTransfer(
-            REQ_TYPE_VENDOR_OUT, CP210X_SET_BAUDRATE, 0, 0, baudBytes, baudBytes.size, BULK_TIMEOUT_MS
+            USB_REQ_TYPE_VENDOR_OUT, CP210X_SET_BAUDRATE, 0, 0, baudBytes, baudBytes.size, ESP_BULK_TIMEOUT_MS
         )
         return enable >= 0 && setBaud >= 0
     }
@@ -444,12 +474,12 @@ class EspSerialFlasher(
      *  cargo-culted from the Linux ch341 driver and known-good for 115200. */
     private fun configureCh340(@Suppress("UNUSED_PARAMETER") baud: Int): Boolean {
         // Magic init reads (return 0x27/0x00); ignored, just kick the chip.
-        connection.controlTransfer(REQ_TYPE_VENDOR_IN, CH340_REQ_SERIAL_INIT, 0, 0, ByteArray(8), 8, BULK_TIMEOUT_MS)
+        connection.controlTransfer(USB_REQ_TYPE_VENDOR_IN, CH340_REQ_SERIAL_INIT, 0, 0, ByteArray(8), 8, ESP_BULK_TIMEOUT_MS)
         // Set baud-rate divisors for 115200 from ch341 driver tables.
-        connection.controlTransfer(REQ_TYPE_VENDOR_OUT, CH340_REQ_WRITE_REG, 0x1312, 0xCC83, null, 0, BULK_TIMEOUT_MS)
-        connection.controlTransfer(REQ_TYPE_VENDOR_OUT, CH340_REQ_WRITE_REG, 0x0F2C, 0x0007, null, 0, BULK_TIMEOUT_MS)
+        connection.controlTransfer(USB_REQ_TYPE_VENDOR_OUT, CH340_REQ_WRITE_REG, CH340_BAUD_DIV_WRITE_LOW, CH340_BAUD_DIV_WRITE_HIGH, null, 0, ESP_BULK_TIMEOUT_MS)
+        connection.controlTransfer(USB_REQ_TYPE_VENDOR_OUT, CH340_REQ_WRITE_REG, CH340_BAUD_DIV_READ_LOW, CH340_BAUD_DIV_READ_HIGH, null, 0, ESP_BULK_TIMEOUT_MS)
         // 8N1, no parity, no flow control.
-        connection.controlTransfer(REQ_TYPE_VENDOR_OUT, CH340_REQ_WRITE_REG, 0x2518, 0x00C3, null, 0, BULK_TIMEOUT_MS)
+        connection.controlTransfer(USB_REQ_TYPE_VENDOR_OUT, CH340_REQ_WRITE_REG, CH340_LINE_CTRL_LOW, CH340_LINE_CTRL_HIGH, null, 0, ESP_BULK_TIMEOUT_MS)
         return true
     }
 
@@ -459,35 +489,35 @@ class EspSerialFlasher(
      *    RTS  →  IO0 (strap, low = bootloader)
      */
     private suspend fun resetIntoBootloader() {
-        setDtrRts(dtr = false, rts = true);  delay(100)
-        setDtrRts(dtr = true,  rts = false); delay(50)
-        setDtrRts(dtr = false, rts = false); delay(50)
+        setDtrRts(dtr = false, rts = true);  delay(ESP_RESET_PULSE_MS)
+        setDtrRts(dtr = true,  rts = false); delay(ESP_RESET_RELEASE_MS)
+        setDtrRts(dtr = false, rts = false); delay(ESP_GPIO0_RELEASE_MS)
     }
 
     private fun setDtrRts(dtr: Boolean, rts: Boolean) {
         when (vendorId) {
             VID_SILABS_CP210X -> {
                 // Bit 0=DTR, bit 1=RTS in low byte; mask in high byte.
-                val state = (if (dtr) 0x01 else 0x00) or (if (rts) 0x02 else 0x00)
-                val mask = 0x03 shl 8
+                val state = (if (dtr) CP210X_MHS_DTR else 0x00) or (if (rts) 0x02 else 0x00)
+                val mask = CP210X_MHS_MASK shl 8
                 connection.controlTransfer(
-                    REQ_TYPE_VENDOR_OUT, CP210X_SET_MHS, state or mask, 0, null, 0, BULK_TIMEOUT_MS
+                    USB_REQ_TYPE_VENDOR_OUT, CP210X_SET_MHS, state or mask, 0, null, 0, ESP_BULK_TIMEOUT_MS
                 )
             }
             VID_QINHENG_CH340 -> {
                 // CH340 MODEM_CTRL: bit 5=~DTR, bit 6=~RTS (active-low).
-                var v = 0xFF
-                if (dtr) v = v and 0x20.inv()
-                if (rts) v = v and 0x40.inv()
+                var v = CH340_MODEM_DEFAULT
+                if (dtr) v = v and CH340_MODEM_DTR_NEG.inv()
+                if (rts) v = v and CH340_MODEM_RTS_NEG.inv()
                 connection.controlTransfer(
-                    REQ_TYPE_VENDOR_OUT, CH340_REQ_MODEM_CTRL, v, 0, null, 0, BULK_TIMEOUT_MS
+                    USB_REQ_TYPE_VENDOR_OUT, CH340_REQ_MODEM_CTRL, v, 0, null, 0, ESP_BULK_TIMEOUT_MS
                 )
             }
             else -> {
                 // Standard CDC-ACM: bit 0=DTR, bit 1=RTS.
                 val value = (if (dtr) 0x01 else 0x00) or (if (rts) 0x02 else 0x00)
                 connection.controlTransfer(
-                    REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, value, intf.id, null, 0, BULK_TIMEOUT_MS
+                    USB_REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, value, intf.id, null, 0, ESP_BULK_TIMEOUT_MS
                 )
             }
         }
@@ -501,11 +531,11 @@ class EspSerialFlasher(
         // Standard USB CLEAR_FEATURE(ENDPOINT_HALT) — the PC driver does this
         // automatically after a stall; Android's USB host does not.
         connection.controlTransfer(
-            0x02,  // bmReqType: host→device, standard, endpoint
-            0x01,  // CLEAR_FEATURE
-            0x00,  // ENDPOINT_HALT
+            USB_BMREQ_SET_FEATURE,  // bmReqType: host→device, standard, endpoint
+            USB_REQ_CLEAR_FEATURE,  // CLEAR_FEATURE
+            USB_ENDPOINT_HALT,  // ENDPOINT_HALT
             endpoint.address,
-            null, 0, 500
+            null, 0, ESP_BULK_TIMEOUT_MS
         )
     }
 
@@ -518,7 +548,7 @@ class EspSerialFlasher(
         payload: ByteArray,
         checksumOver: ByteArray = ByteArray(0),
         expectReply: Boolean = true,
-        timeoutMs: Int = BULK_TIMEOUT_MS,
+        timeoutMs: Int = ESP_BULK_TIMEOUT_MS,
     ): Boolean {
         val cs = if (checksumOver.isEmpty()) 0 else checksum(checksumOver)
         val header = byteArrayOf(0x00, op.toByte()) +
@@ -539,18 +569,18 @@ class EspSerialFlasher(
         var discarded = 0
         var lastDiscardedOp = -1
         while (System.currentTimeMillis() < deadline) {
-            val remainingMs = (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(50)
+            val remainingMs = (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(ESP_IFCLAIM_DRAIN_MS.toInt())
             val reply = readSlipPacket(remainingMs)
             if (reply == null) {
                 val elapsed = System.currentTimeMillis() - writeStart
                 // After 3s of silence, clear the IN endpoint halt (Android
                 // does not auto-clear) and give it one more chance.
-                if (elapsed > 3_000) {
+                if (elapsed > ESP_IN_EP_HALT_THRESHOLD_MS) {
                     inEndpoint?.let { clearEndpointHalt(it) }
                     dbg("sendCmd op=0x%02x: cleared IN endpoint halt, retrying...".format(op))
                     val retryReply = readSlipPacket(3_000)
                     if (retryReply != null && retryReply.size >= 2 && 
-                        retryReply[0] == 0x01.toByte() && retryReply[1] == op.toByte()) {
+                        retryReply[0] == ESP_ROM_RETRY_REPLY_MAGIC && retryReply[1] == op.toByte()) {
                         return parseReplyOk(op, retryReply)
                     }
                 }
@@ -561,7 +591,7 @@ class EspSerialFlasher(
                 }
                 return false
             }
-            if (reply.size >= 2 && reply[0] == 0x01.toByte() && reply[1] == op.toByte()) {
+            if (reply.size >= 2 && reply[0] == ESP_ROM_REPLY_OK && reply[1] == op.toByte()) {
                 return parseReplyOk(op, reply)
             }
             // Mismatched frame — discard and keep reading.
@@ -578,15 +608,15 @@ class EspSerialFlasher(
 
     /** Issue one 36×0x55 SYNC frame and return true if the ROM replies OK. */
     private fun trySync(): Boolean {
-        val syncData = ByteArray(36) { 0x55.toByte() }
-        val payload = byteArrayOf(0x07.toByte(), 0x07.toByte(), 0x12.toByte(), 0x20.toByte()) + syncData
+        val syncData = ByteArray(ESP_SYNC_FRAME_DATA_LEN) { ESP_SYNC_FRAME_BYTE }
+        val payload = ESP_SYNC_FRAME_PREFIX + syncData
         val header = byteArrayOf(0x00, ESP_SYNC.toByte()) + leShort(payload.size) + leInt(0)
         val frame = SlipFramer.encode(header + payload)
         val out = outEndpoint ?: return false
-        if (connection.bulkTransfer(out, frame, frame.size, SYNC_TIMEOUT_MS) < 0) return false
+        if (connection.bulkTransfer(out, frame, frame.size, ESP_SYNC_TIMEOUT_MS) < 0) return false
         // The ROM emits multiple frames in response (one per SYNC echo); the
         // first valid OK reply is enough for our purposes.
-        val reply = readSlipPacket(SYNC_TIMEOUT_MS) ?: return false
+        val reply = readSlipPacket(ESP_SYNC_TIMEOUT_MS) ?: return false
         return parseReplyOk(ESP_SYNC, reply)
     }
 
@@ -598,9 +628,9 @@ class EspSerialFlasher(
         val buf = ByteArray(256)
         // Brief read loop with short timeout — once the pipe is idle for
         // one tick we know all queued echoes have been consumed.
-        val deadline = System.currentTimeMillis() + 200
+        val deadline = System.currentTimeMillis() + ESP_DRAIN_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
-            val n = connection.bulkTransfer(ep, buf, buf.size, 30)
+            val n = connection.bulkTransfer(ep, buf, buf.size, ESP_SHORT_READ_TIMEOUT_MS)
             if (n <= 0) break
         }
     }
@@ -641,7 +671,7 @@ class EspSerialFlasher(
                 continue
             }
             // Read more bytes from USB
-            val n = connection.bulkTransfer(ep, buf, buf.size, 50)
+            val n = connection.bulkTransfer(ep, buf, buf.size, ESP_IFCLAIM_DRAIN_MS.toInt())
             if (n > 0) {
                 for (i in 0 until n) ringBuf.add(buf[i])
             }
@@ -659,14 +689,14 @@ class EspSerialFlasher(
      *  status == 0 means success. */
     private fun parseReplyOk(expectedOp: Int, reply: ByteArray): Boolean {
         if (reply.size < 10) return false  // 8-byte header + at least 2 status bytes
-        if (reply[0] != 0x01.toByte()) return false
+        if (reply[0] != ESP_ROM_REPLY_OK) return false
         if (reply[1] != expectedOp.toByte()) return false
         // Check 2-byte status trailer first (ESP32-S3 used by AirTAK), then
         // fall back to 4-byte (ESP32 classic / stub).
         val statusByte2 = reply.getOrNull(reply.size - 2)
-        if (statusByte2 != null && statusByte2 == 0x00.toByte()) return true
+        if (statusByte2 != null && statusByte2 == ESP_ROM_REPLY_STATUS_OK_BYTE2) return true
         val statusByte4 = reply.getOrNull(reply.size - 4)
-        return statusByte4 != null && statusByte4 == 0x00.toByte()
+        return statusByte4 != null && statusByte4 == ESP_ROM_REPLY_STATUS_OK_BYTE4
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -685,7 +715,7 @@ class EspSerialFlasher(
 
     /** esptool XOR checksum (seed 0xEF). */
     private fun checksum(data: ByteArray): Int {
-        var c = 0xEF
+        var c = ESP_XOR_CHECKSUM_SEED
         for (b in data) c = c xor (b.toInt() and 0xFF)
         return c
     }

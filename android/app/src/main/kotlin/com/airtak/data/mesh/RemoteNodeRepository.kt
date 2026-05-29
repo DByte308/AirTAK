@@ -4,6 +4,12 @@ package com.airtak.data.mesh
 
 import com.airtak.data.db.RemoteNodeDao
 import com.airtak.data.db.RemoteNodeEntity
+import com.airtak.config.constants.MESH_NODE_RETENTION_MS
+import com.airtak.config.constants.PORTNUM_AIRTAK_PLAYER
+import com.airtak.config.constants.PORTNUM_NODEINFO_APP
+import com.airtak.config.constants.PORTNUM_POSITION_APP
+import com.airtak.config.constants.PORTNUM_TELEMETRY_APP
+import com.airtak.config.constants.UINT32_MASK
 import com.airtak.proto.PlayerStatePacket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,10 +32,10 @@ class RemoteNodeRepository @Inject constructor(
         scope.launch {
             mesh.packets.collect { packet ->
                 when (packet.portnum) {
-                    Portnum.POSITION_APP -> handlePosition(packet)
-                    Portnum.NODEINFO_APP -> handleNodeInfo(packet)
-                    Portnum.AIRTAK_PLAYER -> handlePlayer(packet)
-                    Portnum.TELEMETRY_APP -> handleTelemetry(packet)
+                    PORTNUM_POSITION_APP -> handlePosition(packet)
+                    PORTNUM_NODEINFO_APP -> handleNodeInfo(packet)
+                    PORTNUM_AIRTAK_PLAYER -> handlePlayer(packet)
+                    PORTNUM_TELEMETRY_APP -> handleTelemetry(packet)
                 }
             }
         }
@@ -70,7 +76,7 @@ class RemoteNodeRepository @Inject constructor(
     private suspend fun handlePlayer(packet: MeshRxPacket) {
         val payload = packet.payload ?: return
         val player = runCatching { PlayerStatePacket.parseFrom(payload) }.getOrNull() ?: return
-        val nodeId = (if (player.nodeId != 0) player.nodeId.toLong() else packet.srcNodeId) and 0xFFFF_FFFFL
+        val nodeId = (if (player.nodeId != 0) player.nodeId.toLong() else packet.srcNodeId) and UINT32_MASK
         update(nodeId) { existing, now ->
             existing.copy(
                 callsign = player.callsign.ifBlank { existing.callsign },
@@ -108,6 +114,7 @@ class RemoteNodeRepository @Inject constructor(
     }
 
     private companion object {
-        const val NODE_RETENTION_MS = 24L * 60L * 60L * 1_000L
+        // ── Canonical definition in config/constants/ModerationConstants.kt ────
+        const val NODE_RETENTION_MS = MESH_NODE_RETENTION_MS
     }
 }

@@ -14,6 +14,7 @@
 
 package com.airtak.data.config
 
+import com.airtak.config.constants.MESH_CONFIG_BUFFER
 import com.airtak.data.ble.BleRepository
 import com.airtak.data.ble.InboundChannel
 import com.airtak.proto.ConfigAck
@@ -44,7 +45,7 @@ class ConfigRepository @Inject constructor(
     private val _groupBytes = MutableStateFlow<Map<ConfigGroup, ByteArray>>(emptyMap())
     val groupBytes: StateFlow<Map<ConfigGroup, ByteArray>> = _groupBytes.asStateFlow()
 
-    private val _acks = MutableSharedFlow<ConfigAck>(extraBufferCapacity = 32)
+    private val _acks = MutableSharedFlow<ConfigAck>(extraBufferCapacity = MESH_CONFIG_BUFFER)
     val acks: SharedFlow<ConfigAck> = _acks.asSharedFlow()
 
     init {

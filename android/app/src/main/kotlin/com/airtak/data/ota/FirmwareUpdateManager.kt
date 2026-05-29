@@ -12,6 +12,11 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
 import android.net.Uri
+import com.airtak.config.constants.OTA_RECONNECT_TIMEOUT_MS
+import com.airtak.config.constants.VID_ESP32_NATIVE
+import com.airtak.config.constants.VID_NRF52840
+import com.airtak.config.constants.VID_SILABS_CP210X
+import com.airtak.config.constants.VID_QINHENG_CH340
 import com.airtak.data.ble.BleConstants
 import com.airtak.data.ble.BleRepository
 import kotlinx.coroutines.flow.Flow
@@ -132,7 +137,7 @@ class FirmwareUpdateManager(
             engine.onDebug?.invoke("finalize() OK — device should reboot now")
 
             onProgress(UpdateProgress.Rebooting)
-            val versionResult = engine.waitForReconnect(30000L)
+            val versionResult = engine.waitForReconnect(OTA_RECONNECT_TIMEOUT_MS)
             if (versionResult.isFailure) {
                 engine.onDebug?.invoke("waitForReconnect: ${versionResult.exceptionOrNull()?.message}")
                 onProgress(UpdateProgress.Error(
@@ -158,10 +163,10 @@ class FirmwareUpdateManager(
         val engine = when (transport) {
             is Transport.UsbCdc -> {
                 when {
-                    transport.vendorId == 0x239A -> NrfSerialDfuEngine(context, transport.connection, transport.intf, transport.usbDevice)
-                    transport.vendorId == 0x303A ||
-                        transport.vendorId == 0x10C4 ||
-                        transport.vendorId == 0x1A86 ->
+                    transport.vendorId == VID_NRF52840 -> NrfSerialDfuEngine(context, transport.connection, transport.intf, transport.usbDevice)
+                    transport.vendorId == VID_ESP32_NATIVE ||
+                        transport.vendorId == VID_SILABS_CP210X ||
+                        transport.vendorId == VID_QINHENG_CH340 ->
                         EspSerialFlasher(context, transport.connection, transport.intf, transport.vendorId)
                     else -> return Result.failure(IllegalArgumentException("Unknown USB vendor: ${transport.vendorId}"))
                 }
@@ -192,8 +197,9 @@ class FirmwareUpdateManager(
     }
 
     companion object {
-        fun isNordicDfuVendor(vendorId: Int): Boolean = vendorId == 0x239A
+        // ── Canonical definitions in config/constants/OtaConstants.kt ──────────
+        fun isNordicDfuVendor(vendorId: Int): Boolean = vendorId == VID_NRF52840
         fun isEsp32Vendor(vendorId: Int): Boolean =
-            vendorId == 0x303A || vendorId == 0x10C4 || vendorId == 0x1A86
+            vendorId == VID_ESP32_NATIVE || vendorId == VID_SILABS_CP210X || vendorId == VID_QINHENG_CH340
     }
 }

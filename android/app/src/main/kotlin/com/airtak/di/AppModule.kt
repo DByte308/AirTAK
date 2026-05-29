@@ -4,6 +4,7 @@ package com.airtak.di
 
 import android.content.Context
 import androidx.room.Room
+import com.airtak.config.constants.APP_DB_NAME
 import com.airtak.data.db.AppDatabase
 import com.airtak.data.db.MessageDao
 import com.airtak.data.db.ModerationVoteDao
@@ -23,7 +24,7 @@ object AppModule {
 
     @Provides @Singleton
     fun provideDb(@ApplicationContext ctx: Context): AppDatabase =
-        Room.databaseBuilder(ctx, AppDatabase::class.java, "airtak.db")
+        Room.databaseBuilder(ctx, AppDatabase::class.java, APP_DB_NAME)
             // Recover from schema/identity-hash mismatches (only relevant
             // during pre-1.0 development; once Phase 6 ships we'll switch to
             // explicit migrations).

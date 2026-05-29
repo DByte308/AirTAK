@@ -9,6 +9,15 @@ package com.airtak.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.airtak.config.constants.DEVICE_BROADCAST_INTERVAL_SECS
+import com.airtak.config.constants.DEVICE_MIN_TX_INTERVAL_SECS
+import com.airtak.config.constants.QR_SCHEME
+import com.airtak.config.constants.UI_CALLSIGN_MAX_LEN
+import com.airtak.config.constants.UI_CHANNEL_NAME_MAX_LEN
+import com.airtak.config.constants.UI_DEFAULT_PLAYER_COLOR_RGB
+import com.airtak.config.constants.UI_MIN_UNIT_SLOT_INDEX
+import com.airtak.config.constants.UI_PSK_MAX_BYTES
+import com.airtak.config.constants.UI_QR_SIZE_DEFAULT_PX
 import com.airtak.data.config.ConfigRepository
 import com.airtak.data.moderation.ModerationRepository
 import com.airtak.data.prefs.AppPreferences
@@ -76,8 +85,8 @@ class SettingsViewModel @Inject constructor(
         val validationError: String? = null,
     )
     data class PositionState(
-        val broadcastIntervalSecs: Int = 90,
-        val minTxIntervalSecs: Int = 15,
+        val broadcastIntervalSecs: Int = DEVICE_BROADCAST_INTERVAL_SECS,
+        val minTxIntervalSecs: Int = DEVICE_MIN_TX_INTERVAL_SECS,
         val smartBroadcast: Boolean = true,
         val gpsSource: GpsSource = GpsSource.DEVICE_GPS,
         val positionChannelIndex: Int = 0,
@@ -89,7 +98,7 @@ class SettingsViewModel @Inject constructor(
         val squadId: String = "",
         val platoonId: String = "",
         val companyId: String = "",
-        val playerColorRgb: Int = 0xFFFFFF,
+        val playerColorRgb: Int = UI_DEFAULT_PLAYER_COLOR_RGB,
         val hitButtonEnabled: Boolean = false,
         val fireteamChannelSlot: Int = -1,
         val squadChannelSlot: Int = -1,
@@ -249,7 +258,7 @@ class SettingsViewModel @Inject constructor(
         val msg = ChannelConfig.newBuilder().addAllSlots(s.slots.map { editor ->
             editor.slot.toBuilder()
                 .setIndex(editor.slot.index.coerceIn(0, 7))
-                .setName(editor.slot.name.take(16))
+                .setName(editor.slot.name.take(UI_CALLSIGN_MAX_LEN))
                 .setRole(editor.slot.role.takeUnless { it == ChannelRole.UNRECOGNIZED } ?: ChannelRole.DISABLED)
                 .setPositionPrecision(editor.slot.positionPrecision.coerceIn(0, 32))
                 .setPhyProfileIndex(editor.slot.phyProfileIndex.coerceIn(0, 4))
@@ -317,11 +326,11 @@ class SettingsViewModel @Inject constructor(
         val current = _channels.value
         val slots = current.slots
         val target = slots.firstOrNull { editor ->
-            editor.slot.index >= MIN_UNIT_SLOT_INDEX &&
+            editor.slot.index >= UI_MIN_UNIT_SLOT_INDEX &&
             editor.slot.role == ChannelRole.DISABLED
         } ?: return null
         val targetIdx = target.slot.index
-        val name = suggestedName.take(16).ifBlank { "Slot ${target.slot.index}" }
+        val name = suggestedName.take(UI_CALLSIGN_MAX_LEN).ifBlank { "Slot ${target.slot.index}" }
         _channels.value = current.copy(
             slots = slots.map { editor ->
                 if (editor.slot.index == targetIdx) {
@@ -443,7 +452,7 @@ class SettingsViewModel @Inject constructor(
     /**
      * Render [uri] as a QR-code bitmap suitable for display.
      */
-    fun renderQrBitmap(uri: String, size: Int = 512): Bitmap {
+    fun renderQrBitmap(uri: String, size: Int = UI_QR_SIZE_DEFAULT_PX): Bitmap {
         val writer = QRCodeWriter()
         val matrix = writer.encode(uri, BarcodeFormat.QR_CODE, size, size)
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
@@ -455,12 +464,7 @@ class SettingsViewModel @Inject constructor(
         return bitmap
     }
 
-    private companion object {
-        /** Slots 0 and 1 are global (mesh/AirTAK-wide). Slot 2 is reserved for PTT audio. */
-        const val MIN_UNIT_SLOT_INDEX = 3
-
-        const val QR_SCHEME = "airtak-config://"
-    }
+    
 
     private val _themeMode = MutableStateFlow(prefs.themeMode())
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
@@ -501,7 +505,7 @@ class SettingsViewModel @Inject constructor(
         } else if (isBase64(trimmed)) {
             try {
                 val decoded = Base64.decode(trimmed, Base64.DEFAULT)
-                if (decoded.size > 32) return PskParseResult(decoded, "PSK must be 32 bytes or fewer.")
+                if (decoded.size > UI_PSK_MAX_BYTES) return PskParseResult(decoded, "PSK must be 32 bytes or fewer.")
                 decoded
             } catch (_: IllegalArgumentException) {
                 trimmed.toByteArray(Charsets.UTF_8)
@@ -509,7 +513,7 @@ class SettingsViewModel @Inject constructor(
         } else {
             trimmed.toByteArray(Charsets.UTF_8)
         }
-        if (bytes.size > 32) return PskParseResult(bytes, "PSK must be 32 bytes or fewer.")
+        if (bytes.size > UI_PSK_MAX_BYTES) return PskParseResult(bytes, "PSK must be 32 bytes or fewer.")
         return PskParseResult(bytes, null)
     }
 

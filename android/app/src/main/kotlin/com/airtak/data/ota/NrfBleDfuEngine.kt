@@ -29,6 +29,8 @@ package com.airtak.data.ota
 
 import android.content.Context
 import com.airtak.data.ble.BleRepository
+import com.airtak.config.constants.NRF_BLE_DFU_TIMEOUT_MS
+import com.airtak.config.constants.NRF_BOOTLOADER_WAKE_MS
 import com.airtak.data.ota.FirmwareUpdateManager.DeviceInfo
 import com.airtak.data.ota.FirmwareUpdateManager.UpdateProgress
 import com.airtak.proto.AdminCommand
@@ -49,13 +51,6 @@ class NrfBleDfuEngine(
     private val initialDeviceInfo: DeviceInfo,
 ) : FirmwareUpdateManager.FirmwareUpdateEngine {
     override var onDebug: ((String) -> Unit)? = null
-
-    companion object {
-        /** Time the Adafruit nRF52 bootloader needs from reboot to advertising. */
-        private const val BOOTLOADER_WAKE_MS = 2_500L
-        /** Cap on the entire library-managed DFU run. */
-        private const val DFU_TIMEOUT_MS = 5L * 60L * 1_000L
-    }
 
     override suspend fun initialize(): Result<DeviceInfo> = Result.success(initialDeviceInfo)
 
@@ -83,7 +78,7 @@ class NrfBleDfuEngine(
         ble.pauseAutoReconnect(true)
         // Give the device time to actually reboot into the bootloader and
         // start advertising. Skipping this race-conditions the library's scan.
-        delay(BOOTLOADER_WAKE_MS)
+        delay(NRF_BOOTLOADER_WAKE_MS)
 
         // ---- 3. Persist firmware bytes to a cache zip -----------------------
         onProgress(UpdateProgress.Initializing("Preparing DFU package..."))
@@ -157,8 +152,8 @@ class NrfBleDfuEngine(
                 .setZip(android.net.Uri.fromFile(pkgFile))
                 .start(context, AirtakDfuService::class.java)
 
-            val res = withTimeoutOrNull(DFU_TIMEOUT_MS) { outcome.await() }
-                ?: Result.failure(Exception("DFU timed out after ${DFU_TIMEOUT_MS / 1_000}s"))
+            val res = withTimeoutOrNull(NRF_BLE_DFU_TIMEOUT_MS) { outcome.await() }
+                ?: Result.failure(Exception("DFU timed out after ${NRF_BLE_DFU_TIMEOUT_MS / 1_000}s"))
 
             return res
         } finally {

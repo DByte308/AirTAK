@@ -27,6 +27,8 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
+import com.airtak.config.constants.NETWORK_BROUTER_SEGMENTS_URL
+import com.airtak.config.constants.ROUTING_GRID_SIZE_DEG
 import kotlin.math.sqrt
 
 data class RoutePoint(val latitude: Double, val longitude: Double)
@@ -47,7 +49,6 @@ sealed interface SegmentDownloadState {
 
 data class SegmentInfo(val name: String, val sizeBytes: Long)
 
-private const val SEGMENTS_BASE_URL = "https://brouter.de/brouter/segments4/"
 
 @Singleton
 class RoutingRepository @Inject constructor(
@@ -177,14 +178,14 @@ class RoutingRepository @Inject constructor(
         val maxLon = bounds.maxLon.toInt()
 
         val names = mutableListOf<String>()
-        var lat = minLat - (minLat % 5)
+        var lat = minLat - (minLat % ROUTING_GRID_SIZE_DEG)
         while (lat <= maxLat) {
-            var lon = minLon - (minLon % 5)
+            var lon = minLon - (minLon % ROUTING_GRID_SIZE_DEG)
             while (lon <= maxLon) {
                 names.add(segmentFileName(lon, lat))
-                lon += 5
+                lon += ROUTING_GRID_SIZE_DEG
             }
-            lat += 5
+            lat += ROUTING_GRID_SIZE_DEG
         }
 
         _downloadState.value = SegmentDownloadState.Running(0, names.size)
@@ -200,7 +201,7 @@ class RoutingRepository @Inject constructor(
                     if (target.exists()) {
                         skipped++
                     } else {
-                        val url = "$SEGMENTS_BASE_URL$name"
+                        val url = "$NETWORK_BROUTER_SEGMENTS_URL$name"
                         val tempFile = File(segmentDir, "$name.tmp")
                         client.get(url).bodyAsChannel().toInputStream().use { input ->
                             tempFile.outputStream().use { output -> input.copyTo(output) }

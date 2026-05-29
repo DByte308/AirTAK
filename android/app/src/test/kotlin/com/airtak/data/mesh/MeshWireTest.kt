@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
+import com.airtak.config.constants.PORTNUM_AIRTAK_PLAYER
+import com.airtak.config.constants.PORTNUM_TEXT_MESSAGE_APP
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -37,20 +39,20 @@ class MeshWireTest {
 
     @Test fun encodeDataRoundtripsThroughEnvelope() {
         val msg = "TANGO DOWN".toByteArray(Charsets.UTF_8)
-        val pkt = MeshWire.decodeMeshRx(wrap(Portnum.TEXT_MESSAGE_APP, msg))
+        val pkt = MeshWire.decodeMeshRx(wrap(PORTNUM_TEXT_MESSAGE_APP, msg))
         assertNotNull(pkt); pkt!!
-        assertEquals(Portnum.TEXT_MESSAGE_APP, pkt.portnum)
+        assertEquals(PORTNUM_TEXT_MESSAGE_APP, pkt.portnum)
         assertArrayEquals(msg, pkt.payload)
     }
 
     @Test fun decodeMeshRxParsesOtaHeaderFields() {
-        val pkt = MeshWire.decodeMeshRx(wrap(Portnum.AIRTAK_PLAYER, byteArrayOf(0x01, 0x02, 0x03)))!!
+        val pkt = MeshWire.decodeMeshRx(wrap(PORTNUM_AIRTAK_PLAYER, byteArrayOf(0x01, 0x02, 0x03)))!!
         assertEquals(0xAABBCCDDL, pkt.destNodeId)
         assertEquals(0x11223344L, pkt.srcNodeId)
         assertEquals(0x55667788L, pkt.packetId)
         assertEquals(0x03, pkt.flags)
         assertEquals(0x42, pkt.channelHash)
-        assertEquals(Portnum.AIRTAK_PLAYER, pkt.portnum)
+        assertEquals(PORTNUM_AIRTAK_PLAYER, pkt.portnum)
         assertArrayEquals(byteArrayOf(0x01, 0x02, 0x03), pkt.payload)
     }
 
@@ -60,13 +62,13 @@ class MeshWireTest {
 
     @Test fun encodeDataUsesMeshtasticFieldNumbers() {
         val data = MeshWire.encodeData(
-            portnum = Portnum.AIRTAK_PLAYER,
+            portnum = PORTNUM_AIRTAK_PLAYER,
             payload = byteArrayOf(0x42),
             wantResponse = true,
             destNodeId = 0x01020304,
             requestId = 0x55667788,
         )
-        val pkt = MeshWire.decodeMeshRx(wrapData(Portnum.AIRTAK_PLAYER, data))!!
+        val pkt = MeshWire.decodeMeshRx(wrapData(PORTNUM_AIRTAK_PLAYER, data))!!
         assertEquals(true, pkt.wantResponse)
         assertEquals(0x01020304L, pkt.dataDestNodeId)
         assertEquals(0x55667788L, pkt.requestId)

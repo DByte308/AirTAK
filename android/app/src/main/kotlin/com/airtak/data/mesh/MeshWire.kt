@@ -18,26 +18,54 @@
 
 package com.airtak.data.mesh
 
+import com.airtak.config.constants.DATA_FIELD_DEST
+import com.airtak.config.constants.DATA_FIELD_PAYLOAD
+import com.airtak.config.constants.DATA_FIELD_PORTNUM
+import com.airtak.config.constants.DATA_FIELD_REQUEST_ID
+import com.airtak.config.constants.DATA_FIELD_SOURCE
+import com.airtak.config.constants.DATA_FIELD_WANT_RESPONSE
+import com.airtak.config.constants.DEVICE_METRICS_FIELD_BATTERY_LEVEL
+import com.airtak.config.constants.MESH_BROADCAST_ADDR
+import com.airtak.config.constants.MESH_ENCODE_ENVELOPE_BYTES
+import com.airtak.config.constants.NODEINFO_FIELD_ID
+import com.airtak.config.constants.NODEINFO_FIELD_LONG_NAME
+import com.airtak.config.constants.NODEINFO_FIELD_SHORT_NAME
+import com.airtak.config.constants.OTA_HEADER_BYTES
+import com.airtak.config.constants.OTA_HEADER_CHANNEL_HASH_OFFSET
+import com.airtak.config.constants.OTA_HEADER_FLAGS_OFFSET
+import com.airtak.config.constants.PORTNUM_AIRTAK_BASE
+import com.airtak.config.constants.PORTNUM_NODEINFO_APP
+import com.airtak.config.constants.PORTNUM_POSITION_APP
+import com.airtak.config.constants.PORTNUM_ROUTING_APP
+import com.airtak.config.constants.PORTNUM_TELEMETRY_APP
+import com.airtak.config.constants.PORTNUM_TEXT_MESSAGE_APP
+import com.airtak.config.constants.POSITION_E7_DIVISOR
+import com.airtak.config.constants.POSITION_FIELD_ALTITUDE
+import com.airtak.config.constants.POSITION_FIELD_LATITUDE_E7
+import com.airtak.config.constants.POSITION_FIELD_LONGITUDE_E7
+import com.airtak.config.constants.POSITION_FIELD_PRECISION_BITS
+import com.airtak.config.constants.POSITION_FIELD_TIME
+import com.airtak.config.constants.PROTO_FIELD_NUM_SHIFT
+import com.airtak.config.constants.PROTO_FIXED32_BYTES
+import com.airtak.config.constants.PROTO_FIXED64_BYTES
+import com.airtak.config.constants.PROTO_VARINT_CONTINUE_MASK
+import com.airtak.config.constants.PROTO_VARINT_CONTINUE_MASK_L
+import com.airtak.config.constants.PROTO_VARINT_DATA_MASK
+import com.airtak.config.constants.PROTO_VARINT_DATA_MASK_L
+import com.airtak.config.constants.PROTO_VARINT_MAX_SHIFT
+import com.airtak.config.constants.PROTO_VARINT_SHIFT
+import com.airtak.config.constants.PROTO_WIRE_FIXED32
+import com.airtak.config.constants.PROTO_WIRE_FIXED64
+import com.airtak.config.constants.PROTO_WIRE_LEN
+import com.airtak.config.constants.HASH_PRIME
+import com.airtak.config.constants.PROTO_WIRE_TYPE_MASK
+import com.airtak.config.constants.PROTO_WIRE_VARINT
+import com.airtak.config.constants.ROUTING_FIELD_ERROR_REASON
+import com.airtak.config.constants.TELEMETRY_FIELD_DEVICE_METRICS
+import com.airtak.config.constants.UINT32_MASK
+import com.airtak.config.constants.UINT8_MASK
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-
-/** Subset of Meshtastic port numbers we route in Phase 3+; rest are pass-through. */
-object Portnum {
-    const val TEXT_MESSAGE_APP = 1
-    const val POSITION_APP     = 3
-    const val NODEINFO_APP     = 4
-    const val ROUTING_APP      = 5
-    const val TELEMETRY_APP    = 67
-    const val AIRTAK_PLAYER      = 256
-    const val AIRTAK_TACTICAL    = 257
-    const val AIRTAK_MODERATION  = 258
-    const val AIRTAK_ACK         = 261
-    const val AIRTAK_POSREQ      = 262
-    const val AIRTAK_AUDIO       = 263
-    const val AIRTAK_SYNC_REQUEST = 264
-    const val AIRTAK_OVERLAY_ALIGNMENT = 265
-    const val AIRTAK_MARKER_SNAPSHOT_REQUEST = 266
-}
 
 /** Decoded MESH_RX envelope. */
 data class MeshRxPacket(
@@ -59,7 +87,7 @@ data class MeshRxPacket(
 ) {
     override fun equals(other: Any?): Boolean = other is MeshRxPacket &&
         other.srcNodeId == srcNodeId && other.packetId == packetId
-    override fun hashCode(): Int = 31 * srcNodeId.hashCode() + packetId.hashCode()
+    override fun hashCode(): Int = HASH_PRIME * srcNodeId.hashCode() + packetId.hashCode()
 }
 
 data class MeshtasticPosition(
@@ -77,18 +105,15 @@ data class MeshtasticUser(
 )
 
 object MeshWire {
-
-    private const val OTA_HEADER_BYTES = 16
-
     fun decodeMeshRx(envelope: ByteArray): MeshRxPacket? {
         if (envelope.size < 1 + OTA_HEADER_BYTES) return null
-        val portnumHint = envelope[0].toInt() and 0xFF
+        val portnumHint = envelope[0].toInt() and UINT8_MASK
         val bb = ByteBuffer.wrap(envelope, 1, OTA_HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
-        val dest = bb.int.toLong() and 0xFFFF_FFFFL
-        val src  = bb.int.toLong() and 0xFFFF_FFFFL
-        val id   = bb.int.toLong() and 0xFFFF_FFFFL
-        val flags = envelope[1 + 12].toInt() and 0xFF
-        val ch    = envelope[1 + 13].toInt() and 0xFF
+        val dest = bb.int.toLong() and UINT32_MASK
+        val src  = bb.int.toLong() and UINT32_MASK
+        val id   = bb.int.toLong() and UINT32_MASK
+        val flags = envelope[1 + OTA_HEADER_FLAGS_OFFSET].toInt() and UINT8_MASK
+        val ch    = envelope[1 + OTA_HEADER_CHANNEL_HASH_OFFSET].toInt() and UINT8_MASK
         val dataBytes = envelope.copyOfRange(1 + OTA_HEADER_BYTES, envelope.size)
         val data = decodeData(dataBytes)
         return MeshRxPacket(
@@ -113,23 +138,23 @@ object MeshWire {
         sourceNodeId: Long? = null,
         requestId: Long? = null,
     ): ByteArray {
-        val out = ArrayList<Byte>(payload.size + 16)
+        val out = ArrayList<Byte>(payload.size + MESH_ENCODE_ENVELOPE_BYTES)
         // field 1 (portnum) — varint
-        writeTag(out, 1, WIRETYPE_VARINT); writeVarint(out, portnum.toLong())
+        writeTag(out, DATA_FIELD_PORTNUM, PROTO_WIRE_VARINT); writeVarint(out, portnum.toLong())
         // field 2 (payload) — length-delimited
-        writeTag(out, 2, WIRETYPE_LEN); writeVarint(out, payload.size.toLong()); out.addAll(payload.toList())
+        writeTag(out, DATA_FIELD_PAYLOAD, PROTO_WIRE_LEN); writeVarint(out, payload.size.toLong()); out.addAll(payload.toList())
         if (wantResponse) {
             // Meshtastic Data.want_response is field 3.
-            writeTag(out, 3, WIRETYPE_VARINT); writeVarint(out, 1)
+            writeTag(out, DATA_FIELD_WANT_RESPONSE, PROTO_WIRE_VARINT); writeVarint(out, 1)
         }
         destNodeId?.let {
-            writeTag(out, 4, WIRETYPE_FIXED32); writeFixed32(out, it)
+            writeTag(out, DATA_FIELD_DEST, PROTO_WIRE_FIXED32); writeFixed32(out, it)
         }
         sourceNodeId?.let {
-            writeTag(out, 5, WIRETYPE_FIXED32); writeFixed32(out, it)
+            writeTag(out, DATA_FIELD_SOURCE, PROTO_WIRE_FIXED32); writeFixed32(out, it)
         }
         requestId?.let {
-            writeTag(out, 6, WIRETYPE_FIXED32); writeFixed32(out, it)
+            writeTag(out, DATA_FIELD_REQUEST_ID, PROTO_WIRE_FIXED32); writeFixed32(out, it)
         }
         return out.toByteArray()
     }
@@ -144,41 +169,41 @@ object MeshWire {
         while (i < payload.size) {
             val (tag, ni) = readVarint(payload, i) ?: return null
             i = ni
-            val field = (tag shr 3).toInt()
-            val wire = (tag and 0x07L).toInt()
+            val field = (tag shr PROTO_FIELD_NUM_SHIFT).toInt()
+            val wire = (tag and PROTO_WIRE_TYPE_MASK).toInt()
             when (wire) {
-                WIRETYPE_VARINT -> {
+                PROTO_WIRE_VARINT -> {
                     val (v, n2) = readVarint(payload, i) ?: return null
                     i = n2
                     when (field) {
-                        3 -> altitudeM = v.toInt()
-                        14 -> precisionBits = v.toInt()
+                        POSITION_FIELD_ALTITUDE -> altitudeM = v.toInt()
+                        POSITION_FIELD_PRECISION_BITS -> precisionBits = v.toInt()
                     }
                 }
-                WIRETYPE_FIXED32 -> {
-                    if (i + 4 > payload.size) return null
-                    val value = ByteBuffer.wrap(payload, i, 4).order(ByteOrder.LITTLE_ENDIAN).int
-                    i += 4
+                PROTO_WIRE_FIXED32 -> {
+                    if (i + PROTO_FIXED32_BYTES > payload.size) return null
+                    val value = ByteBuffer.wrap(payload, i, PROTO_FIXED32_BYTES).order(ByteOrder.LITTLE_ENDIAN).int
+                    i += PROTO_FIXED32_BYTES
                     when (field) {
-                        1 -> latitudeE7 = value
-                        2 -> longitudeE7 = value
-                        4 -> timeUnix = value.toLong() and 0xFFFF_FFFFL
+                        POSITION_FIELD_LATITUDE_E7 -> latitudeE7 = value
+                        POSITION_FIELD_LONGITUDE_E7 -> longitudeE7 = value
+                        POSITION_FIELD_TIME -> timeUnix = value.toLong() and UINT32_MASK
                     }
                 }
-                WIRETYPE_LEN -> {
+                PROTO_WIRE_LEN -> {
                     val (len, n2) = readVarint(payload, i) ?: return null
                     i = n2 + len.toInt()
                     if (i > payload.size) return null
                 }
-                WIRETYPE_FIXED64 -> i += 8
+                PROTO_WIRE_FIXED64 -> i += PROTO_FIXED64_BYTES
                 else -> return null
             }
         }
         val lat = latitudeE7 ?: return null
         val lon = longitudeE7 ?: return null
         return MeshtasticPosition(
-            latitude = lat / 10_000_000.0,
-            longitude = lon / 10_000_000.0,
+            latitude = lat / POSITION_E7_DIVISOR,
+            longitude = lon / POSITION_E7_DIVISOR,
             altitudeM = altitudeM,
             timeUnix = timeUnix,
             precisionBits = precisionBits,
@@ -193,28 +218,28 @@ object MeshWire {
         while (i < payload.size) {
             val (tag, ni) = readVarint(payload, i) ?: return null
             i = ni
-            val field = (tag shr 3).toInt()
-            val wire = (tag and 0x07L).toInt()
+            val field = (tag shr PROTO_FIELD_NUM_SHIFT).toInt()
+            val wire = (tag and PROTO_WIRE_TYPE_MASK).toInt()
             when (wire) {
-                WIRETYPE_LEN -> {
+                PROTO_WIRE_LEN -> {
                     val (len, n2) = readVarint(payload, i) ?: return null
                     i = n2
                     val end = i + len.toInt()
                     if (end > payload.size) return null
                     val text = payload.copyOfRange(i, end).toString(Charsets.UTF_8)
                     when (field) {
-                        1 -> id = text
-                        2 -> longName = text
-                        3 -> shortName = text
+                        NODEINFO_FIELD_ID -> id = text
+                        NODEINFO_FIELD_LONG_NAME -> longName = text
+                        NODEINFO_FIELD_SHORT_NAME -> shortName = text
                     }
                     i = end
                 }
-                WIRETYPE_VARINT -> {
+                PROTO_WIRE_VARINT -> {
                     val (_, n2) = readVarint(payload, i) ?: return null
                     i = n2
                 }
-                WIRETYPE_FIXED32 -> i += 4
-                WIRETYPE_FIXED64 -> i += 8
+                PROTO_WIRE_FIXED32 -> i += PROTO_FIXED32_BYTES
+                PROTO_WIRE_FIXED64 -> i += PROTO_FIXED64_BYTES
                 else -> return null
             }
         }
@@ -231,10 +256,10 @@ object MeshWire {
         while (i < payload.size) {
             val (tag, ni) = readVarint(payload, i) ?: return null
             i = ni
-            val field = (tag shr 3).toInt()
-            val wire = (tag and 0x07L).toInt()
+            val field = (tag shr PROTO_FIELD_NUM_SHIFT).toInt()
+            val wire = (tag and PROTO_WIRE_TYPE_MASK).toInt()
             when {
-                wire == WIRETYPE_LEN && field == 2 -> {
+                wire == PROTO_WIRE_LEN && field == TELEMETRY_FIELD_DEVICE_METRICS -> {
                     val (len, n2) = readVarint(payload, i) ?: return null
                     i = n2
                     val end = i + len.toInt()
@@ -244,9 +269,9 @@ object MeshWire {
                     while (j < end) {
                         val (innerTag, nj) = readVarint(payload, j) ?: return null
                         j = nj
-                        val innerField = (innerTag shr 3).toInt()
-                        val innerWire = (innerTag and 0x07L).toInt()
-                        if (innerWire == WIRETYPE_VARINT && innerField == 2) {
+                        val innerField = (innerTag shr PROTO_FIELD_NUM_SHIFT).toInt()
+                        val innerWire = (innerTag and PROTO_WIRE_TYPE_MASK).toInt()
+                        if (innerWire == PROTO_WIRE_VARINT && innerField == DEVICE_METRICS_FIELD_BATTERY_LEVEL) {
                             val (battery, _) = readVarint(payload, j) ?: return null
                             return battery.toInt().coerceIn(0, 100)
                         }
@@ -265,16 +290,16 @@ object MeshWire {
 
     private fun skipField(buf: ByteArray, start: Int, wire: Int): Int? {
         return when (wire) {
-            WIRETYPE_VARINT -> {
+            PROTO_WIRE_VARINT -> {
                 val (_, ni) = readVarint(buf, start) ?: return null
                 ni
             }
-            WIRETYPE_FIXED64 -> (start + 8).takeIf { it <= buf.size }
-            WIRETYPE_LEN -> {
+            PROTO_WIRE_FIXED64 -> (start + PROTO_FIXED64_BYTES).takeIf { it <= buf.size }
+            PROTO_WIRE_LEN -> {
                 val (len, ni) = readVarint(buf, start) ?: return null
                 (ni + len.toInt()).takeIf { it <= buf.size }
             }
-            WIRETYPE_FIXED32 -> (start + 4).takeIf { it <= buf.size }
+            PROTO_WIRE_FIXED32 -> (start + PROTO_FIXED32_BYTES).takeIf { it <= buf.size }
             else -> null
         }
     }
@@ -301,41 +326,41 @@ object MeshWire {
         while (i < buf.size) {
             val (tag, ni) = readVarint(buf, i) ?: return null
             i = ni
-            val field = (tag shr 3).toInt()
-            val wire = (tag and 0x07L).toInt()
+            val field = (tag shr PROTO_FIELD_NUM_SHIFT).toInt()
+            val wire = (tag and PROTO_WIRE_TYPE_MASK).toInt()
             when (wire) {
-                WIRETYPE_VARINT -> {
+                PROTO_WIRE_VARINT -> {
                     val (v, n2) = readVarint(buf, i) ?: return null
                     i = n2
                     when (field) {
-                        1 -> portnum = v.toInt()
-                        3 -> wantResponse = v != 0L
-                        4 -> destNodeId = if (v == 0L) 0xFFFF_FFFFL else v
-                        5 -> sourceNodeId = v
-                        6 -> requestId = v
+                        DATA_FIELD_PORTNUM -> portnum = v.toInt()
+                        DATA_FIELD_WANT_RESPONSE -> wantResponse = v != 0L
+                        DATA_FIELD_DEST -> destNodeId = if (v == 0L) MESH_BROADCAST_ADDR else v
+                        DATA_FIELD_SOURCE -> sourceNodeId = v
+                        DATA_FIELD_REQUEST_ID -> requestId = v
                         else -> { /* skip */ }
                     }
                 }
-                WIRETYPE_LEN -> {
+                PROTO_WIRE_LEN -> {
                     val (len, n2) = readVarint(buf, i) ?: return null
                     i = n2
                     val end = i + len.toInt()
                     if (end > buf.size) return null
-                    if (field == 2) payload = buf.copyOfRange(i, end)
+                    if (field == DATA_FIELD_PAYLOAD) payload = buf.copyOfRange(i, end)
                     i = end
                 }
-                WIRETYPE_FIXED32 -> {
-                    if (i + 4 > buf.size) return null
-                    val v = ByteBuffer.wrap(buf, i, 4).order(ByteOrder.LITTLE_ENDIAN).int.toLong() and 0xFFFF_FFFFL
-                    i += 4
+                PROTO_WIRE_FIXED32 -> {
+                    if (i + PROTO_FIXED32_BYTES > buf.size) return null
+                    val v = ByteBuffer.wrap(buf, i, PROTO_FIXED32_BYTES).order(ByteOrder.LITTLE_ENDIAN).int.toLong() and UINT32_MASK
+                    i += PROTO_FIXED32_BYTES
                     when (field) {
-                        4 -> destNodeId = if (v == 0L) 0xFFFF_FFFFL else v
-                        5 -> sourceNodeId = v
-                        6 -> requestId = v
+                        DATA_FIELD_DEST -> destNodeId = if (v == 0L) MESH_BROADCAST_ADDR else v
+                        DATA_FIELD_SOURCE -> sourceNodeId = v
+                        DATA_FIELD_REQUEST_ID -> requestId = v
                         else -> { /* skip */ }
                     }
                 }
-                WIRETYPE_FIXED64 -> i += 8
+                PROTO_WIRE_FIXED64 -> i += PROTO_FIXED64_BYTES
                 else -> return null
             }
         }
@@ -353,12 +378,12 @@ object MeshWire {
         while (i < payload.size) {
             val (tag, ni) = readVarint(payload, i) ?: return null
             i = ni
-            val field = (tag shr 3).toInt()
-            val wire = (tag and 0x07L).toInt()
-            if (wire == WIRETYPE_VARINT) {
+            val field = (tag shr PROTO_FIELD_NUM_SHIFT).toInt()
+            val wire = (tag and PROTO_WIRE_TYPE_MASK).toInt()
+            if (wire == PROTO_WIRE_VARINT) {
                 val (v, n2) = readVarint(payload, i) ?: return null
                 i = n2
-                if (field == 3) return v
+                if (field == ROUTING_FIELD_ERROR_REASON) return v
             } else {
                 i = skipField(payload, i, wire) ?: return null
             }
@@ -368,26 +393,21 @@ object MeshWire {
 
     // ── Protobuf wire primitives ──────────────────────────────────────────────
 
-    private const val WIRETYPE_VARINT = 0
-    private const val WIRETYPE_FIXED64 = 1
-    private const val WIRETYPE_LEN = 2
-    private const val WIRETYPE_FIXED32 = 5
-
     private fun writeTag(out: MutableList<Byte>, field: Int, wire: Int) {
-        writeVarint(out, ((field.toLong() shl 3) or wire.toLong()))
+        writeVarint(out, ((field.toLong() shl PROTO_FIELD_NUM_SHIFT) or wire.toLong()))
     }
 
     private fun writeVarint(out: MutableList<Byte>, v: Long) {
         var x = v
-        while ((x and 0x7FL.inv()) != 0L) {
-            out.add(((x and 0x7FL) or 0x80L).toByte())
-            x = x ushr 7
+        while ((x and PROTO_VARINT_DATA_MASK_L.inv()) != 0L) {
+            out.add(((x and PROTO_VARINT_DATA_MASK_L) or PROTO_VARINT_CONTINUE_MASK_L).toByte())
+            x = x ushr PROTO_VARINT_SHIFT
         }
-        out.add((x and 0x7FL).toByte())
+        out.add((x and PROTO_VARINT_DATA_MASK_L).toByte())
     }
 
     private fun writeFixed32(out: MutableList<Byte>, v: Long) {
-        val buf = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(v.toInt())
+        val buf = ByteBuffer.allocate(PROTO_FIXED32_BYTES).order(ByteOrder.LITTLE_ENDIAN).putInt(v.toInt())
         out.addAll(buf.array().toList())
     }
 
@@ -397,12 +417,12 @@ object MeshWire {
         var shift = 0
         var i = start
         while (i < buf.size) {
-            val b = buf[i].toInt() and 0xFF
+            val b = buf[i].toInt() and UINT8_MASK
             i++
-            result = result or ((b and 0x7F).toLong() shl shift)
-            if (b and 0x80 == 0) return result to i
-            shift += 7
-            if (shift > 63) return null
+            result = result or ((b and PROTO_VARINT_DATA_MASK).toLong() shl shift)
+            if (b and PROTO_VARINT_CONTINUE_MASK == 0) return result to i
+            shift += PROTO_VARINT_SHIFT
+            if (shift > PROTO_VARINT_MAX_SHIFT) return null
         }
         return null
     }

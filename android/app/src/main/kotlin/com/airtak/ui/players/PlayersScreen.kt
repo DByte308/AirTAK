@@ -51,6 +51,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.airtak.proto.PlayerStatus
+import com.airtak.config.constants.MS_PER_SECOND
+import com.airtak.config.constants.UI_SECONDS_PER_HOUR
+import com.airtak.config.constants.UI_SECONDS_PER_MINUTE
 import com.airtak.ui.components.HudCard
 import com.airtak.ui.components.MetricTile
 import com.airtak.ui.components.SectionLabel
@@ -586,11 +589,11 @@ private fun hierarchyLabel(player: PlayerRow): String {
 
 private fun ageText(timestampMs: Long?): String {
     if (timestampMs == null) return "—"
-    val ageSec = ((System.currentTimeMillis() - timestampMs) / 1_000L).coerceAtLeast(0)
+    val ageSec = ((System.currentTimeMillis() - timestampMs) / MS_PER_SECOND).coerceAtLeast(0)
     return when {
-        ageSec < 60 -> "${ageSec}s"
-        ageSec < 3600 -> "${ageSec / 60}m"
-        else -> "${ageSec / 3600}h"
+        ageSec < UI_SECONDS_PER_MINUTE -> "${ageSec}s"
+        ageSec < UI_SECONDS_PER_HOUR -> "${ageSec / UI_SECONDS_PER_MINUTE}m"
+        else -> "${ageSec / UI_SECONDS_PER_HOUR}h"
     }
 }
 

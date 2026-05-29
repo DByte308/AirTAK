@@ -6,29 +6,30 @@
 
 package com.airtak.data.ota
 
+import com.airtak.config.constants.SLIP_END
+import com.airtak.config.constants.SLIP_ESC
+import com.airtak.config.constants.SLIP_ESC_END
+import com.airtak.config.constants.SLIP_ESC_ESC
+
 object SlipFramer {
-    const val END: Byte = 0xC0.toByte()
-    const val ESC: Byte = 0xDB.toByte()
-    const val ESC_END: Byte = 0xDC.toByte()
-    const val ESC_ESC: Byte = 0xDD.toByte()
 
     fun encode(payload: ByteArray): ByteArray {
         val output = mutableListOf<Byte>()
-        output.add(END)
+        output.add(SLIP_END.toByte())
         for (b in payload) {
             when (b) {
-                END -> {
-                    output.add(ESC)
-                    output.add(ESC_END)
+                SLIP_END.toByte() -> {
+                    output.add(SLIP_ESC.toByte())
+                    output.add(SLIP_ESC_END.toByte())
                 }
-                ESC -> {
-                    output.add(ESC)
-                    output.add(ESC_ESC)
+                SLIP_ESC.toByte() -> {
+                    output.add(SLIP_ESC.toByte())
+                    output.add(SLIP_ESC_ESC.toByte())
                 }
                 else -> output.add(b)
             }
         }
-        output.add(END)
+        output.add(SLIP_END.toByte())
         return output.toByteArray()
     }
 
@@ -41,14 +42,14 @@ object SlipFramer {
             when {
                 escaped -> {
                     when (b) {
-                        ESC_END -> current.add(END)
-                        ESC_ESC -> current.add(ESC)
+                        SLIP_ESC_END.toByte() -> current.add(SLIP_END.toByte())
+                        SLIP_ESC_ESC.toByte() -> current.add(SLIP_ESC.toByte())
                         else -> current.add(b)
                     }
                     escaped = false
                 }
-                b == ESC -> escaped = true
-                b == END -> {
+                b == SLIP_ESC.toByte() -> escaped = true
+                b == SLIP_END.toByte() -> {
                     if (current.isNotEmpty()) {
                         packets.add(current.toByteArray())
                         current.clear()

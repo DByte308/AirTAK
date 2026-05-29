@@ -51,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.airtak.config.constants.BYTES_PER_KB
 import com.airtak.data.ota.FirmwareUpdateManager.UpdateProgress
 import com.airtak.ui.theme.StatusActive
 import com.airtak.ui.theme.StatusHit
@@ -328,7 +329,7 @@ private fun FirmwareProgress(progress: UpdateProgress) {
 
 private fun formatBytes(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"
-    val kb = bytes / 1024
+    val kb = bytes / BYTES_PER_KB
     return "$kb KB"
 }
 

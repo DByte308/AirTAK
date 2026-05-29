@@ -16,20 +16,26 @@
 
 package com.airtak.data.ble
 
+import com.airtak.config.constants.BLE_FRAMING_ATT_OVERHEAD
+import com.airtak.config.constants.BLE_FRAMING_HEADER_BYTES
+import com.airtak.config.constants.BLE_FRAMING_MAX_PAYLOAD_BYTES
+import com.airtak.config.constants.BLE_MAX_MTU_REQUEST
+import com.airtak.config.constants.UINT16_MASK
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 object BleFraming {
-    const val HEADER_BYTES = 6
-    const val ATT_OVERHEAD = 3                // ATT op + handle
-    const val MAX_PAYLOAD_BYTES = 65_535       // total_length is uint16
+    // ── Canonical definitions in config/constants/BleConstants.kt ──────────
+    const val HEADER_BYTES = BLE_FRAMING_HEADER_BYTES
+    const val ATT_OVERHEAD = BLE_FRAMING_ATT_OVERHEAD
+    const val MAX_PAYLOAD_BYTES = BLE_FRAMING_MAX_PAYLOAD_BYTES
 
     /**
      * Split [payload] into chunks of [chunkPayloadSize] bytes each, prefixed with the
      * 6-byte header. chunkPayloadSize = MTU − 6 − 3 = effective ATT payload.
      */
     fun encode(payload: ByteArray, chunkPayloadSize: Int): List<ByteArray> {
-        require(chunkPayloadSize in 1..(517 - HEADER_BYTES - ATT_OVERHEAD)) {
+        require(chunkPayloadSize in 1..(BLE_MAX_MTU_REQUEST - HEADER_BYTES - ATT_OVERHEAD)) {
             "chunkPayloadSize $chunkPayloadSize out of range"
         }
         require(payload.size <= MAX_PAYLOAD_BYTES) { "payload too large (${payload.size} bytes)" }
@@ -66,9 +72,9 @@ object BleFraming {
         fun feed(frame: ByteArray): ByteArray? {
             if (frame.size < HEADER_BYTES) { reset(); return null }
             val bb = ByteBuffer.wrap(frame, 0, HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
-            val total = bb.short.toInt() and 0xFFFF
-            val idx   = bb.short.toInt() and 0xFFFF
-            val count = bb.short.toInt() and 0xFFFF
+            val total = bb.short.toInt() and UINT16_MASK
+            val idx   = bb.short.toInt() and UINT16_MASK
+            val count = bb.short.toInt() and UINT16_MASK
             if (count == 0 || idx >= count) { reset(); return null }
             val data = frame.copyOfRange(HEADER_BYTES, frame.size)
             if (idx == 0) {

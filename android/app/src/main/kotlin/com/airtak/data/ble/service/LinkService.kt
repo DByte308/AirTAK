@@ -34,6 +34,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import com.airtak.config.constants.ACTION_LINK_DISCONNECT
+import com.airtak.config.constants.ACTION_LINK_START
+import com.airtak.config.constants.LINK_CHANNEL_ID
+import com.airtak.config.constants.LINK_NOTIFICATION_ID
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -58,11 +62,11 @@ class LinkService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_DISCONNECT -> {
+            ACTION_LINK_DISCONNECT -> {
                 bleRepository.disconnect()
                 stopSelf()
             }
-            ACTION_START -> bleRepository.reconnectBonded()
+            ACTION_LINK_START -> bleRepository.reconnectBonded()
         }
         return START_STICKY
     }
@@ -85,9 +89,9 @@ class LinkService : Service() {
 
     private fun ensureChannel() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
+        if (nm.getNotificationChannel(LINK_CHANNEL_ID) == null) {
             val ch = NotificationChannel(
-                CHANNEL_ID,
+                LINK_CHANNEL_ID,
                 getString(R.string.service_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
@@ -101,17 +105,17 @@ class LinkService : Service() {
     private fun startForegroundCompat(n: Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
-                NOTIF_ID, n,
+                LINK_NOTIFICATION_ID, n,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
             )
         } else {
-            startForeground(NOTIF_ID, n)
+            startForeground(LINK_NOTIFICATION_ID, n)
         }
     }
 
     private fun updateNotification(title: String) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(NOTIF_ID, buildNotification(title))
+        nm.notify(LINK_NOTIFICATION_ID, buildNotification(title))
     }
 
     private fun buildNotification(title: String): Notification {
@@ -124,10 +128,10 @@ class LinkService : Service() {
         )
         val disconnect = PendingIntent.getService(
             this, 1,
-            Intent(this, LinkService::class.java).apply { action = ACTION_DISCONNECT },
+            Intent(this, LinkService::class.java).apply { action = ACTION_LINK_DISCONNECT },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, LINK_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(getString(R.string.service_channel_desc))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -146,13 +150,8 @@ class LinkService : Service() {
     }
 
     companion object {
-        const val CHANNEL_ID = "airtak.link"
-        const val NOTIF_ID = 0xA17A
-        const val ACTION_START = "com.airtak.action.LINK_START"
-        const val ACTION_DISCONNECT = "com.airtak.action.LINK_DISCONNECT"
-
         fun start(ctx: Context) {
-            val i = Intent(ctx, LinkService::class.java).setAction(ACTION_START)
+            val i = Intent(ctx, LinkService::class.java).setAction(ACTION_LINK_START)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i)
             else ctx.startService(i)
         }

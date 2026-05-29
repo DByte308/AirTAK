@@ -27,6 +27,14 @@ import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.PI
 import kotlin.math.pow
+import com.airtak.config.constants.MAP_MERCATOR_MAX_LAT
+import com.airtak.config.constants.MAP_MERCATOR_MAX_LON
+import com.airtak.config.constants.MAP_MERCATOR_MIN_LAT
+import com.airtak.config.constants.MAP_MERCATOR_MIN_LON
+import com.airtak.config.constants.MAP_MAX_TILES_PER_DOWNLOAD
+import com.airtak.config.constants.NETWORK_DEFAULT_TILE_URL
+import com.airtak.config.constants.UI_TILE_CACHE_MAX_AGE_SEC
+import com.airtak.config.constants.ASSET_WORLD_OVERVIEW_FILE
 import kotlin.math.tan
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -243,7 +251,7 @@ class TileRepository @Inject constructor(
             if (bytes == null) {
                 out.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".toByteArray())
             } else {
-                out.write("HTTP/1.1 200 OK\r\nContent-Type: ${bytes.contentType()}\r\nCache-Control: max-age=86400\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\nContent-Length: ${bytes.size}\r\n\r\n".toByteArray())
+                out.write("HTTP/1.1 200 OK\r\nContent-Type: ${bytes.contentType()}\r\nCache-Control: max-age=$UI_TILE_CACHE_MAX_AGE_SEC\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\nContent-Length: ${bytes.size}\r\n\r\n".toByteArray())
                 out.write(bytes)
             }
             out.flush()
@@ -301,8 +309,8 @@ class TileRepository @Inject constructor(
     }
 
     private fun latLonToTile(lat: Double, lon: Double, zoom: Int): TileXY {
-        val clampedLat = lat.coerceIn(-85.05112878, 85.05112878)
-        val clampedLon = lon.coerceIn(-180.0, 180.0)
+        val clampedLat = lat.coerceIn(MAP_MERCATOR_MIN_LAT, MAP_MERCATOR_MAX_LAT)
+        val clampedLon = lon.coerceIn(MAP_MERCATOR_MIN_LON, MAP_MERCATOR_MAX_LON)
         val n = 2.0.pow(zoom)
         val x = ((clampedLon + 180.0) / 360.0 * n).toInt().coerceIn(0, n.toInt() - 1)
         val latRad = Math.toRadians(clampedLat)
@@ -312,19 +320,21 @@ class TileRepository @Inject constructor(
     }
 
     private fun TileBounds.normalized(): TileBounds = TileBounds(
-        minLat = minOf(minLat, maxLat).coerceIn(-85.05112878, 85.05112878),
-        minLon = minOf(minLon, maxLon).coerceIn(-180.0, 180.0),
-        maxLat = maxOf(minLat, maxLat).coerceIn(-85.05112878, 85.05112878),
-        maxLon = maxOf(minLon, maxLon).coerceIn(-180.0, 180.0),
+        minLat = minOf(minLat, maxLat).coerceIn(MAP_MERCATOR_MIN_LAT, MAP_MERCATOR_MAX_LAT),
+        minLon = minOf(minLon, maxLon).coerceIn(MAP_MERCATOR_MIN_LON, MAP_MERCATOR_MAX_LON),
+        maxLat = maxOf(minLat, maxLat).coerceIn(MAP_MERCATOR_MIN_LAT, MAP_MERCATOR_MAX_LAT),
+        maxLon = maxOf(minLon, maxLon).coerceIn(MAP_MERCATOR_MIN_LON, MAP_MERCATOR_MAX_LON),
     )
 
     private data class TileCoord(val z: Int, val x: Int, val y: Int)
     private data class TileXY(val x: Int, val y: Int)
 
     private companion object {
+        // ── Canonical definitions in config/constants/AppConstants.kt & MapConstants.kt ─
         val TILE_PATH = Regex("/tiles/(\\d+)/(\\d+)/(\\d+)\\.png")
-        const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        const val WORLD_OVERVIEW_FILE = "world-overview.mbtiles"
-        const val MAX_TILES_PER_DOWNLOAD = 15_000
+        const val DEFAULT_TILE_URL = NETWORK_DEFAULT_TILE_URL   // Canonical: AppConstants
+        // ── Canonical definition in config/constants/AppConstants.kt ───────────
+        const val WORLD_OVERVIEW_FILE = ASSET_WORLD_OVERVIEW_FILE
+        const val MAX_TILES_PER_DOWNLOAD = MAP_MAX_TILES_PER_DOWNLOAD  // Canonical: MapConstants
     }
 }

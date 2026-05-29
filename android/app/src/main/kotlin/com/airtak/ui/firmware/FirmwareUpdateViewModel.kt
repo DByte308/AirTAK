@@ -36,6 +36,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import com.airtak.config.constants.VID_NRF52840
+import com.airtak.config.constants.VID_ESP32_NATIVE
+import com.airtak.config.constants.VID_SILABS_CP210X
+import com.airtak.config.constants.VID_QINHENG_CH340
 import kotlin.coroutines.resume
 
 @HiltViewModel
@@ -156,7 +160,7 @@ class FirmwareUpdateViewModel @Inject constructor(
                 // DeviceInfo here is informational).
                 val deviceInfo = FirmwareUpdateManager.DeviceInfo(
                     boardId = "usb-${device.vendorId.toString(16)}",
-                    platform = if (device.vendorId == 0x239A) "nRF52" else "ESP32",
+                    platform = if (device.vendorId == VID_NRF52840) "nRF52" else "ESP32",
                     firmwareVersion = "unknown",
                 )
 
@@ -185,7 +189,7 @@ class FirmwareUpdateViewModel @Inject constructor(
      *  VID. Returns null when nothing matches so the caller can show a
      *  hint instead of opening a device picker. */
     private fun pickSupportedDevice(mgr: UsbManager): UsbDevice? {
-        val supported = setOf(0x239A, 0x303A, 0x10C4, 0x1A86)
+        val supported = setOf(VID_NRF52840, VID_ESP32_NATIVE, VID_SILABS_CP210X, VID_QINHENG_CH340)
         return mgr.deviceList.values.firstOrNull { it.vendorId in supported }
     }
 
@@ -243,14 +247,8 @@ class FirmwareUpdateViewModel @Inject constructor(
     }
 
     companion object {
-        const val SUPPORTED_MIME = "application/octet-stream"
-        val SUPPORTED_EXTENSIONS = arrayOf(
-            "application/octet-stream",
-            "application/x-binary",
-            // nRF52 Secure DFU distributes signed firmware as a .zip
-            // package produced by adafruit-nrfutil.
-            "application/zip",
-            "*/*",
-        )
+        // ── Canonical definitions in config/constants/OtaConstants.kt ──────────
+        const val SUPPORTED_MIME = FW_MIME_OCTET_STREAM
+        val SUPPORTED_EXTENSIONS = arrayOf(FW_MIME_OCTET_STREAM, FW_MIME_X_BINARY, FW_MIME_ZIP, FW_MIME_WILDCARD)
     }
 }

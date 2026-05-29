@@ -15,6 +15,12 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
+import com.airtak.config.constants.MS_PER_SECOND
+import com.airtak.config.constants.UI_OVERLAY_HASH_BYTES
+import com.airtak.config.constants.UI_OVERLAY_OPACITY_DEFAULT
+import com.airtak.config.constants.UI_OVERLAY_OPACITY_MIN
+import com.airtak.config.constants.UI_STREAM_COPY_BUFFER_BYTES
+import com.airtak.config.constants.KEY_OVERLAY
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,7 +46,7 @@ enum class MissionOverlayCornerId {
 data class MissionOverlay(
     val imagePath: String,
     val corners: MissionOverlayCorners,
-    val opacity: Float = DEFAULT_MISSION_OVERLAY_OPACITY,
+    val     opacity: Float = UI_OVERLAY_OPACITY_DEFAULT,
     val updatedMs: Long,
 )
 
@@ -76,7 +82,7 @@ class MissionOverlayRepository @Inject constructor(
         val overlay = MissionOverlay(
             imagePath = overlayFile.absolutePath,
             corners = corners,
-            opacity = DEFAULT_MISSION_OVERLAY_OPACITY,
+            opacity = UI_OVERLAY_OPACITY_DEFAULT,
             updatedMs = System.currentTimeMillis(),
         )
         saveOverlay(overlay)
@@ -96,7 +102,7 @@ class MissionOverlayRepository @Inject constructor(
     fun updateOpacity(opacity: Float) {
         val current = _overlay.value ?: return
         val updated = current.copy(
-            opacity = opacity.coerceIn(MIN_MISSION_OVERLAY_OPACITY, 1f),
+            opacity = opacity.coerceIn(UI_OVERLAY_OPACITY_MIN, 1f),
             updatedMs = System.currentTimeMillis(),
         )
         saveOverlay(updated)
@@ -121,7 +127,7 @@ class MissionOverlayRepository @Inject constructor(
         if (!imageFile.exists()) return
         val imageHash = computeFileHash(imageFile)
         val fileName = imageFile.name
-        val nowUnix = (System.currentTimeMillis() / 1000L).toInt()
+        val nowUnix = (System.currentTimeMillis() / MS_PER_SECOND).toInt()
         val alignment = OverlayAlignment.newBuilder()
             .setSharerNodeId(0) // populated by firmware
             .setImageHash(imageHash)
@@ -212,9 +218,9 @@ class MissionOverlayRepository @Inject constructor(
             MissionOverlay(
                 imagePath = imagePath,
                 updatedMs = json.optLong("updatedMs", 0L),
-                opacity = json.optDouble("opacity", DEFAULT_MISSION_OVERLAY_OPACITY.toDouble())
+                opacity = json.optDouble("opacity", UI_OVERLAY_OPACITY_DEFAULT.toDouble())
                     .toFloat()
-                    .coerceIn(MIN_MISSION_OVERLAY_OPACITY, 1f),
+                    .coerceIn(UI_OVERLAY_OPACITY_MIN, 1f),
                 corners = MissionOverlayCorners(
                     topLeft = json.getJSONObject("topLeft").toPoint(),
                     topRight = json.getJSONObject("topRight").toPoint(),
@@ -237,7 +243,7 @@ class MissionOverlayRepository @Inject constructor(
     private fun computeFileHash(file: File): Long {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
-            val buf = ByteArray(8192)
+            val buf = ByteArray(UI_STREAM_COPY_BUFFER_BYTES)
             var read: Int
             while (input.read(buf).also { read = it } != -1) {
                 digest.update(buf, 0, read)
@@ -245,16 +251,12 @@ class MissionOverlayRepository @Inject constructor(
         }
         val full = digest.digest()
         var hash = 0L
-        for (i in 0 until 8) {
+        for (i in 0 until UI_OVERLAY_HASH_BYTES) {
             hash = (hash shl 8) or (full[i].toLong() and 0xFF)
         }
         return hash
     }
 
-    private companion object {
-        const val KEY_OVERLAY = "overlay"
-    }
 }
 
-const val DEFAULT_MISSION_OVERLAY_OPACITY = 0.72f
-const val MIN_MISSION_OVERLAY_OPACITY = 0.1f
+

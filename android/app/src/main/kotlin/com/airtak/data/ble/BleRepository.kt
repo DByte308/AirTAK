@@ -38,6 +38,20 @@ import android.os.Build
 import android.os.ParcelUuid
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import com.airtak.config.constants.BLE_SCAN_TIMEOUT_MS
+import com.airtak.config.constants.BLE_DEFAULT_MTU
+import com.airtak.config.constants.BLE_MAX_MTU_REQUEST
+import com.airtak.config.constants.BLE_MAX_ATTR_VALUE_BYTES
+import com.airtak.config.constants.BLE_INTER_NOTIFY_DELAY_MS
+import com.airtak.config.constants.BLE_MESH_TX_THROTTLE_MS
+import com.airtak.config.constants.BLE_TX_RETRY_COUNT
+import com.airtak.config.constants.BLE_TX_IDLE_POLL_MS
+import com.airtak.config.constants.BLE_TX_RETRY_BACKOFF_MS
+import com.airtak.config.constants.BLE_DEFAULT_AWAIT_TX_IDLE_MS
+import com.airtak.config.constants.BLE_RECONNECT_BASE_MS
+import com.airtak.config.constants.BLE_RECONNECT_MAX_MS
+import com.airtak.config.constants.BLE_RECONNECT_MAX_EXPONENT
+import com.airtak.config.constants.BLE_INBOUND_BUFFER
 import com.airtak.data.prefs.AppPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -71,7 +85,7 @@ class BleRepository @Inject constructor(
     val discovered: StateFlow<List<DiscoveredDevice>> = _discovered.asStateFlow()
 
     private val _inbound = MutableSharedFlow<InboundFrame>(
-        extraBufferCapacity = 256,
+        extraBufferCapacity = BLE_INBOUND_BUFFER,
         onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
     )
     val inbound: SharedFlow<InboundFrame> = _inbound.asSharedFlow()
@@ -97,7 +111,7 @@ class BleRepository @Inject constructor(
     private var lastMeshTxMs: Long = 0L
     private var reconnectJob: Job? = null
     private var scanJob: Job? = null
-    private var currentMtu: Int = 23
+    private var currentMtu: Int = BLE_DEFAULT_MTU
     private var chunkPayloadSize: Int = 23 - BleFraming.HEADER_BYTES - BleFraming.ATT_OVERHEAD
 
     /** Per-characteristic reassemblers — chunked notifications must not interleave.
@@ -124,7 +138,7 @@ class BleRepository @Inject constructor(
         val charUuid: java.util.UUID,
         val chunk: ByteArray,
         val writeNoResponse: Boolean,
-        var retriesLeft: Int = 3,
+        var retriesLeft: Int = BLE_TX_RETRY_COUNT,
     )
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -165,7 +179,7 @@ class BleRepository @Inject constructor(
             .build()
         scanner.startScan(filters, settings, scanCallback)
         scanJob = scope.launch {
-            delay(30_000)
+            delay(BLE_SCAN_TIMEOUT_MS)
             stopScan()
         }
     }
@@ -228,7 +242,7 @@ class BleRepository @Inject constructor(
         // from congesting the LoRa channel and suppressing peer transmissions.
         if (channel == OutboundChannel.MeshTx) {
             val now = SystemClock.elapsedRealtime()
-            if (now - lastMeshTxMs < 500) return
+            if (now - lastMeshTxMs < BLE_MESH_TX_THROTTLE_MS) return
             lastMeshTxMs = now
         }
         val uuid = when (channel) {
@@ -256,23 +270,23 @@ class BleRepository @Inject constructor(
     }
 
     /** Effective ATT payload size for OTA_DATA chunks at the negotiated MTU.
-     *  Capped at 512 bytes because that is the Android-side maximum for a
-     *  `BluetoothGattCharacteristic` value, regardless of MTU. Writes larger
+     *  Capped at BLE_MAX_ATTR_VALUE_BYTES (Android-side max for BluetoothGattCharacteristic value)
+     *  regardless of MTU. Writes larger
      *  than 512 throw "value should not be longer than max length of an
      *  attribute value" before they ever reach the air. */
     fun otaDataChunkSize(): Int =
-        (currentMtu - BleFraming.ATT_OVERHEAD).coerceIn(1, 512)
+        (currentMtu - BleFraming.ATT_OVERHEAD).coerceIn(1, BLE_MAX_ATTR_VALUE_BYTES)
 
     /** Suspend until the outbound queue has drained (all writes acked) or the
      *  timeout elapses. Returns true if drained, false on timeout. Used by the
      *  OTA engine to flush pending chunks before requesting a status snapshot
      *  or finalizing the update. */
-    suspend fun awaitTxIdle(timeoutMs: Long = 30_000L): Boolean {
+    suspend fun awaitTxIdle(timeoutMs: Long = BLE_DEFAULT_AWAIT_TX_IDLE_MS): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (txQueue.isNotEmpty() || txInFlight) {
             if (System.currentTimeMillis() > deadline) return false
             if (_linkState.value !is LinkState.Connected) return false
-            kotlinx.coroutines.delay(20)
+            kotlinx.coroutines.delay(BLE_TX_IDLE_POLL_MS)
         }
         return true
     }
@@ -304,7 +318,7 @@ class BleRepository @Inject constructor(
                     // BEFORE service discovery so we always see the live schema.
                     refreshGattCache(g)
                     // Request the largest supported MTU; the device may grant less.
-                    g.requestMtu(517)
+                    g.requestMtu(BLE_MAX_MTU_REQUEST)
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     txQueue.clear()
@@ -319,7 +333,7 @@ class BleRepository @Inject constructor(
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
-            currentMtu = if (status == BluetoothGatt.GATT_SUCCESS) mtu else 23
+            currentMtu = if (status == BluetoothGatt.GATT_SUCCESS) mtu else BLE_DEFAULT_MTU
             chunkPayloadSize = (currentMtu - BleFraming.HEADER_BYTES - BleFraming.ATT_OVERHEAD)
                 .coerceAtLeast(1)
             g.discoverServices()
@@ -353,7 +367,7 @@ class BleRepository @Inject constructor(
             scope.launch {
                 BleConstants.NOTIFY_CHARS.forEach { uuid ->
                     service.getCharacteristic(uuid)?.let { enableSubscription(g, it) }
-                    delay(40)
+                    delay(BLE_INTER_NOTIFY_DELAY_MS)
                 }
                 _linkState.value = LinkState.Connected(g.device.address, currentMtu)
             }
@@ -514,7 +528,7 @@ class BleRepository @Inject constructor(
                 op.retriesLeft -= 1
                 txQueue.addFirst(op)
                 scope.launch {
-                    delay(20)
+                    delay(BLE_TX_RETRY_BACKOFF_MS)
                     synchronized(pumpLock) { txInFlight = false }
                     pumpTx()
                 }
@@ -575,7 +589,7 @@ class BleRepository @Inject constructor(
             _linkState.value = LinkState.Disconnected
             return
         }
-        val delayMs = (1_000L shl backoffAttempt.coerceAtMost(6)).coerceAtMost(60_000L)
+        val delayMs = (BLE_RECONNECT_BASE_MS shl backoffAttempt.coerceAtMost(BLE_RECONNECT_MAX_EXPONENT)).coerceAtMost(BLE_RECONNECT_MAX_MS)
         _linkState.value = LinkState.Reconnecting(address, delayMs)
         reconnectJob?.cancel()
         reconnectJob = scope.launch {

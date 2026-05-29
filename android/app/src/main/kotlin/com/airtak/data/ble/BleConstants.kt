@@ -1,26 +1,38 @@
 // AirTAK Android — data/ble/BleConstants.kt
 // Planning: §10.1 (GATT service & characteristic UUIDs)
+//
+// Characteristic UUIDs are derived from the canonical base template in
+// config/constants/BleConstants.kt.  Slot 0 = Service, 1–7 = Characteristics.
 
 package com.airtak.data.ble
 
+import com.airtak.config.constants.BLE_RECOVERY_ADV_NAME
+import com.airtak.config.constants.BLE_UUID_BASE_TEMPLATE
 import java.util.UUID
 
 object BleConstants {
-    // Service UUID — ASCII "AirTAK" = 0x4d415348 in the first 32 bits (§10.1).
-    val SERVICE_UUID: UUID = UUID.fromString("4d415348-0000-1000-8000-00805f9b34fb")
+    // ── UUID derivation (§10.1) ──────────────────────────────────────────
+    private val uuidBase: String = BLE_UUID_BASE_TEMPLATE
+    private fun uuid(slot: Int): UUID = UUID.fromString(uuidBase.format(slot))
 
-    val CHR_CONFIG_RW: UUID     = UUID.fromString("4d415348-0001-1000-8000-00805f9b34fb")
-    val CHR_MESH_TX: UUID       = UUID.fromString("4d415348-0002-1000-8000-00805f9b34fb")
-    val CHR_MESH_RX: UUID       = UUID.fromString("4d415348-0003-1000-8000-00805f9b34fb")
-    val CHR_DEVICE_STATUS: UUID = UUID.fromString("4d415348-0004-1000-8000-00805f9b34fb")
-    val CHR_ADMIN: UUID         = UUID.fromString("4d415348-0005-1000-8000-00805f9b34fb")
-    val CHR_OTA_COMMAND: UUID   = UUID.fromString("4d415348-0006-1000-8000-00805f9b34fb")
-    val CHR_OTA_DATA: UUID      = UUID.fromString("4d415348-0007-1000-8000-00805f9b34fb")
+    /** AirTAK GATT service (slot 0). */
+    val SERVICE_UUID: UUID = uuid(0)
 
-    // BLE Recovery (DFU) advertisement name — used by the safe-mode pairing flow.
-    const val RECOVERY_ADV_NAME = "AirTAK Recovery"
+    val CHR_CONFIG_RW: UUID     = uuid(1)
+    val CHR_MESH_TX: UUID       = uuid(2)
+    val CHR_MESH_RX: UUID       = uuid(3)
+    val CHR_DEVICE_STATUS: UUID = uuid(4)
+    val CHR_ADMIN: UUID         = uuid(5)
+    val CHR_OTA_COMMAND: UUID   = uuid(6)
+    val CHR_OTA_DATA: UUID      = uuid(7)
 
-    // Standard Client Characteristic Configuration Descriptor.
+    // ── Recovery advertising (§10.1) ────────────────────────────────────
+    /** BLE advertisement name for safe/DFU mode devices.
+     *  Canonical: config/constants/BleConstants.kt. */
+    const val RECOVERY_ADV_NAME = BLE_RECOVERY_ADV_NAME
+
+    // ── Standard descriptors ────────────────────────────────────────────
+    /** Standard Client Characteristic Configuration Descriptor (CCCD). */
     val CCC_DESCRIPTOR: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
     /** All AirTAK characteristics in stable order for iteration. */

@@ -17,8 +17,13 @@ package com.airtak.data.moderation
 import com.airtak.data.db.ModerationVoteDao
 import com.airtak.data.db.ModerationVoteEntity
 import com.airtak.data.mesh.MeshRepository
-import com.airtak.data.mesh.Portnum
+import com.airtak.config.constants.PORTNUM_AIRTAK_MODERATION
 import com.airtak.data.status.DeviceStatusRepository
+import com.airtak.config.constants.MODERATION_BAN_TTL_SEC
+import com.airtak.config.constants.MODERATION_PRUNE_INTERVAL_MS
+import com.airtak.config.constants.MODERATION_REQUIRED_VOTES
+import com.airtak.config.constants.MS_PER_SECOND
+import com.airtak.config.constants.UINT32_MASK
 import com.airtak.proto.ModerationAction
 import com.airtak.proto.ModerationPacket
 import com.airtak.proto.Scope
@@ -44,11 +49,9 @@ data class BanState(
     val lastVoteUnix: Long,
 ) {
     val voteCount: Int get() = voters.size
-    val isBanned: Boolean get() = voteCount >= REQUIRED_VOTES
+    val isBanned: Boolean get() = voteCount >= MODERATION_REQUIRED_VOTES
 }
 
-const val REQUIRED_VOTES = 3
-const val BAN_TTL_SEC = 86_400L      // 24 h sliding window
 
 @Singleton
 class ModerationRepository @Inject constructor(
@@ -70,7 +73,7 @@ class ModerationRepository @Inject constructor(
     init {
         scope.launch {
             mesh.packets
-                .filter { it.portnum == Portnum.AIRTAK_MODERATION }
+                .filter { it.portnum == PORTNUM_AIRTAK_MODERATION }
                 .collect { pkt ->
                     val parsed = runCatching { ModerationPacket.parseFrom(pkt.payload) }.getOrNull() ?: return@collect
                     record(parsed)
@@ -86,16 +89,16 @@ class ModerationRepository @Inject constructor(
         // Periodic prune of stale votes (>24h).
         scope.launch {
             while (true) {
-                val cutoff = (System.currentTimeMillis() / 1000L) - BAN_TTL_SEC
+                val cutoff = (System.currentTimeMillis() / MS_PER_SECOND) - MODERATION_BAN_TTL_SEC
                 runCatching { dao.pruneOlderThan(cutoff) }
-                delay(60 * 60 * 1000L)
+                delay(MODERATION_PRUNE_INTERVAL_MS)
             }
         }
     }
 
     /** Submit a local vote (VOTE_BAN or UNBAN) and broadcast it. */
     suspend fun submitVote(targetNodeId: Long, scopeKind: Scope, action: ModerationAction) {
-        val ownNodeId = statusRepo.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: return
+        val ownNodeId = statusRepo.status.value?.nodeId?.toLong()?.and(UINT32_MASK) ?: return
         val nowUnix = System.currentTimeMillis() / 1000L
         val packet = ModerationPacket.newBuilder()
             .setAction(action)
@@ -111,18 +114,18 @@ class ModerationRepository @Inject constructor(
     private suspend fun record(pkt: ModerationPacket) {
         dao.upsert(
             ModerationVoteEntity(
-                targetNodeId = pkt.targetNodeId.toLong() and 0xFFFF_FFFFL,
-                voterNodeId = pkt.voterNodeId.toLong() and 0xFFFF_FFFFL,
+                targetNodeId = pkt.targetNodeId.toLong() and UINT32_MASK,
+                voterNodeId = pkt.voterNodeId.toLong() and UINT32_MASK,
                 scopeValue = pkt.scope.number,
                 actionValue = pkt.action.number,
-                timestampUnix = pkt.timestampUnix.toLong() and 0xFFFF_FFFFL,
+                timestampUnix = pkt.timestampUnix.toLong() and UINT32_MASK,
                 receivedMs = System.currentTimeMillis(),
             ),
         )
         // UNBAN from any prior voter clears the target+scope ban.
         if (pkt.action == ModerationAction.MODERATION_ACTION_UNBAN) {
             dao.clearForTargetScope(
-                pkt.targetNodeId.toLong() and 0xFFFF_FFFFL,
+                pkt.targetNodeId.toLong() and UINT32_MASK,
                 pkt.scope.number,
             )
         }
@@ -131,7 +134,7 @@ class ModerationRepository @Inject constructor(
     private fun aggregate(votes: List<ModerationVoteEntity>): List<BanState> {
         val nowUnix = System.currentTimeMillis() / 1000L
         val byTarget = votes
-            .filter { nowUnix - it.timestampUnix <= BAN_TTL_SEC }
+            .filter { nowUnix - it.timestampUnix <= MODERATION_BAN_TTL_SEC }
             .filter { it.actionValue == ModerationAction.MODERATION_ACTION_VOTE_BAN.number }
             .groupBy { it.targetNodeId to it.scopeValue }
         return byTarget.map { (key, rows) ->

@@ -10,6 +10,8 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.airtak.config.constants.NETWORK_NOMINATIM_URL
+import com.airtak.config.constants.NETWORK_USER_AGENT
 import org.json.JSONArray
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,8 +29,8 @@ class GeocodingRepository @Inject constructor() {
     suspend fun search(query: String, limit: Int = 5): List<GeocodingResult> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
         runCatching {
-            val body: String = client.get("https://nominatim.openstreetmap.org/search") {
-                header("User-Agent", "AirTAK/0.1")
+            val body: String = client.get(NETWORK_NOMINATIM_URL) {
+                header("User-Agent", NETWORK_USER_AGENT)
                 parameter("q", query.trim())
                 parameter("format", "json")
                 parameter("limit", limit)

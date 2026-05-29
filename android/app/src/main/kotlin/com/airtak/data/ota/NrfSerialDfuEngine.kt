@@ -39,6 +39,40 @@ import android.hardware.usb.UsbInterface
 import com.airtak.data.ota.FirmwareUpdateManager.DeviceInfo
 import com.airtak.data.ota.FirmwareUpdateManager.UpdateProgress
 import kotlinx.coroutines.delay
+import com.airtak.config.constants.CDC_SET_CONTROL_LINE_STATE
+import com.airtak.config.constants.CDC_SET_LINE_CODING
+import com.airtak.config.constants.NRF_CRC_RESP_MIN_SIZE
+import com.airtak.config.constants.NRF_OBJ_TYPE_COMMAND
+import com.airtak.config.constants.NRF_OBJ_TYPE_DATA
+import com.airtak.config.constants.NRF_OP_CALC_CRC
+import com.airtak.config.constants.NRF_OP_CREATE
+import com.airtak.config.constants.NRF_OP_EXECUTE
+import com.airtak.config.constants.NRF_OP_MTU_GET
+import com.airtak.config.constants.NRF_OP_PING
+import com.airtak.config.constants.NRF_OP_RESPONSE
+import com.airtak.config.constants.NRF_OP_SELECT
+import com.airtak.config.constants.NRF_OP_SET_PRN
+import com.airtak.config.constants.NRF_PING_ID
+import com.airtak.config.constants.NRF_PRN_VALUE
+import com.airtak.config.constants.NRF_RESPONSE_HEADER_BYTES
+import com.airtak.config.constants.NRF_RESULT_SUCCESS
+import com.airtak.config.constants.NRF_SELECT_RESP_MIN_SIZE
+import com.airtak.config.constants.NRF_SERIAL_BULK_TIMEOUT_MS
+import com.airtak.config.constants.NRF_SERIAL_DEFAULT_BAUD
+import com.airtak.config.constants.NRF_SERIAL_SHORT_READ_TIMEOUT_MS
+import com.airtak.config.constants.NRF_SLIP_CHUNK_SIZE
+import com.airtak.config.constants.NRF_SLIP_MAX_OVERHEAD
+import com.airtak.config.constants.SLIP_END
+import com.airtak.config.constants.SLIP_ESC
+import com.airtak.config.constants.SLIP_ESC_END
+import com.airtak.config.constants.SLIP_ESC_ESC
+import com.airtak.config.constants.USB_CDC_CLASS_CONTROL
+import com.airtak.config.constants.USB_CDC_CLASS_DATA
+import com.airtak.config.constants.USB_CDC_DATA_BITS_8
+import com.airtak.config.constants.USB_CDC_DTR_RTS_ASSERTED
+import com.airtak.config.constants.USB_CDC_PARITY_NONE
+import com.airtak.config.constants.USB_CDC_STOP_BITS_1
+import com.airtak.config.constants.USB_REQ_TYPE_CLASS_OUT
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.util.zip.CRC32
@@ -55,34 +89,7 @@ class NrfSerialDfuEngine(
     private fun dbgErr(msg: String) { android.util.Log.e("NrfSerial", msg); onDebug?.invoke("ERROR: $msg") }
 
     companion object {
-        // Nordic Secure DFU opcodes (table from nrfutil 6.x serial transport).
-        private const val OP_CREATE      = 0x01.toByte()
-        private const val OP_SET_PRN     = 0x02.toByte()
-        private const val OP_CALC_CRC    = 0x03.toByte()
-        private const val OP_EXECUTE     = 0x04.toByte()
-        private const val OP_SELECT      = 0x06.toByte()
-        private const val OP_MTU_GET     = 0x07.toByte()
-        private const val OP_PING        = 0x09.toByte()
-        private const val OP_RESPONSE    = 0x60.toByte()
-
-        private const val OBJ_TYPE_COMMAND = 0x01.toByte()
-        private const val OBJ_TYPE_DATA    = 0x02.toByte()
-
-        private const val RESULT_SUCCESS = 0x01.toByte()
-
-        // USB CDC class request codes.
-        private const val CDC_SET_LINE_CODING        = 0x20
-        private const val CDC_SET_CONTROL_LINE_STATE = 0x22
-        private const val REQ_TYPE_CLASS_OUT         = 0x21
-
-        private const val BULK_TIMEOUT_MS = 5_000
-        private const val DEFAULT_BAUD = 115_200
-
-        // SLIP escape bytes (RFC 1055).
-        private const val SLIP_END: Byte     = 0xC0.toByte()
-        private const val SLIP_ESC: Byte     = 0xDB.toByte()
-        private const val SLIP_ESC_END: Byte = 0xDC.toByte()
-        private const val SLIP_ESC_ESC: Byte = 0xDD.toByte()
+        // All constants are canonical in config/constants/OtaConstants.kt
     }
 
     private var outEndpoint: UsbEndpoint? = null
@@ -124,7 +131,7 @@ class NrfSerialDfuEngine(
         // Configure the Adafruit bootloader CDC endpoint for 115200 8N1 +
         // DTR/RTS asserted (the bootloader gates serial RX on DTR).
         dbg("configuring CDC ACM 115200...")
-        if (!configureCdcAcm(DEFAULT_BAUD)) {
+        if (!configureCdcAcm(NRF_SERIAL_DEFAULT_BAUD)) {
             dbgErr("configureCdcAcm failed")
             return Result.failure(Exception("Failed to configure USB serial for nRF52 bootloader"))
         }
@@ -132,10 +139,10 @@ class NrfSerialDfuEngine(
 
         // PING is a cheap probe; if the bootloader responds we know the
         // serial pipe is alive and we're talking to the right firmware.
-        val pingId = 0x01.toByte()
+        val pingId = NRF_PING_ID
         dbg("sending PING...")
-        sendControl(byteArrayOf(OP_PING, pingId))
-        val pingResp = readResponse(OP_PING)
+        sendControl(byteArrayOf(NRF_OP_PING.toByte(), pingId))
+        val pingResp = readResponse(NRF_OP_PING.toByte())
         if (pingResp == null) {
             dbgErr("PING no response")
             return Result.failure(Exception(
@@ -153,8 +160,8 @@ class NrfSerialDfuEngine(
         // ACKs only the CALC_CRC at the end of each object, simplifying our
         // state machine without a measurable throughput hit on USB.
         dbg("SET_PRN 0...")
-        sendControl(byteArrayOf(OP_SET_PRN, 0x00, 0x00))
-        if (readResponse(OP_SET_PRN) == null) {
+        sendControl(byteArrayOf(NRF_OP_SET_PRN.toByte(), NRF_PRN_VALUE.toByte(), NRF_PRN_VALUE.toByte()))
+        if (readResponse(NRF_OP_SET_PRN.toByte()) == null) {
             dbgErr("SET_PRN rejected")
             return Result.failure(Exception("SET_PRN rejected"))
         }
@@ -183,7 +190,7 @@ class NrfSerialDfuEngine(
 
         // ---- 2. Upload the init / command object -------------------------
         onProgress(UpdateProgress.Initializing("Uploading init packet..."))
-        val initSel = selectObject(OBJ_TYPE_COMMAND)
+        val initSel = selectObject(NRF_OBJ_TYPE_COMMAND.toByte())
             ?: return Result.failure(Exception("SELECT(command) failed"))
         val initMax = initSel.maxSize
         if (pkg.initPacket.size > initMax) {
@@ -191,12 +198,12 @@ class NrfSerialDfuEngine(
                 "Init packet (${pkg.initPacket.size} B) exceeds bootloader limit ($initMax B)"
             ))
         }
-        if (!streamObject(OBJ_TYPE_COMMAND, pkg.initPacket, initMax)) {
+        if (!streamObject(NRF_OBJ_TYPE_COMMAND.toByte(), pkg.initPacket, initMax)) {
             return Result.failure(Exception("Init packet upload failed (signature mismatch?)"))
         }
 
         // ---- 3. Upload the firmware image in max_size chunks -------------
-        val dataSel = selectObject(OBJ_TYPE_DATA)
+        val dataSel = selectObject(NRF_OBJ_TYPE_DATA.toByte())
             ?: return Result.failure(Exception("SELECT(data) failed"))
         val objSize = dataSel.maxSize
 
@@ -210,7 +217,7 @@ class NrfSerialDfuEngine(
         while (offset < pkg.firmwareImage.size) {
             val take = objSize.coerceAtMost(pkg.firmwareImage.size - offset)
             val chunk = pkg.firmwareImage.copyOfRange(offset, offset + take)
-            if (!streamObject(OBJ_TYPE_DATA, chunk, objSize)) {
+            if (!streamObject(NRF_OBJ_TYPE_DATA.toByte(), chunk, objSize)) {
                 return Result.failure(Exception("Data object failed at offset $offset"))
             }
             offset += take
@@ -244,9 +251,9 @@ class NrfSerialDfuEngine(
     /** SELECT a Secure DFU object type and decode the (max_size, offset, crc)
      *  triple from the response. */
     private fun selectObject(type: Byte): SelectResult? {
-        sendControl(byteArrayOf(OP_SELECT, type))
-        val resp = readResponse(OP_SELECT) ?: return null
-        if (resp.size < 12) return null
+        sendControl(byteArrayOf(NRF_OP_SELECT.toByte(), type))
+        val resp = readResponse(NRF_OP_SELECT.toByte()) ?: return null
+        if (resp.size < NRF_SELECT_RESP_MIN_SIZE) return null
         val maxSize = leInt(resp, 0)
         val off = leInt(resp, 4)
         val crc = leInt(resp, 8)
@@ -261,15 +268,15 @@ class NrfSerialDfuEngine(
         require(payload.size <= maxObjSize) { "object too large for bootloader" }
 
         // CREATE object: <opcode><type><size:4 LE>
-        sendControl(byteArrayOf(OP_CREATE, type) + leInt(payload.size))
-        readResponse(OP_CREATE) ?: return false
+        sendControl(byteArrayOf(NRF_OP_CREATE.toByte(), type) + leInt(payload.size))
+        readResponse(NRF_OP_CREATE.toByte()) ?: return false
 
         // Write the raw bytes — Adafruit's bootloader (and nrfutil) frame
         // each chunk of up to ~64 bytes as its own SLIP frame to fit the
         // CDC packet boundary on the device side. Using a single big frame
         // also works on most boards but ~64-byte chunks are the safe
         // interop choice.
-        val chunkSize = 64
+        val chunkSize = NRF_SLIP_CHUNK_SIZE
         var sent = 0
         while (sent < payload.size) {
             val take = chunkSize.coerceAtMost(payload.size - sent)
@@ -278,9 +285,9 @@ class NrfSerialDfuEngine(
         }
 
         // CALC_CRC: bootloader returns (offset:4, crc:4) over what it has.
-        sendControl(byteArrayOf(OP_CALC_CRC))
-        val crcResp = readResponse(OP_CALC_CRC) ?: return false
-        if (crcResp.size < 8) return false
+        sendControl(byteArrayOf(NRF_OP_CALC_CRC.toByte()))
+        val crcResp = readResponse(NRF_OP_CALC_CRC.toByte()) ?: return false
+        if (crcResp.size < NRF_CRC_RESP_MIN_SIZE) return false
         val offset = leInt(crcResp, 0)
         val deviceCrc = leInt(crcResp, 4)
         if (offset != payload.size) return false
@@ -288,8 +295,8 @@ class NrfSerialDfuEngine(
         if (deviceCrc != localCrc) return false
 
         // EXECUTE: commit (write flash for data, validate signature for cmd).
-        sendControl(byteArrayOf(OP_EXECUTE))
-        readResponse(OP_EXECUTE) ?: return false
+        sendControl(byteArrayOf(NRF_OP_EXECUTE.toByte()))
+        readResponse(NRF_OP_EXECUTE.toByte()) ?: return false
         return true
     }
 
@@ -298,8 +305,8 @@ class NrfSerialDfuEngine(
     // ────────────────────────────────────────────────────────────────────
 
     // CDC ACM class codes
-    private val CDC_CONTROL_CLASS = 0x02
-    private val CDC_DATA_CLASS = 0x0A
+    private val CDC_CONTROL_CLASS = USB_CDC_CLASS_CONTROL
+    private val CDC_DATA_CLASS = USB_CDC_CLASS_DATA
 
     /** Find the CDC Communications Interface (class 0x02).  nRF52 DFU
      *  exposes two interfaces: control (iface 0) and data (iface 1).
@@ -322,16 +329,16 @@ class NrfSerialDfuEngine(
             ((baud shr 8) and 0xFF).toByte(),
             ((baud shr 16) and 0xFF).toByte(),
             ((baud shr 24) and 0xFF).toByte(),
-            0x00, // 1 stop bit
-            0x00, // no parity
-            0x08, // 8 data bits
+            USB_CDC_STOP_BITS_1, // 1 stop bit
+            USB_CDC_PARITY_NONE, // no parity
+            USB_CDC_DATA_BITS_8, // 8 data bits
         )
         val r1 = connection.controlTransfer(
-            REQ_TYPE_CLASS_OUT, CDC_SET_LINE_CODING, 0, ctrlIntf.id, data, data.size, BULK_TIMEOUT_MS
+            USB_REQ_TYPE_CLASS_OUT, CDC_SET_LINE_CODING, 0, ctrlIntf.id, data, data.size, NRF_SERIAL_BULK_TIMEOUT_MS
         )
         // Assert DTR + RTS — the Adafruit bootloader gates serial RX on DTR.
         val r2 = connection.controlTransfer(
-            REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, 0x03, ctrlIntf.id, null, 0, BULK_TIMEOUT_MS
+            USB_REQ_TYPE_CLASS_OUT, CDC_SET_CONTROL_LINE_STATE, USB_CDC_DTR_RTS_ASSERTED, ctrlIntf.id, null, 0, NRF_SERIAL_BULK_TIMEOUT_MS
         )
         return r1 >= 0 && r2 >= 0
     }
@@ -345,7 +352,7 @@ class NrfSerialDfuEngine(
     private fun sendRawSlip(buf: ByteArray, off: Int, len: Int): Boolean {
         val out = outEndpoint ?: return false
         val frame = slipEncode(buf, off, len)
-        return connection.bulkTransfer(out, frame, frame.size, BULK_TIMEOUT_MS) >= 0
+        return connection.bulkTransfer(out, frame, frame.size, NRF_SERIAL_BULK_TIMEOUT_MS) >= 0
     }
 
     /** Read a SLIP-framed response, verify it's an OP_RESPONSE for the
@@ -354,10 +361,10 @@ class NrfSerialDfuEngine(
     private fun readResponse(expectedOp: Byte): ByteArray? {
         val packet = readSlipPacket() ?: return null
         if (packet.size < 3) return null
-        if (packet[0] != OP_RESPONSE) return null
+        if (packet[0] != NRF_OP_RESPONSE.toByte()) return null
         if (packet[1] != expectedOp) return null
-        if (packet[2] != RESULT_SUCCESS) return null
-        return packet.copyOfRange(3, packet.size)
+        if (packet[2] != NRF_RESULT_SUCCESS.toByte()) return null
+        return packet.copyOfRange(NRF_RESPONSE_HEADER_BYTES, packet.size)
     }
 
     // Persistent SLIP decoder state — survives across readSlipPacket calls
@@ -369,14 +376,14 @@ class NrfSerialDfuEngine(
     private fun readSlipPacket(): ByteArray? {
         val ep = inEndpoint ?: return null
         val buf = ByteArray(256)
-        val deadline = System.currentTimeMillis() + BULK_TIMEOUT_MS
+        val deadline = System.currentTimeMillis() + NRF_SERIAL_BULK_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
             // Drain pending bytes first
             while (slipPend.isNotEmpty()) {
                 val pkt = slipDecode(slipPend.removeFirst())
                 if (pkt != null) return pkt
             }
-            val n = connection.bulkTransfer(ep, buf, buf.size, 100)
+            val n = connection.bulkTransfer(ep, buf, buf.size, NRF_SERIAL_SHORT_READ_TIMEOUT_MS)
             if (n > 0) {
                 for (i in 0 until n) {
                     val pkt = slipDecode(buf[i])
@@ -392,17 +399,17 @@ class NrfSerialDfuEngine(
 
     private fun slipDecode(b: Byte): ByteArray? {
         if (slipPartial == null) {
-            if (b == SLIP_END) slipPartial = ArrayList()
+            if (b == SLIP_END.toByte()) slipPartial = ArrayList()
         } else if (slipEscaped) {
             slipEscaped = false
             when (b) {
-                SLIP_ESC_END -> slipPartial!!.add(SLIP_END)
-                SLIP_ESC_ESC -> slipPartial!!.add(SLIP_ESC)
+                SLIP_ESC_END.toByte() -> slipPartial!!.add(SLIP_END.toByte())
+                SLIP_ESC_ESC.toByte() -> slipPartial!!.add(SLIP_ESC.toByte())
                 else -> slipPartial!!.add(b)
             }
         } else when (b) {
-            SLIP_ESC -> slipEscaped = true
-            SLIP_END -> {
+            SLIP_ESC.toByte() -> slipEscaped = true
+            SLIP_END.toByte() -> {
                 val pkt = slipPartial!!.toByteArray()
                 slipPartial = null
                 if (pkt.isNotEmpty()) return pkt
@@ -417,16 +424,16 @@ class NrfSerialDfuEngine(
      *  END (0xC0) on both sides; END/ESC bytes inside the payload are
      *  escaped. */
     private fun slipEncode(buf: ByteArray, off: Int, len: Int): ByteArray {
-        val out = ArrayList<Byte>(len + 4)
-        out.add(SLIP_END)
+        val out = ArrayList<Byte>(len + NRF_SLIP_MAX_OVERHEAD)
+        out.add(SLIP_END.toByte())
         for (i in off until off + len) {
             when (val b = buf[i]) {
-                SLIP_END -> { out.add(SLIP_ESC); out.add(SLIP_ESC_END) }
-                SLIP_ESC -> { out.add(SLIP_ESC); out.add(SLIP_ESC_ESC) }
+                SLIP_END.toByte() -> { out.add(SLIP_ESC.toByte()); out.add(SLIP_ESC_END.toByte()) }
+                SLIP_ESC.toByte() -> { out.add(SLIP_ESC.toByte()); out.add(SLIP_ESC_ESC.toByte()) }
                 else -> out.add(b)
             }
         }
-        out.add(SLIP_END)
+        out.add(SLIP_END.toByte())
         return out.toByteArray()
     }
 

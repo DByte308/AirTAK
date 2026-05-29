@@ -10,6 +10,7 @@ package com.airtak.data.game
 import com.airtak.data.config.ConfigRepository
 import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.status.DeviceStatusRepository
+import com.airtak.config.constants.GAME_DEFAULT_PLAYER_COLOR
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.GameConfig
 import com.airtak.proto.PlayerStatePacket
@@ -66,7 +67,7 @@ class GameRepository @Inject constructor(
             .setNodeId(device.nodeId)
             .setCallsign(callsign)
             .setStatus(if (active) PlayerStatus.PLAYER_STATUS_ACTIVE else PlayerStatus.PLAYER_STATUS_INACTIVE)
-            .setColorRgb(cfg.playerColorRgb.takeIf { it != 0 } ?: 0xFFFFFF)
+            .setColorRgb(cfg.playerColorRgb.takeIf { it != 0 } ?: GAME_DEFAULT_PLAYER_COLOR)
             .setIsStateTransition(true)
             .setFireteamId(cfg.fireteamId)
             .setSquadId(cfg.squadId)

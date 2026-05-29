@@ -70,6 +70,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.airtak.config.constants.MS_PER_SECOND
+import com.airtak.config.constants.UI_SECONDS_PER_DAY
+import com.airtak.config.constants.UI_SECONDS_PER_HOUR
+import com.airtak.config.constants.UI_SECONDS_PER_MINUTE
 import com.airtak.data.db.TacticalMarkerEntity
 import com.airtak.proto.MarkerType
 import com.airtak.proto.Scope
@@ -516,12 +520,12 @@ private fun teamLabel(team: TeamControl): String = when (team) {
 
 private fun formatTimestamp(unixSeconds: Long): String {
     if (unixSeconds <= 0L) return "—"
-    val now = System.currentTimeMillis() / 1000L
+    val now = System.currentTimeMillis() / MS_PER_SECOND
     val age = (now - unixSeconds).coerceAtLeast(0)
     return when {
-        age < 60 -> "${age}s ago"
-        age < 3600 -> "${age / 60}m ago"
-        age < 86400 -> "${age / 3600}h ago"
-        else -> SimpleDateFormat("MMM d", Locale.US).format(Date(unixSeconds * 1000))
+        age < UI_SECONDS_PER_MINUTE -> "${age}s ago"
+        age < UI_SECONDS_PER_HOUR -> "${age / UI_SECONDS_PER_MINUTE}m ago"
+        age < UI_SECONDS_PER_DAY -> "${age / UI_SECONDS_PER_HOUR}h ago"
+        else -> SimpleDateFormat("MMM d", Locale.US).format(Date(unixSeconds * MS_PER_SECOND))
     }
 }

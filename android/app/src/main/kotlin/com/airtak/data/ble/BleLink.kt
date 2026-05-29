@@ -6,6 +6,8 @@
 
 package com.airtak.data.ble
 
+import com.airtak.config.constants.HASH_PRIME
+
 sealed interface LinkState {
     /** No active link; idle (e.g. on cold boot before scanning). */
     data object Disconnected : LinkState
@@ -45,5 +47,5 @@ data class InboundFrame(
 ) {
     override fun equals(other: Any?): Boolean =
         other is InboundFrame && other.channel == channel && other.payload.contentEquals(payload)
-    override fun hashCode(): Int = 31 * channel.hashCode() + payload.contentHashCode()
+    override fun hashCode(): Int = HASH_PRIME * channel.hashCode() + payload.contentHashCode()
 }

@@ -20,6 +20,7 @@ import com.airtak.proto.PlayerStatePacket
 import com.airtak.proto.PlayerStatus
 import com.airtak.proto.Scope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.airtak.config.constants.MAP_PLAYER_STALE_MS
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -323,7 +324,8 @@ constructor(
     }
 
     private companion object {
-        const val PLAYER_STALE_MS = 5 * 60 * 1_000L
+        // ── Canonical definition in config/constants/MapConstants.kt ──────────
+        private const val PLAYER_STALE_MS = MAP_PLAYER_STALE_MS
         val DEFAULT_COLORS =
                 intArrayOf(
                         0xE63946,

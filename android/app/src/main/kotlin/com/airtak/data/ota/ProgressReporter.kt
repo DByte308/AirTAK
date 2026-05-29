@@ -5,13 +5,16 @@
 
 package com.airtak.data.ota
 
+import com.airtak.config.constants.MS_PER_SECOND
+import com.airtak.config.constants.OTA_PROGRESS_EVERY_N_CHUNKS
+import com.airtak.config.constants.OTA_PROGRESS_MIN_REPORT_MS
 import com.airtak.data.ota.FirmwareUpdateManager.UpdateProgress
 
 class ProgressReporter(
     private val totalBytes: Long,
     private val onProgress: (UpdateProgress) -> Unit,
-    private val statusEveryNChunks: Int = 50,
-    private val minReportIntervalMs: Long = 500L
+    private val statusEveryNChunks: Int = OTA_PROGRESS_EVERY_N_CHUNKS,
+    private val minReportIntervalMs: Long = OTA_PROGRESS_MIN_REPORT_MS
 ) {
     private var bytesWritten: Long = 0
     private var chunksSinceStatus: Int = 0
@@ -51,6 +54,6 @@ class ProgressReporter(
         val rate = bytesWritten.toDouble() / elapsed
         val remaining = totalBytes - bytesWritten
         if (rate <= 0.0) return 0
-        return ((remaining / rate) / 1000.0).toInt()
+        return ((remaining / rate) / MS_PER_SECOND.toDouble()).toInt()
     }
 }

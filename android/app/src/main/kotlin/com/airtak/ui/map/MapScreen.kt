@@ -86,6 +86,23 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.airtak.config.constants.MAP_DEFAULT_ZOOM
+import com.airtak.config.constants.MAP_LOCATE_ZOOM
+import com.airtak.config.constants.MAP_MERCATOR_MAX_LAT
+import com.airtak.config.constants.MAP_MERCATOR_MIN_LAT
+import com.airtak.config.constants.MAP_MAX_TILES_PER_DOWNLOAD
+import com.airtak.config.constants.MAP_NUDGE_PX
+import com.airtak.config.constants.MAP_SELF_ZOOM
+import com.airtak.config.constants.MAP_TILE_DOWNLOAD_PAUSE_MS
+import com.airtak.config.constants.MAP_TILE_SIZE_PX
+import com.airtak.config.constants.UI_ARGB_ALPHA_FULL
+import com.airtak.config.constants.UI_DISTANCE_KM_THRESHOLD_M
+import com.airtak.config.constants.UI_DISTANCE_PRECISE_THRESHOLD_M
+import com.airtak.config.constants.UI_HALO_LUMINANCE_THRESHOLD
+import com.airtak.config.constants.UI_MARKER_DESC_MAX_LEN
+import com.airtak.config.constants.UI_METERS_TO_KM
+import com.airtak.config.constants.UI_RGB_MASK
+import com.airtak.config.constants.UI_TILE_URL_MAX_LEN
 import com.airtak.data.tiles.TileBounds
 import com.airtak.data.tiles.TileDownloadState
 import com.airtak.data.overlays.MissionOverlay
@@ -493,7 +510,7 @@ fun MapScreen(
         val pos = ui.ownPosition
         if (!centeredOnce && pos != null) {
             centeredOnce = true
-            map?.animateCamera(northUpCamera(LatLng(pos.latitude, pos.longitude), 14.0))
+            map?.animateCamera(northUpCamera(LatLng(pos.latitude, pos.longitude), MAP_SELF_ZOOM))
         }
     }
 
@@ -514,7 +531,7 @@ fun MapScreen(
     LaunchedEffect(map, focusTarget) {
         val target = focusTarget ?: return@LaunchedEffect
         if (map != null) {
-            map?.animateCamera(northUpCamera(LatLng(target.latitude, target.longitude), 16.0))
+            map?.animateCamera(northUpCamera(LatLng(target.latitude, target.longitude), MAP_LOCATE_ZOOM))
             viewModel.clearFocus()
         }
     }
@@ -664,7 +681,7 @@ fun MapScreen(
                 Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 96.dp),
             )
             LaunchedEffect(routeCalc) {
-                kotlinx.coroutines.delay(4000)
+                kotlinx.coroutines.delay(MAP_TILE_DOWNLOAD_PAUSE_MS)
                 if (routeState is RouteCalcState.Failed) viewModel.clearRoute()
             }
         }
@@ -724,7 +741,7 @@ fun MapScreen(
         FloatingActionButton(
             onClick = {
                 val pos = ui.ownPosition ?: return@FloatingActionButton
-                map?.animateCamera(northUpCamera(LatLng(pos.latitude, pos.longitude), 14.0))
+                map?.animateCamera(northUpCamera(LatLng(pos.latitude, pos.longitude), MAP_SELF_ZOOM))
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -836,7 +853,7 @@ fun MapScreen(
         val maxZoom = zoomRange.endInclusive.toInt()
         val tileCount = remember(bounds, minZoom, maxZoom) { estimateTileCount(bounds, minZoom, maxZoom) }
         val tileUrlValid = tileUrl.contains("{z}") && tileUrl.contains("{x}") && tileUrl.contains("{y}")
-        val tooManyTiles = tileCount > MAX_TILES_PER_DOWNLOAD
+        val tooManyTiles = tileCount > MAP_MAX_TILES_PER_DOWNLOAD
         AlertDialog(
             onDismissRequest = { selectedTileBounds = null },
             title = { Text("Tile Region") },
@@ -864,7 +881,7 @@ fun MapScreen(
                     )
                     OutlinedTextField(
                         value = tileUrl,
-                        onValueChange = { tileUrl = it.take(512) },
+                        onValueChange = { tileUrl = it.take(UI_TILE_URL_MAX_LEN) },
                         label = { Text("Tile URL") },
                         placeholder = { Text("https://server/{z}/{x}/{y}.png") },
                         singleLine = true,
@@ -1396,7 +1413,7 @@ private fun MarkerCommitDialog(
                 )
                 OutlinedTextField(
                     value = description,
-                    onValueChange = { description = it.take(256) },
+                    onValueChange = { description = it.take(UI_MARKER_DESC_MAX_LEN) },
                     label = { Text("Description (optional)") },
                     minLines = 2,
                     maxLines = 4,
@@ -1404,12 +1421,12 @@ private fun MarkerCommitDialog(
                 Text("Color", style = MaterialTheme.typography.labelSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MARKER_COLOR_PRESETS.forEach { c ->
-                        val selected = (colorRgb and 0xFFFFFF) == c
+                        val selected = (colorRgb and UI_RGB_MASK) == c
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(androidx.compose.ui.graphics.Color(0xFF000000L or c.toLong()))
+                                .background(androidx.compose.ui.graphics.Color(UI_ARGB_ALPHA_FULL or c.toLong()))
                                 .clickable { colorRgb = c }
                                 .padding(2.dp),
                         ) {
@@ -1456,7 +1473,7 @@ private fun MarkerEditDialog(
 ) {
     var label by remember(marker.markerId) { mutableStateOf(marker.label) }
     var description by remember(marker.markerId) { mutableStateOf(marker.description) }
-    var colorRgb by remember(marker.markerId) { mutableStateOf(marker.colorRgb and 0xFFFFFF) }
+    var colorRgb by remember(marker.markerId) { mutableStateOf(marker.colorRgb and UI_RGB_MASK) }
     var scope by remember(marker.markerId) { mutableStateOf(marker.scope) }
     var team by remember(marker.markerId) { mutableStateOf(marker.controllingTeam) }
     var priority by remember(marker.markerId) { mutableStateOf(marker.priority) }
@@ -1474,7 +1491,7 @@ private fun MarkerEditDialog(
                 )
                 OutlinedTextField(
                     value = description,
-                    onValueChange = { description = it.take(256) },
+                    onValueChange = { description = it.take(UI_MARKER_DESC_MAX_LEN) },
                     label = { Text("Description (optional)") },
                     minLines = 2,
                     maxLines = 4,
@@ -1487,7 +1504,7 @@ private fun MarkerEditDialog(
                             modifier = Modifier
                                 .size(28.dp)
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(androidx.compose.ui.graphics.Color(0xFF000000L or c.toLong()))
+                                .background(androidx.compose.ui.graphics.Color(UI_ARGB_ALPHA_FULL or c.toLong()))
                                 .clickable { colorRgb = c }
                                 .padding(2.dp),
                         ) {
@@ -1664,9 +1681,9 @@ private fun haversineDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Do
 }
 
 private fun formatDistance(meters: Double): String = when {
-    meters < 10 -> "${meters.roundToInt()} m"
-    meters < 1000 -> "${(meters / 10).roundToInt() * 10} m"
-    else -> "%.1f km".format(meters / 1000)
+    meters < UI_DISTANCE_PRECISE_THRESHOLD_M -> "${meters.roundToInt()} m"
+    meters < UI_DISTANCE_KM_THRESHOLD_M -> "${(meters / 10).roundToInt() * 10} m"
+    else -> "%.1f km".format(meters / UI_METERS_TO_KM)
 }
 
 private fun markerTypeLabel(type: MarkerType): String = when (type) {
@@ -1740,16 +1757,16 @@ private fun MissionOverlayControls(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text("Nudge ${selectedCorner.shortLabel()}", style = MaterialTheme.typography.labelSmall)
-                IconButton(onClick = { onNudge(0f, -NUDGE_PX) }) {
+                IconButton(onClick = { onNudge(0f, -MAP_NUDGE_PX) }) {
                     Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = "Nudge up")
                 }
-                IconButton(onClick = { onNudge(-NUDGE_PX, 0f) }) {
+                IconButton(onClick = { onNudge(-MAP_NUDGE_PX, 0f) }) {
                     Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = "Nudge left")
                 }
-                IconButton(onClick = { onNudge(NUDGE_PX, 0f) }) {
+                IconButton(onClick = { onNudge(MAP_NUDGE_PX, 0f) }) {
                     Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = "Nudge right")
                 }
-                IconButton(onClick = { onNudge(0f, NUDGE_PX) }) {
+                IconButton(onClick = { onNudge(0f, MAP_NUDGE_PX) }) {
                     Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Nudge down")
                 }
             }
@@ -1959,7 +1976,7 @@ private fun ensureLayers(style: Style, textColor: Int) {
                 textFont(arrayOf("Noto Sans Regular")),
                 textSize(14f),
                 textOffset(arrayOf(0f, -1.35f)),
-                textColor("#%06X".format(textColor and 0xFFFFFF)),
+                textColor("#%06X".format(textColor and UI_RGB_MASK)),
                 textHaloColor("#000000"),
                 textHaloWidth(1.2f),
                 textAllowOverlap(true),
@@ -1984,7 +2001,7 @@ private fun ensureLayers(style: Style, textColor: Int) {
                 textFont(arrayOf("Noto Sans Regular")),
                 textSize(14f),
                 textOffset(arrayOf(0f, 1.2f)),
-                textColor("#%06X".format(textColor and 0xFFFFFF)),
+                textColor("#%06X".format(textColor and UI_RGB_MASK)),
                 textHaloColor("#000000"),
                 textHaloWidth(1.2f),
                 textAllowOverlap(true),
@@ -2036,8 +2053,8 @@ private fun ensureMarkerLayers(style: Style, textColor: Int) {
             ),
         )
     }
-    val haloColor = if ((textColor and 0xFFFFFF) < 0x808080) "#FFFFFF" else "#000000"
-    val labelColor = "#%06X".format(textColor and 0xFFFFFF)
+    val haloColor = if ((textColor and UI_RGB_MASK) < UI_HALO_LUMINANCE_THRESHOLD) "#FFFFFF" else "#000000"
+    val labelColor = "#%06X".format(textColor and UI_RGB_MASK)
     if (style.getLayer(MARKER_POINT_LABEL_LAYER) == null) {
         style.addLayer(
             SymbolLayer(MARKER_POINT_LABEL_LAYER, MARKER_POINT_SOURCE).withProperties(
@@ -2176,7 +2193,7 @@ private fun updateMarkerLayers(style: Style, markers: List<MarkerVisual>) {
     val routeEndFeatures = mutableListOf<Feature>()
     val areaFeatures = mutableListOf<Feature>()
     for (m in markers) {
-        val colorHex = "#%06X".format(m.colorRgb and 0xFFFFFF)
+        val colorHex = "#%06X".format(m.colorRgb and UI_RGB_MASK)
         when (m.type) {
             MarkerType.MARKER_TYPE_POINT,
             MarkerType.MARKER_TYPE_NOTE,
@@ -2379,7 +2396,7 @@ private fun MapNode.toFeature(): Feature {
     val pinColor = when {
         stale -> "#6E7681"
         status == PlayerStatus.PLAYER_STATUS_ELIMINATED -> "#B0BEC5"
-        else -> "#%06X".format(colorRgb and 0xFFFFFF)
+        else -> "#%06X".format(colorRgb and UI_RGB_MASK)
     }
     return Feature.fromGeometry(Point.fromLngLat(longitude, latitude)).apply {
         addStringProperty("label", label)
@@ -2468,13 +2485,13 @@ private fun mapStyleJson(
     localTileMaxZoom: Int?,
     isDark: Boolean,
 ): String {
-    val bgHex = "#%06X".format(bgArgb and 0xFFFFFF)
+    val bgHex = "#%06X".format(bgArgb and UI_RGB_MASK)
     val baseSource = baseTileTemplate?.jsonEscaped()?.let { url ->
-        ",\n        \"base-tiles\": { \"type\": \"raster\", \"tiles\": [\"$url\"], \"tileSize\": 256 }"
+        ",\n        \"base-tiles\": { \"type\": \"raster\", \"tiles\": [\"$url\"], \"tileSize\": $MAP_TILE_SIZE_PX }"
     }.orEmpty()
     val localSource = localTileTemplate?.jsonEscaped()?.let { url ->
         val maxZoom = localTileMaxZoom?.let { ", \"maxzoom\": $it" }.orEmpty()
-        ",\n        \"local-tiles\": { \"type\": \"raster\", \"tiles\": [\"$url\"], \"tileSize\": 256$maxZoom }"
+        ",\n        \"local-tiles\": { \"type\": \"raster\", \"tiles\": [\"$url\"], \"tileSize\": $MAP_TILE_SIZE_PX$maxZoom }"
     }.orEmpty()
     val baseLayer = if (baseTileTemplate != null) {
         ",\n        { \"id\": \"base-tiles\", \"type\": \"raster\", \"source\": \"base-tiles\" }"
@@ -2538,8 +2555,7 @@ private const val DRAFT_LINE_LAYER = "draft-marker-line-layer"
 private const val DRAFT_FILL_LAYER = "draft-marker-fill-layer"
 private const val NAV_ROUTE_SOURCE = "nav-route-source"
 private const val NAV_ROUTE_LINE_LAYER = "nav-route-line-layer"
-private const val MAX_TILES_PER_DOWNLOAD = 15_000
-private const val NUDGE_PX = 2f
+
 
 private fun statusShortLabel(status: PlayerStatus): String = when (status) {
     PlayerStatus.PLAYER_STATUS_ACTIVE -> "ACTIVE"
@@ -2550,6 +2566,7 @@ private fun statusShortLabel(status: PlayerStatus): String = when (status) {
     else -> "UNKNOWN"
 }
 
+// TODO: centralize to Color.kt
 private fun statusColor(status: PlayerStatus): Color = when (status) {
     PlayerStatus.PLAYER_STATUS_ACTIVE -> Color(0xFF00E676)
     PlayerStatus.PLAYER_STATUS_INACTIVE -> Color(0xFF6E7681)

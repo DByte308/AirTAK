@@ -49,6 +49,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import com.airtak.config.constants.GPS_MIN_DISTANCE_M
+import com.airtak.config.constants.GPS_MIN_TIME_MS
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -167,8 +169,8 @@ class PhoneGpsProvider @Inject constructor(
         try {
             lm.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
-                MIN_TIME_MS,
-                MIN_DISTANCE_M,
+                GPS_MIN_TIME_MS,
+                GPS_MIN_DISTANCE_M,
                 locationListener,
                 Looper.getMainLooper(),
             )
@@ -179,8 +181,8 @@ class PhoneGpsProvider @Inject constructor(
         try {
             lm.requestLocationUpdates(
                 LocationManager.NETWORK_PROVIDER,
-                MIN_TIME_MS,
-                MIN_DISTANCE_M,
+                GPS_MIN_TIME_MS,
+                GPS_MIN_DISTANCE_M,
                 locationListener,
                 Looper.getMainLooper(),
             )
@@ -199,8 +201,5 @@ class PhoneGpsProvider @Inject constructor(
         _location.value = null
     }
 
-    companion object {
-        private const val MIN_TIME_MS = 5_000L  // 5 s minimum interval (faster for initial fix)
-        private const val MIN_DISTANCE_M = 5.0f  // 5 m minimum displacement
-    }
+
 }

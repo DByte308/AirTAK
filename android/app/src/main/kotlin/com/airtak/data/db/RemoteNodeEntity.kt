@@ -2,6 +2,7 @@
 
 package com.airtak.data.db
 
+import com.airtak.config.constants.PLAYER_STATUS_UNKNOWN
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -37,6 +38,5 @@ data class RemoteNodeEntity(
     val lastNodeInfoMs: Long? = null,
 ) {
     companion object {
-        const val PLAYER_STATUS_UNKNOWN = -1
     }
 }

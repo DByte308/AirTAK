@@ -229,6 +229,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
 private fun DcLevel.displayColor(): Color = when (this) {
     DcLevel.DC_OK -> StatusActive
     DcLevel.DC_CAUTION -> AccentAmber
+    // TODO: centralize to Color.kt (local theming decision)
     DcLevel.DC_WARNING -> Color(0xFFFF7043)
     DcLevel.DC_CRITICAL -> StatusHit
     DcLevel.UNRECOGNIZED -> MaterialTheme.colorScheme.onSurfaceVariant

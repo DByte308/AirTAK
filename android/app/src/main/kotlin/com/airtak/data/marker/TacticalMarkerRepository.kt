@@ -16,7 +16,10 @@ import com.airtak.data.db.TacticalMarkerDao
 import com.airtak.data.db.TacticalMarkerEntity
 import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.mesh.MeshRxPacket
-import com.airtak.data.mesh.Portnum
+import com.airtak.config.constants.PORTNUM_AIRTAK_ACK
+import com.airtak.config.constants.PORTNUM_AIRTAK_MARKER_SNAPSHOT_REQUEST
+import com.airtak.config.constants.PORTNUM_AIRTAK_SYNC_REQUEST
+import com.airtak.config.constants.PORTNUM_AIRTAK_TACTICAL
 import com.airtak.data.prefs.AppPreferences
 import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.proto.ConfigGroup
@@ -27,6 +30,23 @@ import com.airtak.proto.MarkerSnapshotRequest
 import com.airtak.proto.Scope
 import com.airtak.proto.SyncRequest
 import com.airtak.proto.TacticalMarker
+import com.airtak.config.constants.MESH_SYNC_ID_TTL_MS
+import com.airtak.config.constants.MESH_SYNC_TYPE_MARKERS
+import com.airtak.config.constants.UI_MARKER_DESC_MAX_LEN
+import com.airtak.config.constants.UI_MARKER_LABEL_MAX_LEN
+import com.airtak.config.constants.UI_MARKER_MAX_POINTS
+import com.airtak.config.constants.MARKER_ID_BYTES
+import com.airtak.config.constants.MARKER_ID_SHIFT_1
+import com.airtak.config.constants.MARKER_ID_SHIFT_2
+import com.airtak.config.constants.MARKER_ID_SHIFT_3
+import com.airtak.config.constants.MARKER_PURGE_INTERVAL_MS
+import com.airtak.config.constants.MARKER_REBROADCAST_SPACING_MS
+import com.airtak.config.constants.MARKER_TOMBSTONE_TTL_SEC
+import com.airtak.config.constants.MESH_TACTICAL_SLOT_ALL
+import com.airtak.config.constants.MS_PER_SECOND
+import com.airtak.config.constants.UI_RGB_MASK
+import com.airtak.config.constants.UINT32_MASK
+import com.airtak.config.constants.UINT8_MASK
 import com.airtak.proto.TeamControl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -88,13 +108,13 @@ class TacticalMarkerRepository @Inject constructor(
         // Persist incoming markers.
         scope.launch {
             mesh.packets
-                .filter { it.portnum == Portnum.AIRTAK_TACTICAL }
+                .filter { it.portnum == PORTNUM_AIRTAK_TACTICAL }
                 .collect { handleIncoming(it) }
         }
         // Mark locally-sent markers as delivered when the firmware ACKs.
         scope.launch {
             mesh.packets
-                .filter { it.portnum == Portnum.AIRTAK_ACK }
+                .filter { it.portnum == PORTNUM_AIRTAK_ACK }
                 .collect { pkt ->
                     val reqId = pkt.requestId ?: return@collect
                     val markerId = pendingMarkerAcks.remove(reqId) ?: return@collect
@@ -136,19 +156,19 @@ class TacticalMarkerRepository @Inject constructor(
         // Respond to sync requests from late-joiners by re-broadcasting markers.
         scope.launch {
             mesh.packets
-                .filter { it.portnum == Portnum.AIRTAK_SYNC_REQUEST }
+                .filter { it.portnum == PORTNUM_AIRTAK_SYNC_REQUEST }
                 .collect { handleSyncRequest(it) }
         }
         // Respond to targeted marker snapshot requests by re-broadcasting markers.
         scope.launch {
             mesh.packets
-                .filter { it.portnum == Portnum.AIRTAK_MARKER_SNAPSHOT_REQUEST }
+                .filter { it.portnum == PORTNUM_AIRTAK_MARKER_SNAPSHOT_REQUEST }
                 .collect { handleSnapshotRequest(it) }
         }
         // Periodically purge tombstones older than 24 h.
         scope.launch {
             while (true) {
-                val cutoff = (System.currentTimeMillis() / 1000L) - TOMBSTONE_TTL_SEC
+                val cutoff = (System.currentTimeMillis() / MS_PER_SECOND) - TOMBSTONE_TTL_SEC
                 dao.purgeTombstones(cutoff)
                 delay(PURGE_INTERVAL_MS)
             }
@@ -184,7 +204,7 @@ class TacticalMarkerRepository @Inject constructor(
     ): TacticalMarkerEntity? {
         if (!validatePoints(type, points)) return null
         val ownNodeId = ownNodeIdOrZero()
-        val nowSec = (System.currentTimeMillis() / 1000L).toInt()
+        val nowSec = (System.currentTimeMillis() / MS_PER_SECOND).toInt()
         val markerId = generateMarkerId()
         val marker = TacticalMarker.newBuilder()
             .setMarkerId(markerId.toInt())
@@ -231,14 +251,14 @@ class TacticalMarkerRepository @Inject constructor(
     ): TacticalMarkerEntity? {
         val existing = dao.get(markerId) ?: return null
         if (!existing.ownedLocally || existing.deleted) return null
-        val nowSec = (System.currentTimeMillis() / 1000L).toInt()
+        val nowSec = (System.currentTimeMillis() / MS_PER_SECOND).toInt()
         val type = MarkerType.forNumber(existing.typeValue) ?: MarkerType.MARKER_TYPE_POINT
         val builder = TacticalMarker.newBuilder()
             .setMarkerId(existing.markerId.toInt())
             .setType(type)
             .setLabel(label.take(MAX_LABEL_LEN))
             .setDescription(description.take(MAX_DESC_LEN))
-            .setColorRgb(colorRgb and 0xFFFFFF)
+            .setColorRgb(colorRgb and UI_RGB_MASK)
             .setScope(scopeKind)
             .setCreatorNodeId(existing.creatorNodeId.toInt())
             .setCreatedAtUnix(existing.createdAtUnix.toInt())
@@ -260,7 +280,7 @@ class TacticalMarkerRepository @Inject constructor(
     /** Soft-delete: marks the marker as tombstoned and broadcasts the tombstone. */
     suspend fun deleteMarker(markerId: Long): Boolean {
         val existing = dao.get(markerId) ?: return false
-        val nowSec = (System.currentTimeMillis() / 1000L).toInt()
+        val nowSec = (System.currentTimeMillis() / MS_PER_SECOND).toInt()
         val tombstone = TacticalMarker.newBuilder()
             .setMarkerId(existing.markerId.toInt())
             .setType(MarkerType.forNumber(existing.typeValue) ?: MarkerType.MARKER_TYPE_POINT)
@@ -290,7 +310,7 @@ class TacticalMarkerRepository @Inject constructor(
     private suspend fun handleIncoming(packet: MeshRxPacket) {
         val payload = packet.payload ?: return
         val marker = runCatching { TacticalMarker.parseFrom(payload) }.getOrNull() ?: return
-        val markerId = marker.markerId.toLong() and 0xFFFF_FFFFL
+        val markerId = marker.markerId.toLong() and UINT32_MASK
         if (markerId == 0L) return
         val existing = dao.get(markerId)
         // Drop out-of-order updates: only accept newer updatedAtUnix.
@@ -305,15 +325,15 @@ class TacticalMarkerRepository @Inject constructor(
         ownedLocally: Boolean,
         lastSeenMs: Long,
     ): TacticalMarkerEntity = TacticalMarkerEntity(
-        markerId = marker.markerId.toLong() and 0xFFFF_FFFFL,
+        markerId = marker.markerId.toLong() and UINT32_MASK,
         typeValue = marker.typeValue,
         label = marker.label,
         description = marker.description,
         colorRgb = marker.colorRgb,
         scopeValue = marker.scopeValue,
-        creatorNodeId = marker.creatorNodeId.toLong() and 0xFFFF_FFFFL,
-        createdAtUnix = marker.createdAtUnix.toLong() and 0xFFFF_FFFFL,
-        updatedAtUnix = marker.updatedAtUnix.toLong() and 0xFFFF_FFFFL,
+        creatorNodeId = marker.creatorNodeId.toLong() and UINT32_MASK,
+        createdAtUnix = marker.createdAtUnix.toLong() and UINT32_MASK,
+        updatedAtUnix = marker.updatedAtUnix.toLong() and UINT32_MASK,
         deleted = marker.deleted,
         pointsEncoded = TacticalMarkerEntity.encodePoints(
             marker.pointsList.map { it.lat to it.lng },
@@ -341,10 +361,10 @@ class TacticalMarkerRepository @Inject constructor(
     private suspend fun handleSyncRequest(packet: MeshRxPacket) {
         val payload = packet.payload ?: return
         val request = runCatching { SyncRequest.parseFrom(payload) }.getOrNull() ?: return
-        val syncId = request.syncId.toLong() and 0xFFFF_FFFFL
+        val syncId = request.syncId.toLong() and UINT32_MASK
         if (syncId != 0L && isSyncIdHandled(syncId)) return
-        val requesterId = request.requesterNodeId.toLong() and 0xFFFF_FFFFL
-        val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: 0L
+        val requesterId = request.requesterNodeId.toLong() and UINT32_MASK
+        val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(UINT32_MASK) ?: 0L
         if (requesterId == ownId) return
 
         if (request.requestedTypes and SYNC_TYPE_MARKERS != 0) {
@@ -358,10 +378,10 @@ class TacticalMarkerRepository @Inject constructor(
     private suspend fun handleSnapshotRequest(packet: MeshRxPacket) {
         val payload = packet.payload ?: return
         val request = runCatching { MarkerSnapshotRequest.parseFrom(payload) }.getOrNull() ?: return
-        val syncId = request.syncId.toLong() and 0xFFFF_FFFFL
+        val syncId = request.syncId.toLong() and UINT32_MASK
         if (syncId != 0L && isSyncIdHandled(syncId)) return
-        val targetId = request.targetNodeId.toLong() and 0xFFFF_FFFFL
-        val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: 0L
+        val targetId = request.targetNodeId.toLong() and UINT32_MASK
+        val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(UINT32_MASK) ?: 0L
         if (targetId != ownId) return
         markSyncIdHandled(syncId)
         rebroadcastOwned()
@@ -441,26 +461,27 @@ class TacticalMarkerRepository @Inject constructor(
     }
 
     private fun ownNodeIdOrZero(): Long =
-        deviceStatus.status.value?.nodeId?.toLong()?.and(0xFFFF_FFFFL) ?: 0L
+        deviceStatus.status.value?.nodeId?.toLong()?.and(UINT32_MASK) ?: 0L
 
     private fun generateMarkerId(): Long {
-        val b = ByteArray(4)
+        val b = ByteArray(MARKER_ID_BYTES)
         random.nextBytes(b)
-        return ((b[0].toLong() and 0xFF) shl 24) or
-            ((b[1].toLong() and 0xFF) shl 16) or
-            ((b[2].toLong() and 0xFF) shl 8)  or
-             (b[3].toLong() and 0xFF)
+        return ((b[0].toLong() and UINT8_MASK) shl MARKER_ID_SHIFT_3) or
+            ((b[1].toLong() and UINT8_MASK) shl MARKER_ID_SHIFT_2) or
+            ((b[2].toLong() and UINT8_MASK) shl MARKER_ID_SHIFT_1)  or
+             (b[3].toLong() and UINT8_MASK)
     }
 
     companion object {
-        const val MAX_LABEL_LEN = 32
-        const val MAX_DESC_LEN  = 256
-        const val MAX_POINTS    = 12         // hard cap to keep proto under ~220 B
-        const val SLOT_TACTICAL_ALL = 1      // AirTAK-wide secondary channel
-        const val TOMBSTONE_TTL_SEC = 24L * 60L * 60L
-        const val PURGE_INTERVAL_MS = 60L * 60L * 1_000L
-        const val REBROADCAST_SPACING_MS = 500L
-        private const val SYNC_TYPE_MARKERS = 1
-        private const val SYNC_ID_TTL_MS = 10_000L
+        // ── Canonical definitions in config/constants/ ─────────────────────────
+        const val MAX_LABEL_LEN = UI_MARKER_LABEL_MAX_LEN      // Canonical: UiConstants
+        const val MAX_DESC_LEN = UI_MARKER_DESC_MAX_LEN        // Canonical: UiConstants
+        const val MAX_POINTS = UI_MARKER_MAX_POINTS            // Canonical: UiConstants
+        const val SLOT_TACTICAL_ALL = MESH_TACTICAL_SLOT_ALL    // Canonical: ModerationConstants
+        const val TOMBSTONE_TTL_SEC = MARKER_TOMBSTONE_TTL_SEC  // Canonical: ModerationConstants
+        const val PURGE_INTERVAL_MS = MARKER_PURGE_INTERVAL_MS  // Canonical: ModerationConstants
+        const val REBROADCAST_SPACING_MS = MARKER_REBROADCAST_SPACING_MS  // Canonical: ModerationConstants
+        private const val SYNC_TYPE_MARKERS = MESH_SYNC_TYPE_MARKERS   // Canonical: MeshConstants
+        private const val SYNC_ID_TTL_MS = MESH_SYNC_ID_TTL_MS          // Canonical: MeshConstants
     }
 }
