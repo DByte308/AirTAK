@@ -47,6 +47,10 @@
 #include <esp_ota_ops.h>
 #endif
 
+#ifdef AIRTAK_PLATFORM_ESP32
+#include "platform/esp32/sleep/DeepSleep.h"
+#endif
+
 // ── Inter-task communication handles ─────────────────────────────────────────
 // All inter-task communication uses these queues and event groups.
 // No direct function calls between task contexts.
@@ -131,6 +135,13 @@ void setup() {
     wdtFeed();
     airtak::platform::initBoard();
     delay(airtak::BOOT_BOARD_INIT_SETTLE_MS);
+
+#ifdef AIRTAK_PLATFORM_ESP32
+    airtak::sleep::initDeepSleep();
+    if (airtak::sleep::wakeCause() == airtak::sleep::WakeCause::BUTTON) {
+        Serial.println("[BOOT] Woke from deep sleep (button press)");
+    }
+#endif
 
     airtak::PacketPool::init();
 
@@ -342,6 +353,7 @@ void task_display_refresh(void* params) {
     uint32_t last_player_tick_ms   = 0;
     bool     screen_changed        = false;
     bool     display_asleep        = false;
+    bool     shutdown_armed        = false;
     for (;;) {
         uint32_t now = millis();
 
@@ -360,7 +372,23 @@ void task_display_refresh(void* params) {
         }
 
         // Handle gestures
-        if (gesture == airtak::ButtonGesture::SHORT_PRESS) {
+        if (gesture == airtak::ButtonGesture::LONG_LONG_PRESS) {
+            if (airtak::Button::heldMs() > 0) {
+                shutdown_armed = true;
+                Serial.println("[BTN] Hold to power off — release to confirm");
+            } else {
+                if (shutdown_armed) {
+                    Serial.println("[BTN] Shutdown confirmed — entering deep sleep");
+                    Serial.flush();
+                    airtak::Display::sleep();
+#ifdef AIRTAK_PLATFORM_ESP32
+                    airtak::sleep::enterDeepSleep(0);
+#endif
+                }
+                shutdown_armed = false;
+            }
+        } else if (gesture == airtak::ButtonGesture::SHORT_PRESS) {
+            shutdown_armed = false;
             if (airtak::PlayerState::isCancellable()) {
                 airtak::PlayerState::cancelHit(g_radio_tx_queue);
             } else {
@@ -368,6 +396,7 @@ void task_display_refresh(void* params) {
                 screen_changed = true;
             }
         } else if (gesture == airtak::ButtonGesture::LONG_PRESS) {
+            shutdown_armed = false;
             airtak::PlayerState::toggleHit(g_radio_tx_queue);
         }
 
@@ -384,6 +413,12 @@ void task_display_refresh(void* params) {
         if (!display_asleep && off_secs > 0 && (now - last_interaction_ms) >= off_secs * airtak::SECS_TO_MS) {
             airtak::Display::sleep();
             display_asleep = true;
+        }
+
+        if (shutdown_armed) {
+            airtak::Display::showShutdownWarning();
+            vTaskDelay(pdMS_TO_TICKS(200));
+            continue;
         }
 
         if (display_asleep) {

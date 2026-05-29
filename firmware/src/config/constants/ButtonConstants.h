@@ -12,8 +12,9 @@ namespace airtak {
 
 // ── Button Timing (§12.6) ──────────────────────────────────────────────────
 constexpr uint32_t BUTTON_DEBOUNCE_MS        = 50;     // Ignore transitions < 50 ms
-constexpr uint32_t BUTTON_LONG_PRESS_MS      = 3000;   // ≥ 3 s = long press
+constexpr uint32_t BUTTON_LONG_PRESS_MS      = 2000;   // ≥ 2 s = long press
 constexpr uint32_t BUTTON_DOUBLE_PRESS_MS    = 400;    // Max gap between presses for double
+constexpr uint32_t BUTTON_LONG_LONG_PRESS_MS = 5000;  // ≥ 5 s = shutdown
 
 // ── Button Event Bit ───────────────────────────────────────────────────────
 // Posted to system_event_group when a gesture is detected.

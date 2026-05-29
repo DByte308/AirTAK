@@ -9,13 +9,14 @@
 
 namespace airtak {
 
-static bool     s_last_state     = false;  // true = pressed (active low → inverted)
-static uint32_t s_press_start_ms = 0;
+static bool     s_last_state      = false;
+static uint32_t s_press_start_ms  = 0;
 static uint32_t s_last_release_ms = 0;
-static uint8_t  s_press_count    = 0;
+static uint8_t  s_press_count     = 0;
+static bool     s_long_long_fired = false;
 
 void Button::init() {
-    pinMode(AIRTAK_PIN_USER_BUTTON, INPUT_PULLUP); // active low
+    pinMode(AIRTAK_PIN_USER_BUTTON, INPUT_PULLUP);
 }
 
 ButtonGesture Button::poll() {
@@ -23,30 +24,31 @@ ButtonGesture Button::poll() {
     uint32_t now = millis();
 
     if (pressed && !s_last_state) {
-        // Button just pressed
         if ((now - s_last_release_ms) < BUTTON_DEBOUNCE_MS) {
-            return ButtonGesture::NONE; // debounce
+            return ButtonGesture::NONE;
         }
         s_press_start_ms = now;
         s_press_count++;
         s_last_state = true;
+        s_long_long_fired = false;
+    } else if (pressed && s_last_state) {
+        if (!s_long_long_fired && (now - s_press_start_ms) >= BUTTON_LONG_LONG_PRESS_MS) {
+            s_long_long_fired = true;
+            return ButtonGesture::LONG_LONG_PRESS;
+        }
     } else if (!pressed && s_last_state) {
-        // Button just released
         uint32_t held = now - s_press_start_ms;
         s_last_release_ms = now;
         s_last_state = false;
 
         if (held >= BUTTON_LONG_PRESS_MS) {
             s_press_count = 0;
-            return ButtonGesture::LONG_PRESS;
+            return s_long_long_fired ? ButtonGesture::LONG_LONG_PRESS : ButtonGesture::LONG_PRESS;
         }
-
-        // Check for double press after timeout
         if (s_press_count >= 2 && (now - s_last_release_ms) < BUTTON_DOUBLE_PRESS_MS) {
             s_press_count = 0;
             return ButtonGesture::DOUBLE_PRESS;
         }
-
         return ButtonGesture::SHORT_PRESS;
     }
 

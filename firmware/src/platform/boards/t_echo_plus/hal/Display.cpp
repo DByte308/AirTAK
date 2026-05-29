@@ -219,6 +219,8 @@ void Display::showPasscode(uint32_t passkey) {
     s_dirty_mask = DISPLAY_DIRTY_ALL;
 }
 
+void Display::showShutdownWarning() {}
+
 void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
     s_display.setFullWindow();
     s_display.firstPage();

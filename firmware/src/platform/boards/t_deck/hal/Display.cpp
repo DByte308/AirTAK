@@ -335,6 +335,18 @@ void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
     s_last_refresh_ms = millis();
 }
 
+void Display::showShutdownWarning() {
+    s_tft.fillScreen(COL_BG);
+    s_tft.setTextFont(4);
+    s_tft.setTextColor(COL_WARN, COL_BG);
+    s_tft.setCursor(10, 60);
+    s_tft.print("Release button");
+    s_tft.setCursor(10, 100);
+    s_tft.print("to power off");
+    s_dirty_mask = DISPLAY_DIRTY_ALL;
+    s_last_refresh_ms = 0;
+}
+
 void Display::nextScreen() {
     uint8_t next = (static_cast<uint8_t>(s_current_screen) + 1) % SCREEN_COUNT;
     s_current_screen = static_cast<ScreenId>(next);

@@ -15,10 +15,11 @@
 namespace airtak {
 
 enum class ButtonGesture : uint8_t {
-    NONE         = 0,
-    SHORT_PRESS  = 1,  // advance display screen; cancel HIT within 3 s window (§12.6)
-    LONG_PRESS   = 2,  // ≥ 3 s: report HIT when ACTIVE (§12.6)
-    DOUBLE_PRESS = 3,  // reserved for future hardware (§12.6)
+    NONE           = 0,
+    SHORT_PRESS    = 1,  // advance display screen; cancel HIT within 3 s window (§12.6)
+    LONG_PRESS     = 2,  // ≥ 2 s: report HIT when ACTIVE (§12.6)
+    DOUBLE_PRESS   = 3,  // reserved for future hardware (§12.6)
+    LONG_LONG_PRESS = 4, // ≥ 5 s: deep sleep / power off
 };
 
 class Button {

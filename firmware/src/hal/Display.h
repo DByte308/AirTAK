@@ -62,6 +62,11 @@ public:
 
     // Wake the display from sleep.
     static void wake();
+
+    // Phase 2.9: Show "Release to power off" warning when holding the button
+    // for ≥ 10 s.  Bypasses the normal refresh interval so the user sees
+    // immediate feedback.
+    static void showShutdownWarning();
 };
 
 } // namespace airtak

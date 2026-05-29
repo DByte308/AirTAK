@@ -268,6 +268,20 @@ void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
     s_last_refresh_ms = millis();
 }
 
+void Display::showShutdownWarning() {
+    s_display.clearDisplay();
+    s_display.setTextSize(1);
+    s_display.setTextColor(SSD1306_WHITE);
+
+    s_display.setCursor(10, 16);
+    s_display.print("Release button");
+    s_display.setCursor(14, 32);
+    s_display.print("to power off");
+
+    s_display.display();
+    s_dirty_mask = DISPLAY_DIRTY_ALL;
+}
+
 void Display::nextScreen() {
     uint8_t next = (static_cast<uint8_t>(s_current_screen) + 1) % SCREEN_COUNT;
     s_current_screen = static_cast<ScreenId>(next);
