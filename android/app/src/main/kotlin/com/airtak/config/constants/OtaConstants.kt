@@ -58,11 +58,11 @@ const val ESP_FLASH_END_DELAY_MS = 2_000L
  *  time, causing the stub to NAK and the Android IN pipe to stall. */
 const val ESP_BLOCK_PACING_MS = 50L
 /** Drain buffer read timeout. */
-const val ESP_DRAIN_TIMEOUT_MS = 200L
-/** Interface claim drain timeout. */
+const val ESP_DRAIN_TIMEOUT_MS = 500L
+/** Interface claim drain timeout (ms). */
 const val ESP_IFCLAIM_DRAIN_MS = 50L
-/** Default bulk transfer timeout for short reads. */
-const val ESP_SHORT_READ_TIMEOUT_MS = 30
+/** Default bulk transfer timeout for short reads (ms). */
+const val ESP_SHORT_READ_TIMEOUT_MS = 50
 
 // ── DTR/RTS reset pulse timing (esptool sequence) ──────
 const val ESP_RESET_PULSE_MS = 100L

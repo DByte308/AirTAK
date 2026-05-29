@@ -220,6 +220,7 @@ class EspSerialFlasher(
         dbg("SYNC OK on attempt ${syncedAttempt}")
 
         drainPendingReplies()
+        ringBuf.clear()
         dbg("pending replies drained")
 
         // ---- SPI_ATTACH --------
@@ -229,6 +230,7 @@ class EspSerialFlasher(
             return Result.failure(Exception("SPI_ATTACH rejected by ROM bootloader"))
         }
         dbg("SPI_ATTACH OK")
+        ringBuf.clear()
 
         // ---- Upload stub loader --------
         val stubResult = uploadStubLoader()
@@ -564,6 +566,7 @@ class EspSerialFlasher(
         expectReply: Boolean = true,
         timeoutMs: Int = ESP_BULK_TIMEOUT_MS,
     ): Boolean {
+        ringBuf.clear()
         val cs = if (checksumOver.isEmpty()) 0 else checksum(checksumOver)
         val header = byteArrayOf(0x00, op.toByte()) +
             leShort(payload.size) +
@@ -606,7 +609,12 @@ class EspSerialFlasher(
                 return false
             }
             if (reply.size >= 2 && reply[0] == ESP_ROM_REPLY_OK && reply[1] == op.toByte()) {
-                return parseReplyOk(op, reply)
+                val ok = parseReplyOk(op, reply)
+                if (!ok) {
+                    val hex = reply.joinToString("") { "%02x".format(it) }
+                    dbgErr("  op=0x%02x response ERROR: ${reply.size}B raw=$hex".format(op))
+                }
+                return ok
             }
             // Mismatched frame — discard and keep reading.
             discarded++
