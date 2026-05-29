@@ -52,8 +52,11 @@ const val ESP_SYNC_TIMEOUT_MS = 500
 const val ESP_SYNC_RETRIES = 7
 /** Sleep between flash end and reboot. */
 const val ESP_FLASH_END_DELAY_MS = 2_000L
-/** Inter-block pacing delay. */
-const val ESP_BLOCK_PACING_MS = 5L
+/** Inter-block pacing delay (ms).  Must give the stub enough time to
+ *  commit each 1-KiB page to SPI flash before the next command.  5 ms
+ *  was too aggressive — some flash chips need 30-50 ms page-program
+ *  time, causing the stub to NAK and the Android IN pipe to stall. */
+const val ESP_BLOCK_PACING_MS = 50L
 /** Drain buffer read timeout. */
 const val ESP_DRAIN_TIMEOUT_MS = 200L
 /** Interface claim drain timeout. */
@@ -196,11 +199,6 @@ const val ESP_IN_EP_HALT_THRESHOLD_MS = 3_000
 
 // ── ESP32 ROM reply magic ───────────────────────────────
 const val ESP_ROM_RETRY_REPLY_MAGIC = 0x01.toByte()
-
-// ── ESP32-S3 flash MMU base address (DROM, read-only) ───
-/** ESP32-S3 DROM MMU window start.  Flash reads through
- *  READ_REG use this base + flash offset. */
-const val ESP_FLASH_MMU_DROM_BASE = 0x3C000000
 
 // ── ESP32 large erase timeout ───────────────────────────
 const val ESP_FLASH_LARGE_ERASE_TIMEOUT_MS = 30_000

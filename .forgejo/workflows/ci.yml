@@ -34,14 +34,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache firmware venv
+      - name: Cache firmware venv + libraries
         uses: actions/cache@v3
         with:
           path: |
             firmware/.venv
             ~/.platformio
-          key: firmware-venv-${{ hashFiles('firmware/requirements-dev.txt', 'firmware/platformio.ini') }}
-          restore-keys: firmware-venv-
+            firmware/.pio/libdeps
+          key: firmware-deps-v2-${{ hashFiles('firmware/requirements-dev.txt', 'firmware/platformio.ini') }}
+          restore-keys: |
+            firmware-deps-
 
       - name: Install Python venv
         run: apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip

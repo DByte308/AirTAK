@@ -20,8 +20,8 @@ import com.airtak.config.constants.VID_SILABS_CP210X
 import com.airtak.config.constants.VID_QINHENG_CH340
 import com.airtak.data.ble.BleConstants
 import com.airtak.data.ble.BleRepository
-import java.io.ByteArrayInputStream
-import java.util.zip.ZipInputStream
+import java.util.zip.ZipFile
+import java.io.File
 import kotlinx.coroutines.flow.Flow
 
 class FirmwareUpdateManager(
@@ -210,23 +210,27 @@ class FirmwareUpdateManager(
          *  don't flash ZIP bytes to flash.  Returns the unmodified [bytes]
          *  if the input is not a ZIP or no .bin entry is found. */
         fun extractEsp32FirmwareBin(bytes: ByteArray): ByteArray {
-            // ZIP local file header signature: PK\x03\x04
             if (bytes.size < 4 ||
                 bytes[0] != 0x50.toByte() || bytes[1] != 0x4B.toByte() ||
                 bytes[2] != 0x03.toByte() || bytes[3] != 0x04.toByte()
             ) return bytes
             try {
                 Log.d("FirmwareManager", "Detected ZIP firmware — extracting .bin payload (${bytes.size} B zip)")
-                ZipInputStream(ByteArrayInputStream(bytes)).use { zin ->
-                    while (true) {
-                        val entry = zin.nextEntry ?: break
-                        if (entry.name.endsWith(".bin", ignoreCase = true)) {
-                            val extracted = zin.readBytes()
-                            Log.d("FirmwareManager", "Extracted ${entry.name} (${extracted.size} B) from ZIP")
+                val tmpFile = File.createTempFile("airtak_fw_", ".zip").also { it.writeBytes(bytes) }
+                try {
+                    ZipFile(tmpFile).use { zip ->
+                        val entries = zip.entries()
+                        while (entries.hasMoreElements()) {
+                            val entry = entries.nextElement()
+                            if (!entry.name.endsWith(".bin", ignoreCase = true)) continue
+                            val extracted = zip.getInputStream(entry).use { it.readBytes() }
+                            Log.d("FirmwareManager",
+                                "Extracted ${entry.name} (${extracted.size} B, entry-size=${entry.size}) from ZIP")
                             return extracted
                         }
-                        zin.closeEntry()
                     }
+                } finally {
+                    runCatching { tmpFile.delete() }
                 }
                 Log.w("FirmwareManager", "ZIP contained no .bin entry — falling back to raw bytes")
             } catch (e: Exception) {
