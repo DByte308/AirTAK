@@ -5,6 +5,8 @@ package com.airtak.ui.map
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.airtak.config.constants.UI_MARKER_DESC_MAX_LEN
+import com.airtak.config.constants.UI_MARKER_LABEL_MAX_LEN
 import com.airtak.data.config.ConfigRepository
 import com.airtak.data.db.RemoteNodeEntity
 import com.airtak.data.db.TacticalMarkerEntity
