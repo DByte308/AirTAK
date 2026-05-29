@@ -26,11 +26,6 @@ object BleConstants {
     val CHR_OTA_COMMAND: UUID   = uuid(6)
     val CHR_OTA_DATA: UUID      = uuid(7)
 
-    // ── Recovery advertising (§10.1) ────────────────────────────────────
-    /** BLE advertisement name for safe/DFU mode devices.
-     *  Canonical: config/constants/BleConstants.kt. */
-    const val RECOVERY_ADV_NAME = BLE_RECOVERY_ADV_NAME
-
     // ── Standard descriptors ────────────────────────────────────────────
     /** Standard Client Characteristic Configuration Descriptor (CCCD). */
     val CCC_DESCRIPTOR: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")

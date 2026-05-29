@@ -46,7 +46,7 @@ const val UI_QR_SIZE_DEFAULT_PX = 512
 
 // ── Bandwidth options (§11.9) ───────────────────────────
 /** Available LoRa bandwidth settings in Hz. */
-const val UI_BANDWIDTH_OPTIONS = listOf(125000, 250000, 500000)
+val UI_BANDWIDTH_OPTIONS = listOf(125000, 250000, 500000)
 
 // ── Unit slots ──────────────────────────────────────────
 /** Minimum unit-slot index rendered in the settings UI. */

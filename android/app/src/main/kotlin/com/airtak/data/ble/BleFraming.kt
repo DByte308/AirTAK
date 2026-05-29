@@ -25,20 +25,15 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 object BleFraming {
-    // ── Canonical definitions in config/constants/BleConstants.kt ──────────
-    const val HEADER_BYTES = BLE_FRAMING_HEADER_BYTES
-    const val ATT_OVERHEAD = BLE_FRAMING_ATT_OVERHEAD
-    const val MAX_PAYLOAD_BYTES = BLE_FRAMING_MAX_PAYLOAD_BYTES
-
     /**
      * Split [payload] into chunks of [chunkPayloadSize] bytes each, prefixed with the
      * 6-byte header. chunkPayloadSize = MTU − 6 − 3 = effective ATT payload.
      */
     fun encode(payload: ByteArray, chunkPayloadSize: Int): List<ByteArray> {
-        require(chunkPayloadSize in 1..(BLE_MAX_MTU_REQUEST - HEADER_BYTES - ATT_OVERHEAD)) {
+        require(chunkPayloadSize in 1..(BLE_MAX_MTU_REQUEST - BLE_FRAMING_HEADER_BYTES - BLE_FRAMING_ATT_OVERHEAD)) {
             "chunkPayloadSize $chunkPayloadSize out of range"
         }
-        require(payload.size <= MAX_PAYLOAD_BYTES) { "payload too large (${payload.size} bytes)" }
+        require(payload.size <= BLE_FRAMING_MAX_PAYLOAD_BYTES) { "payload too large (${payload.size} bytes)" }
         if (payload.isEmpty()) {
             // Empty payload still encodes a single-chunk frame to signal e.g. a config read request.
             return listOf(header(0, 0, 1))
@@ -54,7 +49,7 @@ object BleFraming {
     }
 
     private fun header(total: Int, idx: Int, count: Int): ByteArray =
-        ByteBuffer.allocate(HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+        ByteBuffer.allocate(BLE_FRAMING_HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
             putShort(total.toShort()); putShort(idx.toShort()); putShort(count.toShort())
         }.array()
 
@@ -70,13 +65,13 @@ object BleFraming {
         private var cursor: Int = 0
 
         fun feed(frame: ByteArray): ByteArray? {
-            if (frame.size < HEADER_BYTES) { reset(); return null }
-            val bb = ByteBuffer.wrap(frame, 0, HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+            if (frame.size < BLE_FRAMING_HEADER_BYTES) { reset(); return null }
+            val bb = ByteBuffer.wrap(frame, 0, BLE_FRAMING_HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
             val total = bb.short.toInt() and UINT16_MASK
             val idx   = bb.short.toInt() and UINT16_MASK
             val count = bb.short.toInt() and UINT16_MASK
             if (count == 0 || idx >= count) { reset(); return null }
-            val data = frame.copyOfRange(HEADER_BYTES, frame.size)
+            val data = frame.copyOfRange(BLE_FRAMING_HEADER_BYTES, frame.size)
             if (idx == 0) {
                 buffer = ByteArray(total)
                 expectedCount = count

@@ -127,6 +127,7 @@ import com.airtak.config.constants.ESP_SYNC_RETRIES
 import com.airtak.config.constants.ESP_SYNC_TIMEOUT_MS
 import com.airtak.config.constants.ESP_XOR_CHECKSUM_SEED
 import com.airtak.config.constants.USB_BMREQ_SET_FEATURE
+import com.airtak.config.constants.SLIP_END
 import com.airtak.config.constants.USB_CDC_DATA_BITS_8
 import com.airtak.config.constants.USB_CDC_DTR_RTS_ASSERTED
 import com.airtak.config.constants.USB_CDC_PARITY_NONE
@@ -437,9 +438,9 @@ class EspSerialFlasher(
             ((baud shr 8) and 0xFF).toByte(),
             ((baud shr 16) and 0xFF).toByte(),
             ((baud shr 24) and 0xFF).toByte(),
-            USB_CDC_STOP_BITS_1, // 1 stop bit
-            USB_CDC_PARITY_NONE, // no parity
-            USB_CDC_DATA_BITS_8, // 8 data bits
+            USB_CDC_STOP_BITS_1.toByte(), // 1 stop bit
+            USB_CDC_PARITY_NONE.toByte(), // no parity
+            USB_CDC_DATA_BITS_8.toByte(), // 8 data bits
         )
         val r1 = connection.controlTransfer(
             USB_REQ_TYPE_CLASS_OUT, CDC_SET_LINE_CODING, 0, intf.id, data, data.size, ESP_BULK_TIMEOUT_MS
@@ -658,9 +659,9 @@ class EspSerialFlasher(
                 var consumed = 0
                 for (i in ringBuf.indices) {
                     val b = ringBuf[i]
-                    if (!started && b == SlipFramer.END) { started = true; continue }
+                    if (!started && b == SLIP_END.toByte()) { started = true; continue }
                     if (started) {
-                        if (b == SlipFramer.END) { endIdx = i; break }
+                        if (b == SLIP_END.toByte()) { endIdx = i; break }
                     }
                 }
                 if (endIdx > 0) {

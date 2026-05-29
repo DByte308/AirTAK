@@ -62,7 +62,7 @@ const val OTA_START_FIELD_CRC32 = 2
 const val OTA_FINISH_FIELD_CRC32 = 2
 const val OTA_TAG_OTA_START = 0x0A.toByte()
 const val OTA_TAG_OTA_FINISH = 0x12.toByte()
-const val OTA_TAG_STATUS_REQUEST = byteArrayOf(0x1A.toByte(), 0x00.toByte())
+val OTA_TAG_STATUS_REQUEST = byteArrayOf(0x1A.toByte(), 0x00.toByte())
 const val OTA_VARINT_TAG_IMAGE_SIZE = 0x08.toByte()
 const val OTA_VARINT_TAG_CRC32 = 0x10.toByte()
 

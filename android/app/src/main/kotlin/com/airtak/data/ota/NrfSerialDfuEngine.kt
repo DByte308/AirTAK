@@ -329,9 +329,9 @@ class NrfSerialDfuEngine(
             ((baud shr 8) and 0xFF).toByte(),
             ((baud shr 16) and 0xFF).toByte(),
             ((baud shr 24) and 0xFF).toByte(),
-            USB_CDC_STOP_BITS_1, // 1 stop bit
-            USB_CDC_PARITY_NONE, // no parity
-            USB_CDC_DATA_BITS_8, // 8 data bits
+            USB_CDC_STOP_BITS_1.toByte(), // 1 stop bit
+            USB_CDC_PARITY_NONE.toByte(), // no parity
+            USB_CDC_DATA_BITS_8.toByte(), // 8 data bits
         )
         val r1 = connection.controlTransfer(
             USB_REQ_TYPE_CLASS_OUT, CDC_SET_LINE_CODING, 0, ctrlIntf.id, data, data.size, NRF_SERIAL_BULK_TIMEOUT_MS

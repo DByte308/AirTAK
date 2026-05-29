@@ -40,6 +40,10 @@ import com.airtak.config.constants.VID_NRF52840
 import com.airtak.config.constants.VID_ESP32_NATIVE
 import com.airtak.config.constants.VID_SILABS_CP210X
 import com.airtak.config.constants.VID_QINHENG_CH340
+import com.airtak.config.constants.FW_MIME_OCTET_STREAM
+import com.airtak.config.constants.FW_MIME_X_BINARY
+import com.airtak.config.constants.FW_MIME_ZIP
+import com.airtak.config.constants.FW_MIME_WILDCARD
 import kotlin.coroutines.resume
 
 @HiltViewModel

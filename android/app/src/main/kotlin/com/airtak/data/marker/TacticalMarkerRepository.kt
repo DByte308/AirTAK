@@ -168,9 +168,9 @@ class TacticalMarkerRepository @Inject constructor(
         // Periodically purge tombstones older than 24 h.
         scope.launch {
             while (true) {
-                val cutoff = (System.currentTimeMillis() / MS_PER_SECOND) - TOMBSTONE_TTL_SEC
+                val cutoff = (System.currentTimeMillis() / MS_PER_SECOND) - MARKER_TOMBSTONE_TTL_SEC
                 dao.purgeTombstones(cutoff)
-                delay(PURGE_INTERVAL_MS)
+                delay(MARKER_PURGE_INTERVAL_MS)
             }
         }
     }
@@ -209,8 +209,8 @@ class TacticalMarkerRepository @Inject constructor(
         val marker = TacticalMarker.newBuilder()
             .setMarkerId(markerId.toInt())
             .setType(type)
-            .setLabel(label.take(MAX_LABEL_LEN))
-            .setDescription(description.take(MAX_DESC_LEN))
+            .setLabel(label.take(UI_MARKER_LABEL_MAX_LEN))
+            .setDescription(description.take(UI_MARKER_DESC_MAX_LEN))
             .setColorRgb(colorRgb)
             .setScope(scopeKind)
             .setCreatorNodeId(ownNodeId.toInt())
@@ -256,8 +256,8 @@ class TacticalMarkerRepository @Inject constructor(
         val builder = TacticalMarker.newBuilder()
             .setMarkerId(existing.markerId.toInt())
             .setType(type)
-            .setLabel(label.take(MAX_LABEL_LEN))
-            .setDescription(description.take(MAX_DESC_LEN))
+            .setLabel(label.take(UI_MARKER_LABEL_MAX_LEN))
+            .setDescription(description.take(UI_MARKER_DESC_MAX_LEN))
             .setColorRgb(colorRgb and UI_RGB_MASK)
             .setScope(scopeKind)
             .setCreatorNodeId(existing.creatorNodeId.toInt())
@@ -352,7 +352,7 @@ class TacticalMarkerRepository @Inject constructor(
             val proto = entityToProto(entity)
             val result = mesh.sendTacticalMarker(proto, channelSlotForScope(proto.scope))
             if (result is MeshRepository.SendResult.Ok) pendingMarkerAcks[result.requestId] = entity.markerId
-            delay(REBROADCAST_SPACING_MS)
+            delay(MARKER_REBROADCAST_SPACING_MS)
         }
     }
 
@@ -367,7 +367,7 @@ class TacticalMarkerRepository @Inject constructor(
         val ownId = deviceStatus.status.value?.nodeId?.toLong()?.and(UINT32_MASK) ?: 0L
         if (requesterId == ownId) return
 
-        if (request.requestedTypes and SYNC_TYPE_MARKERS != 0) {
+        if (request.requestedTypes and MESH_SYNC_TYPE_MARKERS != 0) {
             markSyncIdHandled(syncId)
             rebroadcastOwned()
         }
@@ -393,7 +393,7 @@ class TacticalMarkerRepository @Inject constructor(
     private fun markSyncIdHandled(syncId: Long) {
         if (syncId == 0L) return
         synchronized(handledSyncIds) {
-            handledSyncIds[syncId] = System.currentTimeMillis() + SYNC_ID_TTL_MS
+            handledSyncIds[syncId] = System.currentTimeMillis() + MESH_SYNC_ID_TTL_MS
         }
     }
 
@@ -441,21 +441,21 @@ class TacticalMarkerRepository @Inject constructor(
     private fun channelSlotForScope(scope: Scope): Int? {
         val bindings = _channelBindings.value
         return when (scope) {
-            Scope.SCOPE_ALL       -> SLOT_TACTICAL_ALL
-            Scope.SCOPE_FIRE_TEAM -> bindings.fireteamSlot.takeIf { it >= 0 } ?: SLOT_TACTICAL_ALL
-            Scope.SCOPE_SQUAD     -> bindings.squadSlot.takeIf    { it >= 0 } ?: SLOT_TACTICAL_ALL
-            Scope.SCOPE_PLATOON   -> bindings.platoonSlot.takeIf  { it >= 0 } ?: SLOT_TACTICAL_ALL
-            Scope.SCOPE_COMPANY   -> bindings.companySlot.takeIf  { it >= 0 } ?: SLOT_TACTICAL_ALL
-            else -> SLOT_TACTICAL_ALL
+            Scope.SCOPE_ALL       -> MESH_TACTICAL_SLOT_ALL
+            Scope.SCOPE_FIRE_TEAM -> bindings.fireteamSlot.takeIf { it >= 0 } ?: MESH_TACTICAL_SLOT_ALL
+            Scope.SCOPE_SQUAD     -> bindings.squadSlot.takeIf    { it >= 0 } ?: MESH_TACTICAL_SLOT_ALL
+            Scope.SCOPE_PLATOON   -> bindings.platoonSlot.takeIf  { it >= 0 } ?: MESH_TACTICAL_SLOT_ALL
+            Scope.SCOPE_COMPANY   -> bindings.companySlot.takeIf  { it >= 0 } ?: MESH_TACTICAL_SLOT_ALL
+            else -> MESH_TACTICAL_SLOT_ALL
         }
     }
 
     private fun validatePoints(type: MarkerType, points: List<Pair<Double, Double>>): Boolean {
-        if (points.size > MAX_POINTS) return false
+        if (points.size > UI_MARKER_MAX_POINTS) return false
         return when (type) {
             MarkerType.MARKER_TYPE_POINT, MarkerType.MARKER_TYPE_NOTE, MarkerType.MARKER_TYPE_OBJECTIVE -> points.size == 1
-            MarkerType.MARKER_TYPE_ROUTE -> points.size in 2..MAX_POINTS
-            MarkerType.MARKER_TYPE_AREA  -> points.size in 3..MAX_POINTS
+            MarkerType.MARKER_TYPE_ROUTE -> points.size in 2..UI_MARKER_MAX_POINTS
+            MarkerType.MARKER_TYPE_AREA  -> points.size in 3..UI_MARKER_MAX_POINTS
             else -> false
         }
     }
@@ -466,22 +466,10 @@ class TacticalMarkerRepository @Inject constructor(
     private fun generateMarkerId(): Long {
         val b = ByteArray(MARKER_ID_BYTES)
         random.nextBytes(b)
-        return ((b[0].toLong() and UINT8_MASK) shl MARKER_ID_SHIFT_3) or
-            ((b[1].toLong() and UINT8_MASK) shl MARKER_ID_SHIFT_2) or
-            ((b[2].toLong() and UINT8_MASK) shl MARKER_ID_SHIFT_1)  or
-             (b[3].toLong() and UINT8_MASK)
+        return ((b[0].toLong() and UINT8_MASK.toLong()) shl MARKER_ID_SHIFT_3) or
+            ((b[1].toLong() and UINT8_MASK.toLong()) shl MARKER_ID_SHIFT_2) or
+            ((b[2].toLong() and UINT8_MASK.toLong()) shl MARKER_ID_SHIFT_1)  or
+             (b[3].toLong() and UINT8_MASK.toLong())
     }
 
-    companion object {
-        // ── Canonical definitions in config/constants/ ─────────────────────────
-        const val MAX_LABEL_LEN = UI_MARKER_LABEL_MAX_LEN      // Canonical: UiConstants
-        const val MAX_DESC_LEN = UI_MARKER_DESC_MAX_LEN        // Canonical: UiConstants
-        const val MAX_POINTS = UI_MARKER_MAX_POINTS            // Canonical: UiConstants
-        const val SLOT_TACTICAL_ALL = MESH_TACTICAL_SLOT_ALL    // Canonical: ModerationConstants
-        const val TOMBSTONE_TTL_SEC = MARKER_TOMBSTONE_TTL_SEC  // Canonical: ModerationConstants
-        const val PURGE_INTERVAL_MS = MARKER_PURGE_INTERVAL_MS  // Canonical: ModerationConstants
-        const val REBROADCAST_SPACING_MS = MARKER_REBROADCAST_SPACING_MS  // Canonical: ModerationConstants
-        private const val SYNC_TYPE_MARKERS = MESH_SYNC_TYPE_MARKERS   // Canonical: MeshConstants
-        private const val SYNC_ID_TTL_MS = MESH_SYNC_ID_TTL_MS          // Canonical: MeshConstants
-    }
 }

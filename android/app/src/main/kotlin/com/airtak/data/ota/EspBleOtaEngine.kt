@@ -376,8 +376,8 @@ class EspBleOtaEngine(
                     val len = r.readVarint().toInt()
                     r.skip(len)
                 }
-                1 -> r.skip(PROTO_FIXED64_BYTES.toLong())  // 64-bit
-                5 -> r.skip(PROTO_FIXED32_BYTES.toLong())  // 32-bit
+                1 -> r.skip(PROTO_FIXED64_BYTES)  // 64-bit
+                5 -> r.skip(PROTO_FIXED32_BYTES)  // 32-bit
                 else -> break    // unknown wire type — stop parsing
             }
         }

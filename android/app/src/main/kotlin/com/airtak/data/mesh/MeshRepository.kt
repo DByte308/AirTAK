@@ -48,14 +48,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import com.airtak.config.constants.MESH_DM_CHANNEL_INDEX
 import com.airtak.config.constants.MESH_INBOUND_BUFFER
-import com.airtak.config.constants.MESH_MAX_MARKER_BYTES
-import com.airtak.config.constants.MESH_MAX_TEXT_BYTES
+import com.airtak.config.constants.MESH_MESH_MAX_MARKER_BYTES
+import com.airtak.config.constants.MESH_MESH_MAX_TEXT_BYTES
 import com.airtak.config.constants.MESH_MESSAGE_WINDOW
-import com.airtak.config.constants.MESH_SYNC_ID_TTL_MS
-import com.airtak.config.constants.MESH_SYNC_MESSAGE_COUNT
-import com.airtak.config.constants.MESH_SYNC_SPACING_MS
-import com.airtak.config.constants.MESH_SYNC_TYPE_MARKERS
-import com.airtak.config.constants.MESH_SYNC_TYPE_MESSAGES
+import com.airtak.config.constants.MESH_MESH_SYNC_ID_TTL_MS
+import com.airtak.config.constants.MESH_MESH_SYNC_MESSAGE_COUNT
+import com.airtak.config.constants.MESH_MESH_SYNC_SPACING_MS
+import com.airtak.config.constants.MESH_MESH_SYNC_TYPE_MARKERS
+import com.airtak.config.constants.MESH_MESH_SYNC_TYPE_MESSAGES
 import com.airtak.config.constants.CHANNEL_SLOT_MASK
 import com.airtak.config.constants.MESH_AES_KEY_BYTES
 import com.airtak.config.constants.MESH_BROADCAST_ADDR
@@ -200,7 +200,7 @@ class MeshRepository @Inject constructor(
      *  propagates through the mesh; AIRTAK_ACK fires when the target receives it. */
     fun sendDm(peerNodeId: Long, peerCallsign: String, text: String): SendResult {
         val bytes = text.toByteArray(Charsets.UTF_8)
-        if (bytes.size > MAX_TEXT_BYTES) return SendResult.TooLong(bytes.size)
+        if (bytes.size > MESH_MAX_TEXT_BYTES) return SendResult.TooLong(bytes.size)
         val requestId = (System.nanoTime() and REQUEST_ID_MASK) or 1L
         val data = MeshWire.encodeData(
             portnum = PORTNUM_TEXT_MESSAGE_APP,
@@ -213,7 +213,7 @@ class MeshRepository @Inject constructor(
         scope.launch {
             val msgId = messageDao.insert(
                 MessageEntity(
-                    channelIndex = DM_CHANNEL_INDEX,
+                    channelIndex = MESH_DM_CHANNEL_INDEX,
                     sourceNodeId = 0,
                     sourceCallsign = "",
                     text = text,
@@ -234,7 +234,7 @@ class MeshRepository @Inject constructor(
 
     fun sendText(channel: Int, text: String, bestEffort: Boolean = false): SendResult {
         val bytes = text.toByteArray(Charsets.UTF_8)
-        if (bytes.size > MAX_TEXT_BYTES) return SendResult.TooLong(bytes.size)
+        if (bytes.size > MESH_MAX_TEXT_BYTES) return SendResult.TooLong(bytes.size)
         val wantResponse = !bestEffort
         val requestId = if (wantResponse) {
             (System.nanoTime() and REQUEST_ID_MASK) or 1L
@@ -268,7 +268,7 @@ class MeshRepository @Inject constructor(
                 pendingAcks[requestId] = msgId
                 pendingAckJournal.add(msgId)
             }
-            messageDao.pruneOldest(channel, MESSAGE_WINDOW)
+            messageDao.pruneOldest(channel, MESH_MESSAGE_WINDOW)
         }
         return SendResult.Ok()
     }
@@ -308,7 +308,7 @@ class MeshRepository @Inject constructor(
      */
     fun sendTacticalMarker(marker: TacticalMarker, channelSlot: Int? = null): SendResult {
         val payload = marker.toByteArray()
-        if (payload.size > MAX_MARKER_BYTES) return SendResult.TooLong(payload.size)
+        if (payload.size > MESH_MAX_MARKER_BYTES) return SendResult.TooLong(payload.size)
         val requestId = (System.nanoTime() and REQUEST_ID_MASK) or 1L
         val dataProto = MeshWire.encodeData(
             portnum = PORTNUM_AIRTAK_TACTICAL,
@@ -357,7 +357,7 @@ class MeshRepository @Inject constructor(
         // Resolve the slot index by matching the firmware-computed channel_hash byte.
         // Falls back to slot 0 (primary) if the hash is not yet in the map
         // (e.g. config not yet read from device).
-        val channel = if (isDm) DM_CHANNEL_INDEX else (channelHashIndex[pkt.channelHash] ?: 0)
+        val channel = if (isDm) MESH_DM_CHANNEL_INDEX else (channelHashIndex[pkt.channelHash] ?: 0)
         messageDao.insert(
             MessageEntity(
                 channelIndex = channel,
@@ -369,7 +369,7 @@ class MeshRepository @Inject constructor(
                 peerNodeId = peerNodeId,
             ),
         )
-        if (!isDm) messageDao.pruneOldest(channel, MESSAGE_WINDOW)
+        if (!isDm) messageDao.pruneOldest(channel, MESH_MESSAGE_WINDOW)
     }
 
     private fun ownNodeId(): Long =
@@ -381,7 +381,7 @@ class MeshRepository @Inject constructor(
         val syncId = (System.nanoTime() and REQUEST_ID_MASK) or 1L
         val request = SyncRequest.newBuilder()
             .setRequesterNodeId(nodeId.toInt())
-            .setRequestedTypes(SYNC_TYPE_MARKERS or SYNC_TYPE_MESSAGES)
+            .setRequestedTypes(MESH_SYNC_TYPE_MARKERS or MESH_SYNC_TYPE_MESSAGES)
             .setSyncId(syncId.toInt())
             .build()
         val data = MeshWire.encodeData(
@@ -400,7 +400,7 @@ class MeshRepository @Inject constructor(
         if (requesterId == ownNodeId()) return
 
         val types = request.requestedTypes
-        if (types and SYNC_TYPE_MESSAGES != 0) {
+        if (types and MESH_SYNC_TYPE_MESSAGES != 0) {
             markSyncIdHandled(syncId)
             rebroadcastRecentMessages()
         }
@@ -412,18 +412,18 @@ class MeshRepository @Inject constructor(
     private fun markSyncIdHandled(syncId: Long) {
         if (syncId == 0L) return
         synchronized(handledSyncIds) {
-            handledSyncIds[syncId] = System.currentTimeMillis() + SYNC_ID_TTL_MS
+            handledSyncIds[syncId] = System.currentTimeMillis() + MESH_SYNC_ID_TTL_MS
         }
     }
 
     private suspend fun rebroadcastRecentMessages() {
-        val messages = messageDao.recentMessages(SYNC_MESSAGE_COUNT)
+        val messages = messageDao.recentMessages(MESH_SYNC_MESSAGE_COUNT)
         for (msg in messages) {
             if (!msg.outgoing) continue
             val text = msg.text
-            if (text.length > MAX_TEXT_BYTES) continue
+            if (text.length > MESH_MAX_TEXT_BYTES) continue
             sendText(channel = msg.channelIndex, text = text, bestEffort = true)
-            delay(SYNC_SPACING_MS)
+            delay(MESH_SYNC_SPACING_MS)
         }
     }
 
@@ -458,18 +458,5 @@ class MeshRepository @Inject constructor(
         )
         ble.send(BleRepository.OutboundChannel.MeshTx, data)
         return SendResult.Ok(requestId)
-    }
-
-    companion object {
-        // ── Canonical definitions in config/constants/MeshConstants.kt ─────────
-        const val MAX_TEXT_BYTES = MESH_MAX_TEXT_BYTES          // Canonical: MeshConstants
-        const val MAX_MARKER_BYTES = MESH_MAX_MARKER_BYTES       // Canonical: MeshConstants
-        const val MESSAGE_WINDOW = MESH_MESSAGE_WINDOW           // Canonical: MeshConstants
-        const val DM_CHANNEL_INDEX = MESH_DM_CHANNEL_INDEX       // Canonical: MeshConstants
-        private const val SYNC_SPACING_MS = MESH_SYNC_SPACING_MS          // Canonical: MeshConstants
-        private const val SYNC_MESSAGE_COUNT = MESH_SYNC_MESSAGE_COUNT      // Canonical: MeshConstants
-        private const val SYNC_TYPE_MARKERS = MESH_SYNC_TYPE_MARKERS       // Canonical: MeshConstants
-        private const val SYNC_TYPE_MESSAGES = MESH_SYNC_TYPE_MESSAGES      // Canonical: MeshConstants
-        private const val SYNC_ID_TTL_MS = MESH_SYNC_ID_TTL_MS            // Canonical: MeshConstants
     }
 }

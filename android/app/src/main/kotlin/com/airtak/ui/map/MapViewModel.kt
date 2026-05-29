@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.stateIn
 import com.airtak.config.constants.MAP_LOCATE_ZOOM
 import com.airtak.config.constants.MAP_PLAYER_STALE_MS
 import com.airtak.config.constants.MAP_POSITION_STALE_MS
+import com.airtak.config.constants.PLAYER_STATUS_UNKNOWN
 import com.airtak.config.constants.MAP_SELF_ZOOM
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -541,7 +542,7 @@ class MapViewModel @Inject constructor(
             latitude = latitude ?: 0.0,
             longitude = longitude ?: 0.0,
             colorRgb = colorRgb.takeIf { it != 0 } ?: defaultPlayerColor(nodeId),
-            statusValue = statusValue.takeIf { it != RemoteNodeEntity.PLAYER_STATUS_UNKNOWN }
+            statusValue = statusValue.takeIf { it != PLAYER_STATUS_UNKNOWN }
                 ?: PlayerStatus.PLAYER_STATUS_ACTIVE_VALUE,
             positionStale = lastPositionMs == null || now - lastPositionMs > POSITION_STALE_MS,
             playerOffline = lastPlayerMs == null || now - lastPlayerMs > PLAYER_STALE_MS,
