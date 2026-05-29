@@ -11,4 +11,7 @@ constexpr uint8_t  FIRMWARE_VERSION_MINOR  = 0;
 constexpr uint8_t  FIRMWARE_VERSION_PATCH  = 0;
 constexpr const char* FIRMWARE_VERSION_STR = "1.0.0";
 
+// ── Display Title ────────────────────────────────────────────────────────
+constexpr const char* FIRMWARE_DISPLAY_TITLE    = "AirTAK";
+
 } // namespace airtak

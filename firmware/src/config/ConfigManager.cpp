@@ -61,15 +61,15 @@ static bool isValid(const uint8_t* buf, size_t len) {
         uint32_t tag = 0; uint8_t shift = 0;
         while (pos < len) {
             uint8_t b = buf[pos++];
-            tag |= (uint32_t)(b & 0x7F) << shift;
-            if (!(b & 0x80)) break;
+            tag |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift;
+            if (!(b & PROTO_VARINT_CONTINUE_MASK)) break;
             shift += 7;
             if (shift >= 32) return false; // varint overflow
         }
-        uint8_t wire = tag & 0x07;
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
         switch (wire) {
             case 0: { // varint
-                while (pos < len && (buf[pos++] & 0x80)) {}
+                while (pos < len && (buf[pos++] & PROTO_VARINT_CONTINUE_MASK)) {}
                 break;
             }
             case 1: pos += 8; break; // 64-bit
@@ -77,8 +77,8 @@ static bool isValid(const uint8_t* buf, size_t len) {
                 uint32_t sz = 0; shift = 0;
                 while (pos < len) {
                     uint8_t b = buf[pos++];
-                    sz |= (uint32_t)(b & 0x7F) << shift;
-                    if (!(b & 0x80)) break;
+                    sz |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift;
+                    if (!(b & PROTO_VARINT_CONTINUE_MASK)) break;
                     shift += 7;
                     if (shift >= 32) return false;
                 }
@@ -372,7 +372,7 @@ bool ConfigManager::isRadioRestartPending() { return s_radio_restart_pending; }
 static bool skipProtoField(const uint8_t* buf, size_t n, size_t& pos, uint8_t wire) {
     switch (wire) {
         case 0: // varint
-            while (pos < n) { if (!(buf[pos++] & 0x80)) return true; }
+            while (pos < n) { if (!(buf[pos++] & PROTO_VARINT_CONTINUE_MASK)) return true; }
             return false;
         case 1: // 64-bit
             if (pos + 8 > n) return false;
@@ -380,7 +380,7 @@ static bool skipProtoField(const uint8_t* buf, size_t n, size_t& pos, uint8_t wi
             return true;
         case 2: { // length-delimited
             uint32_t sz = 0; uint8_t sh = 0;
-            while (pos < n) { uint8_t b = buf[pos++]; sz |= (uint32_t)(b & 0x7F) << sh; if (!(b & 0x80)) break; sh += 7; }
+            while (pos < n) { uint8_t b = buf[pos++]; sz |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << sh; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; sh += 7; }
             if (pos + sz > n) return false;
             pos += sz;
             return true;
@@ -398,8 +398,8 @@ static bool readProtoVarint(const uint8_t* buf, size_t n, size_t& pos, uint32_t&
     out = 0; uint8_t shift = 0;
     while (pos < n && shift < 32) {
         uint8_t b = buf[pos++];
-        out |= (uint32_t)(b & 0x7F) << shift;
-        if (!(b & 0x80)) return true;
+        out |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift;
+        if (!(b & PROTO_VARINT_CONTINUE_MASK)) return true;
         shift += 7;
     }
     return false;
@@ -421,9 +421,9 @@ static const char* readDeviceStringField(uint32_t wanted_field, const char* fall
     while (pos < n) {
         uint32_t tag;
         if (!readProtoVarint(buf, n, pos, tag)) break;
-        uint8_t wire = tag & 7;
-        uint32_t field = tag >> 3;
-        if (wire == 2) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_LEN) {
             uint32_t slen;
             if (!readProtoVarint(buf, n, pos, slen)) break;
             if (pos + slen > n) break;
@@ -462,9 +462,9 @@ const char* ConfigManager::gameCallsign() {
     while (pos < n) {
         uint32_t tag;
         if (!readProtoVarint(buf, n, pos, tag)) break;
-        uint8_t wire = tag & 7;
-        uint32_t field = tag >> 3;
-        if (wire == 2) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_LEN) {
             uint32_t slen;
             if (!readProtoVarint(buf, n, pos, slen)) break;
             if (pos + slen > n) break;
@@ -489,9 +489,9 @@ uint32_t ConfigManager::powerDisplayOffSecs() {
     size_t pos = 0;
     while (pos < n) {
         uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
-        uint8_t wire = tag & 7;
-        uint32_t field = tag >> 3;
-        if (wire == 0) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_VARINT) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
             if (field == POWERCONFIG_FIELD_DISPLAY_OFF) return v;  // display_off_secs = field 4
         } else {
@@ -508,9 +508,9 @@ uint8_t ConfigManager::powerBrightnessPct() {
     size_t pos = 0;
     while (pos < n) {
         uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
-        uint8_t wire = tag & 7;
-        uint32_t field = tag >> 3;
-        if (wire == 0) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_VARINT) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
             if (field == POWERCONFIG_FIELD_BRIGHTNESS) {  // brightness_pct = field 5
                 if (v > CONFIG_MAX_BRIGHTNESS_PCT) v = CONFIG_MAX_BRIGHTNESS_PCT;
@@ -530,9 +530,9 @@ static uint32_t readPositionVarintField(uint32_t wanted_field, uint32_t fallback
     size_t pos = 0;
     while (pos < n) {
         uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
-        uint8_t wire = tag & 7;
-        uint32_t field = tag >> 3;
-        if (wire == 0) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_VARINT) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
             if (field == wanted_field) return v;
         } else {
@@ -583,9 +583,9 @@ float ConfigManager::loraFrequencyMhz() {
     size_t pos = 0;
     while (pos < n) {
         uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
-        uint8_t wire  = tag & 7;
-        uint32_t field = tag >> 3;
-        if (wire == 0) {
+        uint8_t wire  = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_VARINT) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
             if (field == LORACONFIG_FIELD_REGION) {
                 switch (v) {
@@ -611,9 +611,9 @@ uint8_t ConfigManager::loraTxPowerDbm() {
     size_t pos = 0;
     while (pos < n) {
         uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
-        uint8_t wire  = tag & 7;
-        uint32_t field = tag >> 3;
-        if (wire == 0) {
+        uint8_t wire  = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_VARINT) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
             if (field == LORACONFIG_FIELD_TX_POWER && v > 0) return (uint8_t)v;
         } else { if (!skipProtoField(buf, n, pos, wire)) break; }
@@ -631,9 +631,9 @@ uint8_t ConfigManager::primarySlotPhyProfileIndex() {
     size_t pos = 0;
     while (pos < n) {
         uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
-        uint8_t wire  = tag & 7;
-        uint32_t field = tag >> 3;
-        if (wire == 2 && field == CHANNELCONFIG_FIELD_SLOTS) {
+        uint8_t wire  = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_LEN && field == CHANNELCONFIG_FIELD_SLOTS) {
             // Slot sub-message length
             uint32_t slen; if (!readProtoVarint(buf, n, pos, slen)) break;
             size_t end = pos + slen;
@@ -642,8 +642,8 @@ uint8_t ConfigManager::primarySlotPhyProfileIndex() {
             size_t sp = pos;
             while (sp < end) {
                 uint32_t stag; if (!readProtoVarint(buf, end, sp, stag)) break;
-                uint8_t sw = stag & 7;
-                uint32_t sf = stag >> 3;
+                uint8_t sw = stag & PROTO_WIRE_TYPE_MASK;
+                uint32_t sf = stag >> PROTO_FIELD_NUM_SHIFT;
                 if (sw == 0) {
                     uint32_t v; if (!readProtoVarint(buf, end, sp, v)) break;
                     if (sf == CHANNELSLOT_FIELD_ROLE) slot_role = (uint8_t)v;

@@ -36,8 +36,8 @@ bool RecoveryMode::requestedAtBoot() {
 
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     Bluefruit.begin();
-    Bluefruit.setName("AirTAK Recovery");
-    Bluefruit.setTxPower(4);
+    Bluefruit.setName(RECOVERY_BLE_NAME);
+    Bluefruit.setTxPower(BLE_TX_POWER_DBM_NRF52);
 
     ble::DFUService::init();
 
@@ -45,8 +45,8 @@ bool RecoveryMode::requestedAtBoot() {
     Bluefruit.Advertising.addTxPower();
     Bluefruit.ScanResponse.addName();
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(160, 160);
-    Bluefruit.Advertising.setFastTimeout(30);
+    Bluefruit.Advertising.setInterval(BLE_ADV_INTERVAL_MS, BLE_ADV_INTERVAL_MS);
+    Bluefruit.Advertising.setFastTimeout(BLE_FAST_ADV_TIMEOUT_S);
     Bluefruit.Advertising.start(0);
 
     bool action_armed = false;
@@ -58,7 +58,7 @@ bool RecoveryMode::requestedAtBoot() {
 
         if (!action_armed) {
             if (!pressed) action_armed = true;
-            delay(100);
+            delay(RECOVERY_DEBOUNCE_POLL_MS);
             continue;
         }
 
@@ -81,15 +81,15 @@ bool RecoveryMode::requestedAtBoot() {
 
             if (held_ms >= RECOVERY_USB_SERIAL_HOLD_MS) {
                 Serial.println("AirTAK recovery mode: entering USB serial DFU bootloader");
-                delay(250);
+                delay(RECOVERY_DFU_ENTRY_DELAY_MS);
                 enterSerialDfu();
             } else if (held_ms >= RECOVERY_SHORT_PRESS_MIN_MS) {
                 Serial.println("AirTAK recovery mode: entering USB UF2 bootloader");
-                delay(250);
+                delay(RECOVERY_DFU_ENTRY_DELAY_MS);
                 enterUf2Dfu();
             }
         }
-        delay(100);
+        delay(RECOVERY_DEBOUNCE_POLL_MS);
     }
 }
 

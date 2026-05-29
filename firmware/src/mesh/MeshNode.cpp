@@ -40,7 +40,7 @@ static uint32_t s_known_node_count  = 0;
 // interoperability with Meshtastic clients.
 
 static uint16_t encodeVarint(uint8_t* buf, uint16_t pos, uint32_t v) {
-    while (v >= 0x80) { buf[pos++] = (uint8_t)(v | 0x80); v >>= 7; }
+    while (v >= PROTO_VARINT_CONTINUE_MASK) { buf[pos++] = (uint8_t)(v | PROTO_VARINT_CONTINUE_MASK); v >>= 7; }
     buf[pos++] = (uint8_t)v;
     return pos;
 }

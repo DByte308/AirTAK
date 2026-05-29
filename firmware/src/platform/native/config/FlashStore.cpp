@@ -31,7 +31,7 @@ bool FlashStore::init() {
 
 size_t FlashStore::read(ConfigGroup group, uint8_t* buf, size_t buf_len) {
     if (!s_initialized) return 0;
-    char path[260];
+    char path[NATIVE_FLASH_PATH_MAX];
     nativePath(group, path, sizeof(path));
     FILE* file = fopen(path, "rb");
     if (!file) return 0;
@@ -42,7 +42,7 @@ size_t FlashStore::read(ConfigGroup group, uint8_t* buf, size_t buf_len) {
 
 bool FlashStore::write(ConfigGroup group, const uint8_t* data, size_t len) {
     if (!s_initialized) return false;
-    char path[260];
+    char path[NATIVE_FLASH_PATH_MAX];
     nativePath(group, path, sizeof(path));
     FILE* file = fopen(path, "wb");
     if (!file) return false;
@@ -53,7 +53,7 @@ bool FlashStore::write(ConfigGroup group, const uint8_t* data, size_t len) {
 
 bool FlashStore::erase(ConfigGroup group) {
     if (!s_initialized) return false;
-    char path[260];
+    char path[NATIVE_FLASH_PATH_MAX];
     nativePath(group, path, sizeof(path));
     return remove(path) == 0 || !exists(group);
 }
@@ -69,7 +69,7 @@ bool FlashStore::eraseAll() {
 
 bool FlashStore::exists(ConfigGroup group) {
     if (!s_initialized) return false;
-    char path[260];
+    char path[NATIVE_FLASH_PATH_MAX];
     nativePath(group, path, sizeof(path));
     FILE* file = fopen(path, "rb");
     if (!file) return false;

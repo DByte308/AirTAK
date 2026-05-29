@@ -50,9 +50,10 @@ constexpr size_t  NONCE_FROM_NODE_BYTES     = 4;     // from_node field width (u
 
 // ── Meshtastic Default PSK ("AQ==", 16-byte AES-128 key) ─────────────────
 constexpr size_t   MESHTASTIC_DEFAULT_PSK_BYTES  = 16;  // 16-byte default key
+constexpr uint8_t  CHANNEL_HASH_NONE          = 0x00;   // Sentinel: no channel hash (PKI-encrypted)
 // The actual default PSK key bytes (Meshtastic LONG_FAST channel key)
 // Defined as constexpr inline to allow compile-time use
-inline constexpr uint8_t MESHTASTIC_DEFAULT_PSK[16] = {
+constexpr uint8_t MESHTASTIC_DEFAULT_PSK[16] = {
     0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
     0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01
 };

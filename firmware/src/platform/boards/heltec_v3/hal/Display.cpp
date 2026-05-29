@@ -82,7 +82,7 @@ static void renderMainScreen() {
 #ifdef AIRTAK_FLASH_TEST
     drawHeader("FLASH TEST OK");
 #else
-    drawHeader("AirTAK");
+    drawHeader(FIRMWARE_DISPLAY_TITLE);
 #endif
 
     s_display.setTextSize(1);
@@ -193,7 +193,7 @@ void Display::init() {
     // Enable peripheral power rail (Vext, active LOW).
     pinMode(AIRTAK_PIN_POWER_EN, OUTPUT);
     digitalWrite(AIRTAK_PIN_POWER_EN, LOW);
-    delay(50); // allow OLED and LoRa boost to stabilise
+    delay(PERIPH_POWER_SETTLE_MS); // allow OLED and LoRa boost to stabilise
 
     // Enable battery ADC voltage divider (ADC_CTRL, active LOW).
     pinMode(AIRTAK_PIN_ADC_CTRL, OUTPUT);

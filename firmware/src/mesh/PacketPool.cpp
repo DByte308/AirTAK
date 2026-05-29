@@ -29,7 +29,7 @@ PooledPacket* PacketPool::alloc() {
             s_pool[i].length = 0;
             s_pool[i].rssi = 0.0f;
             s_pool[i].snr = 0.0f;
-            s_pool[i].phy_profile_index = 0;
+            s_pool[i].phy_profile_index = PHY_PROFILE_DEFAULT;
             result = &s_pool[i];
             s_used++;
             break;

@@ -55,18 +55,18 @@ bool RecoveryMode::requestedAtBoot() {
 #else
     digitalWrite(AIRTAK_PIN_POWER_EN, HIGH);
 #endif
-    delay(50);
+    delay(RECOVERY_PERIPH_SETTLE_MS);
 #endif
 
     Display::init();
     Display::showRecoveryMode(false, false);
 
     // Minimal BLE advertising — NimBLE, recovery name only, no AirTAK service
-    NimBLEDevice::init("AirTAK Recovery");
+    NimBLEDevice::init(RECOVERY_BLE_NAME);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
     NimBLEAdvertising* pAdv = NimBLEDevice::getAdvertising();
     pAdv->setScanResponse(true);
-    pAdv->setName("AirTAK Recovery");
+    pAdv->setName(RECOVERY_BLE_NAME);
     NimBLEDevice::startAdvertising();
 
     bool action_armed  = false;
@@ -78,7 +78,7 @@ bool RecoveryMode::requestedAtBoot() {
 
         if (!action_armed) {
             if (!pressed) action_armed = true;
-            delay(100);
+            delay(RECOVERY_DEBOUNCE_POLL_MS);
             continue;
         }
 
@@ -93,7 +93,7 @@ bool RecoveryMode::requestedAtBoot() {
                 ? "AirTAK recovery mode: config erased; rebooting"
                 : "AirTAK recovery mode: config erase failed");
             if (erase_done) {
-                delay(500);
+                delay(RECOVERY_RESTART_DELAY_MS);
                 esp_restart();
             }
         }

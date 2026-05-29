@@ -84,7 +84,7 @@ static void renderMainScreen() {
 #ifdef AIRTAK_FLASH_TEST
     drawHeader("FLASH TEST OK");
 #else
-    drawHeader("AirTAK");
+    drawHeader(FIRMWARE_DISPLAY_TITLE);
 #endif
 
     s_tft.setTextFont(2);
@@ -237,7 +237,7 @@ static void applyBacklight(uint8_t target) {
     if (target > BL_STEPS) target = BL_STEPS;
     if (target == 0) {
         digitalWrite(AIRTAK_PIN_TFT_BL, LOW);
-        delay(3);                              // backlight chip needs ms-level hold
+        delay(TFT_BACKLIGHT_OFF_HOLD_MS);                              // backlight chip needs ms-level hold
         s_bl_level = 0;
         return;
     }
@@ -369,7 +369,7 @@ void Display::sleep() {
 void Display::wake() {
     s_bl_asleep = false;
     s_tft.writecommand(0x11);
-    delay(20);
+    delay(TFT_WAKE_DELAY_MS);
     uint8_t pct = config::ConfigManager::powerBrightnessPct();
     uint8_t level = (uint8_t)(((uint16_t)pct * BL_STEPS + 50) / 100);
     if (level == 0) level = 1;

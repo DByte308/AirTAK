@@ -18,4 +18,11 @@ constexpr uint32_t RECOVERY_CONFIG_ERASE_HOLD_MS = 10000;  // 10 seconds
 // Poll interval during recovery mode loop
 constexpr uint32_t RECOVERY_POLL_MS              = 10;
 
+// ── Recovery BLE ─────────────────────────────────────────────────────────
+constexpr const char* RECOVERY_BLE_NAME        = "AirTAK Recovery";
+constexpr uint32_t    RECOVERY_DFU_ENTRY_DELAY_MS = 250;
+constexpr uint32_t    RECOVERY_RESTART_DELAY_MS = 500;
+constexpr uint32_t    RECOVERY_PERIPH_SETTLE_MS = 50;
+constexpr uint32_t    RECOVERY_DEBOUNCE_POLL_MS = 100;
+
 } // namespace airtak

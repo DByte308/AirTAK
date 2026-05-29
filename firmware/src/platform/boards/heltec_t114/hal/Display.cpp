@@ -83,7 +83,7 @@ static void renderMainScreen() {
 #ifdef AIRTAK_FLASH_TEST
     drawHeader("FLASH TEST OK");
 #else
-    drawHeader("AirTAK");
+    drawHeader(FIRMWARE_DISPLAY_TITLE);
 #endif
 
     s_tft.setTextSize(1);
@@ -216,7 +216,7 @@ void Display::init() {
     // Enable peripheral power rail (VEXT).
     pinMode(AIRTAK_PIN_POWER_EN, OUTPUT);
     digitalWrite(AIRTAK_PIN_POWER_EN, HIGH);
-    delay(50); // allow peripherals to stabilise
+    delay(TFT_PERIPH_SETTLE_MS); // allow peripherals to stabilise
 
     // Enable ADC control pin before reading battery.
     pinMode(AIRTAK_PIN_ADC_CTRL, OUTPUT);

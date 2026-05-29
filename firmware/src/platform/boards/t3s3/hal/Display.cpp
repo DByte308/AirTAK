@@ -80,7 +80,7 @@ static void renderMainScreen() {
 #ifdef AIRTAK_FLASH_TEST
     drawHeader("FLASH TEST OK");
 #else
-    drawHeader("AirTAK");
+    drawHeader(FIRMWARE_DISPLAY_TITLE);
 #endif
 
     s_display.setTextSize(1);

@@ -22,6 +22,7 @@ constexpr size_t   FLASH_PATH_MAX_BYTES        = 48;     // Max path buffer size
 constexpr const char* FLASH_TMP_SUFFIX         = ".tmp";
 
 // ── Config Buffer Sizes ────────────────────────────────────────────────────
+constexpr size_t   NATIVE_FLASH_PATH_MAX       = 260;    // Native test MAX_PATH for file operations
 constexpr size_t   CONFIG_BUF_SIZE             = 512;    // Per-group config buffer size
 constexpr size_t   CONFIG_GROUP_COUNT          = 8;      // Number of config groups
 

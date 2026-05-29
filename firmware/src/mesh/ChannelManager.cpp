@@ -46,17 +46,17 @@ static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot&
     size_t  sp  = 0;
     while (sp < sub_len) {
         uint32_t tag = 0; uint8_t shift = 0;
-        while (sp < sub_len) { uint8_t b = sub[sp++]; tag |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
-        uint8_t wire  = tag & 0x07;
-        uint8_t field = (uint8_t)(tag >> 3);
-        if (wire == 0 && field == CHANNELSLOT_FIELD_INDEX) {
+        while (sp < sub_len) { uint8_t b = sub[sp++]; tag |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; }
+        uint8_t wire  = tag & PROTO_WIRE_TYPE_MASK;
+        uint8_t field = (uint8_t)(tag >> PROTO_FIELD_NUM_SHIFT);
+        if (wire == PROTO_WIRE_VARINT && field == CHANNELSLOT_FIELD_INDEX) {
             uint32_t v = 0; shift = 0;
-            while (sp < sub_len) { uint8_t b = sub[sp++]; v |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            while (sp < sub_len) { uint8_t b = sub[sp++]; v |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; }
             idx = (uint8_t)v;
-        } else if (wire == 0) { while (sp < sub_len && (sub[sp++] & 0x80)) {} }
-        else if (wire == 2) { uint32_t fl = 0; shift = 0; while (sp < sub_len) { uint8_t b = sub[sp++]; fl |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; } sp += fl; }
-        else if (wire == 5) { sp += 4; }
-        else if (wire == 1) { sp += 8; }
+        } else if (wire == PROTO_WIRE_VARINT) { while (sp < sub_len && (sub[sp++] & PROTO_VARINT_CONTINUE_MASK)) {} }
+        else if (wire == PROTO_WIRE_LEN) { uint32_t fl = 0; shift = 0; while (sp < sub_len) { uint8_t b = sub[sp++]; fl |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; } sp += fl; }
+        else if (wire == PROTO_WIRE_I32) { sp += 4; }
+        else if (wire == PROTO_WIRE_I64) { sp += 8; }
     }
     if (idx >= MAX_CHANNEL_SLOTS) return 0xFF;
 
@@ -64,12 +64,12 @@ static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot&
     sp = 0;
     while (sp < sub_len) {
         uint32_t tag = 0; uint8_t shift = 0;
-        while (sp < sub_len) { uint8_t b = sub[sp++]; tag |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
-        uint8_t wire  = tag & 0x07;
-        uint8_t field = (uint8_t)(tag >> 3);
-        if (wire == 0) {
+        while (sp < sub_len) { uint8_t b = sub[sp++]; tag |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; }
+        uint8_t wire  = tag & PROTO_WIRE_TYPE_MASK;
+        uint8_t field = (uint8_t)(tag >> PROTO_FIELD_NUM_SHIFT);
+        if (wire == PROTO_WIRE_VARINT) {
             uint32_t v = 0; shift = 0;
-            while (sp < sub_len) { uint8_t b = sub[sp++]; v |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            while (sp < sub_len) { uint8_t b = sub[sp++]; v |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; }
             switch (field) {
                 case CHANNELSLOT_FIELD_ROLE:      slot.role               = static_cast<ChannelRole>(v); break;
                 case CHANNELSLOT_FIELD_UPLINK:    slot.uplink_enabled     = (v != 0); break;
@@ -78,9 +78,9 @@ static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot&
                 case CHANNELSLOT_FIELD_PHY:       slot.phy_profile_index  = (uint8_t)v; break;
                 default: break;
             }
-        } else if (wire == 2) {
+        } else if (wire == PROTO_WIRE_LEN) {
             uint32_t flen = 0; shift = 0;
-            while (sp < sub_len) { uint8_t b = sub[sp++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            while (sp < sub_len) { uint8_t b = sub[sp++]; flen |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; }
             if (field == CHANNELSLOT_FIELD_NAME && flen > 0) { // name
                 uint8_t cplen = (uint8_t)(flen < CHANNEL_NAME_MAX_BYTES ? flen : CHANNEL_NAME_MAX_BYTES);
                 memcpy(slot.name, sub + sp, cplen);
@@ -90,8 +90,8 @@ static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot&
                 slot.psk_len = (uint8_t)flen;
             }
             sp += flen;
-        } else if (wire == 5) { sp += 4; }
-        else if (wire == 1) { sp += 8; }
+        } else if (wire == PROTO_WIRE_I32) { sp += 4; }
+        else if (wire == PROTO_WIRE_I64) { sp += 8; }
     }
     return idx;
 }
@@ -108,12 +108,12 @@ static void loadConfiguredSlots() {
         size_t pos = 0;
         while (pos < buf_len) {
             uint32_t tag = 0; uint8_t shift = 0;
-            while (pos < buf_len) { uint8_t b = buf[pos++]; tag |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
-            uint8_t wire  = tag & 0x07;
-            uint8_t field = (uint8_t)(tag >> 3);
-            if (wire == 2 && field == CHANNELCONFIG_FIELD_SLOTS) {
+            while (pos < buf_len) { uint8_t b = buf[pos++]; tag |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; }
+            uint8_t wire  = tag & PROTO_WIRE_TYPE_MASK;
+            uint8_t field = (uint8_t)(tag >> PROTO_FIELD_NUM_SHIFT);
+            if (wire == PROTO_WIRE_LEN && field == CHANNELCONFIG_FIELD_SLOTS) {
                 uint32_t submsg_len = 0; shift = 0;
-                while (pos < buf_len) { uint8_t b = buf[pos++]; submsg_len |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+                while (pos < buf_len) { uint8_t b = buf[pos++]; submsg_len |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; }
                 if (pos + submsg_len > buf_len) break;
                 ChannelSlot parsed{};
                 uint8_t idx = parseChannelSlot(buf + pos, submsg_len, parsed);
@@ -123,10 +123,10 @@ static void loadConfiguredSlots() {
                 }
                 pos += submsg_len;
             } else {
-                if (wire == 0) { while (pos < buf_len && (buf[pos++] & 0x80)) {} }
-                else if (wire == 2) { uint32_t fl = 0; shift = 0; while (pos < buf_len) { uint8_t b = buf[pos++]; fl |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; } pos += fl; }
-                else if (wire == 5) { pos += 4; }
-                else if (wire == 1) { pos += 8; }
+                if (wire == PROTO_WIRE_VARINT) { while (pos < buf_len && (buf[pos++] & PROTO_VARINT_CONTINUE_MASK)) {} }
+                else if (wire == PROTO_WIRE_LEN) { uint32_t fl = 0; shift = 0; while (pos < buf_len) { uint8_t b = buf[pos++]; fl |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; } pos += fl; }
+                else if (wire == PROTO_WIRE_I32) { pos += 4; }
+                else if (wire == PROTO_WIRE_I64) { pos += 8; }
             }
         }
     }
@@ -135,7 +135,7 @@ static void loadConfiguredSlots() {
     // default ("AirTAK" from Defaults.h) — i.e. user hasn't configured
     // channels via the app yet.
     auto& s = s_slots[0];
-    if (strcmp(s.name, "AirTAK") == 0) {
+    if (strcmp(s.name, CHANNEL_DEFAULT_NAME_OLD) == 0) {
         strncpy(s.name, CHANNEL_NAME_LONGFAST, CHANNEL_NAME_MAX_BYTES);
         s.name[CHANNEL_NAME_MAX_BYTES] = '\0';
         s.psk[0] = PSK_INDEX_BYTE;

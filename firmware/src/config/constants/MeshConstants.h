@@ -87,6 +87,13 @@ constexpr uint8_t  OTA_FLAGS_WANT_ACK_MASK    = 0x08;  // Bitmask: want_ack
 constexpr uint8_t  OTA_FLAGS_HOP_START_SHIFT  = 5;     // Bits [7:5]: hop_start
 constexpr uint8_t  OTA_FLAGS_HOP_START_MASK   = 0x07;  // Bitmask (shifted): hop_start
 
+// ── Protobuf Wire Types ───────────────────────────────────────────────────
+constexpr uint8_t  PROTO_WIRE_TYPE_MASK        = 0x07;   // Protobuf wire type mask (lower 3 bits)
+constexpr uint8_t  PROTO_WIRE_VARINT           = 0;      // Protobuf wire type: varint
+constexpr uint8_t  PROTO_WIRE_I64              = 1;      // Protobuf wire type: 64-bit
+constexpr uint8_t  PROTO_WIRE_LEN              = 2;      // Protobuf wire type: length-delimited
+constexpr uint8_t  PROTO_WIRE_I32              = 5;      // Protobuf wire type: 32-bit
+
 // ── Protobuf Field Numbers ─────────────────────────────────────────────────
 // NodeInfo (User protobuf, Meshtastic-compatible)
 constexpr uint32_t NODEINFO_FIELD_ID            = 1;    // string id
@@ -225,5 +232,30 @@ constexpr uint8_t  MSG_RING_BUFFER_SIZE          = 8;     // Message history cap
 constexpr uint8_t  MSG_DISPLAY_COUNT             = 3;     // Messages shown on screen
 constexpr uint8_t  MSG_CALLSIGN_DISPLAY_CHARS    = 8;     // Callsign chars shown
 constexpr uint8_t  MSG_TEXT_DISPLAY_CHARS        = 47;    // Message text chars shown
+
+// ── Channel Migration ────────────────────────────────────────────────────
+constexpr const char* CHANNEL_DEFAULT_NAME_OLD  = "AirTAK";  // Pre-migration default name
+
+// ── Protobuf Wire Format Constants ───────────────────────────────────────
+constexpr uint8_t  PROTO_VARINT_CONTINUE_MASK   = 0x80;   // Varint continuation bit
+constexpr uint8_t  PROTO_VARINT_DATA_MASK       = 0x7F;   // Varint data bits (lower 7)
+constexpr uint8_t  PROTO_FIELD_NUM_SHIFT        = 3;      // Field number is upper bits of tag
+constexpr uint8_t  PROTO_FIXED32_BYTES          = 4;      // protobuf fixed32 field size
+constexpr uint8_t  PROTO_FIXED64_BYTES          = 8;      // protobuf fixed64 field size
+
+// ── Encoded Protobuf Tag Bytes (for statically-encoded ACK messages) ─────
+// tag=1,wire=0(varint),value=5 → portnum=ROUTING_APP
+constexpr uint8_t  PROTO_ENC_PORTNUM_ROUTING     = 0x05;
+// tag=1,wire=0(varint),value=261 → portnum=AIRTAK_ACK
+constexpr uint8_t  PROTO_ENC_PORTNUM_AIRTAK_ACK  = 0x85;
+constexpr uint8_t  PROTO_ENC_PORTNUM_AIRTAK_ACK2 = 0x02;
+// tag=2,wire=2(len), value=2 → Data.payload length 2
+constexpr uint8_t  PROTO_ENC_PAYLOAD_TAG         = 0x12;
+constexpr uint8_t  PROTO_ENC_PAYLOAD_LEN         = 0x02;
+// tag=3,wire=0(varint),value=0 → error_reason=NONE
+constexpr uint8_t  PROTO_ENC_ERROR_TAG           = 0x18;
+constexpr uint8_t  PROTO_ENC_ERROR_NONE          = 0x00;
+// tag=6,wire=5(fixed32) → Data.request_id
+constexpr uint8_t  PROTO_ENC_REQUEST_ID_TAG      = 0x35;
 
 } // namespace airtak

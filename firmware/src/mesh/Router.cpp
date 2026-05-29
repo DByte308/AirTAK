@@ -76,7 +76,7 @@ static uint32_t nextPacketId() {
 // ── Minimal varint encoder used for inline proto building ────────────────────
 static uint8_t writeVarU32(uint8_t* buf, uint32_t v) {
     uint8_t n = 0;
-    while (v >= 0x80) { buf[n++] = (uint8_t)((v & 0x7F) | 0x80); v >>= 7; }
+    while (v >= PROTO_VARINT_CONTINUE_MASK) { buf[n++] = (uint8_t)((v & PROTO_VARINT_DATA_MASK) | PROTO_VARINT_CONTINUE_MASK); v >>= 7; }
     buf[n++] = (uint8_t)v;
     return n;
 }
@@ -84,9 +84,9 @@ static uint8_t writeVarU32(uint8_t* buf, uint32_t v) {
 static bool appendVarU32(uint8_t* buf, uint16_t& pos, uint16_t max_len, uint32_t v) {
     do {
         if (pos >= max_len) return false;
-        uint8_t b = static_cast<uint8_t>(v & 0x7F);
+        uint8_t b = static_cast<uint8_t>(v & PROTO_VARINT_DATA_MASK);
         v >>= 7;
-        if (v) b |= 0x80;
+        if (v) b |= PROTO_VARINT_CONTINUE_MASK;
         buf[pos++] = b;
     } while (v);
     return true;
@@ -120,8 +120,8 @@ static bool readVarint(const uint8_t* buf, uint16_t len, uint16_t& pos, uint32_t
     uint8_t shift = 0;
     while (pos < len && shift < 32) {
         uint8_t b = buf[pos++];
-        out |= (uint32_t)(b & 0x7F) << shift;
-        if (!(b & 0x80)) return true;
+        out |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift;
+        if (!(b & PROTO_VARINT_CONTINUE_MASK)) return true;
         shift += 7;
     }
     return false;
@@ -129,22 +129,22 @@ static bool readVarint(const uint8_t* buf, uint16_t len, uint16_t& pos, uint32_t
 
 static bool skipField(const uint8_t* buf, uint16_t len, uint16_t& pos, uint8_t wire) {
     switch (wire) {
-        case 0: {
+        case PROTO_WIRE_VARINT: {
             uint32_t ignored;
             return readVarint(buf, len, pos, ignored);
         }
-        case 1:
+        case PROTO_WIRE_I64:
             if (pos + 8 > len) return false;
             pos += 8;
             return true;
-        case 2: {
+        case PROTO_WIRE_LEN: {
             uint32_t field_len;
             if (!readVarint(buf, len, pos, field_len)) return false;
             if (pos + field_len > len) return false;
             pos += static_cast<uint16_t>(field_len);
             return true;
         }
-        case 5:
+        case PROTO_WIRE_I32:
             if (pos + 4 > len) return false;
             pos += 4;
             return true;
@@ -161,9 +161,9 @@ static bool findLengthDelimitedField(const uint8_t* buf, uint16_t len,
     while (pos < len) {
         uint32_t tag;
         if (!readVarint(buf, len, pos, tag)) return false;
-        uint8_t wire = tag & 0x07;
-        uint32_t field = tag >> 3;
-        if (wire == 2) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_LEN) {
             uint32_t field_len;
             if (!readVarint(buf, len, pos, field_len)) return false;
             if (field_len > UINT16_MAX || pos + field_len > len) return false;
@@ -186,9 +186,9 @@ static bool readVarintField(const uint8_t* buf, uint16_t len,
     while (pos < len) {
         uint32_t tag;
         if (!readVarint(buf, len, pos, tag)) return false;
-        uint8_t wire = tag & 0x07;
-        uint32_t field = tag >> 3;
-        if (wire == 0) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_VARINT) {
             uint32_t value;
             if (!readVarint(buf, len, pos, value)) return false;
             if (field == wanted_field) {
@@ -245,11 +245,11 @@ static void parseNodeInfoPayload(const uint8_t* data_pb, uint16_t data_len,
     while (pos < inner_len) {
         uint32_t tag;
         if (!readVarint(inner, inner_len, pos, tag)) break;
-        uint8_t wire = tag & 0x07;
-        uint32_t field = tag >> 3;
-        if (wire == 2) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_LEN) {
             uint32_t flen = 0; uint8_t shift = 0;
-            while (pos < inner_len) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            while (pos < inner_len) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; }
             if (field == NODEINFO_FIELD_ID && flen > 0 && flen < sizeof(id_buf)) {
                 memcpy(id_buf, inner + pos, flen);
                 id_buf[flen] = '\0';
@@ -290,16 +290,16 @@ static void parsePositionPayload(const uint8_t* data_pb, uint16_t data_len,
     while (pos < inner_len) {
         uint32_t tag;
         if (!readVarint(inner, inner_len, pos, tag)) break;
-        uint8_t wire = tag & 0x07;
-        uint32_t field = tag >> 3;
-        if (wire == 5 && field >= 1 && field <= 4) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_I32 && field >= 1 && field <= 4) {
             uint32_t v = 0;
             memcpy(&v, inner + pos, 4);
             pos += 4;
             if (field == POSITION_FIELD_LATITUDE) { lat_i = (int32_t)v; has_lat = true; }
             else if (field == POSITION_FIELD_LONGITUDE) { lon_i = (int32_t)v; has_lon = true; }
             else if (field == POSITION_FIELD_TIME) { timestamp_secs = v; }
-        } else if (wire == 0) {
+        } else if (wire == PROTO_WIRE_VARINT) {
             uint32_t v = 0;
             if (!readVarint(inner, inner_len, pos, v)) break;
             if (field == POSITION_FIELD_ALTITUDE) alt_m = (int32_t)v;
@@ -327,33 +327,33 @@ static void parseTelemetryPayload(const uint8_t* data_pb, uint16_t data_len,
     while (pos < inner_len) {
         uint32_t tag;
         if (!readVarint(inner, inner_len, pos, tag)) break;
-        uint8_t wire = tag & 0x07;
-        uint32_t field = tag >> 3;
-        if (wire == 2 && field == TELEMETRY_FIELD_DEVICE_METRICS) {  // Telemetry.device_metrics (sub-message)
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_LEN && field == TELEMETRY_FIELD_DEVICE_METRICS) {  // Telemetry.device_metrics (sub-message)
             uint32_t sublen = 0; uint8_t shift = 0;
-            while (pos < inner_len) { uint8_t b = inner[pos++]; sublen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            while (pos < inner_len) { uint8_t b = inner[pos++]; sublen |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; }
             uint16_t sub_end = (uint16_t)(pos + sublen);
             if (sub_end > inner_len) break;
             // Parse DeviceMetrics: battery_level(1, uint32)
             while (pos < sub_end) {
                 uint32_t stag;
                 if (!readVarint(inner, sub_end, pos, stag)) break;
-                uint8_t swire = stag & 0x07;
-                uint32_t sfield = stag >> 3;
-                if (swire == 0 && sfield == 1) {
+                uint8_t swire = stag & PROTO_WIRE_TYPE_MASK;
+                uint32_t sfield = stag >> PROTO_FIELD_NUM_SHIFT;
+                if (swire == PROTO_WIRE_VARINT && sfield == 1) {
                     uint32_t v = 0;
                     if (!readVarint(inner, sub_end, pos, v)) break;
                     battery_level = (float)v / 100.0f;  // convert percentage to 0.0–1.0
                     has_battery = true;
                     break;
-                } else if (swire == 5 && sfield == 2) {  // voltage (float, skip)
+                } else if (swire == PROTO_WIRE_I32 && sfield == 2) {  // voltage (float, skip)
                     pos += 4;
-                } else if (swire == 0) {
+                } else if (swire == PROTO_WIRE_VARINT) {
                     uint32_t ignored;
                     if (!readVarint(inner, sub_end, pos, ignored)) break;
-                } else if (swire == 2) {
+                } else if (swire == PROTO_WIRE_LEN) {
                     uint32_t flen = 0; uint8_t fshift = 0;
-                    while (pos < sub_end) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << fshift; if (!(b & 0x80)) break; fshift += 7; }
+                    while (pos < sub_end) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << fshift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; fshift += 7; }
                     pos += (uint16_t)flen;
                 } else { break; }
             }
@@ -375,11 +375,11 @@ static const char* parseTextMessagePayload(const uint8_t* data_pb, uint16_t data
     while (pos < inner_len) {
         uint32_t tag;
         if (!readVarint(inner, inner_len, pos, tag)) break;
-        uint8_t wire = tag & 0x07;
-        uint32_t field = tag >> 3;
-        if (wire == 2 && field == TEXTMSG_FIELD_TEXT) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_LEN && field == TEXTMSG_FIELD_TEXT) {
             uint32_t flen = 0; uint8_t shift = 0;
-            while (pos < inner_len) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
+            while (pos < inner_len) { uint8_t b = inner[pos++]; flen |= (uint32_t)(b & PROTO_VARINT_DATA_MASK) << shift; if (!(b & PROTO_VARINT_CONTINUE_MASK)) break; shift += 7; }
             uint32_t copy = flen < sizeof(msg_buf) - 1 ? flen : sizeof(msg_buf) - 1;
             memcpy(msg_buf, inner + pos, copy);
             msg_buf[copy] = '\0';
@@ -416,13 +416,13 @@ static bool parseDataMetadata(const uint8_t* data, uint16_t data_len, DataMetada
     while (pos < data_len) {
         uint32_t tag;
         if (!readVarint(data, data_len, pos, tag)) return false;
-        uint8_t wire = tag & 0x07;
-        uint32_t field = tag >> 3;
-        if (wire == 0) {
+        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_VARINT) {
             uint32_t value;
             if (!readVarint(data, data_len, pos, value)) return false;
             switch (field) {
-                case 1:
+                case PROTO_WIRE_I64:
                     out.portnum = static_cast<Portnum>(value);
                     saw_portnum = true;
                     break;
@@ -432,7 +432,7 @@ static bool parseDataMetadata(const uint8_t* data, uint16_t data_len, DataMetada
                 case 4:
                     out.dest = (value == 0) ? MESH_BROADCAST_ADDR : value;
                     break;
-                case 5:
+                case PROTO_WIRE_I32:
                     out.source = value;
                     break;
                 case 6:
@@ -442,7 +442,7 @@ static bool parseDataMetadata(const uint8_t* data, uint16_t data_len, DataMetada
                 default:
                     break;
             }
-        } else if (wire == 5) {
+        } else if (wire == PROTO_WIRE_I32) {
             if (pos + 4 > data_len) return false;
             uint32_t value;
             memcpy(&value, data + pos, 4);
@@ -451,7 +451,7 @@ static bool parseDataMetadata(const uint8_t* data, uint16_t data_len, DataMetada
                 case 4:
                     out.dest = (value == 0) ? MESH_BROADCAST_ADDR : value;
                     break;
-                case 5:
+                case PROTO_WIRE_I32:
                     out.source = value;
                     break;
                 case 6:
@@ -716,7 +716,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
 #ifndef AIRTAK_NATIVE_TEST
         {
             static uint32_t last_pki_diag = 0;
-            if (millis() - last_pki_diag > 3000) {
+            if (millis() - last_pki_diag > PKI_DIAG_INTERVAL_MS) {
                 last_pki_diag = millis();
                 Serial.printf("[PKIDIAG] src=%08X ch=0x%02X rpub=%d priv=%d plen=%u pki_ok=%zu → eligible=%d\n",
                     hdr.src_node_id, hdr.channel_hash,
@@ -746,7 +746,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                     slot = ChannelManager::primarySlot();
                     if (!slot) {
                         static uint32_t last_pki_log = 0;
-                        if (millis() - last_pki_log > 3000) {
+                        if (millis() - last_pki_log > PKI_DIAG_INTERVAL_MS) {
                             last_pki_log = millis();
 #ifndef AIRTAK_NATIVE_TEST
                             Serial.printf("[PKIDEC] OK portnum=%u src=%08X len=%u\n",
@@ -779,7 +779,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
 
         if (!data_valid) {
             static uint32_t last_hash_log = 0;
-            if (millis() - last_hash_log > 3000) {
+            if (millis() - last_hash_log > PKI_DIAG_INTERVAL_MS) {
                 last_hash_log = millis();
 #ifndef AIRTAK_NATIVE_TEST
                 if (hash_matched) {
@@ -954,9 +954,9 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             while (ip < inner_len && route_count < ROUTER_RELAY_QUEUE_SIZE) {
                 uint32_t tag;
                 if (!readVarint(inner, inner_len, ip, tag)) break;
-                uint8_t wire = tag & 0x07;
-                uint32_t field = tag >> 3;
-                if (wire == 5 && field == 2 && ip + 4 <= inner_len) {
+                uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+                uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+                if (wire == PROTO_WIRE_I32 && field == 2 && ip + 4 <= inner_len) {
                     memcpy(&route_nodes[route_count], inner + ip, 4);
                     ip += 4;
                     route_count++;
@@ -1010,9 +1010,9 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             while (ip < inner_len) {
                 uint32_t tag;
                 if (!readVarint(inner, inner_len, ip, tag)) break;
-                uint8_t wire = tag & 0x07;
-                uint32_t field = tag >> 3;
-                if (wire == 0 && field >= 26 && field <= 40) {
+                uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
+                uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+                if (wire == PROTO_WIRE_VARINT && field >= 26 && field <= 40) {
                     is_admin_request = true;
                     break;
                 }
@@ -1148,11 +1148,11 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             if (is_meshtastic_dm) {
                 // Build Routing ACK: Data{portnum=8, payload=Routing{error_reason=0}}
                 // Routing NONE: field 3 (varint) = 0 → 0x18 0x00
-                uint8_t ack_data[32]; uint8_t ap = 0;
-                ack_data[ap++] = 0x08; ack_data[ap++] = 0x05;               // portnum=5 (ROUTING_APP)
-                ack_data[ap++] = 0x12; ack_data[ap++] = 0x02;               // Data.payload tag+len=2
-                ack_data[ap++] = 0x18; ack_data[ap++] = 0x00;               // error_reason=NONE
-                ack_data[ap++] = 0x35;                                      // Data.request_id tag (field 6, FIXED32)
+                uint8_t ack_data[ACK_INNER_BUF_SIZE]; uint8_t ap = 0;
+                ack_data[ap++] = 0x08; ack_data[ap++] = PROTO_ENC_PORTNUM_ROUTING; // portnum=5 (ROUTING_APP)
+                ack_data[ap++] = PROTO_ENC_PAYLOAD_TAG; ack_data[ap++] = PROTO_ENC_PAYLOAD_LEN; // Data.payload tag+len=2
+                ack_data[ap++] = PROTO_ENC_ERROR_TAG; ack_data[ap++] = PROTO_ENC_ERROR_NONE;   // error_reason=NONE
+                ack_data[ap++] = PROTO_ENC_REQUEST_ID_TAG;                                     // Data.request_id tag (field 6, FIXED32)
                 memcpy(ack_data + ap, &req_id, 4); ap += 4;                 // Data.request_id value
 #ifndef AIRTAK_NATIVE_TEST
                 Serial.printf("[ACK] routing NONE → %08X req=%08X\n", hdr.src_node_id, req_id);
@@ -1169,7 +1169,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                 // When the original message arrived on ch=0x00 (PKI DM), PKI-encrypt
                 // the ACK back to the sender so the Meshtastic radio can decode it
                 // with its own PKI key — the radio does not share our primary-channel PSK.
-                const uint8_t* sender_pubkey = (hdr.channel_hash == 0x00)
+                const uint8_t* sender_pubkey = (hdr.channel_hash == CHANNEL_HASH_NONE)
                     ? MeshNode::remotePublicKey(hdr.src_node_id) : nullptr;
                 const uint8_t* our_privkey   = (sender_pubkey)
                     ? MeshNode::pkiPrivateKey() : nullptr;
@@ -1181,12 +1181,12 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
                 ack_hdr.dest_node_id  = hdr.src_node_id;
                 ack_hdr.src_node_id   = MeshNode::nodeId();
                 ack_hdr.packet_id     = ack_pkt_id;
-                ack_hdr.flags         = ((ack_hop & 0x07) << 5) | (ack_hop & 0x07);
-                ack_hdr.channel_hash  = pki_ack ? 0x00 : ack_slot->channel_hash;
+                ack_hdr.flags         = ((ack_hop & OTA_FLAGS_HOP_START_MASK) << OTA_FLAGS_HOP_START_SHIFT) | (ack_hop & OTA_FLAGS_HOP_LIMIT_MASK);
+                ack_hdr.channel_hash  = pki_ack ? CHANNEL_HASH_NONE : ack_slot->channel_hash;
                 ack_hdr.next_hop_low  = 0;
                 ack_hdr.relay_node_low = 0;
 
-                uint8_t ack_enc[64];
+                uint8_t ack_enc[ACK_BUF_SIZE];
                 uint16_t ack_pkt_len;
                 if (pki_ack) {
                     size_t pki_len = ap + Crypto::PKI_OVERHEAD_BYTES;
@@ -1231,22 +1231,22 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             }
             } else {
             // AirTAK internal ACK (portnum 261) for game traffic.
-            uint8_t ack_data[64]; uint8_t ap = 0;
-            ack_data[ap++] = 0x08; ack_data[ap++] = 0x85; ack_data[ap++] = 0x02; // portnum=261
+            uint8_t ack_data[ACK_BUF_SIZE]; uint8_t ap = 0;
+            ack_data[ap++] = 0x08; ack_data[ap++] = PROTO_ENC_PORTNUM_AIRTAK_ACK; ack_data[ap++] = PROTO_ENC_PORTNUM_AIRTAK_ACK2; // portnum=261
             // Build inner AirTAKAck sub-message.
             uint8_t inner[32]; uint8_t ip = 0;
             inner[ip++] = 0x08; ip += writeVarU32(inner + ip, req_id);            // ack_request_id (field 1)
             inner[ip++] = 0x10; ip += writeVarU32(inner + ip, MeshNode::nodeId()); // from_node_id (field 2)
             inner[ip++] = 0x18; inner[ip++] = hdr.hopStart();                     // original_hop_start (field 3)
-            ack_data[ap++] = 0x12; ack_data[ap++] = ip;                           // Data.payload tag + length
+            ack_data[ap++] = PROTO_ENC_PAYLOAD_TAG; ack_data[ap++] = ip;              // Data.payload tag + length
             memcpy(ack_data + ap, inner, ip); ap += ip;
-            ack_data[ap++] = 0x35;                                      // Data.request_id tag (field 6, FIXED32)
+            ack_data[ap++] = PROTO_ENC_REQUEST_ID_TAG;                                     // Data.request_id tag (field 6, FIXED32)
             memcpy(ack_data + ap, &req_id, 4); ap += 4;                 // Data.request_id value
             // ACK hop_limit = original packet's hop_start (§8.9); fall back to 7 if zero.
             uint8_t ack_hop = hdr.hopStart();
             if (ack_hop == 0) ack_hop = defaults::ACK_HOP_START_FALLBACK;
 
-            const uint8_t* sender_pubkey = (hdr.channel_hash == 0x00)
+            const uint8_t* sender_pubkey = (hdr.channel_hash == CHANNEL_HASH_NONE)
                 ? MeshNode::remotePublicKey(hdr.src_node_id) : nullptr;
             const uint8_t* our_privkey   = (sender_pubkey)
                 ? MeshNode::pkiPrivateKey() : nullptr;
@@ -1258,11 +1258,11 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
             ack_hdr.src_node_id   = MeshNode::nodeId();
             uint32_t ack_pkt_id   = nextPacketId();
             ack_hdr.packet_id     = ack_pkt_id;
-            ack_hdr.flags         = ((ack_hop & 0x07) << 5) | (ack_hop & 0x07);
-            ack_hdr.channel_hash  = pki_ack ? 0x00 : slot->channel_hash;
+            ack_hdr.flags         = ((ack_hop & OTA_FLAGS_HOP_START_MASK) << OTA_FLAGS_HOP_START_SHIFT) | (ack_hop & OTA_FLAGS_HOP_LIMIT_MASK);
+            ack_hdr.channel_hash  = pki_ack ? CHANNEL_HASH_NONE : slot->channel_hash;
             ack_hdr.next_hop_low  = 0;
             ack_hdr.relay_node_low = 0;
-            uint8_t ack_enc[64];
+            uint8_t ack_enc[ACK_BUF_SIZE];
             uint16_t ack_pkt_len;
             if (pki_ack) {
                 size_t pki_len = ap + Crypto::PKI_OVERHEAD_BYTES;
@@ -1421,9 +1421,9 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
     hdr.dest_node_id  = dest;
     hdr.src_node_id   = MeshNode::nodeId();
     hdr.packet_id     = packet_id;
-    hdr.flags         = ((hop_limit & 0x07) << 5)   // [7:5] hop_start
-                     | (want_ack ? (1 << 3) : 0)    // [3]   want_ack
-                     | (hop_limit & 0x07);           // [2:0] hop_limit
+    hdr.flags         = ((hop_limit & OTA_FLAGS_HOP_START_MASK) << OTA_FLAGS_HOP_START_SHIFT)
+                     | (want_ack ? OTA_FLAGS_WANT_ACK_MASK : 0)
+                     | (hop_limit & OTA_FLAGS_HOP_LIMIT_MASK);
     hdr.channel_hash  = slot->channel_hash;
     hdr.next_hop_low  = 0;
     hdr.relay_node_low = 0;
@@ -1431,7 +1431,7 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
     uint8_t enc[MESH_MAX_PAYLOAD_BYTES];
     memcpy(enc, data_pb, data_len);
     if (slot->psk_len > 0) {
-        uint8_t nonce[16];
+        uint8_t nonce[AES_NONCE_BYTES];
         Crypto::buildNonce(hdr.packet_id, hdr.src_node_id, nonce);
         Crypto::crypt(slot->aes_key, slot->aes_key_len, nonce, enc, data_len);
     }
@@ -1561,10 +1561,10 @@ void Router::sendPacket(Portnum portnum, uint32_t dest,
                 pki_hdr.dest_node_id  = dest;
                 pki_hdr.src_node_id   = MeshNode::nodeId();
                 pki_hdr.packet_id     = packet_id;
-                pki_hdr.flags         = ((hop_limit & 0x07) << 5)
-                                     | (want_ack ? (1 << 3) : 0)
-                                     | (hop_limit & 0x07);
-                pki_hdr.channel_hash  = 0x00;
+                pki_hdr.flags         = ((hop_limit & OTA_FLAGS_HOP_START_MASK) << OTA_FLAGS_HOP_START_SHIFT)
+                                     | (want_ack ? OTA_FLAGS_WANT_ACK_MASK : 0)
+                                     | (hop_limit & OTA_FLAGS_HOP_LIMIT_MASK);
+                pki_hdr.channel_hash  = CHANNEL_HASH_NONE;
                 pki_hdr.next_hop_low  = 0;
                 pki_hdr.relay_node_low = 0;
 
@@ -1713,10 +1713,10 @@ bool Router::sendDataPacket(const uint8_t* data_pb, uint16_t data_len,
                 pki_hdr.dest_node_id  = meta.dest;
                 pki_hdr.src_node_id   = MeshNode::nodeId();
                 pki_hdr.packet_id     = packet_id;
-                pki_hdr.flags         = ((hop_limit & 0x07) << 5)
-                                     | (want_ack ? (1 << 3) : 0)
-                                     | (hop_limit & 0x07);
-                pki_hdr.channel_hash  = 0x00;
+                pki_hdr.flags         = ((hop_limit & OTA_FLAGS_HOP_START_MASK) << OTA_FLAGS_HOP_START_SHIFT)
+                                     | (want_ack ? OTA_FLAGS_WANT_ACK_MASK : 0)
+                                     | (hop_limit & OTA_FLAGS_HOP_LIMIT_MASK);
+                pki_hdr.channel_hash  = CHANNEL_HASH_NONE;
                 pki_hdr.next_hop_low  = 0;
                 pki_hdr.relay_node_low = 0;
                 PooledPacket* pkt = PacketPool::alloc();
@@ -1770,9 +1770,9 @@ static bool retransmitEntry(AckRetryEntry& e, QueueHandle_t tx_queue, uint32_t n
     hdr.dest_node_id  = e.dest_node_id;
     hdr.src_node_id   = MeshNode::nodeId();
     hdr.packet_id     = new_packet_id;
-    hdr.flags         = ((e.hop_start & 0x07) << 5)  // [7:5] hop_start
-                     | (1 << 3)           // want_ack=true
-                      | (e.hop_start & 0x07);         // [2:0] hop_limit
+    hdr.flags         = ((e.hop_start & OTA_FLAGS_HOP_START_MASK) << OTA_FLAGS_HOP_START_SHIFT)
+                     | OTA_FLAGS_WANT_ACK_MASK
+                     | (e.hop_start & OTA_FLAGS_HOP_LIMIT_MASK);
     hdr.channel_hash  = slot->channel_hash;
     hdr.next_hop_low  = 0;
     hdr.relay_node_low = 0;
@@ -1780,7 +1780,7 @@ static bool retransmitEntry(AckRetryEntry& e, QueueHandle_t tx_queue, uint32_t n
     uint8_t enc[MESH_MAX_PAYLOAD_BYTES];
     memcpy(enc, e.payload, e.payload_len);
     if (slot->psk_len > 0) {
-        uint8_t nonce[16];
+        uint8_t nonce[AES_NONCE_BYTES];
         Crypto::buildNonce(hdr.packet_id, MeshNode::nodeId(), nonce);
         Crypto::crypt(slot->aes_key, slot->aes_key_len, nonce, enc, e.payload_len);
     }
