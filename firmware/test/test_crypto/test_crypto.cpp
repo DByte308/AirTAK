@@ -16,12 +16,13 @@
 #include "mesh/Crypto.h"
 #include "mesh/x25519.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 #include <cstring>
 
 using namespace airtak;
 
 // 32-byte PSK for AES-256 tests (all 0xFF)
-static const uint8_t AES256_PSK[32] = {
+static const uint8_t AES256_PSK[PSK_MAX_BYTES] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -41,11 +42,11 @@ void test_key_derivation_aes128_zero_pad() {
         0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
         0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01,
     };
-    uint8_t key[32];
+    uint8_t key[AES_MAX_KEY_BYTES];
     uint8_t key_len;
     Crypto::deriveKey(psk, sizeof(psk), key, key_len);
-    TEST_ASSERT_EQUAL(16, key_len);
-    TEST_ASSERT_EQUAL_MEMORY(psk, key, 16);
+    TEST_ASSERT_EQUAL(AES128_KEY_BYTES, key_len);
+    TEST_ASSERT_EQUAL_MEMORY(psk, key, AES128_KEY_BYTES);
 }
 
 void test_key_derivation_aes128_exact_16() {
@@ -53,51 +54,51 @@ void test_key_derivation_aes128_exact_16() {
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
         0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
     };
-    uint8_t key[32];
+    uint8_t key[AES_MAX_KEY_BYTES];
     uint8_t key_len;
     Crypto::deriveKey(psk, sizeof(psk), key, key_len);
-    TEST_ASSERT_EQUAL(16, key_len);
-    TEST_ASSERT_EQUAL_MEMORY(psk, key, 16);
+    TEST_ASSERT_EQUAL(AES128_KEY_BYTES, key_len);
+    TEST_ASSERT_EQUAL_MEMORY(psk, key, AES128_KEY_BYTES);
 }
 
 void test_key_derivation_aes256_zero_pad() {
     // 20-byte PSK → padded to 32, AES-256
-    uint8_t key[32];
+    uint8_t key[AES_MAX_KEY_BYTES];
     uint8_t key_len;
     Crypto::deriveKey(AES256_PSK_SHORT, 20, key, key_len);
-    TEST_ASSERT_EQUAL(32, key_len);
+    TEST_ASSERT_EQUAL(AES256_KEY_BYTES, key_len);
     // First 20 bytes match input, remaining 12 are zeros
     TEST_ASSERT_EQUAL_MEMORY(AES256_PSK_SHORT, key, 20);
-    for (int i = 20; i < 32; i++) TEST_ASSERT_EQUAL_HEX8(0x00, key[i]);
+    for (int i = 20; i < AES256_KEY_BYTES; i++) TEST_ASSERT_EQUAL_HEX8(0x00, key[i]);
 }
 
 void test_key_derivation_aes256_full_32() {
-    uint8_t key[32];
+    uint8_t key[AES_MAX_KEY_BYTES];
     uint8_t key_len;
-    Crypto::deriveKey(AES256_PSK, 32, key, key_len);
-    TEST_ASSERT_EQUAL(32, key_len);
-    TEST_ASSERT_EQUAL_MEMORY(AES256_PSK, key, 32);
+    Crypto::deriveKey(AES256_PSK, AES256_KEY_BYTES, key, key_len);
+    TEST_ASSERT_EQUAL(AES256_KEY_BYTES, key_len);
+    TEST_ASSERT_EQUAL_MEMORY(AES256_PSK, key, AES256_KEY_BYTES);
 }
 
 void test_key_derivation_zero_length() {
-    uint8_t key[32];
+    uint8_t key[AES_MAX_KEY_BYTES];
     uint8_t key_len;
     Crypto::deriveKey(nullptr, 0, key, key_len);
     TEST_ASSERT_EQUAL(0, key_len);
-    uint8_t zeros[32] = {};
-    TEST_ASSERT_EQUAL_MEMORY(zeros, key, 16);
+    uint8_t zeros[AES_MAX_KEY_BYTES] = {};
+    TEST_ASSERT_EQUAL_MEMORY(zeros, key, AES128_KEY_BYTES);
 }
 
 void test_key_derivation_33_truncated_to_32() {
     uint8_t psk33[33];
     memset(psk33, 0xAA, 33);
-    uint8_t key_a[32], key_b[32];
+    uint8_t key_a[AES_MAX_KEY_BYTES], key_b[AES_MAX_KEY_BYTES];
     uint8_t key_len_a, key_len_b;
     Crypto::deriveKey(psk33, 33, key_a, key_len_a);
-    Crypto::deriveKey(psk33, 32, key_b, key_len_b);
-    TEST_ASSERT_EQUAL(32, key_len_a);
-    TEST_ASSERT_EQUAL(32, key_len_b);
-    TEST_ASSERT_EQUAL_MEMORY(key_b, key_a, 32);
+    Crypto::deriveKey(psk33, AES256_KEY_BYTES, key_b, key_len_b);
+    TEST_ASSERT_EQUAL(AES256_KEY_BYTES, key_len_a);
+    TEST_ASSERT_EQUAL(AES256_KEY_BYTES, key_len_b);
+    TEST_ASSERT_EQUAL_MEMORY(key_b, key_a, AES256_KEY_BYTES);
 }
 
 void test_encrypt_decrypt_aes128_roundtrip() {
@@ -171,7 +172,7 @@ void test_aes128_aes256_produce_different_outputs() {
 
 // Meshtastic-compatible nonce: packet_id (uint64_t LE, upper=0) || from_node_id (uint32_t LE) || zeros
 void test_nonce_construction() {
-    uint8_t nonce[16] = {};
+    uint8_t nonce[AES_NONCE_BYTES] = {};
     Crypto::buildNonce(0x12345678, 0xABCDEF01, nonce);
     // Bytes 0–3: packet_id (little-endian)
     TEST_ASSERT_EQUAL_HEX8(0x78, nonce[0]);
@@ -186,15 +187,15 @@ void test_nonce_construction() {
     TEST_ASSERT_EQUAL_HEX8(0xCD, nonce[10]);
     TEST_ASSERT_EQUAL_HEX8(0xAB, nonce[11]);
     // Bytes 12–15: zero padding
-    for (int i = 12; i < 16; i++) TEST_ASSERT_EQUAL_HEX8(0x00, nonce[i]);
+    for (int i = 12; i < AES_NONCE_BYTES; i++) TEST_ASSERT_EQUAL_HEX8(0x00, nonce[i]);
 }
 
 void test_channel_hash_slot0_xor_fold() {
     // Pure XOR fold of 32 0xAA bytes (no channel name).
-    uint8_t psk[32];
+    uint8_t psk[PSK_MAX_BYTES];
     memset(psk, 0xAA, 32);
     uint8_t expected = 0;
-    for (int i = 0; i < 32; i++) expected ^= 0xAA;
+    for (int i = 0; i < PSK_MAX_BYTES; i++) expected ^= 0xAA;
     TEST_ASSERT_EQUAL_HEX8(expected, Crypto::channelHash(psk, 32, 0));
 }
 
@@ -207,7 +208,7 @@ void test_channel_hash_slot0_xor_fold() {
 //   hash = 0x0A ^ 0xAD = 0xA7
 // This MUST match what a stock Meshtastic device computes.
 void test_channel_hash_slot0_meshtastic_longfast_interop() {
-    static const uint8_t LONGFAST_PSK[32] = {
+    static const uint8_t LONGFAST_PSK[PSK_MAX_BYTES] = {
         0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -225,7 +226,7 @@ void test_channel_hash_slot0_name_changes_hash() {
 }
 
 void test_channel_hash_slot1_differs_from_slot0_xor() {
-    static const uint8_t LONGFAST_PSK[32] = {
+    static const uint8_t LONGFAST_PSK[PSK_MAX_BYTES] = {
         0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -239,57 +240,57 @@ void test_channel_hash_slot1_differs_from_slot0_xor() {
 // ── X25519 keypair tests ────────────────────────────────────────────────────
 
 void test_x25519_keypair_generates_valid_keys() {
-    uint8_t seed[32];
-    for (int i = 0; i < 32; i++) seed[i] = (uint8_t)(i + 1);
-    uint8_t pub[32], priv[32];
+    uint8_t seed[CURVE25519_PRIVKEY_BYTES];
+    for (int i = 0; i < CURVE25519_PRIVKEY_BYTES; i++) seed[i] = (uint8_t)(i + 1);
+    uint8_t pub[CURVE25519_PUBKEY_BYTES], priv[CURVE25519_PRIVKEY_BYTES];
     TEST_ASSERT_TRUE(x25519_keypair(pub, priv, seed));
 
-    uint8_t zero[32] = {};
-    TEST_ASSERT_NOT_EQUAL(0, memcmp(pub, zero, 32));
-    TEST_ASSERT_NOT_EQUAL(0, memcmp(priv, zero, 32));
+    uint8_t zero[CURVE25519_PUBKEY_BYTES] = {};
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(pub, zero, CURVE25519_PUBKEY_BYTES));
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(priv, zero, CURVE25519_PRIVKEY_BYTES));
 }
 
 void test_x25519_keypair_deterministic() {
-    uint8_t seed[32];
-    for (int i = 0; i < 32; i++) seed[i] = 0xAA;
-    uint8_t pub1[32], priv1[32], pub2[32], priv2[32];
+    uint8_t seed[CURVE25519_PRIVKEY_BYTES];
+    for (int i = 0; i < CURVE25519_PRIVKEY_BYTES; i++) seed[i] = 0xAA;
+    uint8_t pub1[CURVE25519_PUBKEY_BYTES], priv1[CURVE25519_PRIVKEY_BYTES], pub2[CURVE25519_PUBKEY_BYTES], priv2[CURVE25519_PRIVKEY_BYTES];
     TEST_ASSERT_TRUE(x25519_keypair(pub1, priv1, seed));
     TEST_ASSERT_TRUE(x25519_keypair(pub2, priv2, seed));
-    TEST_ASSERT_EQUAL_MEMORY(pub1, pub2, 32);
-    TEST_ASSERT_EQUAL_MEMORY(priv1, priv2, 32);
+    TEST_ASSERT_EQUAL_MEMORY(pub1, pub2, CURVE25519_PUBKEY_BYTES);
+    TEST_ASSERT_EQUAL_MEMORY(priv1, priv2, CURVE25519_PRIVKEY_BYTES);
 }
 
 void test_x25519_ecdh_symmetric() {
-    uint8_t seed_a[32], seed_b[32];
-    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
-    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32];
+    uint8_t seed_a[CURVE25519_PRIVKEY_BYTES], seed_b[CURVE25519_PRIVKEY_BYTES];
+    for (int i = 0; i < CURVE25519_PRIVKEY_BYTES; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
+    uint8_t pub_a[CURVE25519_PUBKEY_BYTES], priv_a[CURVE25519_PRIVKEY_BYTES], pub_b[CURVE25519_PUBKEY_BYTES], priv_b[CURVE25519_PRIVKEY_BYTES];
     TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
     TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
 
-    uint8_t shared_ab[32], shared_ba[32];
+    uint8_t shared_ab[CURVE25519_SHARED_BYTES], shared_ba[CURVE25519_SHARED_BYTES];
     TEST_ASSERT_TRUE(x25519_shared_secret(shared_ab, priv_a, pub_b));
     TEST_ASSERT_TRUE(x25519_shared_secret(shared_ba, priv_b, pub_a));
-    TEST_ASSERT_EQUAL_MEMORY(shared_ab, shared_ba, 32);
+    TEST_ASSERT_EQUAL_MEMORY(shared_ab, shared_ba, CURVE25519_SHARED_BYTES);
 
-    uint8_t zero[32] = {};
-    TEST_ASSERT_NOT_EQUAL(0, memcmp(shared_ab, zero, 32));
+    uint8_t zero[CURVE25519_SHARED_BYTES] = {};
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(shared_ab, zero, CURVE25519_SHARED_BYTES));
 }
 
 void test_x25519_rejects_zero_shared_secret() {
     // All-zero public key produces all-zero shared secret → rejected
-    uint8_t priv[32];
-    for (int i = 0; i < 32; i++) priv[i] = 0x01;
-    uint8_t zero_pub[32] = {};
-    uint8_t shared[32];
+    uint8_t priv[CURVE25519_PRIVKEY_BYTES];
+    for (int i = 0; i < CURVE25519_PRIVKEY_BYTES; i++) priv[i] = 0x01;
+    uint8_t zero_pub[CURVE25519_PUBKEY_BYTES] = {};
+    uint8_t shared[CURVE25519_SHARED_BYTES];
     TEST_ASSERT_FALSE(x25519_shared_secret(shared, priv, zero_pub));
 }
 
 // ── PKI encrypt/decrypt tests ───────────────────────────────────────────────
 
 void test_pki_encrypt_decrypt_roundtrip() {
-    uint8_t seed_a[32], seed_b[32];
-    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
-    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32];
+    uint8_t seed_a[CURVE25519_PRIVKEY_BYTES], seed_b[CURVE25519_PRIVKEY_BYTES];
+    for (int i = 0; i < CURVE25519_PRIVKEY_BYTES; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
+    uint8_t pub_a[CURVE25519_PUBKEY_BYTES], priv_a[CURVE25519_PRIVKEY_BYTES], pub_b[CURVE25519_PUBKEY_BYTES], priv_b[CURVE25519_PRIVKEY_BYTES];
     TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
     TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
 
@@ -300,7 +301,7 @@ void test_pki_encrypt_decrypt_roundtrip() {
     TEST_ASSERT_TRUE(Crypto::pkiEncrypt(priv_a, pub_b, 0xDEADBEEF, 0x00000042,
                                          sizeof(plaintext), plaintext, ciphertext));
 
-    uint8_t recovered[sizeof(plaintext)];
+    uint8_t recovered[sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES];
     memcpy(recovered, ciphertext, sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES);
     TEST_ASSERT_TRUE(Crypto::pkiDecrypt(priv_b, pub_a, 0xDEADBEEF, 0x00000042,
                                          sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES, recovered));
@@ -308,9 +309,9 @@ void test_pki_encrypt_decrypt_roundtrip() {
 }
 
 void test_pki_decrypt_fails_with_wrong_key() {
-    uint8_t seed_a[32], seed_b[32], seed_c[32];
-    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); seed_c[i] = (uint8_t)0xFF; }
-    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32], pub_c[32], priv_c[32];
+    uint8_t seed_a[CURVE25519_PRIVKEY_BYTES], seed_b[CURVE25519_PRIVKEY_BYTES], seed_c[CURVE25519_PRIVKEY_BYTES];
+    for (int i = 0; i < CURVE25519_PRIVKEY_BYTES; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); seed_c[i] = (uint8_t)0xFF; }
+    uint8_t pub_a[CURVE25519_PUBKEY_BYTES], priv_a[CURVE25519_PRIVKEY_BYTES], pub_b[CURVE25519_PUBKEY_BYTES], priv_b[CURVE25519_PRIVKEY_BYTES], pub_c[CURVE25519_PUBKEY_BYTES], priv_c[CURVE25519_PRIVKEY_BYTES];
     TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
     TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
     TEST_ASSERT_TRUE(x25519_keypair(pub_c, priv_c, seed_c));
@@ -323,16 +324,16 @@ void test_pki_decrypt_fails_with_wrong_key() {
                                          sizeof(plaintext), plaintext, ciphertext));
 
     // Decrypt with wrong key (C's keypair instead of B's)
-    uint8_t recovered[sizeof(plaintext)];
+    uint8_t recovered[sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES];
     memcpy(recovered, ciphertext, sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES);
     TEST_ASSERT_FALSE(Crypto::pkiDecrypt(priv_c, pub_a, 0x11111111, 1,
                                           sizeof(plaintext) + Crypto::PKI_OVERHEAD_BYTES, recovered));
 }
 
 void test_pki_decrypt_detects_bad_mac() {
-    uint8_t seed_a[32], seed_b[32];
-    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
-    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32];
+    uint8_t seed_a[CURVE25519_PRIVKEY_BYTES], seed_b[CURVE25519_PRIVKEY_BYTES];
+    for (int i = 0; i < CURVE25519_PRIVKEY_BYTES; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
+    uint8_t pub_a[CURVE25519_PUBKEY_BYTES], priv_a[CURVE25519_PRIVKEY_BYTES], pub_b[CURVE25519_PUBKEY_BYTES], priv_b[CURVE25519_PRIVKEY_BYTES];
     TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
     TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
 
@@ -347,15 +348,15 @@ void test_pki_decrypt_detects_bad_mac() {
     // Corrupt the last byte (extraNonce)
     ciphertext[total - 1] ^= 0xFF;
 
-    uint8_t recovered[16];
+    uint8_t recovered[16 + Crypto::PKI_OVERHEAD_BYTES];
     memcpy(recovered, ciphertext, total);
     TEST_ASSERT_FALSE(Crypto::pkiDecrypt(priv_b, pub_a, 0xAAAA, 99, total, recovered));
 }
 
 void test_pki_encrypt_produces_different_output_for_different_inputs() {
-    uint8_t seed_a[32], seed_b[32];
-    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
-    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32];
+    uint8_t seed_a[CURVE25519_PRIVKEY_BYTES], seed_b[CURVE25519_PRIVKEY_BYTES];
+    for (int i = 0; i < CURVE25519_PRIVKEY_BYTES; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
+    uint8_t pub_a[CURVE25519_PUBKEY_BYTES], priv_a[CURVE25519_PRIVKEY_BYTES], pub_b[CURVE25519_PUBKEY_BYTES], priv_b[CURVE25519_PRIVKEY_BYTES];
     TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
     TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
 
@@ -372,9 +373,9 @@ void test_pki_encrypt_produces_different_output_for_different_inputs() {
 }
 
 void test_pki_encrypt_empty_payload() {
-    uint8_t seed_a[32], seed_b[32];
-    for (int i = 0; i < 32; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
-    uint8_t pub_a[32], priv_a[32], pub_b[32], priv_b[32];
+    uint8_t seed_a[CURVE25519_PRIVKEY_BYTES], seed_b[CURVE25519_PRIVKEY_BYTES];
+    for (int i = 0; i < CURVE25519_PRIVKEY_BYTES; i++) { seed_a[i] = (uint8_t)(i + 1); seed_b[i] = (uint8_t)(64 - i); }
+    uint8_t pub_a[CURVE25519_PUBKEY_BYTES], priv_a[CURVE25519_PRIVKEY_BYTES], pub_b[CURVE25519_PUBKEY_BYTES], priv_b[CURVE25519_PRIVKEY_BYTES];
     TEST_ASSERT_TRUE(x25519_keypair(pub_a, priv_a, seed_a));
     TEST_ASSERT_TRUE(x25519_keypair(pub_b, priv_b, seed_b));
 
@@ -393,11 +394,11 @@ void test_pki_decrypt_rejects_too_short() {
 }
 
 void test_crypto_pkikeypair_produces_valid_keys() {
-    uint8_t pub[32], priv[32];
+    uint8_t pub[CURVE25519_PUBKEY_BYTES], priv[CURVE25519_PRIVKEY_BYTES];
     TEST_ASSERT_TRUE(Crypto::pkikeypair(pub, priv));
-    uint8_t zero[32] = {};
-    TEST_ASSERT_NOT_EQUAL(0, memcmp(pub, zero, 32));
-    TEST_ASSERT_NOT_EQUAL(0, memcmp(priv, zero, 32));
+    uint8_t zero[CURVE25519_PUBKEY_BYTES] = {};
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(pub, zero, CURVE25519_PUBKEY_BYTES));
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(priv, zero, CURVE25519_PRIVKEY_BYTES));
 }
 int main(int argc, char** argv) {
     UNITY_BEGIN();

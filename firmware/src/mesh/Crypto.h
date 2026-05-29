@@ -16,14 +16,9 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "config/constants/Constants.h"
 
 namespace airtak {
-
-constexpr size_t PSK_MAX_BYTES      = 32;
-constexpr size_t AES128_KEY_BYTES   = 16;
-constexpr size_t AES256_KEY_BYTES   = 32;
-constexpr size_t AES_MAX_KEY_BYTES  = 32;
-constexpr size_t AES_NONCE_BYTES    = 16;
 
 class Crypto {
 public:

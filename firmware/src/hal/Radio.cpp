@@ -16,6 +16,7 @@
 #include "mesh/PacketPool.h"
 #include "mesh/DcTracker.h"
 #include "ble/BLEQueue.h"
+#include "config/constants/Constants.h"
 #include "config.h"
 
 #include <RadioLib.h>
@@ -159,9 +160,9 @@ void Radio::init() {
             s_radio_sx1262.setCRC(true);
             s_radio_sx1262.explicitHeader();
             s_radio_sx1262.setDio2AsRfSwitch(true);
-            s_radio_sx1262.setCurrentLimit(140.0);
+            s_radio_sx1262.setCurrentLimit(SX1262_CURRENT_LIMIT_MA);
             s_radio_sx1262.setRxBoostedGainMode(true);
-            s_mod_sx1262.SPIsetRegValue(0x08B5, 0x01, 0, 0);
+            s_mod_sx1262.SPIsetRegValue(SX1262_REG_TX_CLAMP_CFG, SX1262_TX_CLAMP_VALUE, 0, 0);
         }
     }
 
@@ -210,9 +211,9 @@ void Radio::reinit() {
 
     // Reset the radio hardware via RESET pin.
     digitalWrite(AIRTAK_PIN_SX1262_RESET, LOW);
-    delay(2);
+    delay(RADIO_RESET_LOW_MS);
     digitalWrite(AIRTAK_PIN_SX1262_RESET, HIGH);
-    delay(10);
+    delay(RADIO_RESET_RECOVERY_MS);
 
     uint8_t  new_phy = config::ConfigManager::primarySlotPhyProfileIndex();
     if (new_phy >= 5) new_phy = 0;
@@ -240,9 +241,9 @@ void Radio::reinit() {
             s_radio_sx1262.setCRC(true);
             s_radio_sx1262.explicitHeader();
             s_radio_sx1262.setDio2AsRfSwitch(true);
-            s_radio_sx1262.setCurrentLimit(140.0);
+            s_radio_sx1262.setCurrentLimit(SX1262_CURRENT_LIMIT_MA);
             s_radio_sx1262.setRxBoostedGainMode(true);
-            s_mod_sx1262.SPIsetRegValue(0x08B5, 0x01, 0, 0);
+            s_mod_sx1262.SPIsetRegValue(SX1262_REG_TX_CLAMP_CFG, SX1262_TX_CLAMP_VALUE, 0, 0);
         }
     }
 #if defined(AIRTAK_PIN_SX1276_DIO0)
@@ -301,7 +302,7 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
         EventBits_t bits = xEventGroupWaitBits(
             event_group,
             RADIO_EVENT_PAUSE | RADIO_EVENT_RESUME,
-            pdTRUE, pdFALSE, pdMS_TO_TICKS(1000));
+            pdTRUE, pdFALSE, pdMS_TO_TICKS(RADIO_FAILED_POLL_MS));
         if (bits & RADIO_EVENT_PAUSE) {
             xEventGroupSetBits(event_group, RADIO_EVENT_PAUSED);
             xEventGroupWaitBits(event_group, RADIO_EVENT_RESUME, pdTRUE, pdTRUE, portMAX_DELAY);
@@ -315,7 +316,7 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
         RADIO_EVENT_DIO1 | RADIO_EVENT_TX_READY | RADIO_EVENT_PAUSE,
         pdTRUE,   // clear on exit
         pdFALSE,  // wait for any bit
-        pdMS_TO_TICKS(100)
+        pdMS_TO_TICKS(RADIO_EVENT_POLL_MS)
     );
 
     // ── Radio restart (§9.4.2) ────────────────────────────────────────────────

@@ -21,15 +21,12 @@
 #include "config/FlashStore.h"
 #include "hal/Display.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <esp_system.h>
 
 namespace airtak {
-
-constexpr uint32_t RECOVERY_BUTTON_HOLD_MS      = 5000;
-constexpr uint32_t RECOVERY_CONFIG_ERASE_MS     = 10000;
-constexpr uint32_t RECOVERY_POLL_MS             = 10;
 
 static bool userButtonPressed() {
     return digitalRead(AIRTAK_PIN_USER_BUTTON) == LOW;
@@ -88,7 +85,7 @@ bool RecoveryMode::requestedAtBoot() {
         if (pressed && press_started == 0) press_started = millis();
 
         if (pressed && press_started != 0 && !erase_done &&
-            (millis() - press_started) >= RECOVERY_CONFIG_ERASE_MS) {
+            (millis() - press_started) >= RECOVERY_CONFIG_ERASE_HOLD_MS) {
             bool flash_ok = config::FlashStore::init();
             erase_done = flash_ok && config::FlashStore::eraseAll();
             Display::showRecoveryMode(erase_done, false);

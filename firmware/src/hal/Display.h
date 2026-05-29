@@ -7,14 +7,15 @@
 // Dirty-state tracking per screen element prevents unnecessary refreshes.
 // Screen rotation via short button press cycles through 4 layouts (§9.6).
 //
-// Dirty flag constants and ScreenId are defined in ui/Screens.h.
+// Dirty flag constants are defined in config/constants/DisplayConstants.h.
+// ScreenId is defined in ui/Screens.h.
 
 #pragma once
 
 #include <cstdint>
 #include <FreeRTOS.h>
 #include <event_groups.h>
-#include "ui/Screens.h"   // ScreenId, ROW_*, DISPLAY_DIRTY_*, EINK_WIDTH/HEIGHT
+#include "ui/Screens.h"   // ScreenId
 
 namespace airtak {
 

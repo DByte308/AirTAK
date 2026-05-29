@@ -2,6 +2,7 @@
 // firmware/src/platform/Platform.cpp - common platform dispatch
 
 #include "platform/Platform.h"
+#include "config/constants/Constants.h"
 
 #include <cstring>
 
@@ -53,7 +54,7 @@ void initBoard() {
     digitalWrite(AIRTAK_PIN_POWER_EN, HIGH);
 #endif
 #if defined(AIRTAK_PLATFORM_ESP32)
-    delay(100); // peripherals need time to stabilise after the rail comes up
+    delay(BOOT_PERIPH_SETTLE_MS); // peripherals need time to stabilise after the rail comes up
 #endif
 #endif
 #if defined(AIRTAK_PLATFORM_ESP32)

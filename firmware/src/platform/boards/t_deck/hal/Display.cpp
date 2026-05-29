@@ -24,6 +24,7 @@
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 #include <Arduino.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
@@ -31,24 +32,6 @@
 namespace airtak {
 
 using namespace ui;
-
-// ── Layout constants (landscape 320×240) ─────────────────────────────────────
-constexpr uint16_t TFT_W    = 320;
-constexpr uint16_t TFT_H    = 240;
-constexpr uint16_t HDR_H    = 24;   // header row height
-constexpr uint16_t FTR_H    = 22;   // footer row height
-constexpr uint16_t CONTENT_Y = HDR_H + 2;
-constexpr uint16_t FOOTER_Y  = TFT_H - FTR_H;
-
-// ── Colour palette ────────────────────────────────────────────────────────────
-constexpr uint16_t COL_BG        = TFT_BLACK;
-constexpr uint16_t COL_HDR_BG    = 0x1082;   // dark blue-grey
-constexpr uint16_t COL_TEXT      = TFT_WHITE;
-constexpr uint16_t COL_ACCENT    = 0x07FF;   // cyan
-constexpr uint16_t COL_OK        = TFT_GREEN;
-constexpr uint16_t COL_WARN      = TFT_YELLOW;
-constexpr uint16_t COL_ERR       = TFT_RED;
-constexpr uint16_t COL_DIM       = 0x7BEF;   // mid-grey
 
 static TFT_eSPI s_tft;
 
@@ -60,7 +43,7 @@ static bool       s_bl_asleep       = false;
 // ── Private helpers ───────────────────────────────────────────────────────────
 
 static void drawHeader(const char* title) {
-    s_tft.fillRect(0, 0, TFT_W, HDR_H, COL_HDR_BG);
+    s_tft.fillRect(0, 0, DISP_WIDTH, DISP_HEADER_HEIGHT, COL_HDR_BG);
     s_tft.setTextColor(COL_ACCENT, COL_HDR_BG);
     s_tft.setTextFont(2);
     s_tft.setCursor(6, 4);
@@ -68,8 +51,8 @@ static void drawHeader(const char* title) {
 
     // Screen indicator dots (right side of header)
     for (uint8_t i = 0; i < SCREEN_COUNT; i++) {
-        int16_t x = (int16_t)(TFT_W - 10 - (SCREEN_COUNT - 1 - i) * 12);
-        int16_t y = HDR_H / 2;
+        int16_t x = (int16_t)(DISP_WIDTH - 10 - (SCREEN_COUNT - 1 - i) * 12);
+        int16_t y = DISP_HEADER_HEIGHT / 2;
         if (i == static_cast<uint8_t>(s_current_screen)) {
             s_tft.fillCircle(x, y, 4, COL_ACCENT);
         } else {
@@ -79,7 +62,7 @@ static void drawHeader(const char* title) {
 }
 
 static void drawFooter() {
-    s_tft.fillRect(0, FOOTER_Y, TFT_W, FTR_H, COL_HDR_BG);
+    s_tft.fillRect(0, DISP_FOOTER_Y, DISP_WIDTH, DISP_FOOTER_HEIGHT, COL_HDR_BG);
     s_tft.setTextFont(1);
 
     // Battery
@@ -88,12 +71,12 @@ static void drawFooter() {
     s_tft.setTextColor(bat_col, COL_HDR_BG);
     char bat[16];
     snprintf(bat, sizeof(bat), "BAT:%3d%%%s", pct, Battery::isCharging() ? "+" : " ");
-    s_tft.setCursor(4, FOOTER_Y + 6);
+    s_tft.setCursor(4, DISP_FOOTER_Y + 6);
     s_tft.print(bat);
 
     // BLE status
     s_tft.setTextColor(ble::BLEServer::isConnected() ? COL_ACCENT : COL_DIM, COL_HDR_BG);
-    s_tft.setCursor(TFT_W - 36, FOOTER_Y + 6);
+    s_tft.setCursor(DISP_WIDTH - 36, DISP_FOOTER_Y + 6);
     s_tft.print(ble::BLEServer::isConnected() ? "BLE" : "   ");
 }
 
@@ -105,8 +88,8 @@ static void renderMainScreen() {
 #endif
 
     s_tft.setTextFont(2);
-    int16_t y = CONTENT_Y + 2;
-    constexpr int16_t LINE_H = 18;
+    int16_t y = DISP_CONTENT_Y + 2;
+    constexpr int16_t LINE_H = DISP_LINE_HEIGHT;
 
     // ── Device identity ───────────────────────────────────────────────────────
     {
@@ -197,7 +180,7 @@ static void renderMessagesScreen() {
     drawHeader("MESSAGES");
     s_tft.setTextFont(2);
     s_tft.setTextColor(COL_DIM, COL_BG);
-    s_tft.setCursor(4, CONTENT_Y + 8);
+    s_tft.setCursor(4, DISP_CONTENT_Y + 8);
     s_tft.print("(no messages)");
     drawFooter();
 }
@@ -206,7 +189,7 @@ static void renderPlayersScreen() {
     drawHeader("PLAYERS");
     s_tft.setTextFont(2);
     s_tft.setTextColor(COL_DIM, COL_BG);
-    s_tft.setCursor(4, CONTENT_Y + 8);
+    s_tft.setCursor(4, DISP_CONTENT_Y + 8);
     s_tft.print("(no players)");
     drawFooter();
 }
@@ -215,8 +198,8 @@ static void renderRadioScreen() {
     drawHeader("RADIO");
 
     s_tft.setTextFont(2);
-    int16_t y = CONTENT_Y + 4;
-    const int16_t LINE_H = 22;
+    int16_t y = DISP_CONTENT_Y + 4;
+    const int16_t LINE_H = DISP_LINE_HEIGHT + 4;
 
     s_tft.setTextColor(COL_TEXT, COL_BG);
     const ChannelSlot* primary = ChannelManager::primarySlot();
@@ -245,7 +228,7 @@ static void renderRadioScreen() {
 
 // Backlight state for pulse-train protocol
 static uint8_t  s_bl_level = 0;
-static constexpr uint8_t BL_STEPS = 16;
+
 
 // LilyGo T-Deck backlight chip counts LOW→HIGH edges on GPIO 42.
 // Each edge increments an internal counter; the brightness is the counter value.

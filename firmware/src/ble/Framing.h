@@ -17,15 +17,10 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "config/constants/Constants.h"
 
 namespace airtak {
 namespace ble {
-
-constexpr size_t   FRAME_HEADER_SIZE = 6;
-constexpr uint16_t BLE_MTU           = 517;
-constexpr size_t   BLE_ATT_OVERHEAD  = 3;   // ATT notification PDU header (opcode + handle)
-constexpr size_t   FRAME_CHUNK_SIZE  = BLE_MTU - BLE_ATT_OVERHEAD - FRAME_HEADER_SIZE; // 508 bytes
-constexpr size_t   BLE_FRAME_MAX_LEN = FRAME_HEADER_SIZE + FRAME_CHUNK_SIZE; // 514-byte ATT value
 
 struct FrameHeader {
     uint16_t total_length;
@@ -36,7 +31,7 @@ struct FrameHeader {
 class Framing {
 public:
     // Encode: write chunk_index-th chunk of payload (total len bytes) into out_buf.
-    // out_buf must be at least FRAME_HEADER_SIZE + FRAME_CHUNK_SIZE bytes.
+    // out_buf must be at least BLE_FRAME_HEADER_SIZE + BLE_FRAME_CHUNK_SIZE bytes.
     // Returns total bytes written to out_buf.
     static size_t encodeChunk(const uint8_t* payload, size_t len,
                               uint16_t chunk_index,

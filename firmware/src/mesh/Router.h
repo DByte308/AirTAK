@@ -19,10 +19,10 @@
 #include <queue.h>
 #include "mesh/Portnums.h"
 #include "mesh/PacketPool.h"
+#include "config.h"
+#include "config/constants/Constants.h"
 
 namespace airtak {
-
-constexpr uint8_t OTA_HEADER_BYTES = 16;
 
 // Parsed representation of the OTA wire header (§8.2).
 struct OtaHeader {
@@ -35,12 +35,12 @@ struct OtaHeader {
    uint8_t  next_hop_low;   // byte 14
    uint8_t  relay_node_low; // byte 15
    // Helpers
-    uint8_t hopLimit() const { return flags & 0x07; }
-    uint8_t hopStart() const { return (flags >> 5) & 0x07; }
-    bool    wantAck()  const { return (flags & 0x08) != 0; }
-    void    setHopLimit(uint8_t v) { flags = (flags & ~0x07) | (v & 0x07); }
+    uint8_t hopLimit() const { return flags & OTA_FLAGS_HOP_LIMIT_MASK; }
+    uint8_t hopStart() const { return (flags >> OTA_FLAGS_HOP_START_SHIFT) & OTA_FLAGS_HOP_START_MASK; }
+    bool    wantAck()  const { return (flags & OTA_FLAGS_WANT_ACK_MASK) != 0; }
+    void    setHopLimit(uint8_t v) { flags = (flags & ~OTA_FLAGS_HOP_LIMIT_MASK) | (v & OTA_FLAGS_HOP_LIMIT_MASK); }
 };
-static_assert(sizeof(OtaHeader) == 16, "OtaHeader must be exactly 16 bytes");
+static_assert(sizeof(OtaHeader) == OTA_HEADER_BYTES, "OtaHeader must be exactly OTA_HEADER_BYTES bytes");
 
 // Entry in the application-layer ACK retry queue (§8.9).
 //
@@ -61,7 +61,7 @@ struct AckRetryEntry {
     uint8_t  hop_start;        // original hop_start for timeout formula
     uint8_t  slot_index;       // channel slot used for the original transmission
     uint32_t portnum;          // for diagnostics/retry policy
-    uint8_t  payload[237];     // original payload bytes (unencrypted Data protobuf)
+    uint8_t  payload[MESH_MAX_PAYLOAD_BYTES];     // original payload bytes (unencrypted Data protobuf)
     uint16_t payload_len;
     bool     in_use;
     bool     in_backoff;       // true when waiting for backoff before next retry

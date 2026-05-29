@@ -18,6 +18,7 @@
 
 #include <FreeRTOS.h>
 #include <queue.h>
+#include "config/constants/Constants.h"
 
 namespace airtak {
 namespace ble {

@@ -4,6 +4,7 @@
 
 #include "mesh/ChannelManager.h"
 #include "mesh/Crypto.h"
+#include "config/constants/Constants.h"
 #include "config/ConfigManager.h"
 #include "config/ConfigGroups.h"
 #include "config/Defaults.h"
@@ -18,8 +19,8 @@ static void seedDefaultSlots() {
         const auto& def = defaults::CHANNEL_SLOTS[i];
         auto& slot = s_slots[i];
         slot.index              = def.index;
-        strncpy(slot.name, def.name, 16);
-        slot.name[16]           = '\0';
+        strncpy(slot.name, def.name, CHANNEL_NAME_MAX_BYTES);
+        slot.name[CHANNEL_NAME_MAX_BYTES]           = '\0';
         slot.psk_len            = 0;
         memset(slot.psk, 0, sizeof(slot.psk));
         slot.role               = static_cast<ChannelRole>(def.role);
@@ -81,10 +82,10 @@ static uint8_t parseChannelSlot(const uint8_t* sub, size_t sub_len, ChannelSlot&
             uint32_t flen = 0; shift = 0;
             while (sp < sub_len) { uint8_t b = sub[sp++]; flen |= (uint32_t)(b & 0x7F) << shift; if (!(b & 0x80)) break; shift += 7; }
             if (field == 2 && flen > 0) { // name
-                uint8_t cplen = (uint8_t)(flen < 16 ? flen : 16);
+                uint8_t cplen = (uint8_t)(flen < CHANNEL_NAME_MAX_BYTES ? flen : CHANNEL_NAME_MAX_BYTES);
                 memcpy(slot.name, sub + sp, cplen);
                 slot.name[cplen] = '\0';
-            } else if (field == 3 && flen > 0 && flen <= 32) { // psk
+            } else if (field == 3 && flen > 0 && flen <= PSK_MAX_BYTES) { // psk
                 memcpy(slot.psk, sub + sp, flen);
                 slot.psk_len = (uint8_t)flen;
             }
@@ -135,8 +136,8 @@ static void loadConfiguredSlots() {
     // channels via the app yet.
     auto& s = s_slots[0];
     if (strcmp(s.name, "AirTAK") == 0) {
-        strncpy(s.name, "LongFast", 16);
-        s.name[16] = '\0';
+        strncpy(s.name, "LongFast", CHANNEL_NAME_MAX_BYTES);
+        s.name[CHANNEL_NAME_MAX_BYTES] = '\0';
         s.psk[0] = 0x01;
         s.psk_len = 1;
         s.role = ChannelRole::PRIMARY;
@@ -154,7 +155,7 @@ void ChannelManager::init() {
 void ChannelManager::rekey() {
     loadConfiguredSlots();
 
-    static const uint8_t MESHTASTIC_DEFAULT_PSK[16] = {
+    static const uint8_t MESHTASTIC_DEFAULT_PSK[MESHTASTIC_DEFAULT_PSK_BYTES] = {
         0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
         0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01
     };
@@ -170,7 +171,7 @@ void ChannelManager::rekey() {
         const uint8_t* effective_psk = slot.psk;
         size_t         effective_len = slot.psk_len;
         if (effective_len == 1 && effective_psk[0] != 0) {
-            static uint8_t expanded[16];
+            static uint8_t expanded[MESHTASTIC_DEFAULT_PSK_BYTES];
             memcpy(expanded, MESHTASTIC_DEFAULT_PSK, sizeof(expanded));
             expanded[15] += (uint8_t)(effective_psk[0] - 1);
             effective_psk = expanded;

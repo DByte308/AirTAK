@@ -8,6 +8,7 @@
 #include "ble/BLEQueue.h"
 #include "config/ConfigManager.h"
 #include "config/ConfigGroups.h"
+#include "config/constants/Constants.h"
 #include "mesh/ChannelManager.h"
 #include "mesh/Router.h"
 #include "mesh/PacketPool.h"
@@ -38,11 +39,11 @@ static BLECharacteristic s_admin     (CHAR_ADMIN_UUID);
 static QueueHandle_t    s_mesh_rx_queue = nullptr;
 static QueueHandle_t    s_radio_tx_queue = nullptr;
 
-static uint8_t  s_config_assembly[640];
+static uint8_t  s_config_assembly[BLE_CONFIG_ASSEMBLY_SIZE];
 static uint64_t s_config_recv_mask  = 0;
 static uint8_t  s_mesh_tx_assembly[LORA_MAX_PAYLOAD_BYTES];
 static uint64_t s_mesh_tx_recv_mask = 0;
-static uint8_t  s_admin_assembly[128];
+static uint8_t  s_admin_assembly[BLE_ADMIN_ASSEMBLY_SIZE];
 static uint64_t s_admin_recv_mask = 0;
 static uint64_t s_config_apply_started_ms = 0;
 static volatile bool s_pending_config_restart = false;

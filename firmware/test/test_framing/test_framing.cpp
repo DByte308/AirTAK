@@ -12,8 +12,10 @@
 
 #include <unity.h>
 #include "ble/Framing.h"
+#include "config/constants/Constants.h"
 #include <cstring>
 
+using namespace airtak;
 using namespace airtak::ble;
 
 static uint8_t s_payload[2048];
@@ -28,7 +30,7 @@ void tearDown() {}
 
 void test_single_chunk_small_payload() {
     size_t n = Framing::encodeChunk(s_payload, 100, 0, s_out, sizeof(s_out));
-    TEST_ASSERT_EQUAL(FRAME_HEADER_SIZE + 100, n);
+    TEST_ASSERT_EQUAL(BLE_FRAME_HEADER_SIZE + 100, n);
 
     FrameHeader hdr;
     const uint8_t* payload;
@@ -42,14 +44,14 @@ void test_single_chunk_small_payload() {
 }
 
 void test_chunk_count_at_mtu_boundary() {
-    TEST_ASSERT_EQUAL(1, Framing::chunkCount(FRAME_CHUNK_SIZE));
-    TEST_ASSERT_EQUAL(2, Framing::chunkCount(FRAME_CHUNK_SIZE + 1));
-    TEST_ASSERT_EQUAL(2, Framing::chunkCount(FRAME_CHUNK_SIZE * 2));
-    TEST_ASSERT_EQUAL(3, Framing::chunkCount(FRAME_CHUNK_SIZE * 2 + 1));
+    TEST_ASSERT_EQUAL(1, Framing::chunkCount(BLE_FRAME_CHUNK_SIZE));
+    TEST_ASSERT_EQUAL(2, Framing::chunkCount(BLE_FRAME_CHUNK_SIZE + 1));
+    TEST_ASSERT_EQUAL(2, Framing::chunkCount(BLE_FRAME_CHUNK_SIZE * 2));
+    TEST_ASSERT_EQUAL(3, Framing::chunkCount(BLE_FRAME_CHUNK_SIZE * 2 + 1));
 }
 
 void test_multi_chunk_reassemble() {
-    size_t total = FRAME_CHUNK_SIZE + 92;
+    size_t total = BLE_FRAME_CHUNK_SIZE + 92;
     uint64_t mask = 0;
 
     // Chunk 0
@@ -72,7 +74,7 @@ void test_multi_chunk_reassemble() {
 }
 
 void test_out_of_order_reassemble() {
-    size_t total = FRAME_CHUNK_SIZE * 2 + 17;
+    size_t total = BLE_FRAME_CHUNK_SIZE * 2 + 17;
     uint64_t mask = 0;
 
     uint8_t c2[BLE_MTU];
@@ -97,7 +99,7 @@ void test_out_of_order_reassemble() {
 }
 
 void test_decode_rejects_invalid_chunk_index() {
-    uint8_t frame[FRAME_HEADER_SIZE] = {};
+    uint8_t frame[BLE_FRAME_HEADER_SIZE] = {};
     uint16_t total = 20;
     uint16_t chunk_index = 1;
     uint16_t chunk_count = 1;
@@ -115,13 +117,13 @@ void test_framed_full_lora_packet_fits_single_att_value() {
     uint8_t frame[BLE_FRAME_MAX_LEN];
     size_t n = Framing::encodeChunk(s_payload, 255, 0, frame, sizeof(frame));
 
-    TEST_ASSERT_EQUAL(FRAME_HEADER_SIZE + 255, n);
+    TEST_ASSERT_EQUAL(BLE_FRAME_HEADER_SIZE + 255, n);
     TEST_ASSERT_LESS_OR_EQUAL(BLE_FRAME_MAX_LEN, n);
 }
 
 void test_maximum_chunk_uses_declared_frame_capacity() {
     uint8_t frame[BLE_FRAME_MAX_LEN];
-    size_t n = Framing::encodeChunk(s_payload, FRAME_CHUNK_SIZE, 0, frame, sizeof(frame));
+    size_t n = Framing::encodeChunk(s_payload, BLE_FRAME_CHUNK_SIZE, 0, frame, sizeof(frame));
 
     TEST_ASSERT_EQUAL(BLE_FRAME_MAX_LEN, n);
 }
@@ -132,7 +134,7 @@ void test_zero_length_payload() {
     uint8_t frame[BLE_FRAME_MAX_LEN];
     TEST_ASSERT_EQUAL(1, Framing::chunkCount(0));
     size_t n = Framing::encodeChunk(s_payload, 0, 0, frame, sizeof(frame));
-    TEST_ASSERT_EQUAL(FRAME_HEADER_SIZE, n);
+    TEST_ASSERT_EQUAL(BLE_FRAME_HEADER_SIZE, n);
 
     FrameHeader hdr;
     const uint8_t* payload;
@@ -147,7 +149,7 @@ void test_zero_length_payload() {
 // Duplicate chunk delivery must be idempotent: reassembly must return false
 // (not yet complete) and must not corrupt the assembly buffer.
 void test_duplicate_chunk_idempotent() {
-    size_t total = FRAME_CHUNK_SIZE * 2;
+    size_t total = BLE_FRAME_CHUNK_SIZE * 2;
     uint64_t mask = 0;
 
     uint8_t c0[BLE_MTU];
@@ -177,14 +179,14 @@ void test_duplicate_chunk_idempotent() {
 // through encode/decode since s_payload is too small for chunk 63 offsets.
 void test_chunk_count_64_is_valid() {
     // chunkCount for a payload that spans exactly 64 chunks.
-    // For FRAME_CHUNK_SIZE = 508: 64 * 508 = 32512 bytes.
-    size_t total = FRAME_CHUNK_SIZE * 64;
+    // For BLE_FRAME_CHUNK_SIZE = 508: 64 * 508 = 32512 bytes.
+    size_t total = BLE_FRAME_CHUNK_SIZE * 64;
     TEST_ASSERT_EQUAL(64, Framing::chunkCount(total));
 
     // Encode and decode chunk 0 of a 64-chunk payload.
     uint8_t frame[BLE_FRAME_MAX_LEN];
     size_t n = Framing::encodeChunk(s_payload, total, 0, frame, sizeof(frame));
-    TEST_ASSERT_GREATER_THAN(FRAME_HEADER_SIZE, n);
+    TEST_ASSERT_GREATER_THAN(BLE_FRAME_HEADER_SIZE, n);
 
     FrameHeader hdr;
     const uint8_t* payload;
@@ -197,7 +199,7 @@ void test_chunk_count_64_is_valid() {
 
 // chunk_count > 64 must be rejected by decodeChunk (uint64_t mask overflow).
 void test_chunk_count_exceeds_64_is_rejected() {
-    uint8_t frame[FRAME_HEADER_SIZE] = {};
+    uint8_t frame[BLE_FRAME_HEADER_SIZE] = {};
     uint16_t total = 0;
     uint16_t chunk_index = 0;
     uint16_t chunk_count = 65; // exceeds uint64_t capacity

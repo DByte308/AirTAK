@@ -9,15 +9,14 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "config/constants/Constants.h"
 
 namespace airtak {
 
 // Maximum number of concurrently live packets in the system.
 // Sized to hold: radio RX queue (16) + TX queue (8) + ACK retry queue (8) + headroom (8).
-constexpr size_t PACKET_POOL_SIZE = 40;
-
-// Maximum on-air packet size (§8.2 wire format + header overhead).
-constexpr size_t PACKET_POOL_BUF_SIZE = 256;
+// Canonical: MeshConstants.h — PACKET_POOL_SIZE
+// Canonical: MeshConstants.h — PACKET_POOL_BUF_SIZE
 
 struct PooledPacket {
     uint8_t  data[PACKET_POOL_BUF_SIZE];

@@ -3,6 +3,7 @@
 
 #include "config/FlashStore.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 
 #include <Arduino.h>
 #include <Adafruit_LittleFS.h>
@@ -16,9 +17,6 @@ namespace airtak {
 namespace config {
 
 static bool s_initialized = false;
-
-constexpr uint32_t FLASH_BLOCK_SIZE = 4096;
-constexpr uint32_t FLASH_PROG_SIZE  = 256;
 
 static Adafruit_FlashTransport_QSPI s_flash_transport(
     AIRTAK_PIN_QSPI_SCK,
@@ -34,7 +32,7 @@ static lfs_config s_lfs_cfg;
 static uint8_t s_lfs_read_buffer[FLASH_PROG_SIZE];
 static uint8_t s_lfs_prog_buffer[FLASH_PROG_SIZE];
 static uint8_t s_lfs_file_buffer[FLASH_PROG_SIZE];
-static uint8_t s_lfs_lookahead_buffer[32];
+static uint8_t s_lfs_lookahead_buffer[FLASH_LFS_LOOKAHEAD_SIZE];
 
 static const SPIFlash_Device_t s_supported_flash[] = {
     MX25R1635F,
@@ -79,7 +77,7 @@ static void configureLittleFs() {
     s_lfs_cfg.prog_size = FLASH_PROG_SIZE;
     s_lfs_cfg.block_size = FLASH_BLOCK_SIZE;
     s_lfs_cfg.block_count = s_flash.size() / FLASH_BLOCK_SIZE;
-    s_lfs_cfg.lookahead = 32;
+    s_lfs_cfg.lookahead = FLASH_LFS_LOOKAHEAD_SIZE;
     s_lfs_cfg.read_buffer = s_lfs_read_buffer;
     s_lfs_cfg.prog_buffer = s_lfs_prog_buffer;
     s_lfs_cfg.lookahead_buffer = s_lfs_lookahead_buffer;
@@ -135,7 +133,7 @@ bool FlashStore::write(ConfigGroup group, const uint8_t* data, size_t len) {
     const char* path = configGroupFilename(group);
     if (!path) return false;
 
-    char tmp_path[48];
+    char tmp_path[FLASH_PATH_MAX_BYTES];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
 
     Adafruit_LittleFS_Namespace::File f = s_config_fs.open(tmp_path, Adafruit_LittleFS_Namespace::FILE_O_WRITE);

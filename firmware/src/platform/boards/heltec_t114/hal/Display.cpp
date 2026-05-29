@@ -19,6 +19,7 @@
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 #include <Arduino.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -27,24 +28,6 @@
 namespace airtak {
 
 using namespace ui;
-
-// ── Layout constants (portrait 240×135) ──────────────────────────────────────
-constexpr uint16_t TFT_W    = 240;
-constexpr uint16_t TFT_H    = 135;
-constexpr uint16_t HDR_H    = 14;   // header row height
-constexpr uint16_t FTR_H    = 12;   // footer row height
-constexpr uint16_t CONTENT_Y = HDR_H + 2;
-constexpr uint16_t FOOTER_Y  = TFT_H - FTR_H;
-
-// ── Colour palette ───────────────────────────────────────────────────────────
-constexpr uint16_t COL_BG        = ST77XX_BLACK;
-constexpr uint16_t COL_HDR_BG    = 0x1082;
-constexpr uint16_t COL_TEXT      = ST77XX_WHITE;
-constexpr uint16_t COL_ACCENT    = 0x07FF;
-constexpr uint16_t COL_OK        = ST77XX_GREEN;
-constexpr uint16_t COL_WARN      = ST77XX_YELLOW;
-constexpr uint16_t COL_ERR       = ST77XX_RED;
-constexpr uint16_t COL_DIM       = 0x7BEF;
 
 // Separate SPI2 instance for the ST7789 (radio uses SPI/SPIM3).
 // The nRF52840 SPIClass constructor is:
@@ -62,15 +45,15 @@ static uint16_t  s_dirty_mask      = DISPLAY_DIRTY_ALL;
 static uint32_t  s_last_refresh_ms = 0;
 
 static void drawHeader(const char* title) {
-    s_tft.fillRect(0, 0, TFT_W, HDR_H, COL_HDR_BG);
+    s_tft.fillRect(0, 0, DISP_WIDTH, DISP_HEADER_HEIGHT, COL_HDR_BG);
     s_tft.setTextColor(COL_ACCENT, COL_HDR_BG);
     s_tft.setTextSize(1);
     s_tft.setCursor(4, 3);
     s_tft.print(title);
 
     for (uint8_t i = 0; i < SCREEN_COUNT; i++) {
-        int16_t x = (int16_t)(TFT_W - 8 - (SCREEN_COUNT - 1 - i) * 10);
-        int16_t y = HDR_H / 2;
+        int16_t x = (int16_t)(DISP_WIDTH - 8 - (SCREEN_COUNT - 1 - i) * 10);
+        int16_t y = DISP_HEADER_HEIGHT / 2;
         if (i == static_cast<uint8_t>(s_current_screen)) {
             s_tft.fillCircle(x, y, 3, COL_ACCENT);
         } else {
@@ -80,7 +63,7 @@ static void drawHeader(const char* title) {
 }
 
 static void drawFooter() {
-    s_tft.fillRect(0, FOOTER_Y, TFT_W, FTR_H, COL_HDR_BG);
+    s_tft.fillRect(0, DISP_FOOTER_Y, DISP_WIDTH, DISP_FOOTER_HEIGHT, COL_HDR_BG);
     s_tft.setTextSize(1);
 
     uint8_t pct = (uint8_t)(Battery::level() * 100.0f);
@@ -88,11 +71,11 @@ static void drawFooter() {
     s_tft.setTextColor(bat_col, COL_HDR_BG);
     char bat[12];
     snprintf(bat, sizeof(bat), "B:%3d%%%s", pct, Battery::isCharging() ? "+" : " ");
-    s_tft.setCursor(2, FOOTER_Y + 2);
+    s_tft.setCursor(2, DISP_FOOTER_Y + 2);
     s_tft.print(bat);
 
     s_tft.setTextColor(ble::BLEServer::isConnected() ? COL_ACCENT : COL_DIM, COL_HDR_BG);
-    s_tft.setCursor(TFT_W - 22, FOOTER_Y + 2);
+    s_tft.setCursor(DISP_WIDTH - 22, DISP_FOOTER_Y + 2);
     s_tft.print(ble::BLEServer::isConnected() ? "BLE" : "   ");
 }
 
@@ -104,8 +87,7 @@ static void renderMainScreen() {
 #endif
 
     s_tft.setTextSize(1);
-    int16_t y = CONTENT_Y + 2;
-    constexpr int16_t LINE_H = 12;
+    int16_t y = DISP_CONTENT_Y + 2;
 
     {
         char namebuf[32];
@@ -114,7 +96,7 @@ static void renderMainScreen() {
         snprintf(namebuf, sizeof(namebuf), "%.14s (%.6s)", longn, shortn);
         s_tft.setTextColor(COL_ACCENT, COL_BG);
         s_tft.setCursor(2, y); s_tft.print(namebuf);
-        y += LINE_H;
+        y += DISP_LINE_HEIGHT;
     }
 
     {
@@ -122,7 +104,7 @@ static void renderMainScreen() {
         snprintf(csbuf, sizeof(csbuf), "CS: %.12s", config::ConfigManager::gameCallsign());
         s_tft.setTextColor(COL_TEXT, COL_BG);
         s_tft.setCursor(2, y); s_tft.print(csbuf);
-        y += LINE_H;
+        y += DISP_LINE_HEIGHT;
     }
 
     {
@@ -131,7 +113,7 @@ static void renderMainScreen() {
         if (GPS::hasFix()) {
             s_tft.setTextColor(COL_OK, COL_BG);
             snprintf(buf, sizeof(buf), "GPS %.4f %.4f", fix.latitude, fix.longitude);
-            s_tft.setCursor(2, y); s_tft.print(buf); y += LINE_H;
+            s_tft.setCursor(2, y); s_tft.print(buf); y += DISP_LINE_HEIGHT;
             s_tft.setTextColor(COL_TEXT, COL_BG);
             snprintf(buf, sizeof(buf), "  %.0fm SAT:%u HDOP:%.1f",
                      fix.altitude_m, fix.satellites, fix.hdop);
@@ -147,7 +129,7 @@ static void renderMainScreen() {
             }
             s_tft.setCursor(2, y); s_tft.print(buf);
         }
-        y += LINE_H + 2;
+        y += DISP_LINE_HEIGHT + 2;
     }
 
     s_tft.setTextColor(COL_TEXT, COL_BG);
@@ -158,7 +140,7 @@ static void renderMainScreen() {
             snprintf(buf, sizeof(buf), "CH:%-8s RSSI:%.0f", primary->name, Radio::lastRssi());
             s_tft.setCursor(2, y); s_tft.print(buf);
         }
-        y += LINE_H;
+        y += DISP_LINE_HEIGHT;
     }
 
     {
@@ -167,7 +149,7 @@ static void renderMainScreen() {
         snprintf(mbuf, sizeof(mbuf), "MESH:%lu node%s",
                  static_cast<unsigned long>(n), n == 1 ? "" : "s");
         s_tft.setCursor(2, y); s_tft.print(mbuf);
-        y += LINE_H;
+        y += DISP_LINE_HEIGHT;
     }
 
     {
@@ -184,7 +166,7 @@ static void renderMessagesScreen() {
     drawHeader("MESSAGES");
     s_tft.setTextSize(1);
     s_tft.setTextColor(COL_DIM, COL_BG);
-    s_tft.setCursor(2, CONTENT_Y + 6);
+    s_tft.setCursor(2, DISP_CONTENT_Y + 6);
     s_tft.print("(no messages)");
     drawFooter();
 }
@@ -193,7 +175,7 @@ static void renderPlayersScreen() {
     drawHeader("PLAYERS");
     s_tft.setTextSize(1);
     s_tft.setTextColor(COL_DIM, COL_BG);
-    s_tft.setCursor(2, CONTENT_Y + 6);
+    s_tft.setCursor(2, DISP_CONTENT_Y + 6);
     s_tft.print("(no players)");
     drawFooter();
 }
@@ -202,8 +184,8 @@ static void renderRadioScreen() {
     drawHeader("RADIO");
 
     s_tft.setTextSize(1);
-    int16_t y = CONTENT_Y + 2;
-    constexpr int16_t LINE_H = 13;
+    int16_t y = DISP_CONTENT_Y + 2;
+    constexpr int16_t LINE_H = DISP_LINE_HEIGHT + 1;
 
     s_tft.setTextColor(COL_TEXT, COL_BG);
     const ChannelSlot* primary = ChannelManager::primarySlot();
@@ -246,7 +228,7 @@ void Display::init() {
 
     // Initialize SPI1 for the ST7789 display (separate from radio SPI0).
     s_tft_spi.begin();
-    s_tft.init(TFT_W, TFT_H);
+    s_tft.init(DISP_WIDTH, DISP_HEIGHT);
     s_tft.setRotation(0);   // portrait
     s_tft.fillScreen(COL_BG);
     s_tft.setTextWrap(false);
@@ -308,7 +290,7 @@ void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
     s_tft.setTextSize(1);
     s_tft.setTextColor(COL_TEXT, COL_BG);
     int16_t y = 35;
-    const int16_t LH = 12;
+    const int16_t LH = DISP_LINE_HEIGHT;
 
     s_tft.setCursor(4, y); s_tft.print(config_erased ? "Config: ERASED" : "Config: kept"); y += LH;
     s_tft.setCursor(4, y); s_tft.print(bonds_cleared ? "BLE bonds: CLEARED" : "BLE bonds: kept"); y += LH + 2;

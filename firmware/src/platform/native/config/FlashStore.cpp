@@ -2,6 +2,7 @@
 // firmware/src/platform/native/config/FlashStore.cpp - native test config storage
 
 #include "config/FlashStore.h"
+#include "config/constants/Constants.h"
 
 #include <cstdio>
 #include <cstdlib>

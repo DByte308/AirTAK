@@ -12,6 +12,7 @@
 #include "config/FlashStore.h"
 #include "config/ConfigGroups.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 
 #include <LittleFS.h>
 #include <Arduino.h>
@@ -23,12 +24,9 @@ namespace config {
 
 static bool s_initialized = false;
 
-// Temporary file suffix for atomic write
-static constexpr const char* TMP_SUFFIX = ".tmp";
-
 // Build the path to a temporary write target for a given group file.
 static void tmpPath(const char* group_path, char* out, size_t out_len) {
-    snprintf(out, out_len, "%s%s", group_path, TMP_SUFFIX);
+    snprintf(out, out_len, "%s%s", group_path, FLASH_TMP_SUFFIX);
 }
 
 bool FlashStore::init() {

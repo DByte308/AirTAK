@@ -15,8 +15,6 @@
 
 namespace airtak {
 
-constexpr uint8_t MAX_CHANNEL_SLOTS = 8;
-
 // esp32-hal-gpio.h (Arduino-ESP32) defines DISABLED as a C macro (0x00).
 // Undefine it here so it does not corrupt the enum class member name below.
 #ifdef DISABLED

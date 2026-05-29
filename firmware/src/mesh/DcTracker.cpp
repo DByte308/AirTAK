@@ -7,6 +7,7 @@
 // No theoretical formula — the hardware tells us.
 
 #include "mesh/DcTracker.h"
+#include "config/constants/Constants.h"
 #include "config/Defaults.h"
 #include "config/ConfigManager.h"
 #include "config.h"
@@ -79,7 +80,7 @@ void DcTracker::recordTx(uint32_t toa_ms, uint32_t timestamp_ms) {
     TxRecord* slot = &s_tx_log[s_tx_log_head];
     if (slot->timestamp_ms != 0 && slot->toa_ms > 0) {
         int32_t age_ms = (int32_t)(timestamp_ms - slot->timestamp_ms);
-        if (age_ms < 3600000 && s_trailing_hour_ms >= slot->toa_ms) {
+        if (age_ms < DC_TRAILING_HOUR_MS && s_trailing_hour_ms >= slot->toa_ms) {
             s_trailing_hour_ms -= slot->toa_ms;
         } else {
             s_trailing_hour_ms = 0;
@@ -154,7 +155,7 @@ void DcTracker::tick() {
         if (entry->timestamp_ms == 0 || entry->toa_ms == 0) continue;
 
         int32_t age_ms = (int32_t)(now_ms - entry->timestamp_ms);
-        if (age_ms >= 3600000) {
+        if (age_ms >= DC_TRAILING_HOUR_MS) {
             if (s_trailing_hour_ms >= entry->toa_ms) {
                 s_trailing_hour_ms -= entry->toa_ms;
             } else {

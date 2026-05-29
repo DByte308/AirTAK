@@ -5,6 +5,7 @@
 #include "hal/GPS.h"
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
+#include "config/constants/Constants.h"
 #include "config.h"
 #include <Arduino.h>
 #if AIRTAK_BOARD_HAS_GPS
@@ -35,8 +36,8 @@ static bool        s_using_external = false;
 #if AIRTAK_BOARD_HAS_GPS
 static constexpr uint32_t GPS_BAUD_CANDIDATES[] = {
     GPS_BAUD_INITIAL,
-    38400,
-    57600,
+    GPS_BAUD_CANDIDATE_1,
+    GPS_BAUD_CANDIDATE_4,
     GPS_BAUD_FAST,
 };
 static uint8_t s_baud_probe_index = 0;
@@ -44,7 +45,7 @@ static uint8_t s_baud_probe_index = 0;
 #ifdef AIRTAK_GPS_DEBUG
 static uint32_t    s_debug_raw_bytes    = 0;  // total bytes read from GPS UART
 static uint32_t    s_debug_last_print_ms = 0; // last time we printed diagnostics
-static char        s_debug_sentence[128] = {};
+static char        s_debug_sentence[GPS_DEBUG_SENTENCE_BUF_SIZE] = {};
 static uint8_t     s_debug_sentence_len = 0;
 static uint8_t     s_debug_sentence_prints = 0;
 #endif
@@ -225,8 +226,8 @@ void GPS::process(EventGroupHandle_t system_event_group) {
     // rates until the first clean sentence is decoded, then keep that baud for
     // the rest of the session.
     uint32_t now = millis();
-    if (!s_baud_upgraded && now - s_last_valid_sentence_ms >= 8000u &&
-        now - s_last_baud_probe_ms >= 8000u) {
+    if (!s_baud_upgraded && now - s_last_valid_sentence_ms >= GPS_BAUD_SWITCH_TIMEOUT_MS &&
+        now - s_last_baud_probe_ms >= GPS_BAUD_SWITCH_TIMEOUT_MS) {
         s_last_baud_probe_ms = now;
         s_baud_probe_index = (s_baud_probe_index + 1) %
                              (sizeof(GPS_BAUD_CANDIDATES) / sizeof(GPS_BAUD_CANDIDATES[0]));
@@ -236,7 +237,7 @@ void GPS::process(EventGroupHandle_t system_event_group) {
                       (unsigned long)next_baud);
 #endif
         GPS_SERIAL.end();
-        delay(10);
+        delay(GPS_BAUD_SWITCH_DELAY_MS);
         begin_gps_serial(next_baud);
     }
 
@@ -327,13 +328,12 @@ void GPS::markPositionTransmitted() {
 
 // Haversine formula — returns distance in meters
 static double haversine_m(double lat1, double lon1, double lat2, double lon2) {
-    constexpr double R = 6371000.0; // Earth radius in meters
     double dlat = (lat2 - lat1) * M_PI / 180.0;
     double dlon = (lon2 - lon1) * M_PI / 180.0;
     double a = sin(dlat / 2) * sin(dlat / 2)
              + cos(lat1 * M_PI / 180.0) * cos(lat2 * M_PI / 180.0)
              * sin(dlon / 2) * sin(dlon / 2);
-    return R * 2.0 * atan2(sqrt(a), sqrt(1.0 - a));
+    return EARTH_RADIUS_M * 2.0 * atan2(sqrt(a), sqrt(1.0 - a));
 }
 
 } // namespace airtak

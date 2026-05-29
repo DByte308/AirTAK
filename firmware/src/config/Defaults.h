@@ -9,6 +9,7 @@
 #pragma once
 
 #include <cstdint>
+#include "config/constants/Constants.h"
 
 namespace airtak {
 namespace defaults {
@@ -19,8 +20,8 @@ constexpr const char* DEVICE_SHORT_NAME = "nod1";
 
 // ── LoraConfig ────────────────────────────────────────────────────────────────
 // Region: 0=EU_868, 1=US_915. Set at first-time setup via Settings > LoRa.
-constexpr uint8_t  LORA_REGION        = 0;    // EU_868 default
-constexpr uint8_t  LORA_TX_POWER_DBM  = 22;   // SX1262 maximum
+constexpr uint8_t  LORA_REGION       = LORA_REGION_DEFAULT;       // Canonical: RadioConstants.h
+constexpr uint8_t  LORA_TX_POWER_DBM = LORA_TX_POWER_DBM_DEFAULT; // Canonical: RadioConstants.h
 
 // PHY Profile defaults (indexes 0–4). See §8.1 for SF/BW/CR semantics.
 // All five profiles share sync word 0x2B, preamble 16, explicit header, CRC on, IQ normal.
@@ -57,7 +58,7 @@ constexpr float PHY_SNR_MAX[5] = {
 
 // ── ChannelConfig — 8 slots (§8.5) ───────────────────────────────────────────
 // PSK must be set by user at first-time setup. Empty = no encryption (insecure).
-constexpr uint8_t CHANNEL_COUNT = 8;
+constexpr uint8_t CHANNEL_COUNT = MAX_CHANNEL_SLOTS; // Canonical: MeshConstants.h
 
 struct ChannelSlotDefault {
     uint8_t     index;
@@ -85,45 +86,47 @@ constexpr ChannelSlotDefault CHANNEL_SLOTS[8] = {
 };
 
 // ── PositionConfig — Smart beaconing (§8.7) ───────────────────────────────────
-constexpr uint32_t POSITION_BROADCAST_INTERVAL_SECS = 90;    // heartbeat max
-constexpr uint32_t POSITION_GPS_PRECISION_BITS       = 32;    // full precision
+// Canonical position values: MeshConstants.h
+constexpr uint32_t POSITION_BROADCAST_INTERVAL_SECS = airtak::POSITION_BROADCAST_INTERVAL_SECS;
+constexpr uint32_t POSITION_GPS_PRECISION_BITS       = airtak::POSITION_GPS_PRECISION_BITS;
 constexpr bool     POSITION_SMART_BROADCAST          = true;
-constexpr uint32_t POSITION_MOVEMENT_THRESHOLD_M     = 10;    // fixed; not user-configurable
-constexpr uint32_t POSITION_MIN_TX_INTERVAL_SECS     = 15;    // min gap between TX
-constexpr uint32_t POSITION_HIT_HEARTBEAT_SECS       = 300;   // 5 min when HIT/RESPAWNING/ELIMINATED
-constexpr uint8_t  POSITION_GPS_SOURCE               = 0;     // 0=DEVICE_GPS, 1=PHONE_GPS
-constexpr uint8_t  POSITION_CHANNEL_INDEX             = 0;     // which channel slot broadcasts POSITION_APP
+constexpr uint32_t POSITION_MOVEMENT_THRESHOLD_M     = airtak::POSITION_MOVEMENT_THRESHOLD_M;
+constexpr uint32_t POSITION_MIN_TX_INTERVAL_SECS     = airtak::POSITION_MIN_TX_INTERVAL_SECS;
+constexpr uint32_t POSITION_HIT_HEARTBEAT_SECS       = airtak::POSITION_HIT_HEARTBEAT_SECS;
+constexpr uint8_t  POSITION_GPS_SOURCE               = 0;     // keep local (config-specific default)
+constexpr uint8_t  POSITION_CHANNEL_INDEX             = 0;     // keep local (config-specific default)
 
 // ── Per-packet-type default hop limits (§8.7, updated v1.5) ────────────────────
-// All types use hop_limit=7 (maximum) except AIRTAK_AUDIO=1 and AIRTAK_ACK (dynamic).
+// All types use HOP_LIMIT_DEFAULT=7 except AIRTAK_AUDIO=HOP_LIMIT_AUDIO=1.
 // Rationale: hop_limit does not create extra relay traffic — relay count is bounded
 // by mesh topology. Restricting hop_limit only prevents delivery to far-edge nodes.
 // Airtime is controlled by smart beaconing TX interval, not hop_limit fields.
 // POSITION_APP can be overridden via PositionConfig.position_hop_limit.
-constexpr uint8_t HOP_LIMIT_TEXT_MESSAGE     = 7;
-constexpr uint8_t HOP_LIMIT_POSITION         = 7;
-constexpr uint8_t HOP_LIMIT_NODEINFO         = 7;
-constexpr uint8_t HOP_LIMIT_TELEMETRY        = 7;
-constexpr uint8_t HOP_LIMIT_TRACEROUTE       = 7;
-constexpr uint8_t HOP_LIMIT_NEIGHBORINFO     = 7;
-constexpr uint8_t HOP_LIMIT_AIRTAK_PLAYER      = 7;
-constexpr uint8_t HOP_LIMIT_AIRTAK_TACTICAL     = 7;
-constexpr uint8_t HOP_LIMIT_AIRTAK_MODERATION   = 7;
-constexpr uint8_t HOP_LIMIT_AIRTAK_ACK         = 7;  // Fallback: ACK built dynamically in processIncoming()
-                                                    // uses hop_start of the original packet; this is the
-                                                    // safety default if sendPacket is called directly. (§8.9)
-constexpr uint8_t HOP_LIMIT_POSITION_REQUEST = 7;
-constexpr uint8_t HOP_LIMIT_AIRTAK_AUDIO       = 1;  // MUST never relay audio — sole exception (§12.7)
-constexpr uint8_t HOP_LIMIT_AIRTAK_SYNC_REQUEST = 7;  // late-joiner sync request
-constexpr uint8_t HOP_LIMIT_OVERLAY_ALIGNMENT   = 7;  // overlay alignment share
-constexpr uint8_t HOP_LIMIT_MARKER_SNAPSHOT     = 7;  // targeted marker snapshot request
+// Canonical definitions: HOP_LIMIT_DEFAULT=7, HOP_LIMIT_AUDIO=1 (MeshConstants.h)
+constexpr uint8_t HOP_LIMIT_TEXT_MESSAGE     = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_POSITION         = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_NODEINFO         = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_TELEMETRY        = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_TRACEROUTE       = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_NEIGHBORINFO     = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_AIRTAK_PLAYER      = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_AIRTAK_TACTICAL     = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_AIRTAK_MODERATION   = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_AIRTAK_ACK         = HOP_LIMIT_DEFAULT; // Fallback: ACK built dynamically in
+                                                     // processIncoming() uses hop_start of the original
+                                                     // packet; this is the safety default (§8.9)
+constexpr uint8_t HOP_LIMIT_POSITION_REQUEST = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_AIRTAK_AUDIO       = HOP_LIMIT_AUDIO;  // MUST never relay audio (§12.7)
+constexpr uint8_t HOP_LIMIT_AIRTAK_SYNC_REQUEST = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_OVERLAY_ALIGNMENT   = HOP_LIMIT_DEFAULT;
+constexpr uint8_t HOP_LIMIT_MARKER_SNAPSHOT     = HOP_LIMIT_DEFAULT;
 
 // ── PowerConfig ───────────────────────────────────────────────────────────────
 constexpr bool     POWER_GPS_DUTY_CYCLE    = false;  // disabled until Phase 6
 constexpr uint32_t POWER_GPS_ON_SECS       = 30;
 constexpr uint32_t POWER_GPS_OFF_SECS      = 60;
-constexpr uint32_t POWER_DISPLAY_OFF_SECS  = 0;      // 0 = never off
-constexpr uint32_t POWER_BRIGHTNESS_PCT    = 100;    // 0–100; default full brightness
+constexpr uint32_t POWER_DISPLAY_OFF_SECS  = DISPLAY_OFF_SECS_DEFAULT;    // Canonical: DisplayConstants.h
+constexpr uint32_t POWER_BRIGHTNESS_PCT    = DISPLAY_BRIGHTNESS_PCT_DEF;  // Canonical: DisplayConstants.h
 
 // ── GameConfig ────────────────────────────────────────────────────────────────
 constexpr const char* GAME_CALLSIGN           = "Player";
@@ -131,56 +134,63 @@ constexpr const char* GAME_FIRETEAM_ID        = "";    // free-text, optional
 constexpr const char* GAME_SQUAD_ID           = "";    // free-text, optional
 constexpr const char* GAME_PLATOON_ID         = "";    // free-text, optional
 constexpr const char* GAME_COMPANY_ID         = "";    // free-text, optional
-constexpr uint32_t    GAME_PLAYER_COLOR_RGB   = 0x2196F3; // Material Blue
+constexpr uint32_t    GAME_PLAYER_COLOR_RGB   = GAME_DEFAULT_PLAYER_COLOR; // Canonical: GameConstants.h
 constexpr bool        GAME_HIT_BUTTON_ENABLED = false;   // long-press HIT toggle on device button
 
 // ── SecurityConfig ────────────────────────────────────────────────────────────
 constexpr uint32_t SECURITY_MAX_BONDED_DEVICES = 1;
 
 // ── AudioConfig (Phase 7) ─────────────────────────────────────────────────────
-constexpr uint32_t AUDIO_CHANNEL_SLOT  = 2;    // slot 2 (Profile 1, Short/Speed)
-constexpr uint32_t AUDIO_CODEC2_BPS    = 1300; // 1300 bps mode (§12.7)
+constexpr uint32_t AUDIO_CHANNEL_SLOT  = AUDIO_DEFAULT_CHANNEL_SLOT; // Canonical: AudioConstants.h
+constexpr uint32_t AUDIO_CODEC2_BPS    = AUDIO_DEFAULT_CODEC2_BPS;   // Canonical: AudioConstants.h
 constexpr bool     AUDIO_PTT_ENABLED   = false; // disabled until user opts in
-constexpr uint32_t AUDIO_FRAME_COUNT   = 8;    // 8 frames = 160 ms; EU g1 requires ≥ 42
+constexpr uint32_t AUDIO_FRAME_COUNT   = AUDIO_DEFAULT_FRAME_COUNT;  // Canonical: AudioConstants.h
 
 // ── Application-layer reliability (§8.9) ────────────────────────────────────
-constexpr uint32_t ACK_MAX_RETRIES         = 3;
-constexpr uint32_t ACK_RETRY_BASE_MS       = 200;  // base for backoff: random(0, 200*2^attempt)
-constexpr uint32_t ACK_TIMEOUT_MIN_MS      = 500;  // min timeout regardless of hop_start
-constexpr uint32_t ACK_TIMEOUT_PER_HOP_MS  = 400;  // formula: max(500, 2*hop_start*400)
-constexpr uint8_t  ACK_RETRY_QUEUE_SIZE    = 8;    // max in-flight ACKNOWLEDGED packets
-constexpr uint8_t  ACK_HOP_START_FALLBACK  = 7;    // used when hop_start=0 (legacy device)
+// Canonical: MeshConstants.h
+constexpr uint32_t ACK_MAX_RETRIES         = airtak::ACK_MAX_RETRIES;
+constexpr uint32_t ACK_RETRY_BASE_MS       = airtak::ACK_RETRY_BASE_MS;
+constexpr uint32_t ACK_TIMEOUT_MIN_MS      = airtak::ACK_TIMEOUT_MIN_MS;
+constexpr uint32_t ACK_TIMEOUT_PER_HOP_MS  = airtak::ACK_TIMEOUT_PER_HOP_MS;
+constexpr uint8_t  ACK_RETRY_QUEUE_SIZE    = airtak::ACK_RETRY_QUEUE_SIZE;
+constexpr uint8_t  ACK_HOP_START_FALLBACK  = airtak::ACK_HOP_START_FALLBACK;
 
 // ── Router duplicate-suppression cache ───────────────────────────────────────
-constexpr uint32_t ROUTER_DUP_CACHE_SIZE    = 100;  // (source_id, packet_id) pairs
-constexpr uint32_t ROUTER_DUP_CACHE_TTL_MS = 60000; // 60 s expiry per entry
+// Canonical: MeshConstants.h
+constexpr uint32_t ROUTER_DUP_CACHE_SIZE   = airtak::ROUTER_DUP_CACHE_SIZE;
+constexpr uint32_t ROUTER_DUP_CACHE_TTL_MS = airtak::ROUTER_DUP_CACHE_TTL_MS;
 
 // ── NODEINFO broadcast interval ───────────────────────────────────────────────
 // Meshtastic default is 900 s (15 min); AirTAK was 10800 s (3 h) which is far
 // too long — the node appears stale in the Meshtastic app's node list.
-constexpr uint32_t NODEINFO_BROADCAST_INTERVAL_SECS = 900;  // 15 minutes
+// Canonical: MeshConstants.h
+constexpr uint32_t NODEINFO_BROADCAST_INTERVAL_SECS = airtak::NODEINFO_BROADCAST_INTERVAL_SECS;
 
 // ── Startup announce burst ────────────────────────────────────────────────────
 // After the initial explicit NODEINFO at boot, backdate the periodic timer so
 // tick() fires a follow-up rebroadcast after this many milliseconds.  This
 // ensures the Meshtastic app discovers the device quickly even if it connected
 // after the very first broadcast.
-constexpr uint32_t STARTUP_ANNOUNCE_DELAY_MS = 10000;  // 10 seconds
+// Canonical: MeshConstants.h
+constexpr uint32_t STARTUP_ANNOUNCE_DELAY_MS = airtak::STARTUP_ANNOUNCE_DELAY_MS;
 
 // ── Telemetry broadcast interval ──────────────────────────────────────────────
-constexpr uint32_t TELEMETRY_BROADCAST_INTERVAL_SECS = 900;   // 15 minutes
+// Canonical: MeshConstants.h
+constexpr uint32_t TELEMETRY_BROADCAST_INTERVAL_SECS = airtak::TELEMETRY_BROADCAST_INTERVAL_SECS;
 
 // ── Display ───────────────────────────────────────────────────────────────────
-constexpr uint32_t DISPLAY_MIN_REFRESH_MS = 60000; // 60 s min between full refreshes (§9.6)
+// Canonical: DisplayConstants.h
+constexpr uint32_t DISPLAY_MIN_REFRESH_MS = airtak::DISPLAY_MIN_REFRESH_MS;
 
 // ── Duty-cycle-aware relay suppression (§8.7.1, Roadmap 6.10) ──────────────────
 // Thresholds as percentage of the per-sub-band regulatory limit.
 // All values are in Defaults.h only — not user-configurable via BLE.
-constexpr uint8_t  DC_CAUTION_THRESHOLD_PCT  = 60;   // notify Android only
-constexpr uint8_t  DC_WARNING_THRESHOLD_PCT  = 80;   // drop Tier 2 relay; e-ink "Radio Busy"
-constexpr uint8_t  DC_CRITICAL_THRESHOLD_PCT = 95;   // drop Tier 2; keep Tier 1 only; e-ink "Radio Guard"
-constexpr uint8_t  DC_TX_LOG_SIZE            = 128;  // circular buffer entries (~50 min at 100-node peak relay)
-constexpr uint32_t DC_LIMIT_EU868_G1_MS_PER_HOUR = 360000; // 10 % of 3 600 000 ms (§8.7.1)
+// Canonical: DcConstants.h
+constexpr uint8_t  DC_CAUTION_THRESHOLD_PCT  = airtak::DC_CAUTION_THRESHOLD_PCT;
+constexpr uint8_t  DC_WARNING_THRESHOLD_PCT  = airtak::DC_WARNING_THRESHOLD_PCT;
+constexpr uint8_t  DC_CRITICAL_THRESHOLD_PCT = airtak::DC_CRITICAL_THRESHOLD_PCT;
+constexpr uint8_t  DC_TX_LOG_SIZE            = airtak::DC_TX_LOG_SIZE;
+constexpr uint32_t DC_LIMIT_EU868_G1_MS_PER_HOUR = airtak::DC_LIMIT_EU868_G1_MS_PER_HOUR;
 
 } // namespace defaults
 } // namespace airtak

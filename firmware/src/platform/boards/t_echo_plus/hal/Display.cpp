@@ -12,6 +12,7 @@
 #include "mesh/ChannelManager.h"
 #include "config/Defaults.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 #include <Arduino.h>
 #include <SPI.h>
 
@@ -38,9 +39,9 @@ static void drawHeader(const char* title) {
     s_display.setTextColor(GxEPD_BLACK);
     s_display.setCursor(4, 14);
     s_display.print(title);
-    s_display.drawLine(0, ROW_HEADER_END, EINK_WIDTH, ROW_HEADER_END, GxEPD_BLACK);
+    s_display.drawLine(0, DISP_HEADER_HEIGHT, DISP_WIDTH, DISP_HEADER_HEIGHT, GxEPD_BLACK);
     for (uint8_t i = 0; i < SCREEN_COUNT; i++) {
-        uint16_t x = EINK_WIDTH - 4 - (SCREEN_COUNT - 1 - i) * 7;
+        uint16_t x = DISP_WIDTH - 4 - (SCREEN_COUNT - 1 - i) * 7;
         uint16_t y = 8;
         if (i == static_cast<uint8_t>(s_current_screen)) {
             s_display.fillCircle(x, y, 3, GxEPD_BLACK);
@@ -51,17 +52,17 @@ static void drawHeader(const char* title) {
 }
 
 static void drawFooter() {
-    s_display.drawLine(0, ROW_FOOTER_START, EINK_WIDTH, ROW_FOOTER_START, GxEPD_BLACK);
+    s_display.drawLine(0, DISP_ROW_FOOTER_START, DISP_WIDTH, DISP_ROW_FOOTER_START, GxEPD_BLACK);
     s_display.setFont(nullptr);
     s_display.setTextColor(GxEPD_BLACK);
 
     uint8_t pct = (uint8_t)(Battery::level() * 100.0f);
     char bat[12];
     snprintf(bat, sizeof(bat), "%d%%%s", pct, Battery::isCharging() ? "+" : "");
-    s_display.setCursor(EINK_WIDTH - 32, ROW_FOOTER_START + 9);
+    s_display.setCursor(DISP_WIDTH - 32, DISP_ROW_FOOTER_START + 9);
     s_display.print(bat);
 
-    s_display.setCursor(2, ROW_FOOTER_START + 9);
+    s_display.setCursor(2, DISP_ROW_FOOTER_START + 9);
     s_display.print(airtak::ble::BLEServer::isConnected() ? "BLE" : "   ");
 }
 
@@ -74,7 +75,7 @@ static void renderMainScreen() {
     s_display.setFont(&FreeSans9pt7b);
     s_display.setTextColor(GxEPD_BLACK);
 
-    uint16_t y = ROW_CONTENT_START + 14;
+    uint16_t y = DISP_ROW_CONTENT_START + 14;
 
     if (GPS::hasFix()) {
         const GpsFix& fix = GPS::currentFix();
@@ -116,7 +117,7 @@ static void renderMessagesScreen() {
     drawHeader("MESSAGES");
     s_display.setFont(&FreeSans9pt7b);
     s_display.setTextColor(GxEPD_BLACK);
-    s_display.setCursor(4, ROW_CONTENT_START + 14);
+    s_display.setCursor(4, DISP_ROW_CONTENT_START + 14);
     s_display.print("(no messages)");
     drawFooter();
 }
@@ -125,7 +126,7 @@ static void renderPlayersScreen() {
     drawHeader("PLAYERS");
     s_display.setFont(&FreeSans9pt7b);
     s_display.setTextColor(GxEPD_BLACK);
-    s_display.setCursor(4, ROW_CONTENT_START + 14);
+    s_display.setCursor(4, DISP_ROW_CONTENT_START + 14);
     s_display.print("(no players)");
     drawFooter();
 }
@@ -135,7 +136,7 @@ static void renderRadioScreen() {
     s_display.setFont(&FreeSans9pt7b);
     s_display.setTextColor(GxEPD_BLACK);
 
-    uint16_t y = ROW_CONTENT_START + 14;
+    uint16_t y = DISP_ROW_CONTENT_START + 14;
     const ChannelSlot* primary = ChannelManager::primarySlot();
     if (primary) {
         char buf[32];
@@ -175,7 +176,7 @@ void Display::refresh(EventGroupHandle_t system_event_group) {
     if (s_dirty_mask == 0) return;
 
     uint32_t now = millis();
-    if (s_last_refresh_ms != 0 && (now - s_last_refresh_ms) < EINK_MIN_REFRESH_MS) return;
+    if (s_last_refresh_ms != 0 && (now - s_last_refresh_ms) < DISPLAY_MIN_REFRESH_MS) return;
 
     s_display.setFullWindow();
     s_display.firstPage();

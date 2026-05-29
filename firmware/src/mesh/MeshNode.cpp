@@ -12,6 +12,7 @@
 #include "hal/Display.h"
 #include "game/PlayerState.h"
 #include "config/ConfigManager.h"
+#include "config/constants/Constants.h"
 #include "config/Defaults.h"
 #include "config/FlashStore.h"
 #include "platform/Platform.h"
@@ -23,8 +24,8 @@
 namespace airtak {
 
 // PKI keypair — loaded from flash or generated at init.
-static uint8_t s_pki_public_key[32]  = {};
-static uint8_t s_pki_private_key[32] = {};
+static uint8_t s_pki_public_key[CURVE25519_PUBKEY_BYTES]  = {};
+static uint8_t s_pki_private_key[CURVE25519_PRIVKEY_BYTES] = {};
 static bool    s_pki_ready           = false;
 
 static uint32_t s_node_id           = 0;
@@ -85,19 +86,19 @@ static uint16_t serializeUser(uint8_t* buf, uint16_t buf_len) {
     platform::macAddress(macaddr);
 
     uint16_t pos = 0;
-    pos = encodeString(buf, pos, 1, id_str);     // field 1: id
-    pos = encodeString(buf, pos, 2, long_name);  // field 2: long_name
-    pos = encodeString(buf, pos, 3, short_name); // field 3: short_name
-    pos = encodeBytes (buf, pos, 4, macaddr, sizeof(macaddr));
+    pos = encodeString(buf, pos, NODEINFO_FIELD_ID, id_str);
+    pos = encodeString(buf, pos, NODEINFO_FIELD_LONG_NAME, long_name);
+    pos = encodeString(buf, pos, NODEINFO_FIELD_SHORT_NAME, short_name);
+    pos = encodeBytes (buf, pos, NODEINFO_FIELD_MACADDR, macaddr, sizeof(macaddr));
     // field 5: hw_model — Meshtastic HardwareModel enum, platform-specific
-    pos = encodeTag   (buf, pos, 5, 0); pos = encodeVarint(buf, pos, platform::meshtasticHwModel());
+    pos = encodeTag   (buf, pos, NODEINFO_FIELD_HW_MODEL, 0); pos = encodeVarint(buf, pos, platform::meshtasticHwModel());
     // field 6: is_licensed = false (default, must match Meshtastic owner.is_licensed)
-    pos = encodeTag   (buf, pos, 6, 0); pos = encodeVarint(buf, pos, 0);
-    // field 7: role = 0 (CLIENT)
-    pos = encodeTag   (buf, pos, 7, 0); pos = encodeVarint(buf, pos, 0);
+    pos = encodeTag   (buf, pos, NODEINFO_FIELD_IS_LICENSED, 0); pos = encodeVarint(buf, pos, 0);
+    // field 7: role = CLIENT
+    pos = encodeTag   (buf, pos, NODEINFO_FIELD_ROLE, 0); pos = encodeVarint(buf, pos, MESHTASTIC_ROLE_CLIENT);
     // field 8: public_key — 32-byte placeholder. Any non-zero bytes unblock
     // Meshtastic PKI DM check; proper Curve25519 keygen is future work.
-    pos = encodeBytes(buf, pos, 8, s_pki_public_key, sizeof(s_pki_public_key));
+    pos = encodeBytes(buf, pos, NODEINFO_FIELD_PUBLIC_KEY, s_pki_public_key, sizeof(s_pki_public_key));
 
     (void)buf_len;
     return pos;
@@ -118,7 +119,7 @@ static uint16_t serializePosition(uint8_t* buf, uint16_t buf_len) {
     uint16_t pos = 0;
     pos = encodeFixed32(buf, pos, 1, (uint32_t)lat_i);  // latitude_i
     pos = encodeFixed32(buf, pos, 2, (uint32_t)lon_i);  // longitude_i
-    pos = encodeTag    (buf, pos, 3, 0); pos = encodeVarint(buf, pos, (uint32_t)alt_m); // altitude
+    pos = encodeTag    (buf, pos, POSITION_FIELD_ALTITUDE, 0); pos = encodeVarint(buf, pos, (uint32_t)alt_m); // altitude
     // field 4: time (unix seconds; derived from GPS timestamp_ms / 1000)
     uint32_t unix_sec = (uint32_t)(fix.timestamp_ms / 1000);
     pos = encodeFixed32(buf, pos, 4, unix_sec);
@@ -129,7 +130,7 @@ static uint16_t serializePosition(uint8_t* buf, uint16_t buf_len) {
     // for a future per-slot override (not yet implemented).  If both are set,
     // the per-slot value should take precedence when transmitting on that slot.
    // For now, the global value is used for all slots.
-    pos = encodeTag    (buf, pos, 23, 0); pos = encodeVarint(buf, pos, precision_bits);
+    pos = encodeTag    (buf, pos, POSITION_FIELD_PRECISION_BITS, 0); pos = encodeVarint(buf, pos, precision_bits);
     (void)buf_len;
     return pos;
 }
@@ -147,13 +148,13 @@ void MeshNode::init() {
     size_t stored = config::FlashStore::read(config::ConfigGroup::PKI_KEYPAIR,
                                              kp_buf, sizeof(kp_buf));
     if (stored == 64) {
-        memcpy(s_pki_private_key, kp_buf, 32);
-        memcpy(s_pki_public_key,  kp_buf + 32, 32);
+        memcpy(s_pki_private_key, kp_buf, CURVE25519_PRIVKEY_BYTES);
+        memcpy(s_pki_public_key,  kp_buf + CURVE25519_PRIVKEY_BYTES, CURVE25519_PUBKEY_BYTES);
         s_pki_ready = true;
     } else {
         if (Crypto::pkikeypair(s_pki_public_key, s_pki_private_key)) {
-            memcpy(kp_buf, s_pki_private_key, 32);
-            memcpy(kp_buf + 32, s_pki_public_key, 32);
+            memcpy(kp_buf, s_pki_private_key, CURVE25519_PRIVKEY_BYTES);
+            memcpy(kp_buf + CURVE25519_PRIVKEY_BYTES, s_pki_public_key, CURVE25519_PUBKEY_BYTES);
             config::FlashStore::write(config::ConfigGroup::PKI_KEYPAIR, kp_buf, 64);
             s_pki_ready = true;
         }
@@ -205,7 +206,7 @@ static uint16_t serializeTelemetry(uint8_t* buf, uint16_t buf_len) {
     uint8_t dm[24];
     uint16_t dm_pos = 0;
     // DeviceMetrics field 1: battery_level (uint32, 0-100 percentage)
-    dm_pos = encodeTag(dm, dm_pos, 1, 0);
+    dm_pos = encodeTag(dm, dm_pos, DEVICEMETRICS_FIELD_BATTERY, 0);
     dm_pos = encodeVarint(dm, dm_pos, (uint32_t)(bat * 100.0f));
     // DeviceMetrics field 2: voltage (float, fixed32)
     uint32_t voltage_mv = Battery::voltageMillivolts();
@@ -217,7 +218,7 @@ static uint16_t serializeTelemetry(uint8_t* buf, uint16_t buf_len) {
 
     // Telemetry field 2: device_metrics (oneof, length-delimited sub-message)
     uint16_t pos = 0;
-    pos = encodeTag(buf, pos, 2, 2);
+    pos = encodeTag(buf, pos, TELEMETRY_FIELD_DEVICE_METRICS, 2);
     pos = encodeVarint(buf, pos, dm_len);
     memcpy(buf + pos, dm, dm_len); pos += dm_len;
 
@@ -320,12 +321,11 @@ uint32_t MeshNode::knownNodeCount()  { return s_known_node_count; }
 // POSITION_APP, and TELEMETRY_APP packets. When a new node is seen for the first
 // time, increment s_known_node_count and mark the display dirty so the main
 // screen reflects the updated mesh size.
-constexpr uint8_t  MAX_KNOWN_NODES = 50;
 
 struct RemoteNode {
     uint32_t node_id;
-    char     long_name[40];
-    char     short_name[5];
+    char     long_name[REMOTE_NODE_LONG_NAME_MAX];
+    char     short_name[REMOTE_NODE_SHORT_NAME_MAX];
     bool     has_position;
     double   latitude;
     double   longitude;
@@ -334,7 +334,7 @@ struct RemoteNode {
     float    battery_level;
     bool     has_battery;
     uint32_t last_seen_ms;
-    uint8_t  public_key[32];
+    uint8_t  public_key[CURVE25519_PUBKEY_BYTES];
     bool     has_public_key;
 };
 
@@ -451,10 +451,10 @@ const uint8_t* MeshNode::remotePublicKey(uint32_t node_id) {
     return nullptr;
 }
 
-void MeshNode::storeRemotePublicKey(uint32_t node_id, const uint8_t pubkey[32]) {
+void MeshNode::storeRemotePublicKey(uint32_t node_id, const uint8_t pubkey[CURVE25519_PUBKEY_BYTES]) {
     RemoteNode* node = findOrCreateRemote(node_id);
     if (!node) return;
-    memcpy(node->public_key, pubkey, 32);
+    memcpy(node->public_key, pubkey, CURVE25519_PUBKEY_BYTES);
     node->has_public_key = true;
 }
 

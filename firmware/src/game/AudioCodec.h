@@ -18,13 +18,9 @@
 #include <cstddef>
 #include <FreeRTOS.h>
 #include <queue.h>
+#include "config/constants/Constants.h"
 
 namespace airtak {
-
-constexpr uint8_t  CODEC2_FRAMES_PER_PACKET = 8;
-constexpr uint16_t CODEC2_BITS_PER_FRAME    = 26;
-constexpr uint8_t  CODEC2_BYTES_PER_FRAME   = 4;  // ceil(26/8)
-constexpr uint16_t CODEC2_SAMPLES_PER_FRAME = 160; // 20 ms at 8 kHz
 
 class AudioCodec {
 public:

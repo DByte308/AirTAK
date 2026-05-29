@@ -31,6 +31,7 @@
 #include "ble/BLEQueue.h"
 #include "config/ConfigManager.h"
 #include "config/ConfigGroups.h"
+#include "config/constants/Constants.h"
 #include "mesh/ChannelManager.h"
 #include "mesh/Router.h"
 #include "mesh/PacketPool.h"
@@ -68,11 +69,11 @@ static QueueHandle_t    s_mesh_rx_queue   = nullptr;
 static QueueHandle_t    s_radio_tx_queue  = nullptr;
 
 // ── Reassembly buffers ────────────────────────────────────────────────────────
-static uint8_t  s_config_assembly[640];
+static uint8_t  s_config_assembly[BLE_CONFIG_ASSEMBLY_SIZE];
 static uint64_t s_config_recv_mask        = 0;
 static uint8_t  s_mesh_tx_assembly[LORA_MAX_PAYLOAD_BYTES];
 static uint64_t s_mesh_tx_recv_mask       = 0;
-static uint8_t  s_admin_assembly[128];
+static uint8_t  s_admin_assembly[BLE_ADMIN_ASSEMBLY_SIZE];
 static uint64_t s_admin_recv_mask         = 0;
 static uint64_t s_config_apply_started_ms = 0;
 static volatile bool s_pending_config_restart = false;
@@ -80,7 +81,7 @@ static airtak_ConfigGroup s_pending_config_group = airtak_ConfigGroup_DEVICE;
 static uint64_t s_pending_config_started_ms = 0;
 
 #if defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
-static uint8_t  s_ota_cmd_assembly[128];
+static uint8_t  s_ota_cmd_assembly[BLE_OTA_CMD_ASSEMBLY_SIZE];
 static uint64_t s_ota_cmd_recv_mask = 0;
 #endif
 

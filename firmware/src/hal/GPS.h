@@ -12,13 +12,9 @@
 #include <cstdint>
 #include <FreeRTOS.h>
 #include <event_groups.h>
+#include "config/constants/Constants.h"
 
 namespace airtak {
-
-// Event bits in g_system_event_group related to GPS
-constexpr EventBits_t GPS_EVENT_FIX_ACQUIRED = (1 << 8);
-constexpr EventBits_t GPS_EVENT_FIX_LOST     = (1 << 9);
-constexpr EventBits_t GPS_EVENT_NEW_POSITION  = (1 << 10);
 
 struct GpsFix {
     bool     valid;          // true when HDOP ≤ 5.0 and satellite count sufficient

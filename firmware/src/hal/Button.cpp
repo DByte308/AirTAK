@@ -3,15 +3,11 @@
 // Planning: §12.6, §7.1 | Roadmap: 1.7
 
 #include "hal/Button.h"
+#include "config/constants/Constants.h"
 #include "config.h"
 #include <Arduino.h>
 
 namespace airtak {
-
-// Debounce: ignore transitions faster than 50 ms
-constexpr uint32_t DEBOUNCE_MS      = 50;
-constexpr uint32_t LONG_PRESS_MS    = 3000;  // ≥ 3 s = long press (§12.6)
-constexpr uint32_t DOUBLE_PRESS_MS  = 400;   // max gap between presses for double detection
 
 static bool     s_last_state     = false;  // true = pressed (active low → inverted)
 static uint32_t s_press_start_ms = 0;
@@ -28,7 +24,7 @@ ButtonGesture Button::poll() {
 
     if (pressed && !s_last_state) {
         // Button just pressed
-        if ((now - s_last_release_ms) < DEBOUNCE_MS) {
+        if ((now - s_last_release_ms) < BUTTON_DEBOUNCE_MS) {
             return ButtonGesture::NONE; // debounce
         }
         s_press_start_ms = now;
@@ -40,13 +36,13 @@ ButtonGesture Button::poll() {
         s_last_release_ms = now;
         s_last_state = false;
 
-        if (held >= LONG_PRESS_MS) {
+        if (held >= BUTTON_LONG_PRESS_MS) {
             s_press_count = 0;
             return ButtonGesture::LONG_PRESS;
         }
 
         // Check for double press after timeout
-        if (s_press_count >= 2 && (now - s_last_release_ms) < DOUBLE_PRESS_MS) {
+        if (s_press_count >= 2 && (now - s_last_release_ms) < BUTTON_DOUBLE_PRESS_MS) {
             s_press_count = 0;
             return ButtonGesture::DOUBLE_PRESS;
         }
@@ -55,7 +51,7 @@ ButtonGesture Button::poll() {
     }
 
     // Reset press count if double-press window expired
-    if (s_press_count > 0 && (now - s_last_release_ms) > DOUBLE_PRESS_MS && !pressed) {
+    if (s_press_count > 0 && (now - s_last_release_ms) > BUTTON_DOUBLE_PRESS_MS && !pressed) {
         s_press_count = 0;
     }
 

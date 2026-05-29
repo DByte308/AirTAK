@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <FreeRTOS.h>
 #include <event_groups.h>
+#include "config/constants/Constants.h"
 
 namespace airtak {
 
@@ -31,8 +32,5 @@ public:
     // Raw ADC voltage in millivolts (diagnostic use only).
     static uint32_t voltageMillivolts();
 };
-
-// Event bit for battery update notification
-constexpr EventBits_t BATTERY_EVENT_UPDATED = (1 << 12);
 
 } // namespace airtak

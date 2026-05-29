@@ -7,6 +7,7 @@
 #include "game/AudioCodec.h"
 #include "mesh/Router.h"
 #include "mesh/Portnums.h"
+#include "config/constants/Constants.h"
 #include <codec2.h>
 #include <cstring>
 

@@ -41,6 +41,7 @@
 #include "system/RecoveryMode.h"
 #include "platform/Platform.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 
 #if defined(AIRTAK_PLATFORM_ESP32) && defined(AIRTAK_BOARD_HAS_BLE_OTA) && AIRTAK_BOARD_HAS_BLE_OTA
 #include <esp_ota_ops.h>
@@ -83,7 +84,7 @@ void task_audio_codec(void* params);
 #ifdef NRF52840_XXAA
 static inline void wdtInit() {
     NRF_WDT->CONFIG = 3;           // SLEEP=Run(1) | HALT=Run(2)
-    NRF_WDT->CRV = 32768 * 8;      // 8 seconds @ 32.768 kHz
+    NRF_WDT->CRV = 32768 * airtak::WDT_TIMEOUT_SECS;      // 8 seconds @ 32.768 kHz
     NRF_WDT->RREN = 0x01;          // Enable reload channel 0
     NRF_WDT->TASKS_START = 1;
 }
@@ -112,8 +113,8 @@ void setup() {
 
     wdtInit();
 
-    Serial.begin(115200);
-    delay(1000);
+    Serial.begin(airtak::SERIAL_BAUD_RATE);
+    delay(airtak::BOOT_SERIAL_SENTINEL_MS);
 #ifdef AIRTAK_FLASH_TEST
     Serial.println("FLASH TEST boot");
 #else
@@ -129,7 +130,7 @@ void setup() {
 
     wdtFeed();
     airtak::platform::initBoard();
-    delay(50);
+    delay(airtak::BOOT_BOARD_INIT_SETTLE_MS);
 
     airtak::PacketPool::init();
 
@@ -143,7 +144,7 @@ void setup() {
     Serial.flush();
     if (!airtak::config::FlashStore::init()) {
         Serial.println("[BOOT] FlashStore init FAILED - config changes won't persist!");
-        delay(2000);
+        delay(airtak::BOOT_FLASH_ERROR_DELAY_MS);
     } else {
         Serial.println("[BOOT] FlashStore init OK");
     }
@@ -156,7 +157,7 @@ void setup() {
     wdtFeed();
     airtak::config::ConfigManager::init();
     airtak::config::ConfigManager::registerCallback([](airtak::ConfigGroup group) {
-        airtak::Display::markDirty(airtak::ui::DISPLAY_DIRTY_ALL);
+        airtak::Display::markDirty(airtak::DISPLAY_DIRTY_ALL);
         if (group == airtak::ConfigGroup::POSITION) {
             uint8_t src = airtak::config::ConfigManager::positionGpsSource();
             airtak::GPS::setExternalSource(src == 1);
@@ -169,16 +170,16 @@ void setup() {
     airtak::Button::init();
 
     // Create inter-task communication primitives.
-    g_radio_tx_queue      = xQueueCreate(8,  sizeof(void*));
-    g_radio_rx_queue      = xQueueCreate(16, sizeof(void*));
-    g_ble_tx_queue        = xQueueCreate(8,  sizeof(void*));
-    g_config_change_queue = xQueueCreate(16, sizeof(void*));
+    g_radio_tx_queue      = xQueueCreate(airtak::QUEUE_SIZE_RADIO_TX,  sizeof(void*));
+    g_radio_rx_queue      = xQueueCreate(airtak::QUEUE_SIZE_RADIO_RX, sizeof(void*));
+    g_ble_tx_queue        = xQueueCreate(airtak::QUEUE_SIZE_BLE_TX,  sizeof(void*));
+    g_config_change_queue = xQueueCreate(airtak::QUEUE_SIZE_CONFIG_CHANGE, sizeof(void*));
     g_radio_event_group   = xEventGroupCreate();
     g_system_event_group  = xEventGroupCreate();
 
 #ifdef AIRTAK_PHASE7_AUDIO
-    g_audio_rx_queue = xQueueCreate(4, sizeof(void*));
-    g_audio_tx_queue = xQueueCreate(4, sizeof(void*));
+    g_audio_rx_queue = xQueueCreate(airtak::QUEUE_SIZE_AUDIO_RX, sizeof(void*));
+    g_audio_tx_queue = xQueueCreate(airtak::QUEUE_SIZE_AUDIO_TX, sizeof(void*));
 #endif
 
     configASSERT(g_radio_tx_queue);
@@ -189,15 +190,15 @@ void setup() {
     configASSERT(g_system_event_group);
 
     // Create all FreeRTOS tasks. Tasks are stubs in Phase 1; filled in subsequent phases.
-    configASSERT(xTaskCreate(task_radio_rxtx,      "radio",    4096, nullptr, 4, nullptr) == pdPASS);
-    configASSERT(xTaskCreate(task_gps_parser,      "gps",      4096, nullptr, 3, nullptr) == pdPASS);
-    configASSERT(xTaskCreate(task_ble_server,      "ble",      4096, nullptr, 3, nullptr) == pdPASS);
-    configASSERT(xTaskCreate(task_config_apply,    "config",   2048, nullptr, 2, nullptr) == pdPASS);
-    configASSERT(xTaskCreate(task_display_refresh, "display",  4096, nullptr, 1, nullptr) == pdPASS);
-    configASSERT(xTaskCreate(task_battery_monitor, "battery",  2048, nullptr, 0, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_radio_rxtx,      "radio",    airtak::TASK_STACK_RADIO_RXTX, nullptr, airtak::TASK_PRIO_RADIO_RXTX, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_gps_parser,      "gps",      airtak::TASK_STACK_GPS,        nullptr, airtak::TASK_PRIO_GPS,        nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_ble_server,      "ble",      airtak::TASK_STACK_BLE,        nullptr, airtak::TASK_PRIO_BLE,        nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_config_apply,    "config",   airtak::TASK_STACK_CONFIG,     nullptr, airtak::TASK_PRIO_CONFIG,     nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_display_refresh, "display",  airtak::TASK_STACK_DISPLAY,    nullptr, airtak::TASK_PRIO_DISPLAY,    nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_battery_monitor, "battery",  airtak::TASK_STACK_BATTERY,    nullptr, airtak::TASK_PRIO_BATTERY,    nullptr) == pdPASS);
 
 #ifdef AIRTAK_PHASE7_AUDIO
-    configASSERT(xTaskCreate(task_audio_codec, "audio", 3072, nullptr, 2, nullptr) == pdPASS);
+    configASSERT(xTaskCreate(task_audio_codec, "audio", airtak::TASK_STACK_AUDIO, nullptr, airtak::TASK_PRIO_AUDIO, nullptr) == pdPASS);
 #endif
 
     // FreeRTOS scheduler starts at end of setup(); loop() becomes the idle task.
@@ -243,7 +244,7 @@ void task_radio_rxtx(void* params) {
     airtak::MeshNode::scheduleStartupBurst();  // rebroadcast ~10 s later
     for (;;) {
         airtak::Radio::process(g_radio_rx_queue, g_radio_tx_queue, g_radio_event_group);
-        vTaskDelay(1);
+        vTaskDelay(airtak::TASK_RADIO_POLL_MS);
 
         // Drain the RX queue and pass packets through the flood router (§8.7).
         airtak::PooledPacket* pkt = nullptr;
@@ -263,7 +264,7 @@ void task_radio_rxtx(void* params) {
         {
             static uint32_t ls = 0;
             static bool     first_stats = true;
-            if (millis() - ls > 10000) {
+            if (millis() - ls > airtak::STATS_PRINT_INTERVAL_MS) {
                 ls = millis();
                 if (first_stats) {
                     first_stats = false;
@@ -298,7 +299,7 @@ void task_gps_parser(void* params) {
         // lower-priority tasks (config apply, display, battery monitor) and
         // competition with same-priority BLE task (§9.3).
         // GPS NMEA sentences arrive at 1 Hz (1000 ms), so 100 ms polling is sufficient.
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(airtak::TASK_GPS_LOOP_MS));
     }
 }
 
@@ -308,7 +309,7 @@ void task_ble_server(void* params) {
     airtak::ble::BLEServer::init(g_radio_rx_queue);
     for (;;) {
         airtak::ble::BLEServer::process(g_ble_tx_queue, g_config_change_queue);
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(airtak::TASK_BLE_LOOP_MS));
     }
 }
 
@@ -386,7 +387,7 @@ void task_display_refresh(void* params) {
         }
 
         if (display_asleep) {
-            vTaskDelay(pdMS_TO_TICKS(250));
+            vTaskDelay(pdMS_TO_TICKS(airtak::DISPLAY_SLEEP_POLL_MS));
             continue;
         }
 
@@ -394,16 +395,16 @@ void task_display_refresh(void* params) {
             airtak::Display::refresh(g_system_event_group);
             last_refresh_check_ms = now;
             screen_changed = false;
-        } else if ((now - last_refresh_check_ms) >= 5000) {
+        } else if ((now - last_refresh_check_ms) >= airtak::DISPLAY_REFRESH_CHECK_MS) {
             airtak::Display::refresh(g_system_event_group);
             last_refresh_check_ms = now;
         }
 
-        if ((now - last_player_tick_ms) >= 1000) {
+        if ((now - last_player_tick_ms) >= airtak::PLAYER_TICK_INTERVAL_MS) {
             airtak::PlayerState::tick(g_radio_tx_queue);
             last_player_tick_ms = now;
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(airtak::TASK_DISPLAY_LOOP_MS));
     }
 }
 
@@ -412,7 +413,7 @@ void task_battery_monitor(void* params) {
     airtak::Battery::init();
     for (;;) {
         airtak::Battery::sample(g_system_event_group);
-        vTaskDelay(pdMS_TO_TICKS(60000)); // sample every 60 s
+        vTaskDelay(pdMS_TO_TICKS(airtak::TASK_BATTERY_SAMPLE_MS));
     }
 }
 
@@ -421,7 +422,7 @@ void task_audio_codec(void* params) {
     // Phase 7.3: firmware audio pipeline (Codec2 encode/decode)
     for (;;) {
         // TODO: Phase 7.3 — process BLE audio frames from g_audio_rx_queue
-        vTaskDelay(pdMS_TO_TICKS(20)); // 20 ms Codec2 frame interval
+        vTaskDelay(pdMS_TO_TICKS(airtak::TASK_AUDIO_FRAME_MS)); // 20 ms Codec2 frame interval
     }
 }
 #endif

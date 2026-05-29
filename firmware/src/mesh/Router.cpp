@@ -26,6 +26,7 @@
 #include "config/ConfigManager.h"
 #include "hal/Radio.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 #include <cstring>
 #include <cstdio>
 
@@ -862,7 +863,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         // Prefix an internal queue tag so BLEServer routes the packet to MESH_RX.
         PooledPacket* bpkt = PacketPool::alloc();
         if (bpkt) {
-            bpkt->data[0] = ble::BLE_QUEUE_MESH_RX;
+            bpkt->data[0] = BLE_QUEUE_MESH_RX;
             bpkt->data[1] = static_cast<uint8_t>(portnum_value & 0xFF);
             memcpy(bpkt->data + 2, raw, OTA_HEADER_BYTES);
             memcpy(bpkt->data + 2 + OTA_HEADER_BYTES, decrypted, payload_len);
@@ -1312,7 +1313,7 @@ void Router::processIncoming(const uint8_t* raw, uint8_t raw_len,
         if (!is_audio) {
            // SNR-based relay delay: delay_ms = (SNR_max - SNR_received) × 50 + random(0, 50) (§8.7).
             float snr_max = defaults::PHY_SNR_MAX[0]; // fallback: Long/Mesh
-            if (slot->phy_profile_index < 5) {
+            if (slot->phy_profile_index < PHY_PROFILE_COUNT) {
                 snr_max = defaults::PHY_SNR_MAX[slot->phy_profile_index];
             }
             uint32_t delay_ms = (uint32_t)(max(0.0f, snr_max - snr) * 50.0f)
@@ -1450,7 +1451,7 @@ static bool queueOtaFrame(const ChannelSlot* slot, uint32_t dest, uint8_t hop_li
             // Diagnostic: print the raw struct bytes to detect layout issues
             const uint8_t* raw_hdr = (const uint8_t*)&hdr;
             Serial.print("[HDRRAW] ");
-            for (int ti = 0; ti < 16; ti++)
+            for (int ti = 0; ti < OTA_HEADER_BYTES; ti++)
                 Serial.printf("%02X", raw_hdr[ti]);
             Serial.println();
             Serial.print("[TXHEX] ");
@@ -1926,7 +1927,7 @@ uint8_t Router::defaultHopLimit(Portnum portnum) {
         case Portnum::AIRTAK_SYNC_REQUEST:  return defaults::HOP_LIMIT_AIRTAK_SYNC_REQUEST;
         case Portnum::AIRTAK_OVERLAY_ALIGNMENT: return defaults::HOP_LIMIT_OVERLAY_ALIGNMENT;
         case Portnum::AIRTAK_MARKER_SNAPSHOT_REQUEST: return defaults::HOP_LIMIT_MARKER_SNAPSHOT;
-        default:                           return 7;
+        default:                           return HOP_LIMIT_DEFAULT;
     }
 }
 

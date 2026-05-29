@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "mesh/Portnums.h"
+#include "config/constants/Constants.h"
 
 namespace airtak {
 

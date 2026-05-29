@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include "config/constants/Constants.h"
 
 namespace airtak {
 
@@ -30,17 +31,13 @@ public:
     static uint8_t touchCount();
     static const TouchPoint& point(uint8_t index);
 
-    static constexpr int16_t SWIPE_THRESHOLD = 8;
-
 private:
     static bool probeCST328();
     static bool probeGT911();
     static bool readCST328();
     static bool readGT911();
 
-    static constexpr uint8_t MAX_POINTS = 2;
-
-    static TouchPoint  s_points[MAX_POINTS];
+    static TouchPoint  s_points[TOUCH_MAX_POINTS];
     static uint8_t     s_count;
     static uint8_t     s_i2c_addr;
     static bool        s_initialized;

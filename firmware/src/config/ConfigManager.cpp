@@ -13,6 +13,7 @@
 #include "mesh/DcTracker.h"
 #include "ble/BLEQueue.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 #include "airtak/config.pb.h"
 #include <pb_encode.h>
 #include <pb_decode.h>
@@ -34,7 +35,6 @@ static bool                  s_radio_restart_pending = false;
 static bool                  s_dirty[CONFIG_GROUP_COUNT];
 
 // In-memory raw protobuf buffers for each config group (max 512 bytes per group)
-constexpr size_t CONFIG_BUF_SIZE = 512;
 static uint8_t  s_buffers[CONFIG_GROUP_COUNT][CONFIG_BUF_SIZE];
 static size_t   s_sizes[CONFIG_GROUP_COUNT];
 static uint8_t  s_staged_buffers[CONFIG_GROUP_COUNT][CONFIG_BUF_SIZE];
@@ -121,8 +121,8 @@ static void randomHexString(char* dest, size_t dest_len, size_t hex_len) {
 
 static size_t encodeDeviceConfig(uint8_t* buf, size_t buf_len) {
     airtak_DeviceConfig msg = airtak_DeviceConfig_init_zero;
-    randomHexString(msg.long_name, sizeof(msg.long_name), 8);
-    randomHexString(msg.short_name, sizeof(msg.short_name), 4);
+    randomHexString(msg.long_name, sizeof(msg.long_name), RANDOM_HEX_NODE_ID_LEN);
+    randomHexString(msg.short_name, sizeof(msg.short_name), RANDOM_HEX_SHORT_NAME_LEN);
     return encodeMessage(airtak_DeviceConfig_fields, &msg, buf, buf_len);
 }
 
@@ -289,7 +289,7 @@ int ConfigManager::applyGroup(ConfigGroup group, const uint8_t* pb_data, size_t 
         // persisted config desynchronized from the active radio state.
         void* sentinel = nullptr;
         if (!::g_config_change_queue ||
-            xQueueSend(::g_config_change_queue, &sentinel, pdMS_TO_TICKS(500)) != pdTRUE) {
+            xQueueSend(::g_config_change_queue, &sentinel, pdMS_TO_TICKS(CONFIG_QUEUE_SEND_TIMEOUT_MS)) != pdTRUE) {
             // Queue still full after 500 ms — the config task is stalled.
             // Run the restart inline on the BLE task stack as a last resort.
             // This blocks the BLE event loop but prevents indefinite config/radio
@@ -334,7 +334,7 @@ void ConfigManager::radioRestartProcedure() {
     // exceed 300 ms airtime, and with relay backoff the radio task may be
     // mid-transmit for up to ~680 ms. A 2 s window covers the worst case and
     // still completes well under any user-perceptible BLE timeout (§9.4.2).
-    constexpr uint32_t PAUSE_TIMEOUT_MS = 2000;
+    constexpr uint32_t PAUSE_TIMEOUT_MS = RADIO_RESTART_PAUSE_MS;
     while (!Radio::isPaused() && (millis() - started_ms) < PAUSE_TIMEOUT_MS) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -408,8 +408,8 @@ static bool readProtoVarint(const uint8_t* buf, size_t n, size_t& pos, uint32_t&
 // Device long name / short name: parse the DEVICE group buffer using a proper
 // proto field iterator so that length-delimited field boundaries are honoured
 // and random byte-values inside other fields cannot be mistaken for field tags.
-static char s_device_long_name[65];
-static char s_device_short_name[8];
+static char s_device_long_name[BLE_DEVICE_LONG_NAME_MAX];
+static char s_device_short_name[BLE_DEVICE_SHORT_NAME_MAX];
 
 static const char* readDeviceStringField(uint32_t wanted_field, const char* fallback, char* out, size_t out_capacity) {
     uint8_t gidx = static_cast<uint8_t>(ConfigGroup::DEVICE);
@@ -451,7 +451,7 @@ const char* ConfigManager::deviceShortName() {
                                  s_device_short_name, sizeof(s_device_short_name));
 }
 
-static char s_game_callsign[17];
+static char s_game_callsign[GAME_CALLSIGN_MAX_BYTES];
 
 const char* ConfigManager::gameCallsign() {
     uint8_t gidx = static_cast<uint8_t>(ConfigGroup::GAME);
@@ -513,7 +513,7 @@ uint8_t ConfigManager::powerBrightnessPct() {
         if (wire == 0) {
             uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
             if (field == 5) {  // brightness_pct = field 5
-                if (v > 100) v = 100;
+                if (v > CONFIG_MAX_BRIGHTNESS_PCT) v = CONFIG_MAX_BRIGHTNESS_PCT;
                 return static_cast<uint8_t>(v);
             }
         } else {
@@ -560,13 +560,13 @@ uint32_t ConfigManager::positionPrecisionBits() {
 
 uint8_t ConfigManager::positionHopLimitOverride() {
     uint32_t value = readPositionVarintField(6, 0);
-    if (value > 7) value = 7;
+    if (value > CONFIG_MAX_HOP_LIMIT) value = CONFIG_MAX_HOP_LIMIT;
     return static_cast<uint8_t>(value);
 }
 
 uint8_t ConfigManager::positionGpsSource() {
     uint32_t value = readPositionVarintField(7, defaults::POSITION_GPS_SOURCE);
-    if (value > 1) value = 0;  // clamp to valid enum range
+    if (value > CONFIG_MAX_GPS_SOURCE) value = 0;  // clamp to valid enum range
     return static_cast<uint8_t>(value);
 }
 
@@ -661,7 +661,7 @@ bool ConfigManager::loraPhyProfile(uint8_t profile_index,
                                    uint8_t& spreading_factor,
                                    uint32_t& bandwidth_hz,
                                    uint8_t& coding_rate) {
-    if (profile_index >= 5) return false;
+    if (profile_index >= PHY_PROFILE_COUNT) return false;
 
     uint8_t gidx = static_cast<uint8_t>(ConfigGroup::LORA);
     if (s_sizes[gidx] == 0) return false;
@@ -672,8 +672,8 @@ bool ConfigManager::loraPhyProfile(uint8_t profile_index,
     if (profile_index >= msg.profiles_count) return false;
 
     const auto& profile = msg.profiles[profile_index];
-    if (profile.spreading_factor < 7 || profile.spreading_factor > 12) return false;
-    if (profile.bandwidth_hz == 0 || profile.coding_rate < 5 || profile.coding_rate > 8) return false;
+    if (profile.spreading_factor < LORA_SF_MIN || profile.spreading_factor > LORA_SF_MAX) return false;
+    if (profile.bandwidth_hz == 0 || profile.coding_rate < LORA_CR_MIN || profile.coding_rate > LORA_CR_MAX) return false;
 
     spreading_factor = static_cast<uint8_t>(profile.spreading_factor);
     bandwidth_hz = profile.bandwidth_hz;

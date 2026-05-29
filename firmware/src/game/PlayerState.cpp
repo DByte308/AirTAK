@@ -7,6 +7,7 @@
 #include "mesh/Portnums.h"
 #include "config/Defaults.h"
 #include "hal/Display.h"
+#include "config/constants/Constants.h"
 #include <Arduino.h>
 
 namespace airtak {
@@ -14,8 +15,6 @@ namespace airtak {
 static PlayerStatus s_status           = PlayerStatus::ACTIVE;
 static uint32_t     s_hit_timestamp_ms = 0;
 static bool         s_hit_button_enabled = defaults::GAME_HIT_BUTTON_ENABLED;
-
-constexpr uint32_t HIT_CANCEL_WINDOW_MS = 3000; // 3 s accidental press protection (§12.6)
 
 void PlayerState::init() {
     s_status           = PlayerStatus::ACTIVE;
@@ -72,7 +71,7 @@ PlayerStatus PlayerState::status() { return s_status; }
 
 bool PlayerState::isCancellable() {
     return s_status == PlayerStatus::HIT &&
-           (millis() - s_hit_timestamp_ms) < HIT_CANCEL_WINDOW_MS;
+           (millis() - s_hit_timestamp_ms) < PLAYER_HIT_CANCEL_WINDOW_MS;
 }
 
 } // namespace airtak

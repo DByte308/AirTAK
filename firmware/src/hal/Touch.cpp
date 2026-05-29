@@ -2,6 +2,7 @@
 // firmware/src/hal/Touch.cpp — I2C touchscreen driver (GT911 / CST328)
 
 #include "hal/Touch.h"
+#include "config/constants/Constants.h"
 #include "config.h"
 
 #ifdef AIRTAK_PIN_TOUCH_INT
@@ -19,11 +20,6 @@ int16_t     Touch::s_touch_start_y  = -1;
 uint16_t    Touch::s_touch_raw_x    = 0;
 uint16_t    Touch::s_touch_raw_y    = 0;
 bool        Touch::s_tracking       = false;
-
-// GT911 registers
-constexpr uint16_t GT911_CMD       = 0x8040;
-constexpr uint16_t GT911_MOD_SW1   = 0x804D;
-constexpr uint16_t GT911_TOUCH_INFO = 0x814E;
 
 static void gt911WriteReg(uint8_t addr, uint16_t reg, uint8_t val) {
     Wire.beginTransmission(addr);
@@ -58,8 +54,8 @@ void Touch::init() {
     pinMode(AIRTAK_PIN_TOUCH_INT, INPUT_PULLUP);
 
     // GT911 can appear at 0x5D or 0x14 depending on INT pin state at boot
-    const uint8_t gt911_addrs[] = {0x5D, 0x14};
-    const uint8_t cst328_addr = 0x15;
+    const uint8_t gt911_addrs[] = {GT911_ADDR_PRIMARY, GT911_ADDR_SECONDARY};
+    const uint8_t cst328_addr = CST328_ADDR;
 
     for (uint8_t a : gt911_addrs) {
         Wire.beginTransmission(a);
@@ -79,23 +75,23 @@ void Touch::init() {
         return;
     }
 
-    if (s_i2c_addr == 0x5D || s_i2c_addr == 0x14) {
-        gt911WriteReg(s_i2c_addr, GT911_CMD, 0x00); // ensure idle
-        delay(10);
-        gt911WriteReg(s_i2c_addr, GT911_CMD, 0x02); // soft reset
-        delay(200);
-        uint8_t sw1 = gt911ReadReg(s_i2c_addr, GT911_MOD_SW1);
+    if (s_i2c_addr == GT911_ADDR_PRIMARY || s_i2c_addr == GT911_ADDR_SECONDARY) {
+        gt911WriteReg(s_i2c_addr, GT911_REG_CMD, GT911_CMD_IDLE); // ensure idle
+        delay(GT911_RESET_DELAY_MS);
+        gt911WriteReg(s_i2c_addr, GT911_REG_CMD, GT911_CMD_SOFT_RESET); // soft reset
+        delay(GT911_SOFT_RESET_DELAY_MS);
+        uint8_t sw1 = gt911ReadReg(s_i2c_addr, GT911_REG_MOD_SW1);
         if ((sw1 & 0x0F) == 0 || sw1 == 0xFF) {
-            sw1 = (sw1 & 0xF0) | 0x03;
+            sw1 = (sw1 & 0xF0) | GT911_MOD_SW1_DEFAULT;
         }
-        gt911WriteReg(s_i2c_addr, GT911_MOD_SW1, sw1);
-        delay(50);
-        uint8_t dummy[40];
-        gt911ReadBuf(s_i2c_addr, GT911_TOUCH_INFO, dummy, 40);
-        gt911WriteReg(s_i2c_addr, GT911_TOUCH_INFO, 0x00);
-        delay(10);
-        gt911WriteReg(s_i2c_addr, GT911_CMD, 0x00);
-        delay(50);
+        gt911WriteReg(s_i2c_addr, GT911_REG_MOD_SW1, sw1);
+        delay(GT911_CONFIG_DELAY_MS);
+        uint8_t dummy[GT911_TOUCH_INFO_SIZE];
+        gt911ReadBuf(s_i2c_addr, GT911_REG_TOUCH_INFO, dummy, GT911_TOUCH_INFO_SIZE);
+        gt911WriteReg(s_i2c_addr, GT911_REG_TOUCH_INFO, 0x00);
+        delay(GT911_FLUSH_DELAY_MS);
+        gt911WriteReg(s_i2c_addr, GT911_REG_CMD, GT911_CMD_IDLE);
+        delay(GT911_POST_FLUSH_DELAY_MS);
     }
 
     s_initialized = true;
@@ -114,11 +110,11 @@ TouchGesture Touch::poll() {
     bool now_pressed = false;
     uint16_t x = 0, y = 0;
 
-    if (s_i2c_addr == 0x5D || s_i2c_addr == 0x14) {
-        uint8_t buf[40] = {0};
-        uint8_t n = gt911ReadBuf(s_i2c_addr, GT911_TOUCH_INFO, buf, 40);
-        if (n < 40) return TouchGesture::NONE;
-        gt911WriteReg(s_i2c_addr, GT911_TOUCH_INFO, 0x00);
+    if (s_i2c_addr == GT911_ADDR_PRIMARY || s_i2c_addr == GT911_ADDR_SECONDARY) {
+        uint8_t buf[GT911_TOUCH_INFO_SIZE] = {0};
+        uint8_t n = gt911ReadBuf(s_i2c_addr, GT911_REG_TOUCH_INFO, buf, GT911_TOUCH_INFO_SIZE);
+        if (n < GT911_TOUCH_INFO_SIZE) return TouchGesture::NONE;
+        gt911WriteReg(s_i2c_addr, GT911_REG_TOUCH_INFO, 0x00);
 
         uint8_t points = buf[0] & 0x0F;
         s_count = (points > 0) ? 1 : 0;
@@ -127,13 +123,13 @@ TouchGesture Touch::poll() {
             uint16_t ry = (uint16_t)buf[4] | ((uint16_t)buf[5] << 8);
             s_touch_raw_x = rx;
             s_touch_raw_y = ry;
-            x = (uint32_t)rx * 320 / 4096;
-            y = (uint32_t)ry * 240 / 4096;
+            x = (uint32_t)rx * DISP_WIDTH / GT911_RAW_X_MAX;
+            y = (uint32_t)ry * DISP_HEIGHT / GT911_RAW_Y_MAX;
             // Swap XY and mirror Y per LilyGo factory calibration
             uint16_t swp = x;
             x = y;
             y = swp;
-            y = 240 - y;
+            y = DISP_HEIGHT - y;
             s_points[0] = {x, y, true};
             now_pressed = true;
         } else {
@@ -143,7 +139,7 @@ TouchGesture Touch::poll() {
         if (digitalRead(AIRTAK_PIN_TOUCH_INT) == HIGH && !was_pressed) {
             return TouchGesture::NONE;
         }
-        uint8_t buf[7] = {0};
+        uint8_t buf[GT911_CONFIG_SIZE] = {0};
         Wire.beginTransmission(s_i2c_addr);
         Wire.write(0x00);
         if (Wire.endTransmission(false) != 0) return TouchGesture::NONE;
@@ -179,7 +175,7 @@ TouchGesture Touch::poll() {
         int16_t ady = dy < 0 ? -dy : dy;
 
         TouchGesture gesture;
-        if (adx < SWIPE_THRESHOLD && ady < SWIPE_THRESHOLD) {
+        if (adx < TOUCH_SWIPE_THRESHOLD_PX && ady < TOUCH_SWIPE_THRESHOLD_PX) {
             gesture = TouchGesture::TAP;
         } else if (adx > ady) {
             gesture = (dx > 0) ? TouchGesture::SWIPE_RIGHT : TouchGesture::SWIPE_LEFT;

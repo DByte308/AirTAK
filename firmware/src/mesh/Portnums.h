@@ -1,10 +1,15 @@
 // AirTAK — Airsoft Team Awareness Kit
 // firmware/src/mesh/Portnums.h — Port number enumeration (Meshtastic + AirTAK)
 // Planning: §8.4 | Roadmap: T.1, T.2
+//
+// NOTE: Range-bound constants (PORTNUM_AIRTAK_BASE, PORTNUM_AIRTAK_MAX)
+// are defined in config/constants/PortnumConstants.h.
+// Do NOT include PortnumConstants.h here to avoid circular includes.
 
 #pragma once
 
 #include <cstdint>
+#include "config/constants/PortnumConstants.h"
 
 namespace airtak {
 
@@ -37,12 +42,12 @@ enum class Portnum : uint32_t {
 };
 
 // Returns true if portnum is an AirTAK-defined port number.
-// Only AirTAK-specific values (256–263) are recognised; other
-// portnums in the 256–511 private range may belong to Meshtastic
-// and must be treated as standard Meshtastic traffic.
+// Only AirTAK-specific values (256–266, see PortnumConstants.h) are
+// recognised; other portnums in the 256–511 private range may belong
+// to Meshtastic and must be treated as standard Meshtastic traffic.
 inline bool isAirTAKPortnum(Portnum p) {
     uint32_t v = static_cast<uint32_t>(p);
-    return v >= 256 && v <= 266;
+    return v >= PORTNUM_AIRTAK_BASE && v <= PORTNUM_AIRTAK_MAX_USED;
 }
 
 // ACKNOWLEDGED delivery eligibility is defined by Router::isAcknowledgedPortnum

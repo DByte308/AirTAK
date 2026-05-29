@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <FreeRTOS.h>
 #include <event_groups.h>
+#include "config/constants/Constants.h"
 
 namespace airtak {
 
@@ -32,8 +33,5 @@ public:
     // Returns time in ms that the button has been continuously held.
     static uint32_t heldMs();
 };
-
-// Event bit for button gesture available
-constexpr EventBits_t BUTTON_EVENT_GESTURE = (1 << 13);
 
 } // namespace airtak

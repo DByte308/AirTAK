@@ -10,6 +10,7 @@
 // the Meshtastic reference implementation. See §19.1 crypto tests.
 
 #include "mesh/Crypto.h"
+#include "config/constants/Constants.h"
 #include <cstring>
 #include <Arduino.h>
 
@@ -74,12 +75,12 @@ void Crypto::deriveKey(const uint8_t* psk, size_t psk_len,
     //   key.length 17–32  → AES-256 (zero-padded to 32 bytes)
     if (psk_len == 0) {
         key_len_out = 0;
-    } else if (psk_len <= 16) {
+    } else if (psk_len <= AES128_KEY_BYTES) {
         memcpy(key_out, psk, psk_len);
-        key_len_out = 16;   // AES-128 (zero-padded via memset above)
+        key_len_out = AES128_KEY_BYTES;   // AES-128 (zero-padded via memset above)
     } else {
-        memcpy(key_out, psk, psk_len > 32 ? 32 : psk_len);
-        key_len_out = 32;
+        memcpy(key_out, psk, psk_len > AES256_KEY_BYTES ? AES256_KEY_BYTES : psk_len);
+        key_len_out = AES256_KEY_BYTES;
     }
 }
 
@@ -92,8 +93,8 @@ void Crypto::buildNonce(uint32_t packet_id, uint32_t from_node_id,
     //   nonce[8:12] = from_node_id (LE uint32_t)
     //   nonce[12:16] = 0x00000000
     memset(nonce_out, 0, AES_NONCE_BYTES);
-    memcpy(nonce_out + 0, &packet_id,    4);
-    memcpy(nonce_out + 8, &from_node_id, 4);
+    memcpy(nonce_out + NONCE_PACKET_ID_OFFSET, &packet_id,     NONCE_PACKET_ID_BYTES);
+    memcpy(nonce_out + NONCE_FROM_NODE_OFFSET, &from_node_id, NONCE_FROM_NODE_BYTES);
 }
 
 void Crypto::crypt(const uint8_t* key, uint8_t key_len,
@@ -150,33 +151,33 @@ uint8_t Crypto::channelHash(const uint8_t* psk, size_t psk_len,
 
 // ── PKI: Curve25519 keypair generation and encryption/decryption ──────────
 
-bool Crypto::pkikeypair(uint8_t pubkey_out[32], uint8_t privkey_out[32]) {
+bool Crypto::pkikeypair(uint8_t pubkey_out[CURVE25519_PUBKEY_BYTES], uint8_t privkey_out[CURVE25519_PRIVKEY_BYTES]) {
 #if !defined(AIRTAK_PLATFORM_ESP32)
     ensureDrbg();
 #endif
-    uint8_t seed[32];
-    int ret = PKI_RNG_CALLBACK(PKI_RNG_CTX, seed, 32);
+    uint8_t seed[CURVE25519_PRIVKEY_BYTES];
+    int ret = PKI_RNG_CALLBACK(PKI_RNG_CTX, seed, CURVE25519_PRIVKEY_BYTES);
     if (ret != 0) return false;
     return x25519_keypair(pubkey_out, privkey_out, seed);
 }
 
-bool Crypto::pkiEncrypt(const uint8_t our_privkey[32],
-                        const uint8_t remote_pubkey[32],
+bool Crypto::pkiEncrypt(const uint8_t our_privkey[CURVE25519_PRIVKEY_BYTES],
+                        const uint8_t remote_pubkey[CURVE25519_PUBKEY_BYTES],
                         uint32_t from_node, uint32_t packet_id,
                         size_t plaintext_len, const uint8_t* plaintext,
                         uint8_t* ciphertext_out) {
-    uint8_t shared_secret[32];
+    uint8_t shared_secret[CURVE25519_SHARED_BYTES];
     if (!x25519_shared_secret(shared_secret, our_privkey, remote_pubkey))
         return false;
 
-    uint8_t shared_key[32];
-    mbedtls_sha256(shared_secret, 32, shared_key, 0);
+    uint8_t shared_key[AES_MAX_KEY_BYTES];
+    mbedtls_sha256(shared_secret, CURVE25519_SHARED_BYTES, shared_key, 0);
 
     uint32_t extraNonce;
 #if !defined(AIRTAK_PLATFORM_ESP32)
     ensureDrbg();
 #endif
-    if (PKI_RNG_CALLBACK(PKI_RNG_CTX, reinterpret_cast<uint8_t*>(&extraNonce), 4) != 0)
+    if (PKI_RNG_CALLBACK(PKI_RNG_CTX, reinterpret_cast<uint8_t*>(&extraNonce), NONCE_EXTRANONCE_BYTES) != 0)
         return false;
 
     // Meshtastic CCM uses L=2 → 13-byte nonce.  The 13-byte field is
@@ -184,11 +185,11 @@ bool Crypto::pkiEncrypt(const uint8_t our_privkey[32],
     //   nonce[4..7]  = extraNonce (LE)  — overwrites packet_id high bytes
     //   nonce[8..11] = from_node (LE)
     //   nonce[12]    = 0
-    uint8_t nonce13[13];
+    uint8_t nonce13[AES_CCM_NONCE_BYTES];
     memset(nonce13, 0, sizeof(nonce13));
-    memcpy(nonce13, &packet_id, 4);
-    memcpy(nonce13 + 4, &extraNonce, 4);
-    memcpy(nonce13 + 8, &from_node, 4);
+    memcpy(nonce13 + NONCE_PACKET_ID_OFFSET, &packet_id, NONCE_PACKET_ID_BYTES);
+    memcpy(nonce13 + NONCE_EXTRANONCE_OFFSET, &extraNonce, NONCE_EXTRANONCE_BYTES);
+    memcpy(nonce13 + NONCE_FROM_NODE_OFFSET, &from_node, NONCE_FROM_NODE_BYTES);
 
     mbedtls_ccm_context ccm;
     mbedtls_ccm_init(&ccm);
@@ -199,45 +200,45 @@ bool Crypto::pkiEncrypt(const uint8_t our_privkey[32],
         memcpy(ciphertext_out, plaintext, plaintext_len);
     }
 
-    uint8_t mac[8];
+    uint8_t mac[PKI_OVERHEAD_BYTES - 4];
     ret = mbedtls_ccm_encrypt_and_tag(&ccm, plaintext_len,
-                                       nonce13, 13,
+                                       nonce13, AES_CCM_NONCE_BYTES,
                                        nullptr, 0,
                                        ciphertext_out, ciphertext_out,
-                                       mac, 8);
+                                       mac, PKI_OVERHEAD_BYTES - 4);
     mbedtls_ccm_free(&ccm);
     if (ret != 0) return false;
 
-    memcpy(ciphertext_out + plaintext_len, mac, 8);
-    memcpy(ciphertext_out + plaintext_len + 8, &extraNonce, 4);
+    memcpy(ciphertext_out + plaintext_len, mac, PKI_OVERHEAD_BYTES - 4);
+    memcpy(ciphertext_out + plaintext_len + (PKI_OVERHEAD_BYTES - 4), &extraNonce, 4);
 
     return true;
 }
 
-bool Crypto::pkiDecrypt(const uint8_t our_privkey[32],
-                        const uint8_t remote_pubkey[32],
+bool Crypto::pkiDecrypt(const uint8_t our_privkey[CURVE25519_PRIVKEY_BYTES],
+                        const uint8_t remote_pubkey[CURVE25519_PUBKEY_BYTES],
                         uint32_t from_node, uint32_t packet_id,
                         size_t num_bytes, uint8_t* bytes) {
     if (num_bytes < PKI_OVERHEAD_BYTES) return false;
 
     const uint8_t* mac_ptr    = bytes + num_bytes - PKI_OVERHEAD_BYTES;
     uint32_t extraNonce;
-    memcpy(&extraNonce, mac_ptr + 8, 4);
+    memcpy(&extraNonce, mac_ptr + (PKI_OVERHEAD_BYTES - 4), 4);
     size_t ct_len = num_bytes - PKI_OVERHEAD_BYTES;
 
-    uint8_t shared_secret[32];
+    uint8_t shared_secret[CURVE25519_SHARED_BYTES];
     if (!x25519_shared_secret(shared_secret, our_privkey, remote_pubkey))
         return false;
 
-    uint8_t shared_key[32];
-    mbedtls_sha256(shared_secret, 32, shared_key, 0);
+    uint8_t shared_key[AES_MAX_KEY_BYTES];
+    mbedtls_sha256(shared_secret, CURVE25519_SHARED_BYTES, shared_key, 0);
 
     // Meshtastic CCM L=2 → 13-byte nonce matching initNonce layout.
-    uint8_t nonce13[13];
+    uint8_t nonce13[AES_CCM_NONCE_BYTES];
     memset(nonce13, 0, sizeof(nonce13));
-    memcpy(nonce13, &packet_id, 4);
-    memcpy(nonce13 + 4, &extraNonce, 4);
-    memcpy(nonce13 + 8, &from_node, 4);
+    memcpy(nonce13 + NONCE_PACKET_ID_OFFSET, &packet_id, NONCE_PACKET_ID_BYTES);
+    memcpy(nonce13 + NONCE_EXTRANONCE_OFFSET, &extraNonce, NONCE_EXTRANONCE_BYTES);
+    memcpy(nonce13 + NONCE_FROM_NODE_OFFSET, &from_node, NONCE_FROM_NODE_BYTES);
 
     mbedtls_ccm_context ccm;
     mbedtls_ccm_init(&ccm);
@@ -245,10 +246,10 @@ bool Crypto::pkiDecrypt(const uint8_t our_privkey[32],
     if (ret != 0) { mbedtls_ccm_free(&ccm); return false; }
 
     ret = mbedtls_ccm_auth_decrypt(&ccm, ct_len,
-                                    nonce13, 13,
+                                    nonce13, AES_CCM_NONCE_BYTES,
                                     nullptr, 0,
                                     bytes, bytes,
-                                    mac_ptr, 8);
+                                    mac_ptr, PKI_OVERHEAD_BYTES - 4);
     mbedtls_ccm_free(&ccm);
     return (ret == 0);
 }

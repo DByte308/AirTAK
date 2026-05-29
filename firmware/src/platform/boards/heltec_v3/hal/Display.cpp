@@ -20,6 +20,7 @@
 #include "config/ConfigManager.h"
 #include "config/Defaults.h"
 #include "config.h"
+#include "config/constants/Constants.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -33,14 +34,6 @@ using namespace ui;
 static Adafruit_SSD1306 s_display(AIRTAK_OLED_WIDTH, AIRTAK_OLED_HEIGHT, &Wire,
                                   AIRTAK_PIN_OLED_RST);
 
-// ── Layout constants (128×64) ─────────────────────────────────────────────────
-constexpr uint16_t OLED_W    = 128;
-constexpr uint16_t OLED_H    = 64;
-constexpr uint16_t HDR_H     = 11;   // header row height
-constexpr uint16_t FTR_H     = 10;   // footer row height
-constexpr uint16_t CONTENT_Y  = HDR_H + 1;
-constexpr uint16_t FOOTER_Y   = OLED_H - FTR_H;
-
 static ScreenId  s_current_screen  = ScreenId::MAIN;
 static uint16_t  s_dirty_mask      = DISPLAY_DIRTY_ALL;
 static uint32_t  s_last_refresh_ms = 0;
@@ -49,16 +42,16 @@ static uint32_t  s_last_refresh_ms = 0;
 
 static void drawHeader(const char* title) {
     s_display.setTextColor(SSD1306_WHITE);
-    s_display.fillRect(0, 0, OLED_W, HDR_H, SSD1306_BLACK);
-    s_display.drawRect(0, 0, OLED_W, HDR_H, SSD1306_WHITE);
+    s_display.fillRect(0, 0, DISP_WIDTH, DISP_HEADER_HEIGHT, SSD1306_BLACK);
+    s_display.drawRect(0, 0, DISP_WIDTH, DISP_HEADER_HEIGHT, SSD1306_WHITE);
     s_display.setTextSize(1);
     s_display.setCursor(3, 2);
     s_display.print(title);
 
     // Screen dots
     for (uint8_t i = 0; i < SCREEN_COUNT; i++) {
-        int16_t x = (int16_t)(OLED_W - 6 - (SCREEN_COUNT - 1 - i) * 8);
-        int16_t y = HDR_H / 2;
+        int16_t x = (int16_t)(DISP_WIDTH - 6 - (SCREEN_COUNT - 1 - i) * 8);
+        int16_t y = DISP_HEADER_HEIGHT / 2;
         if (i == static_cast<uint8_t>(s_current_screen)) {
             s_display.fillCircle(x, y, 2, SSD1306_WHITE);
         } else {
@@ -68,18 +61,18 @@ static void drawHeader(const char* title) {
 }
 
 static void drawFooter() {
-    s_display.fillRect(0, FOOTER_Y, OLED_W, FTR_H, SSD1306_BLACK);
-    s_display.drawRect(0, FOOTER_Y, OLED_W, FTR_H, SSD1306_WHITE);
+    s_display.fillRect(0, DISP_FOOTER_Y, DISP_WIDTH, DISP_FOOTER_HEIGHT, SSD1306_BLACK);
+    s_display.drawRect(0, DISP_FOOTER_Y, DISP_WIDTH, DISP_FOOTER_HEIGHT, SSD1306_WHITE);
     s_display.setTextSize(1);
 
     uint8_t pct = (uint8_t)(Battery::level() * 100.0f);
     s_display.setTextColor(SSD1306_WHITE);
     char bat[10];
     snprintf(bat, sizeof(bat), "%d%%%s", pct, Battery::isCharging() ? "+" : "");
-    s_display.setCursor(2, FOOTER_Y + 2);
+    s_display.setCursor(2, DISP_FOOTER_Y + 2);
     s_display.print(bat);
 
-    s_display.setCursor(OLED_W - 22, FOOTER_Y + 2);
+    s_display.setCursor(DISP_WIDTH - 22, DISP_FOOTER_Y + 2);
     s_display.print(ble::BLEServer::isConnected() ? "BLE" : "   ");
 }
 
@@ -94,8 +87,7 @@ static void renderMainScreen() {
 
     s_display.setTextSize(1);
     s_display.setTextColor(SSD1306_WHITE);
-    int16_t y = CONTENT_Y + 1;
-    constexpr int16_t LINE_H = 9;
+    int16_t y = DISP_CONTENT_Y + 1;
 
     {
         const char* longn  = config::ConfigManager::deviceLongName();
@@ -103,14 +95,14 @@ static void renderMainScreen() {
         char namebuf[32];
         snprintf(namebuf, sizeof(namebuf), "%.12s (%.4s)", longn, shortn);
         s_display.setCursor(2, y); s_display.print(namebuf);
-        y += LINE_H;
+        y += DISP_LINE_HEIGHT;
     }
 
     {
         char csbuf[20];
         snprintf(csbuf, sizeof(csbuf), "CS:%.10s", config::ConfigManager::gameCallsign());
         s_display.setCursor(2, y); s_display.print(csbuf);
-        y += LINE_H;
+        y += DISP_LINE_HEIGHT;
     }
 
     {
@@ -118,13 +110,13 @@ static void renderMainScreen() {
         char buf[48];
         if (GPS::hasFix()) {
             snprintf(buf, sizeof(buf), "GPS %.4f %.4f", fix.latitude, fix.longitude);
-            s_display.setCursor(2, y); s_display.print(buf); y += LINE_H;
+            s_display.setCursor(2, y); s_display.print(buf); y += DISP_LINE_HEIGHT;
             snprintf(buf, sizeof(buf), " %.0fm SAT:%u", fix.altitude_m, fix.satellites);
         } else {
             snprintf(buf, sizeof(buf), "GPS: NO FIX");
         }
         s_display.setCursor(2, y); s_display.print(buf);
-        y += LINE_H;
+        y += DISP_LINE_HEIGHT;
     }
 
     {
@@ -134,7 +126,7 @@ static void renderMainScreen() {
             snprintf(buf, sizeof(buf), "CH:%-6s RSSI:%.0f", primary->name, Radio::lastRssi());
             s_display.setCursor(2, y); s_display.print(buf);
         }
-        y += LINE_H;
+        y += DISP_LINE_HEIGHT;
     }
 
     {
@@ -152,7 +144,7 @@ static void renderMessagesScreen() {
     drawHeader("MESSAGES");
     s_display.setTextSize(1);
     s_display.setTextColor(SSD1306_WHITE);
-    s_display.setCursor(2, CONTENT_Y + 6);
+    s_display.setCursor(2, DISP_CONTENT_Y + 6);
     s_display.print("(no messages)");
     drawFooter();
 }
@@ -161,7 +153,7 @@ static void renderPlayersScreen() {
     drawHeader("PLAYERS");
     s_display.setTextSize(1);
     s_display.setTextColor(SSD1306_WHITE);
-    s_display.setCursor(2, CONTENT_Y + 6);
+    s_display.setCursor(2, DISP_CONTENT_Y + 6);
     s_display.print("(no players)");
     drawFooter();
 }
@@ -171,23 +163,22 @@ static void renderRadioScreen() {
 
     s_display.setTextSize(1);
     s_display.setTextColor(SSD1306_WHITE);
-    int16_t y = CONTENT_Y + 1;
-    constexpr int16_t LINE_H = 9;
+    int16_t y = DISP_CONTENT_Y + 1;
 
     const ChannelSlot* primary = ChannelManager::primarySlot();
     if (primary) {
         char buf[30];
         snprintf(buf, sizeof(buf), "Chan: %s", primary->name);
-        s_display.setCursor(2, y); s_display.print(buf); y += LINE_H;
+        s_display.setCursor(2, y); s_display.print(buf); y += DISP_LINE_HEIGHT;
         snprintf(buf, sizeof(buf), "PHY: %u", primary->phy_profile_index);
-        s_display.setCursor(2, y); s_display.print(buf); y += LINE_H;
+        s_display.setCursor(2, y); s_display.print(buf); y += DISP_LINE_HEIGHT;
     }
 
     char rbuf[30];
     snprintf(rbuf, sizeof(rbuf), "RSSI: %.0f dBm", Radio::lastRssi());
-    s_display.setCursor(2, y); s_display.print(rbuf); y += LINE_H;
+    s_display.setCursor(2, y); s_display.print(rbuf); y += DISP_LINE_HEIGHT;
     snprintf(rbuf, sizeof(rbuf), "SNR:  %.1f dB", Radio::lastSnr());
-    s_display.setCursor(2, y); s_display.print(rbuf); y += LINE_H;
+    s_display.setCursor(2, y); s_display.print(rbuf); y += DISP_LINE_HEIGHT;
     snprintf(rbuf, sizeof(rbuf), "RX:%-3lu TX:%lu",
              static_cast<unsigned long>(Radio::packetsRx()),
              static_cast<unsigned long>(Radio::packetsTx()));
@@ -250,7 +241,7 @@ void Display::showPasscode(uint32_t passkey) {
     s_display.setTextColor(SSD1306_WHITE);
     s_display.setCursor(4, 4);
     s_display.print("AirTAK Pairing");
-    s_display.drawLine(0, 12, OLED_W, 12, SSD1306_WHITE);
+    s_display.drawLine(0, 12, DISP_WIDTH, 12, SSD1306_WHITE);
 
     char buf[8];
     snprintf(buf, sizeof(buf), "%06lu", (unsigned long)passkey);
@@ -273,10 +264,10 @@ void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
     s_display.setTextColor(SSD1306_WHITE);
     s_display.setCursor(4, 2);
     s_display.print("SAFE MODE");
-    s_display.drawLine(0, 11, OLED_W, 11, SSD1306_WHITE);
+    s_display.drawLine(0, 11, DISP_WIDTH, 11, SSD1306_WHITE);
 
     int16_t y = 16;
-    const int16_t LH = 9;
+    const int16_t LH = DISP_LINE_HEIGHT;
     s_display.setCursor(4, y); s_display.print(config_erased ? "Config: ERASED" : "Config: kept"); y += LH;
     s_display.setCursor(4, y); s_display.print(bonds_cleared ? "BLE bonds: CLEARED" : "BLE bonds: kept"); y += LH + 2;
     s_display.setCursor(4, y); s_display.print("Name: AirTAK Recovery"); y += LH;

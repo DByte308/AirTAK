@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+#include "config/constants/Constants.h"
 
 namespace airtak {
 
@@ -23,8 +24,6 @@ enum class ConfigGroup : uint8_t {
     PKI_KEYPAIR = 100, // PKI keypair storage  → /config/pki_keypair.bin (raw 64 B)
     _COUNT      = 8,
 };
-
-constexpr uint8_t CONFIG_GROUP_COUNT = static_cast<uint8_t>(ConfigGroup::_COUNT);
 
 // LittleFS path for each config group (§9.4.4).
 inline const char* configGroupPath(ConfigGroup g) {

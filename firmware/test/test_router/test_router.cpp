@@ -20,6 +20,7 @@
 #include "mesh/MeshNode.h"
 #include "mesh/Portnums.h"
 #include "config/Defaults.h"
+#include "config/constants/Constants.h"
 #include <Arduino.h>
 #include <algorithm>
 #include <cstdint>
@@ -169,7 +170,7 @@ void test_default_hop_limit_position() {
 }
 
 void test_default_hop_limit_airtak_audio_is_one() {
-    TEST_ASSERT_EQUAL(1, Router::defaultHopLimit(Portnum::AIRTAK_AUDIO));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_AUDIO, Router::defaultHopLimit(Portnum::AIRTAK_AUDIO));
 }
 
 void test_default_hop_limit_airtak_tactical() {
@@ -182,15 +183,15 @@ void test_default_hop_limit_airtak_moderation() {
 
 // All non-audio packet types must use hop_limit=7 (§8.9, §v1.5 unification).
 void test_all_non_audio_types_use_hop7() {
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::TEXT_MESSAGE_APP));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::POSITION_APP));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::NODEINFO_APP));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::TRACEROUTE_APP));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::NEIGHBORINFO_APP));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_PLAYER));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_TACTICAL));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_MODERATION));
-    TEST_ASSERT_EQUAL(7, Router::defaultHopLimit(Portnum::AIRTAK_POSITION_REQUEST));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, Router::defaultHopLimit(Portnum::TEXT_MESSAGE_APP));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, Router::defaultHopLimit(Portnum::POSITION_APP));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, Router::defaultHopLimit(Portnum::NODEINFO_APP));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, Router::defaultHopLimit(Portnum::TRACEROUTE_APP));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, Router::defaultHopLimit(Portnum::NEIGHBORINFO_APP));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, Router::defaultHopLimit(Portnum::AIRTAK_PLAYER));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, Router::defaultHopLimit(Portnum::AIRTAK_TACTICAL));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, Router::defaultHopLimit(Portnum::AIRTAK_MODERATION));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, Router::defaultHopLimit(Portnum::AIRTAK_POSITION_REQUEST));
 }
 
 // §8.9 ACK timeout formula: max(ACK_TIMEOUT_MIN_MS, 2 × hop_start × ACK_TIMEOUT_PER_HOP_MS).
@@ -237,15 +238,15 @@ void test_ota_header_hop_start_preserved_after_relay_decrement() {
     OtaHeader hdr;
     hdr.flags = 0;
     // Encode: hop_limit=7 ([7:5]), want_ack=0 ([4]), hop_start=7 ([2:0])
-    hdr.flags = (uint8_t)(((7 & 0x07) << 5) | (7 & 0x07));
-    TEST_ASSERT_EQUAL(7, hdr.hopLimit());
-    TEST_ASSERT_EQUAL(7, hdr.hopStart());
+    hdr.flags = (uint8_t)(((HOP_LIMIT_DEFAULT & 0x07) << 5) | (HOP_LIMIT_DEFAULT & 0x07));
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, hdr.hopLimit());
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, hdr.hopStart());
 
     // Simulate relay: decrement hop_limit.
     hdr.setHopLimit(hdr.hopLimit() - 1);
     TEST_ASSERT_EQUAL(6, hdr.hopLimit());
     // hop_start must still be 7.
-    TEST_ASSERT_EQUAL(7, hdr.hopStart());
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, hdr.hopStart());
 }
 
 // §8.7 Heard-by suppression: handleOverheardRelay must cancel only the relay
@@ -382,7 +383,7 @@ void test_nodeinfo_dispatch_tracks_remote_node() {
     Router::init();
 
     uint8_t raw[192];
-    uint8_t raw_len = build_ota(raw, 0xAABBCCDD, 0x4B, 7, Portnum::NODEINFO_APP);
+    uint8_t raw_len = build_ota(raw, 0xAABBCCDD, 0x4B, HOP_LIMIT_DEFAULT, Portnum::NODEINFO_APP);
     Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
 
     TEST_ASSERT_EQUAL_UINT32(1, airtak::test::nodeInfoReceivedCount());
@@ -404,7 +405,7 @@ void test_send_data_packet_adds_ack_retry_and_handle_ack_clears_it() {
     TEST_ASSERT_TRUE(Router::testFirstRetry(msg_id, attempts, timeout_ms, hop_start, payload_len));
     TEST_ASSERT_NOT_EQUAL(0, msg_id);
     TEST_ASSERT_EQUAL_UINT8(0, attempts);
-    TEST_ASSERT_EQUAL_UINT8(7, hop_start);
+    TEST_ASSERT_EQUAL_UINT8(HOP_LIMIT_DEFAULT, hop_start);
     TEST_ASSERT_EQUAL_UINT32(16600, timeout_ms); // now(11000)+timeout(5600)
     TEST_ASSERT_GREATER_THAN_UINT16(data_len, payload_len);
 
@@ -725,11 +726,11 @@ void test_ack_generated_with_zero_hop_start_fallback() {
 
     // Build a packet with hop_start=0 (legacy device).
     uint8_t raw[192];
-    uint8_t raw_len = build_ota(raw, 0xAABBCCDD, 0x60, 7,
+    uint8_t raw_len = build_ota(raw, 0xAABBCCDD, 0x60, HOP_LIMIT_DEFAULT,
                                 Portnum::AIRTAK_TACTICAL, nullptr, 0,
                                 true, 0x5678);
     // Overwrite the hop_start in Flags [2:0] to 0 (only hop_limit in [7:5]).
-    raw[12] = static_cast<uint8_t>(((7 & 0x07) << 5) | (1 << 4) | (0 & 0x07));
+    raw[12] = static_cast<uint8_t>(((HOP_LIMIT_DEFAULT & 0x07) << 5) | (1 << 4) | (0 & 0x07));
 
     Router::processIncoming(raw, raw_len, -42.0f, 8.0f, reinterpret_cast<QueueHandle_t>(0x1));
 
@@ -775,7 +776,7 @@ void test_send_data_packet_heartbeat_strips_want_response() {
 void test_default_hop_limit_airtak_ack_is_nonzero() {
     uint8_t hl = Router::defaultHopLimit(Portnum::AIRTAK_ACK);
     TEST_ASSERT_NOT_EQUAL(0, hl);
-    TEST_ASSERT_EQUAL(7, hl); // safety fallback per Defaults.h
+    TEST_ASSERT_EQUAL(HOP_LIMIT_DEFAULT, hl); // safety fallback per Defaults.h
 }
 
 // Implicit ACK (§8.9): the Router intentionally skips implicit ACKs via
