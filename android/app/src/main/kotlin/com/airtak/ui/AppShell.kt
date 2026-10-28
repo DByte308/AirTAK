@@ -85,6 +85,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
     val navController = rememberNavController()
     val link by viewModel.linkState.collectAsState()
     val status by viewModel.deviceStatus.collectAsState()
+    val hudTitle by viewModel.hudTitle.collectAsState()
     val phoneGpsActive by viewModel.phoneGpsActive.collectAsState()
     val phoneGpsFix by viewModel.phoneGpsFix.collectAsState()
     val backStack by navController.currentBackStackEntryAsState()
@@ -130,7 +131,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
             Column(Modifier.fillMaxSize()) {
                 HudBar(
                     linkState = link,
-                    callsign = status?.nodeName?.takeIf { it.isNotBlank() } ?: "AirTAK",
+                    callsign = hudTitle,
                     batteryPercent = status?.batteryLevel?.let { (it * 100).toInt() },
                     satellites = status?.gps?.satellites,
                     rssi = status?.radio?.lastRssi,
@@ -175,7 +176,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
         topBar = {
             HudBar(
                 linkState = link,
-                callsign = status?.nodeName?.takeIf { it.isNotBlank() } ?: "AirTAK",
+                callsign = hudTitle,
                 batteryPercent = status?.batteryLevel?.let { (it * 100).toInt() },
                 satellites = status?.gps?.satellites,
                 rssi = status?.radio?.lastRssi,

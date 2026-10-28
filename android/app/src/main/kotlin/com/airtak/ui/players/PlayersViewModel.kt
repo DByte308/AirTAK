@@ -13,6 +13,7 @@ import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.mesh.RemoteNodeRepository
 import com.airtak.data.moderation.ModerationRepository
 import com.airtak.data.status.DeviceStatusRepository
+import com.airtak.util.NodeNames
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.GameConfig
 import com.airtak.proto.ModerationAction
@@ -294,10 +295,7 @@ constructor(
             isSelf: Boolean,
     ): PlayerRow {
         val online = lastPlayerMs != null && now - lastPlayerMs <= MAP_PLAYER_STALE_MS
-        val displayName =
-                callsign.ifBlank {
-                    shortName.ifBlank { nodeId.toString(16).uppercase().takeLast(4) }
-                }
+        val displayName = NodeNames.resolve(callsign, shortName, longName, nodeId)
         return PlayerRow(
                 nodeId = nodeId,
                 callsign = displayName,

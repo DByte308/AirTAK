@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- AirTAK — USB device filter for wired firmware flashing (§3.1) -->
 <resources>
-    <!-- nRF52840 Adafruit bootloader (CDC-ACM serial DFU) vendor-id 0x239A -->
-    <usb-device vendor-id="9578" />
+    <!-- nRF52840 Adafruit bootloader (CDC-ACM serial DFU) vendor-id 0x239A = 9114.
+         This was 9578 (= 0x256A, not a real Adafruit VID), so the filter never
+         matched the board: no USB_DEVICE_ATTACHED auto-launch and no automatic USB
+         permission for nRF flashing. OtaConstants.VID_NRF52840 already had the
+         correct 0x239A, which is why only the manifest path was broken. -->
+    <usb-device vendor-id="9114" />
 
     <!-- ESP32-S3 USB-Serial-JTAG (built-in) vendor-id 0x303A -->
     <usb-device vendor-id="12346" />

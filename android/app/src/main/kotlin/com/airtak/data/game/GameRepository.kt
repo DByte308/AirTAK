@@ -10,6 +10,7 @@ package com.airtak.data.game
 import com.airtak.data.config.ConfigRepository
 import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.status.DeviceStatusRepository
+import com.airtak.util.NodeNames
 import com.airtak.config.constants.GAME_DEFAULT_PLAYER_COLOR
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.GameConfig
@@ -62,7 +63,10 @@ class GameRepository @Inject constructor(
         val gameBytes = config.groupBytes.value[ConfigGroup.GAME]
         val cfg = gameBytes?.let { runCatching { GameConfig.parseFrom(it) }.getOrNull() }
             ?: GameConfig.getDefaultInstance()
-        val callsign = cfg.callsign.ifBlank { device.nodeName.ifBlank { "AirTAK" } }
+        // Callsign first, device long name only as fallback (was the other way round
+        // in spirit: nodeName is DeviceConfig.long_name, see ble.proto).
+        val callsign = NodeNames.resolveOrNull(cfg.callsign, longName = device.nodeName)
+            ?: "AirTAK"
         val packet = PlayerStatePacket.newBuilder()
             .setNodeId(device.nodeId)
             .setCallsign(callsign)

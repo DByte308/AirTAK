@@ -30,6 +30,7 @@ import com.airtak.data.routing.RouteCalcState
 import com.airtak.data.routing.RoutePoint
 import com.airtak.data.routing.RoutingRepository
 import com.airtak.data.status.DeviceStatusRepository
+import com.airtak.util.NodeNames
 import com.airtak.data.tiles.TileBounds
 import com.airtak.data.tiles.TileDownloadState
 import com.airtak.data.tiles.TileRepository
@@ -197,7 +198,12 @@ class MapViewModel @Inject constructor(
     }
 
     private val mapCore = combine(sourceState, layerState, clock, phoneGps.location) { source, layers, now, phoneLoc ->
-        val ownLabel = source.gameConfig.callsign.ifBlank { source.status?.nodeName.orEmpty().ifBlank { "You" } }
+        // Same precedence as every other label. DeviceStatus.nodeName is the device
+        // long name (ble.proto), so it now ranks BELOW callsign instead of replacing it.
+        val ownLabel = NodeNames.resolveOrNull(
+            callsign = source.gameConfig.callsign,
+            longName = source.status?.nodeName,
+        ) ?: "You"
         val own = source.status?.gps?.takeIf { it.fix }?.let { OwnPosition(it.latitude, it.longitude, ownLabel) }
             ?: phoneLoc?.let { OwnPosition(it.latitude, it.longitude, ownLabel) }
         val ownNodeId = source.status?.nodeId?.toLong()?.and(0xFFFF_FFFFL)
@@ -547,7 +553,7 @@ class MapViewModel @Inject constructor(
     }
 
     private fun RemoteNodeEntity.toMapNode(now: Long): MapNode {
-        val label = callsign.ifBlank { shortName.ifBlank { nodeId.toString(16).uppercase().takeLast(4) } }
+        val label = NodeNames.resolve(callsign, shortName, longName, nodeId)
         return MapNode(
             nodeId = nodeId,
             label = label,
