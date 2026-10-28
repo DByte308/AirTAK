@@ -56,10 +56,14 @@ object TileIdentity {
     }
 
     /**
-     * Human-readable provenance for archive metadata: host, port and path, with the query dropped.
+     * Provenance for archive metadata: host and port only.
      *
-     * Enough to tell a user which server an offline area came from, without writing a credential
-     * into a file that outlives the settings screen it came from.
+     * The path is deliberately excluded. A path is not reliably public information either, and a
+     * credential sitting in one is a normal shape for a tile URL:
+     *   https://t.example.com/token/SECRET_ACCOUNT/{z}/{x}/{y}.png
+     * Keeping the path because it "looks like a route" would write that secret into an archive that
+     * gets copied, backed up and screenshotted. Host and port still answer the question a user
+     * actually has, which is which server an offline area came from.
      */
     fun provenanceLabel(rawUrl: String): String {
         val normalized = normalize(rawUrl) ?: return "unknown"
@@ -67,11 +71,9 @@ object TileIdentity {
         val rest = normalized.substring(schemeSep + 3)
         val authorityEnd = rest.indexOfFirst { it == '/' || it == '?' || it == '#' }
         val authority = if (authorityEnd == -1) rest else rest.substring(0, authorityEnd)
-        val path = if (authorityEnd == -1) "" else {
-            val afterAuthority = rest.substring(authorityEnd)
-            val q = afterAuthority.indexOfFirst { it == '?' || it == '#' }
-            if (q == -1) afterAuthority else afterAuthority.substring(0, q)
-        }
-        return "$authority$path".ifEmpty { "unknown" }
+        val at = authority.lastIndexOf('@')
+        // Userinfo is refused by the policy before any fetch, but never let it reach stored
+        // metadata either if some earlier stage is loosened.
+        return (if (at == -1) authority else authority.substring(at + 1)).ifEmpty { "unknown" }
     }
 }

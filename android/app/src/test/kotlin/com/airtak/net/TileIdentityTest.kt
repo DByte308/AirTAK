@@ -47,10 +47,31 @@ class TileIdentityTest {
     }
 
     @Test
-    fun apiKeyNeverReachesTheProvenanceLabel() {
+    fun apiKeyInQueryNeverReachesTheProvenanceLabel() {
         val label = TileIdentity.provenanceLabel("https://t.example.com/v1/{z}/{x}/{y}.png?key=SECRET_TOKEN")
-        assertEquals("t.example.com/v1/{z}/{x}/{y}.png", label)
+        assertEquals("t.example.com", label)
         assert(!label.contains("SECRET_TOKEN"))
+    }
+
+    /**
+     * A path is not reliably public either. /token/SECRET/{z}... is a normal tile URL shape, so the
+     * label stops at the authority rather than assuming everything after it is a harmless route.
+     */
+    @Test
+    fun credentialInPathNeverReachesTheProvenanceLabel() {
+        val label = TileIdentity.provenanceLabel("https://t.example.com/token/SECRET_ACCOUNT/{z}/{x}/{y}.png")
+        assertEquals("t.example.com", label)
+        assert(!label.contains("SECRET_ACCOUNT"))
+        assert(!label.contains("token"))
+    }
+
+    @Test
+    fun portSurvivesTheLabelButUserinfoDoesNot() {
+        assertEquals("t.example.com:8443", TileIdentity.provenanceLabel("https://t.example.com:8443/a/{z}/{x}.png"))
+        assertEquals(
+            "t.example.com",
+            TileIdentity.provenanceLabel("https://user:pw@t.example.com/a/{z}/{x}.png"),
+        )
     }
 
     @Test

@@ -229,10 +229,21 @@ class TileRepository @Inject constructor(
      */
     private fun servingArchives(): List<File> {
         val current = configuredTileUrlOrNull()?.let { TileIdentity.identityKey(it) }
-        return mbtilesFiles
-            .filter { it.name == ASSET_WORLD_OVERVIEW_FILE || (current != null && it.name == "field-$current.mbtiles") }
-            .sortedBy { it.name == ASSET_WORLD_OVERVIEW_FILE }
+        val active = current?.let { "field-$it.mbtiles" }
+
+        // The archive for the provider currently configured, if any.
+        val providerArchives = mbtilesFiles.filter { it.name == active }
+        // Anything that is not an auto-downloaded provider archive is an import or a hand-placed
+        // package, and stays usable by design regardless of provider settings. Excluding those
+        // because no internet provider is configured would leave the default offline case showing
+        // an empty map, which is the opposite of what offline is for.
+        val imported = mbtilesFiles.filter { it.name != ASSET_WORLD_OVERVIEW_FILE && !isProviderArchive(it.name) }
+        val overview = mbtilesFiles.filter { it.name == ASSET_WORLD_OVERVIEW_FILE }
+        return providerArchives + imported + overview
     }
+
+    /** Archives AirTAK downloaded itself, named field-<16 hex>.mbtiles by provider-stream identity. */
+    private fun isProviderArchive(name: String): Boolean = PROVIDER_ARCHIVE_NAME.matches(name)
 
     /**
      * Tile count without materialising the list.
@@ -691,6 +702,8 @@ class TileRepository @Inject constructor(
 
         /** Hard ceiling on simultaneously served connections; excess gets 503, not a new coroutine. */
         const val MAX_CONCURRENT_TILE_HANDLERS = 8
+
+        val PROVIDER_ARCHIVE_NAME = Regex("field-[0-9a-f]{16}\\.mbtiles")
 
         val TILE_PATH = Regex("/tiles/(\\d+)/(\\d+)/(\\d+)\\.png")
     }
