@@ -1,11 +1,14 @@
 package com.airtak.net
 
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentLength
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.readAvailable
+import java.io.ByteArrayOutputStream
 
 // Fetches one raster tile from the user-configured provider on behalf of the loopback proxy.
 //
@@ -15,7 +18,15 @@ import io.ktor.http.isSuccess
 // bytes. Redirects are already disabled on the client, so the re-check is defence in depth rather
 // than the primary control.
 
-/** Provider cache directives relevant to tile reuse. Only what the app actually acts on. */
+/**
+ * Provider cache directives relevant to tile reuse. Only what the app actually acts on.
+ *
+ * Deliberately limited, and not a full RFC 9111 parser. It splits Cache-Control on commas and
+ * matches a small set of tokens, so a quoted directive value containing a comma, for example
+ * `no-cache="set-cookie, x"`, is not interpreted correctly. Full directive parsing belongs to
+ * Ktor's HttpCache when cache reuse is wired up; this type exists to carry the few facts the
+ * fetch path needs, not to claim compliance.
+ */
 data class ProviderCacheDirectives(
     val noStore: Boolean,
     val noCache: Boolean,
@@ -48,10 +59,23 @@ data class ProviderCacheDirectives(
     }
 }
 
+/**
+ * Ceiling on a single tile response. A provider, or anything answering for one, must not be able
+ * to exhaust the device's memory by returning an arbitrarily large body: reading it straight into
+ * a ByteArray would do exactly that. Content-Length is rejected early when present, and the read
+ * is capped regardless so a lying or absent header does not help.
+ */
+const val MAX_TILE_RESPONSE_BYTES = 512 * 1024
+
 class RemoteTileFetcher(
     private val budgets: RequestBudgets,
-    /** Injected so tests drive a mock engine. Production passes the shared no-redirect client. */
+    /**
+     * Injected so tests drive a mock engine. Tests must pass followRedirects = false exactly as
+     * production does; the factory defaults to true, so omitting it silently tests a different
+     * client than the one that ships.
+     */
     private val client: HttpClient = AirTakHttp.newClient(followRedirects = false),
+    private val maxResponseBytes: Int = MAX_TILE_RESPONSE_BYTES,
 ) {
 
     sealed interface Result {
@@ -127,7 +151,12 @@ class RemoteTileFetcher(
                     if (!response.status.isSuccess()) {
                         return Result.Failed("Provider returned ${response.status.value}.")
                     }
-                    val bytes: ByteArray = response.body()
+                    val declared = response.contentLength()
+                    if (declared != null && declared > maxResponseBytes) {
+                        return Result.Failed("Provider declared $declared bytes, over the $maxResponseBytes tile limit.")
+                    }
+                    val bytes = readBounded(response, maxResponseBytes)
+                        ?: return Result.Failed("Provider body exceeded the $maxResponseBytes tile limit.")
                     if (bytes.isEmpty()) {
                         return Result.Failed("Provider returned an empty tile body.")
                     }
@@ -147,6 +176,34 @@ class RemoteTileFetcher(
             if (error is kotlinx.coroutines.CancellationException) throw error
             Result.Failed("Tile fetch failed: ${error.message ?: error.javaClass.simpleName}")
         }
+    }
+
+    /**
+     * Read at most [maxBytes] from the response, returning null as soon as it is exceeded rather
+     * than buffering the whole body first. The Content-Length check in the caller is only an early
+     * exit; this is the actual bound, so a lying or missing header cannot defeat it.
+     */
+    private suspend fun readBounded(
+        response: io.ktor.client.statement.HttpResponse,
+        maxBytes: Int,
+    ): ByteArray? {
+        val channel = response.bodyAsChannel()
+        val buffer = ByteArray(8 * 1024)
+        val out = ByteArrayOutputStream(16 * 1024)
+        var total = 0
+        while (true) {
+            val read = channel.readAvailable(buffer)
+            if (read < 0) break
+            if (read == 0) {
+                if (channel.isClosedForRead) break
+                channel.awaitContent()
+                continue
+            }
+            total += read
+            if (total > maxBytes) return null
+            out.write(buffer, 0, read)
+        }
+        return out.toByteArray()
     }
 
     /**

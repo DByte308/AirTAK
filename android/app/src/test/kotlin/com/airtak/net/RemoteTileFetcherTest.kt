@@ -26,7 +26,7 @@ class RemoteTileFetcherTest {
             seen += "${request.method.value} ${request.url}"
             respond(byteArrayOf(1, 2, 3), HttpStatusCode.OK, headersOf())
         }
-        return RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine)) to seen
+        return RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine, followRedirects = false)) to seen
     }
 
     @Test
@@ -67,7 +67,7 @@ class RemoteTileFetcherTest {
             ua = request.headers[HttpHeaders.UserAgent]
             respond(byteArrayOf(1, 2, 3), HttpStatusCode.OK, headersOf())
         }
-        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine))
+        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine, followRedirects = false))
         fetcher.fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
         assertEquals(AirTakHttp.userAgent(), ua, "every tile request must identify the app")
         assertTrue(ua!!.startsWith("AirTAK/"), "UA must name the app")
@@ -104,7 +104,7 @@ class RemoteTileFetcherTest {
                 ),
             )
         }
-        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine))
+        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine, followRedirects = false))
         val r = fetcher.fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
         assertTrue(r is RemoteTileFetcher.Result.Fetched, "got $r")
         val d = (r as RemoteTileFetcher.Result.Fetched).directives
@@ -120,7 +120,7 @@ class RemoteTileFetcherTest {
         val engine = MockEngine {
             respond(byteArrayOf(1), HttpStatusCode.OK, headersOf(HttpHeaders.CacheControl, "no-store"))
         }
-        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine))
+        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine, followRedirects = false))
         val r = fetcher.fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
         assertTrue(r is RemoteTileFetcher.Result.Fetched)
         assertTrue((r as RemoteTileFetcher.Result.Fetched).directives.persistenceProhibited)
@@ -129,7 +129,7 @@ class RemoteTileFetcherTest {
     @Test
     fun absentCacheHeadersYieldNoInventedFreshness() = runTest {
         val engine = MockEngine { respond(byteArrayOf(1), HttpStatusCode.OK, headersOf()) }
-        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine))
+        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine, followRedirects = false))
         val r = fetcher.fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
         val d = (r as RemoteTileFetcher.Result.Fetched).directives
         assertNull(d.maxAgeSeconds, "no max-age header must not become a local guess")
@@ -140,42 +140,84 @@ class RemoteTileFetcherTest {
     @Test
     fun missingTileIsDistinctFromATransportFailure() = runTest {
         val engine = MockEngine { respond(ByteArray(0), HttpStatusCode.NotFound, headersOf()) }
-        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine))
+        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine, followRedirects = false))
         val r = fetcher.fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
         assertTrue(r is RemoteTileFetcher.Result.NotFound, "404 must be NotFound, got $r")
     }
 
     @Test
-    fun redirectChainNeverYieldsTileBytes() = runTest {
-        // What this can and cannot prove, stated rather than glossed.
-        //
-        // MockEngine 2.3.9 follows redirects inside the engine and exposes no switch to turn that
-        // off (MockEngineConfig has requestHandlers and reuseHandlers only; maxSendCount arrived in
-        // a later Ktor), so it cannot represent the production guarantee that the Android engine is
-        // configured with followRedirects = false. Engine-level redirect suppression is therefore
-        // an API 25 device verification item, not a JVM one, and is recorded as such.
-        //
-        // What is verifiable here is the guarantee that actually protects the caller: a redirecting
-        // provider must never hand back tile bytes, whatever the engine does underneath.
-        //
-        // Observed under MockEngine: the engine follows the Location itself and re-requests it until
-        // its internal send limit trips, so the redirect target does appear in the recorded URLs.
-        // That is a property of the mock, not of the shipped client. The Location is therefore a
-        // reserved .example host so that no test can ever encode a real third-party address, even
-        // though MockEngine opens no socket.
-        val engine = MockEngine {
+    fun redirectIsRefusedAndNeverFollowed() = runTest {
+        val seen = mutableListOf<String>()
+        val engine = MockEngine { request ->
+            seen += request.url.toString()
             respond(
                 byteArrayOf(1, 2, 3, 4, 5),
                 HttpStatusCode.Found,
                 headersOf(HttpHeaders.Location, "https://redirect-target.example/3/4/5.png"),
             )
         }
-        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine))
+        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine, followRedirects = false))
         val r = fetcher.fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
-        assertTrue(
-            r !is RemoteTileFetcher.Result.Fetched,
-            "a redirecting provider must never produce a tile, got $r",
+        assertTrue(r is RemoteTileFetcher.Result.Refused, "3xx must be refused, got $r")
+        assertEquals(
+            listOf("https://tiles.example/3/4/5.png"),
+            seen,
+            "exactly one request and the redirect target must never be reached",
         )
+    }
+
+    @Test
+    fun productionSeamDisablesRedirectsWhileTheFactoryDefaultDoesNot() = runTest {
+        // Guards the exact mistake this correction came from. The factory defaults to following
+        // redirects, so a test seam that omits followRedirects = false silently exercises a client
+        // that is not the one that ships, and a redirect test built on it proves nothing.
+        fun redirectingEngine(seen: MutableList<String>) = MockEngine { request ->
+            seen += request.url.toString()
+            respond(
+                ByteArray(0),
+                HttpStatusCode.Found,
+                headersOf(HttpHeaders.Location, "https://redirect-target.example/x"),
+            )
+        }
+
+        val strict = mutableListOf<String>()
+        RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = redirectingEngine(strict), followRedirects = false))
+            .fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
+        assertEquals(1, strict.size, "production seam must not follow, saw $strict")
+
+        val loose = mutableListOf<String>()
+        RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = redirectingEngine(loose)))
+            .fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
+        assertTrue(
+            loose.size > 1,
+            "factory default does follow redirects, which is why every seam must opt out explicitly",
+        )
+    }
+
+    @Test
+    fun bodyOverTheCeilingIsRejectedRatherThanBuffered() = runTest {
+        // An arbitrarily large provider response must not be able to exhaust device memory.
+        val engine = MockEngine { respond(ByteArray(4096), HttpStatusCode.OK, headersOf()) }
+        val fetcher = RemoteTileFetcher(
+            budgets,
+            AirTakHttp.newClient(engine = engine, followRedirects = false),
+            maxResponseBytes = 1024,
+        )
+        val r = fetcher.fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
+        assertTrue(r is RemoteTileFetcher.Result.Failed, "oversized body must be rejected, got $r")
+    }
+
+    @Test
+    fun bodyUnderTheCeilingIsAccepted() = runTest {
+        val engine = MockEngine { respond(ByteArray(4096), HttpStatusCode.OK, headersOf()) }
+        val fetcher = RemoteTileFetcher(
+            budgets,
+            AirTakHttp.newClient(engine = engine, followRedirects = false),
+            maxResponseBytes = 8192,
+        )
+        val r = fetcher.fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
+        assertTrue(r is RemoteTileFetcher.Result.Fetched, "in-size body must succeed, got $r")
+        assertEquals(4096, (r as RemoteTileFetcher.Result.Fetched).bytes.size)
     }
 
     @Test
@@ -195,7 +237,7 @@ class RemoteTileFetcherTest {
         val clock = { testScheduler.currentTime }
         val shared = RequestBudgets(tileSpacingMs = 250L, clock = clock)
         val engine = MockEngine { respond(byteArrayOf(1), HttpStatusCode.OK, headersOf()) }
-        val client = AirTakHttp.newClient(engine = engine)
+        val client = AirTakHttp.newClient(engine = engine, followRedirects = false)
         // Two independent fetcher instances, as the proxy and the bulk downloader would be.
         val proxySide = RemoteTileFetcher(shared, client)
         val bulkSide = RemoteTileFetcher(shared, client)
@@ -217,7 +259,7 @@ class RemoteTileFetcherTest {
             delay(60_000)
             respond(byteArrayOf(1), HttpStatusCode.OK, headersOf())
         }
-        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine))
+        val fetcher = RemoteTileFetcher(budgets, AirTakHttp.newClient(engine = engine, followRedirects = false))
         var caught: Throwable? = null
         val job = launch {
             try {
