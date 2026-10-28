@@ -7,6 +7,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancelAndJoin
+import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -206,6 +207,14 @@ class RemoteTileFetcherTest {
         val r = fetcher.fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
         assertTrue(r is RemoteTileFetcher.Result.Failed, "oversized body must be rejected, got $r")
     }
+
+    // Not provable with MockEngine, recorded rather than faked: MockUtilsKt materialises the
+    // response content (it exposes toByteArray / toByteReadPacket), so even respond(ByteReadChannel)
+    // is fully drained by the mock before the client sees a status. That means the mock cannot show
+    // whether the production path streams or buffers, and cannot show that an over-cap read cancels
+    // the producer early. The cap itself is tested below, which proves the limit is enforced, but
+    // "no bytes are buffered before the cap is applied" needs a real localhost HTTP server with a
+    // slow, oversized body. That is a deliberate follow-up, not something to claim from a mock.
 
     @Test
     fun bodyUnderTheCeilingIsAccepted() = runTest {

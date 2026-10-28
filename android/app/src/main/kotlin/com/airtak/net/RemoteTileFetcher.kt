@@ -1,7 +1,7 @@
 package com.airtak.net
 
 import io.ktor.client.HttpClient
-import io.ktor.client.request.get
+import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -128,53 +128,63 @@ class RemoteTileFetcher(
         val url = buildTemplateUrl(trimmed, z, x, y)
             ?: return Result.Refused("Tile URL template is malformed.")
 
+        // prepareGet().execute { } rather than get(). get() saves the response, which buffers the
+        // whole body before the caller sees a status, so a cap checked afterwards would be applied
+        // to memory that has already been spent. execute { } streams and disposes the response on
+        // every exit path, including the early returns below, so an over-cap or refused body is
+        // cancelled rather than drained.
         return runCatching {
-            val response = client.get(url)
-            val usedHost = runCatching { response.call.request.url.host }
-                .getOrNull()
-                ?.lowercase()
-                ?.trimEnd('.')
-            if (usedHost != null && usedHost != host) {
-                // Should be unreachable with redirects disabled. Kept because a silent host change
-                // is exactly the failure this whole guard exists to prevent.
-                return Result.Refused("Request ended at $usedHost instead of $host.")
-            }
+            client.prepareGet(url).execute { response ->
+                val usedHost = runCatching { response.call.request.url.host }
+                    .getOrNull()
+                    ?.lowercase()
+                    ?.trimEnd('.')
+                if (usedHost != null && usedHost != host) {
+                    // Should be unreachable with redirects disabled. Kept because a silent host
+                    // change is exactly the failure this guard exists to prevent.
+                    return@execute Result.Refused("Request ended at $usedHost instead of $host.")
+                }
 
-            when (response.status) {
-                HttpStatusCode.NotFound -> Result.NotFound(host)
-                HttpStatusCode.MovedPermanently, HttpStatusCode.Found,
-                HttpStatusCode.SeeOther, HttpStatusCode.TemporaryRedirect,
-                HttpStatusCode.PermanentRedirect,
-                -> Result.Refused("Provider responded with a redirect, which is not followed.")
+                when (response.status) {
+                    HttpStatusCode.NotFound -> return@execute Result.NotFound(host)
+                    HttpStatusCode.MovedPermanently, HttpStatusCode.Found,
+                    HttpStatusCode.SeeOther, HttpStatusCode.TemporaryRedirect,
+                    HttpStatusCode.PermanentRedirect,
+                    -> return@execute Result.Refused("Provider responded with a redirect, which is not followed.")
 
-                else -> {
-                    if (!response.status.isSuccess()) {
-                        return Result.Failed("Provider returned ${response.status.value}.")
+                    else -> {
+                        if (!response.status.isSuccess()) {
+                            return@execute Result.Failed("Provider returned ${'$'}{response.status.value}.")
+                        }
+                        val declared = response.contentLength()
+                        if (declared != null && declared > maxResponseBytes) {
+                            return@execute Result.Failed(
+                                "Provider declared ${'$'}declared bytes, over the $maxResponseBytes tile limit.",
+                            )
+                        }
+                        val bytes = readBounded(response, maxResponseBytes)
+                            ?: return@execute Result.Failed(
+                                "Provider body exceeded the $maxResponseBytes tile limit.",
+                            )
+                        if (bytes.isEmpty()) {
+                            return@execute Result.Failed("Provider returned an empty tile body.")
+                        }
+                        Result.Fetched(
+                            bytes = bytes,
+                            providerHost = host,
+                            directives = ProviderCacheDirectives.parse(
+                                cacheControl = response.headers[HttpHeaders.CacheControl],
+                                etag = response.headers[HttpHeaders.ETag],
+                                lastModified = response.headers[HttpHeaders.LastModified],
+                            ),
+                        )
                     }
-                    val declared = response.contentLength()
-                    if (declared != null && declared > maxResponseBytes) {
-                        return Result.Failed("Provider declared $declared bytes, over the $maxResponseBytes tile limit.")
-                    }
-                    val bytes = readBounded(response, maxResponseBytes)
-                        ?: return Result.Failed("Provider body exceeded the $maxResponseBytes tile limit.")
-                    if (bytes.isEmpty()) {
-                        return Result.Failed("Provider returned an empty tile body.")
-                    }
-                    Result.Fetched(
-                        bytes = bytes,
-                        providerHost = host,
-                        directives = ProviderCacheDirectives.parse(
-                            cacheControl = response.headers[HttpHeaders.CacheControl],
-                            etag = response.headers[HttpHeaders.ETag],
-                            lastModified = response.headers[HttpHeaders.LastModified],
-                        ),
-                    )
                 }
             }
         }.getOrElse { error ->
             // Cancellation must propagate untouched so proxy teardown actually stops fetches.
             if (error is kotlinx.coroutines.CancellationException) throw error
-            Result.Failed("Tile fetch failed: ${error.message ?: error.javaClass.simpleName}")
+            Result.Failed("Tile fetch failed: ${'$'}{error.message ?: error.javaClass.simpleName}")
         }
     }
 
