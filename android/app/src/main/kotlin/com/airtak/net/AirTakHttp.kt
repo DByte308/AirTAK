@@ -46,7 +46,7 @@ object AirTakHttp {
 
     /** Test seam: same configuration over an injected engine (MockEngine in the unit tests). */
     fun newClient(
-        userAgent: String,
+        userAgent: String = userAgent(),
         engine: HttpClientEngine,
         followRedirects: Boolean = true,
     ): HttpClient = HttpClient(engine) {

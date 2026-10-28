@@ -30,6 +30,13 @@ sealed interface BulkDownloadVerdict {
     data class Invalid(val reason: String) : BulkDownloadVerdict
 }
 
+/** Outcome of validating a URL for ordinary live tile fetching, which is a different question. */
+sealed interface LiveFetchVerdict {
+    data class Allowed(val host: String) : LiveFetchVerdict
+    data class Prohibited(val host: String, val reason: String) : LiveFetchVerdict
+    data class Invalid(val reason: String) : LiveFetchVerdict
+}
+
 object TileProviderPolicy {
 
     /**
@@ -37,6 +44,11 @@ object TileProviderPolicy {
      * are subdomains of it and are covered by the suffix rule below.
      */
     private const val OSM_TILE_HOST = "tile.openstreetmap.org"
+
+    private const val OSM_LIVE_REASON =
+        "Live tile requests to OpenStreetMap's public server are disabled until this app's " +
+            "attribution and caching behaviour against that server has been verified. " +
+            "Configure your own tile server or a provider whose terms you have checked."
 
     private const val OSM_USAGE_REASON =
         "OpenStreetMap's public tile server prohibits bulk and automated downloading. " +
@@ -133,6 +145,40 @@ object TileProviderPolicy {
             return HostParse.Reject("Tile server URL has no usable hostname.")
         }
         return HostParse.Ok(host)
+    }
+
+    /**
+     * Validate [rawUrl] for ordinary live tile fetching.
+     *
+     * Separate from bulk on purpose. Prohibition of bulk downloading is not the same question as
+     * whether ordinary live use is acceptable, and conflating them would either over-block a
+     * provider that permits live use or under-block one whose live terms we have not checked.
+     *
+     * The public OSM host is refused here for a different stated reason than in bulk: not because
+     * live use is prohibited outright, but because this app does not yet verifiably meet that
+     * server's attribution and caching requirements. Refusing is the honest state until it does.
+     */
+    fun verdictForLiveFetch(rawUrl: String?): LiveFetchVerdict {
+        val trimmed = rawUrl?.trim()
+        if (trimmed.isNullOrEmpty()) {
+            return LiveFetchVerdict.Invalid("No tile server URL configured.")
+        }
+        val schemeSep = trimmed.indexOf("://")
+        if (schemeSep <= 0) return LiveFetchVerdict.Invalid("Tile server URL must use http or https.")
+        val scheme = trimmed.substring(0, schemeSep).lowercase()
+        if (scheme != "http" && scheme != "https") {
+            return LiveFetchVerdict.Invalid("Tile server URL must use http or https.")
+        }
+        val authority = trimmed.substring(schemeSep + 3)
+            .takeWhile { c -> c != '/' && c != '?' && c != '#' && c != '\\' }
+        val host = when (val parsed = parseHost(scheme, authority)) {
+            is HostParse.Ok -> parsed.host
+            is HostParse.Reject -> return LiveFetchVerdict.Invalid(parsed.reason)
+        }
+        if (host == OSM_TILE_HOST || host.endsWith(".$OSM_TILE_HOST")) {
+            return LiveFetchVerdict.Prohibited(host, OSM_LIVE_REASON)
+        }
+        return LiveFetchVerdict.Allowed(host)
     }
 
     /**
