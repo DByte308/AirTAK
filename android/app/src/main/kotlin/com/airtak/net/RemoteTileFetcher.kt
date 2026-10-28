@@ -94,10 +94,17 @@ class RemoteTileFetcher(
 ) {
 
     sealed interface Result {
+        /**
+         * [rawCacheControl] is the provider's own header value kept verbatim so the loopback
+         * response can forward it. Stripping every cache directive looked like policy compliance
+         * but let the map engine apply its own default caching to a response the provider had
+         * explicitly marked no-store.
+         */
         data class Fetched(
             val bytes: ByteArray,
             val providerHost: String,
             val directives: ProviderCacheDirectives,
+            val rawCacheControl: String? = null,
         ) : Result {
             override fun equals(other: Any?): Boolean =
                 other is Fetched && other.providerHost == providerHost &&
@@ -195,11 +202,17 @@ class RemoteTileFetcher(
                             if (bytes.isEmpty()) {
                                 return@execute Result.Failed("Provider returned an empty tile body.")
                             }
+                            // The provider's own header value is kept verbatim so the loopback
+                            // response can forward it. Stripping every cache directive looked like
+                            // policy compliance, but it let the map engine apply its own default
+                            // caching to a response the provider had marked no-store.
+                            val rawCacheControl = response.headers[HttpHeaders.CacheControl]
                             Result.Fetched(
                                 bytes = bytes,
                                 providerHost = host,
+                                rawCacheControl = rawCacheControl,
                                 directives = ProviderCacheDirectives.parse(
-                                    cacheControl = response.headers[HttpHeaders.CacheControl],
+                                    cacheControl = rawCacheControl,
                                     etag = response.headers[HttpHeaders.ETag],
                                     lastModified = response.headers[HttpHeaders.LastModified],
                                 ),

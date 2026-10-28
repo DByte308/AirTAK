@@ -102,6 +102,22 @@ object TileProviderPolicy {
         return BulkDownloadVerdict.Allowed(host)
     }
 
+    /**
+     * Hostname for a tile URL template, or null when there is no usable one.
+     *
+     * Uses the same slicing and validation as the verdicts, so the identity used to name an
+     * archive can never disagree with the identity the policy actually guarded.
+     */
+    fun hostOf(rawUrl: String?): String? {
+        val trimmed = rawUrl?.trim() ?: return null
+        val schemeSep = trimmed.indexOf("://")
+        if (schemeSep <= 0) return null
+        val scheme = trimmed.substring(0, schemeSep).lowercase()
+        val rest = trimmed.substring(schemeSep + 3)
+        val authority = rest.takeWhile { it != '/' && it != '?' && it != '#' }
+        return (parseHost(scheme, authority) as? HostParse.Ok)?.host
+    }
+
     private sealed interface HostParse {
         data class Ok(val host: String) : HostParse
         data class Reject(val reason: String) : HostParse
