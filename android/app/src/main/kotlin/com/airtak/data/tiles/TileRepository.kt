@@ -37,6 +37,7 @@ import com.airtak.net.BulkDownloadVerdict
 import com.airtak.net.LiveFetchVerdict
 import com.airtak.net.RemoteTileFetcher
 import com.airtak.net.RequestBudgets
+import com.airtak.net.TileIdentity
 import com.airtak.net.TileProviderPolicy
 import com.airtak.net.TileProxyHandler
 import com.airtak.net.TileRoute
@@ -113,6 +114,9 @@ class TileRepository @Inject constructor(
 
     @Volatile private var server: ServerSocket? = null
     @Volatile private var mbtilesFiles: List<File> = emptyList()
+
+    /** Recomputed whenever the archives or the configured provider change. */
+    @Volatile private var servingFiles: List<File> = emptyList()
     @Volatile private var mbtilesRevision: Long = 0L
 
     init {
@@ -209,9 +213,25 @@ class TileRepository @Inject constructor(
      * mixed styles and the metadata named only the last provider used.
      */
     private fun archiveFor(providerUrl: String): File {
-        val host = TileProviderPolicy.hostOf(providerUrl) ?: "unknown"
-        val safe = host.replace(Regex("[^A-Za-z0-9.-]"), "_")
-        return File(tileDir, "field-$safe.mbtiles")
+        val key = TileIdentity.identityKey(providerUrl) ?: return File(tileDir, "field-unusable.mbtiles")
+        return File(tileDir, "field-$key.mbtiles")
+    }
+
+    /**
+     * Archives eligible for serving, in priority order.
+     *
+     * The read layer used to walk every archive and return the first hit at a given z/x/y, so two
+     * providers covering the same area blended tile by tile into one image: a road style from one
+     * stream alternating with a satellite style from another, with nothing on screen to say so.
+     * Only the archive matching the configured provider is consulted, plus the bundled overview,
+     * which is a deliberate base layer rather than somebody else's style. Other providers'
+     * archives stay on disk and intact, they are simply not mixed into this one's rendering.
+     */
+    private fun servingArchives(): List<File> {
+        val current = configuredTileUrlOrNull()?.let { TileIdentity.identityKey(it) }
+        return mbtilesFiles
+            .filter { it.name == ASSET_WORLD_OVERVIEW_FILE || (current != null && it.name == "field-$current.mbtiles") }
+            .sortedBy { it.name == ASSET_WORLD_OVERVIEW_FILE }
     }
 
     /**
@@ -257,7 +277,11 @@ class TileRepository @Inject constructor(
             setMetadata(db, "minzoom", minZoom.toString())
             setMetadata(db, "maxzoom", maxZoom.toString())
             // Source identity, so an archive is never an anonymous blend of servers.
-            setMetadata(db, "attribution", "provider:${TileProviderPolicy.hostOf(urlTemplate) ?: "unknown"}")
+            // Provenance without the credential: the label drops the query, the identity is a hash
+            // of the whole normalised template, so style, port and account are distinguished in the
+            // archive without writing an API key into user data.
+            setMetadata(db, "attribution", TileIdentity.provenanceLabel(urlTemplate))
+            setMetadata(db, "airtak_identity", TileIdentity.identityKey(urlTemplate) ?: "unknown")
 
             outcome = fillDatabase(db, bounds, minZoom, maxZoom, urlTemplate)
             outcome.aborted?.let { reason ->
@@ -370,6 +394,7 @@ class TileRepository @Inject constructor(
         mbtilesRevision = mbtilesFiles.maxOfOrNull { it.lastModified() } ?: 0L
         _localTileMaxZoom.value = downloadedTileMaxZoom(mbtilesFiles)
         ensureServer()
+        servingFiles = servingArchives()
         _localTileTemplate.value = localTileUrl()
         _tileTemplate.value = remoteProxyUrl()
     }
@@ -591,8 +616,11 @@ class TileRepository @Inject constructor(
     }
 
     private fun readTile(z: Int, x: Int, y: Int): ByteArray? {
-        val tmsY = (1 shl z) - 1 - y
-        for (file in mbtilesFiles) {
+        if (z < 0 || z > TileProxyHandler.MAX_SUPPORTED_ZOOM) return null
+        val span = 1L shl z
+        if (x < 0L || x >= span || y < 0L || y >= span) return null
+        val tmsY = ((1L shl z) - 1 - y).toInt()
+        for (file in servingFiles) {
             val bytes = runCatching {
                 val db = SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
                 try {
