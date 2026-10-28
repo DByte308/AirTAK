@@ -47,8 +47,12 @@ const val ACTION_LINK_DISCONNECT = "com.airtak.action.LINK_DISCONNECT"
 const val QR_SCHEME = "airtak-config://"
 
 // ── Network ─────────────────────────────────────────────
-/** Default OpenStreetMap raster tile URL template. */
-const val NETWORK_DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+/**
+ * No default tile provider. AirTAK renders bundled and local MBTiles until the user configures a
+ * server in Settings > App. Shipping a public community tile server as the default turned every
+ * install into an unthrottled bulk client of shared infrastructure it never chose, which is both
+ * a policy violation and not what the user asked for.
+ */
 /** Nominatim geocoding API endpoint. */
 const val NETWORK_NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 /** BRouter segments API endpoint. */

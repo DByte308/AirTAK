@@ -94,7 +94,7 @@ import com.airtak.config.constants.MAP_MERCATOR_MIN_LAT
 import com.airtak.config.constants.MAP_MAX_TILES_PER_DOWNLOAD
 import com.airtak.config.constants.MAP_NUDGE_PX
 import com.airtak.config.constants.MAP_SELF_ZOOM
-import com.airtak.config.constants.MAP_TILE_DOWNLOAD_PAUSE_MS
+import com.airtak.config.constants.MAP_ROUTE_ERROR_DISMISS_MS
 import com.airtak.config.constants.MAP_TILE_SIZE_PX
 import com.airtak.config.constants.UI_ARGB_ALPHA_FULL
 import com.airtak.config.constants.UI_DISTANCE_KM_THRESHOLD_M
@@ -691,7 +691,7 @@ fun MapScreen(
                 Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 96.dp),
             )
             LaunchedEffect(routeCalc) {
-                kotlinx.coroutines.delay(MAP_TILE_DOWNLOAD_PAUSE_MS)
+                kotlinx.coroutines.delay(MAP_ROUTE_ERROR_DISMISS_MS)
                 if (routeState is RouteCalcState.Failed) viewModel.clearRoute()
             }
         }

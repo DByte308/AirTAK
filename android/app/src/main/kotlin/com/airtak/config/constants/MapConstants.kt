@@ -28,8 +28,8 @@ const val MAP_MERCATOR_MAX_LON = 180.0
 // ── Tile download ───────────────────────────────────────
 /** Overall cap on tiles downloaded in a single region download. */
 const val MAP_MAX_TILES_PER_DOWNLOAD = 15_000
-/** Delay between tile batches to smooth out network pressure. */
-const val MAP_TILE_DOWNLOAD_PAUSE_MS = 4000L
+/** How long a route-calculation failure stays on screen. Nothing to do with tile pacing. */
+const val MAP_ROUTE_ERROR_DISMISS_MS = 4000L
 /** MapLibre style json uses tileSize 256. */
 const val MAP_TILE_SIZE_PX = 256
 
