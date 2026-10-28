@@ -32,6 +32,10 @@ import com.airtak.config.constants.MAP_MERCATOR_MAX_LON
 import com.airtak.config.constants.MAP_MERCATOR_MIN_LAT
 import com.airtak.config.constants.MAP_MERCATOR_MIN_LON
 import com.airtak.config.constants.MAP_MAX_TILES_PER_DOWNLOAD
+import com.airtak.net.LocalTileReader
+import com.airtak.net.RemoteTileOutcome
+import com.airtak.net.RemoteTileSource
+import com.airtak.net.TileServer
 import com.airtak.net.AirTakHttp
 import com.airtak.net.BulkDownloadVerdict
 import com.airtak.net.LiveFetchVerdict
@@ -90,10 +94,6 @@ class TileRepository @Inject constructor(
     private val tileDir = File(context.filesDir, "tiles")
 
     @Volatile private var downloadJob: Job? = null
-    @Volatile private var serverRunning = false
-    private val handlerSlots = java.util.concurrent.Semaphore(MAX_CONCURRENT_TILE_HANDLERS)
-    private val openSockets = java.util.Collections.synchronizedSet(mutableSetOf<Socket>())
-
     /** Serialises downloads so a cancelled job and its replacement cannot write one file at once. */
     private val downloadMutex = Mutex()
 
@@ -112,7 +112,11 @@ class TileRepository @Inject constructor(
     private val _configuredTileTemplate = MutableStateFlow(configuredTileUrlOrNull() ?: "")
     val configuredTileTemplate: StateFlow<String> = _configuredTileTemplate.asStateFlow()
 
-    @Volatile private var server: ServerSocket? = null
+    /** The shipped loopback listener. TileRepository owns its lifecycle. */
+    private val tileServer: TileServer by lazy {
+        TileServer(scope, LocalTileReader { z, x, y -> readTile(z, x, y) }, remoteSource)
+    }
+
     @Volatile private var mbtilesFiles: List<File> = emptyList()
 
     /** Recomputed whenever the archives or the configured provider change. */
@@ -337,6 +341,26 @@ class TileRepository @Inject constructor(
         override fun toString(): String = "Outcome(stored=$stored)"
     }
 
+    /** Adapts the policy-aware fetcher to the listener's narrow outcome contract. */
+    private val remoteSource = object : RemoteTileSource {
+        override suspend fun fetch(z: Int, x: Int, y: Int): RemoteTileOutcome =
+            when (
+                val r = remoteTiles.fetch(
+                    configuredTileUrlOrNull(),
+                    z,
+                    x,
+                    y,
+                    TileProxyHandler.MAX_SUPPORTED_ZOOM,
+                )
+            ) {
+                is RemoteTileFetcher.Result.Fetched -> RemoteTileOutcome.Found(r.bytes, r.rawCacheControl)
+                is RemoteTileFetcher.Result.NotFound -> RemoteTileOutcome.Missing
+                is RemoteTileFetcher.Result.Failed -> RemoteTileOutcome.Unavailable
+                is RemoteTileFetcher.Result.Refused -> RemoteTileOutcome.Refused
+                is RemoteTileFetcher.Result.NoProvider -> RemoteTileOutcome.Refused
+            }
+    }
+
     private suspend fun fillDatabase(
         db: SQLiteDatabase,
         bounds: TileBounds,
@@ -431,7 +455,7 @@ class TileRepository @Inject constructor(
     }.getOrNull()
 
     private fun localTileUrl(): String? {
-        return server?.localPort?.takeIf { it > 0 }?.let { port ->
+        return tileServer.port?.takeIf { it > 0 }?.let { port ->
             if (mbtilesFiles.isNotEmpty()) "http://127.0.0.1:$port/tiles/{z}/{x}/{y}.png?v=$mbtilesRevision" else null
         }
     }
@@ -451,173 +475,22 @@ class TileRepository @Inject constructor(
      * cancellation entirely. Routing it here is what keeps those guarantees real.
      */
     private fun remoteProxyUrl(): String? {
-        val port = server?.localPort?.takeIf { it > 0 } ?: return null
+        val port = tileServer.port.takeIf { it > 0 } ?: return null
         val provider = configuredTileUrlOrNull() ?: return null
         if (TileProviderPolicy.verdictForLiveFetch(provider) !is LiveFetchVerdict.Allowed) return null
         return "http://127.0.0.1:$port/remote/{z}/{x}/{y}.png"
     }
 
     private fun ensureServer() {
-        if (server != null) return
-        // ServerSocket(port, backlog, address). Port 0 asks the kernel for an ephemeral port.
-        // Passing the backlog constant in the port slot bound the listener to a fixed low port,
-        // which collides with something else or fails outright on a device.
-        val socket = ServerSocket(0, SERVER_ACCEPT_BACKLOG, InetAddress.getByName("127.0.0.1"))
-        server = socket
-        serverRunning = true
-        scope.launch {
-            while (serverRunning && !socket.isClosed) {
-                val clientSocket = runCatching { socket.accept() }.getOrNull() ?: break
-                // A finite backlog bounds only the kernel's pending set. accept() hands each
-                // connection straight to a coroutine, so without a slot limit a flood still grows
-                // an unbounded number of live handlers on a phone.
-                if (!handlerSlots.tryAcquire()) {
-                    runCatching {
-                        clientSocket.getOutputStream().write(
-                            ("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n" +
-                                "Retry-After: 1\r\nContent-Length: 0\r\n\r\n").toByteArray(),
-                        )
-                    }
-                    runCatching { clientSocket.close() }
-                    continue
-                }
-                openSockets.add(clientSocket)
-                launch {
-                    try {
-                        serveTile(clientSocket)
-                    } finally {
-                        openSockets.remove(clientSocket)
-                        handlerSlots.release()
-                    }
-                }
-            }
-        }
+        runCatching { tileServer.start() }
     }
 
     /**
-     * Close the listener and every live connection.
-     *
-     * Cancelling the coroutine scope is not sufficient: accept() and socket reads block a platform
-     * thread and do not observe coroutine cancellation, so the only thing that unblocks them is
-     * closing the socket underneath. Without this the listener, its thread and every accepted
-     * connection outlive the object that owns them.
+     * Close the listener and every live connection, and report what actually closed. A worker
+     * blocked in a synchronous archive read cannot be preempted, so the report is the honest answer
+     * rather than an assumption that everything drained.
      */
-    fun shutdown() {
-        serverRunning = false
-        downloadJob?.cancel()
-        server?.let { runCatching { it.close() } }
-        server = null
-        _tileTemplate.value = null
-        _localTileTemplate.value = null
-        val sockets = synchronized(openSockets) { openSockets.toList() }
-        sockets.forEach { runCatching { it.close() } }
-        synchronized(openSockets) { openSockets.clear() }
-    }
-
-    private suspend fun serveTile(socket: Socket) = withContext(Dispatchers.IO) {
-        try {
-            socket.tcpNoDelay = true
-            socket.soTimeout = SERVER_SOCKET_TIMEOUT_MS
-            val input = socket.getInputStream()
-            // Overflow throws rather than returning null: a null that means "too long" and a null
-            // that means "end of stream" are different events, and treating the first as the second
-            // would let a truncated header block be routed as if it were complete.
-            val requestLine = input.readCappedLine(TileProxyHandler.MAX_REQUEST_LINE_BYTES)
-                ?: run { writeStatus(socket, 414, headOnly = false); return@withContext }
-            val headerNames = mutableListOf<String>()
-            var headerLines = 0
-            while (true) {
-                val line = input.readCappedLine(TileProxyHandler.MAX_HEADER_BYTES) ?: break
-                if (line.isEmpty()) break
-                headerLines++
-                if (headerLines > TileProxyHandler.MAX_HEADER_LINES) {
-                    writeStatus(socket, 431, headOnly = false)
-                    return@withContext
-                }
-                headerNames += line.substringBefore(':').trim()
-            }
-
-            when (val route = TileProxyHandler.route(requestLine, headerNames, TileProxyHandler.MAX_SUPPORTED_ZOOM)) {
-                is TileRoute.Reject -> writeStatus(socket, route.status, headOnly = false)
-
-                is TileRoute.Local -> {
-                    val bytes = readTile(route.z, route.x, route.y)
-                    if (bytes == null) writeStatus(socket, 404, route.headOnly) else writeTile(socket, bytes, route.headOnly)
-                }
-
-                is TileRoute.Remote -> when (
-                    val result = remoteTiles.fetch(
-                        configuredTileUrlOrNull(),
-                        route.z,
-                        route.x,
-                        route.y,
-                        TileProxyHandler.MAX_SUPPORTED_ZOOM,
-                    )
-                ) {
-                    is RemoteTileFetcher.Result.Fetched -> writeTile(
-                        socket,
-                        result.bytes,
-                        route.headOnly,
-                        // Forward what the provider actually said. When it said nothing, say
-                        // no-store rather than staying silent and letting the engine guess.
-                        result.rawCacheControl ?: "no-store",
-                    )
-                    is RemoteTileFetcher.Result.NotFound -> writeStatus(socket, 404, route.headOnly)
-                    is RemoteTileFetcher.Result.Refused -> writeStatus(socket, 503, route.headOnly)
-                    is RemoteTileFetcher.Result.NoProvider -> writeStatus(socket, 503, route.headOnly)
-                    is RemoteTileFetcher.Result.Failed -> writeStatus(socket, 502, route.headOnly)
-                }
-            }
-        } catch (t: Throwable) {
-            if (t is kotlinx.coroutines.CancellationException) throw t
-            // A malformed or aborted request closes the connection. Nothing is buffered and no
-            // partial response is left for the client to interpret.
-        } finally {
-            runCatching { socket.close() }
-        }
-    }
-
-    /** Read one CRLF-terminated line, refusing anything longer than [maxBytes] instead of growing. */
-    private fun java.io.InputStream.readCappedLine(maxBytes: Int): String? {
-        val bytes = ByteArrayOutputStream(maxOf(64, minOf(maxBytes, 1024)))
-        var terminated = false
-        while (true) {
-            val b = read()
-            if (b == -1) break
-            if (b == '\n'.code) { terminated = true; break }
-            if (bytes.size() >= maxBytes) {
-                throw java.io.IOException("header line exceeds $maxBytes bytes")
-            }
-            bytes.write(b)
-        }
-        if (!terminated && bytes.size() == 0) return null
-        return bytes.toByteArray().toString(Charsets.US_ASCII).trimEnd('\r')
-    }
-
-    private fun writeStatus(socket: Socket, status: Int, headOnly: Boolean) {
-        val reason = when (status) {
-            400 -> "Bad Request"; 404 -> "Not Found"; 405 -> "Method Not Allowed"
-            414 -> "URI Too Long"; 431 -> "Header Fields Too Large"
-            501 -> "Not Implemented"; 502 -> "Bad Gateway"; 503 -> "Service Unavailable"
-            else -> "Error"
-        }
-        val head = "HTTP/1.1 $status $reason\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
-        socket.getOutputStream().use { it.write(head.toByteArray()); it.flush() }
-        if (headOnly) return
-    }
-
-    private fun writeTile(socket: Socket, bytes: ByteArray, headOnly: Boolean, cacheControl: String? = null) {
-        // Local tiles carry no directive, which the caller reads as no-store. Nothing here asserts
-        // a freshness the app has not verified against a provider.
-        val cc = cacheControl?.let { "Cache-Control: $it\r\n" }.orEmpty()
-        val head = "HTTP/1.1 200 OK\r\nContent-Type: ${bytes.contentType()}\r\n$cc" +
-            "Content-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
-        socket.getOutputStream().use { out ->
-            out.write(head.toByteArray())
-            if (!headOnly) out.write(bytes)
-            out.flush()
-        }
-    }
+    fun shutdown(): TileServer.ShutdownReport = tileServer.shutdown()
 
     private fun ByteArray.contentType(): String = when {
         size >= 8 && this[0] == 0x89.toByte() && this[1] == 0x50.toByte() && this[2] == 0x4E.toByte() -> "image/png"
@@ -694,15 +567,6 @@ class TileRepository @Inject constructor(
     private data class TileXY(val x: Int, val y: Int)
 
     private companion object {
-        /** Finite backlog so a flood cannot grow an unbounded pending set in the kernel. */
-        const val SERVER_ACCEPT_BACKLOG = 16
-
-        /** A stalled or hostile client must not hold a handler coroutine open. */
-        const val SERVER_SOCKET_TIMEOUT_MS = 5_000
-
-        /** Hard ceiling on simultaneously served connections; excess gets 503, not a new coroutine. */
-        const val MAX_CONCURRENT_TILE_HANDLERS = 8
-
         val PROVIDER_ARCHIVE_NAME = Regex("field-[0-9a-f]{16}\\.mbtiles")
 
         val TILE_PATH = Regex("/tiles/(\\d+)/(\\d+)/(\\d+)\\.png")
