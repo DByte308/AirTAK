@@ -16,6 +16,8 @@ package com.airtak.net
 // tile and geocoder requests precisely so a 3xx cannot move a bulk download onto a prohibited
 // host after this check has passed.
 
+import java.net.URI
+
 /** Outcome of validating a URL for bulk/offline tile download. */
 sealed interface BulkDownloadVerdict {
     /** URL is structurally valid, http(s), and not a prohibited host. */
@@ -52,10 +54,12 @@ object TileProviderPolicy {
             return BulkDownloadVerdict.Invalid("No tile server URL configured.")
         }
 
-        // Deliberately not java.net.URI: that parser is strict about RFC 3986 characters and
-        // throws on the {z}/{x}/{y} placeholders every tile template contains, so it rejected
-        // every real tile URL, including the OSM one this guard exists to refuse. Only the
-        // authority is needed here, so the authority is read directly.
+        // java.net.URI cannot parse a tile template directly: it is strict about RFC 3986 and
+        // throws on the {z}/{x}/{y} placeholders, so parsing the whole URL rejects every real tile
+        // URL including the OSM host this guard exists to refuse. So the authority is sliced out
+        // first and that authority alone is handed to URI as a synthetic URL with no placeholders
+        // in it. That keeps real RFC validation of host and port rather than trusting a hand-rolled
+        // parser to agree with whatever the HTTP stack does later.
         val schemeSep = trimmed.indexOf("://")
         if (schemeSep <= 0) {
             return BulkDownloadVerdict.Invalid("Tile server URL must use http or https.")
@@ -69,26 +73,10 @@ object TileProviderPolicy {
         // too rather than becoming part of a hostname that then fails to compare equal.
         val authority = trimmed.substring(schemeSep + 3)
             .takeWhile { c -> c != '/' && c != '?' && c != '#' && c != '\\' }
-        if (authority.isEmpty()) {
-            return BulkDownloadVerdict.Invalid("Tile server URL has no usable hostname.")
-        }
-        // Whitespace or control characters would leave a host that silently fails the comparison
-        // below, so refuse instead of letting it look like an ordinary unknown host.
-        if (authority.any { it.isWhitespace() || it.code < 0x21 }) {
-            return BulkDownloadVerdict.Invalid("Tile server URL contains invalid characters.")
-        }
 
-        // `http://tile.openstreetmap.org@hostile.example/` means host=hostile.example with
-        // userinfo=tile.openstreetmap.org. Accepting it would let an authority that merely looks
-        // like a permitted host slip past the guard, and userinfo has no legitimate use in a tile
-        // template, so reject rather than try to interpret it.
-        if (authority.contains('@')) {
-            return BulkDownloadVerdict.Invalid("Tile server URL must not contain credentials.")
-        }
-
-        val host = stripPort(authority).lowercase().trimEnd('.')
-        if (host.isEmpty()) {
-            return BulkDownloadVerdict.Invalid("Tile server URL has no usable hostname.")
+        val host = when (val parsed = parseHost(scheme, authority)) {
+            is HostParse.Ok -> parsed.host
+            is HostParse.Reject -> return BulkDownloadVerdict.Invalid(parsed.reason)
         }
 
         // Exact host or a real subdomain of it. A port is irrelevant to the comparison because
@@ -102,23 +90,57 @@ object TileProviderPolicy {
         return BulkDownloadVerdict.Allowed(host)
     }
 
+    private sealed interface HostParse {
+        data class Ok(val host: String) : HostParse
+        data class Reject(val reason: String) : HostParse
+    }
+
     /**
-     * Drop the port so `:8080` cannot step around the comparison. Bracketed IPv6 literals keep
-     * their brackets, since their address contains colons that are not a port separator.
+     * Extract and validate the hostname from an authority slice.
+     *
+     * Each of these is rejected rather than guessed, because some HTTP stack parses it differently
+     * and any divergence between this guard and the client that later issues the request is a
+     * bypass: userinfo, percent-encoding that decodes to another host at request time, whitespace
+     * or control characters, a backslash, a non-numeric or out-of-range port, junk after the port,
+     * and a malformed IPv6 literal.
      */
-    private fun stripPort(authority: String): String =
-        if (authority.startsWith("[")) {
-            val close = authority.indexOf(']')
-            if (close < 0) authority else authority.substring(0, close + 1)
-        } else {
-            authority.substringBefore(':', authority)
+    private fun parseHost(scheme: String, authority: String): HostParse {
+        if (authority.isEmpty()) return HostParse.Reject("Tile server URL has no usable hostname.")
+        // `tile.openstreetmap.org@hostile.example` means host=hostile.example with userinfo, and
+        // userinfo has no legitimate use in a tile template.
+        if (authority.contains('@')) {
+            return HostParse.Reject("Tile server URL must not contain credentials.")
+        }
+        if (authority.contains('%')) {
+            return HostParse.Reject("Tile server URL must not percent-encode the host.")
+        }
+        if (authority.any { it.isWhitespace() || it.code < 0x21 || it == '\\' }) {
+            return HostParse.Reject("Tile server URL contains invalid characters.")
         }
 
-    /** Convenience for call sites that only need yes/no. Invalid counts as not permitted. */
-    fun isProhibitedForBulkDownload(rawUrl: String?): Boolean =
-        verdictForBulkDownload(rawUrl) is BulkDownloadVerdict.Prohibited
+        // Synthetic URL: no {z} placeholders, so strict RFC parsing is safe on this slice.
+        val uri = runCatching { URI("$scheme://$authority/") }.getOrNull()
+            ?: return HostParse.Reject("Tile server URL authority is malformed.")
 
-    /** True when the URL is usable at all for bulk download. */
+        // URI accepts an out-of-range port rather than rejecting it, so check the range here.
+        val port = uri.port
+        if (port == 0 || port > 65535) {
+            return HostParse.Reject("Tile server URL has an invalid port.")
+        }
+
+        val host = uri.host?.lowercase()?.trimEnd('.')
+        if (host.isNullOrEmpty()) {
+            return HostParse.Reject("Tile server URL has no usable hostname.")
+        }
+        return HostParse.Ok(host)
+    }
+
+    /**
+     * Only [BulkDownloadVerdict.Allowed] is permitted. [BulkDownloadVerdict.Invalid] is refused
+     * too: a URL this guard cannot reason about is not a URL to bulk download 15 000 tiles from.
+     * There is deliberately no isProhibited() shorthand, because "not prohibited" and "permitted"
+     * are different answers once Invalid exists. Match on the sealed verdict for messaging.
+     */
     fun isAllowedForBulkDownload(rawUrl: String?): Boolean =
         verdictForBulkDownload(rawUrl) is BulkDownloadVerdict.Allowed
 }
