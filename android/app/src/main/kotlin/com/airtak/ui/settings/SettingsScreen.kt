@@ -17,6 +17,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -131,6 +132,15 @@ fun SettingsScreen(
     // When non-null, the Channels editor scrolls / highlights the given slot
     // index on entry (used by the "Set up channel" flow from the Player section).
     var focusChannelSlot by remember { mutableStateOf<Int?>(null) }
+
+    // The Config sub-screens are local composable state, not NavHost entries, so the
+    // system Back button is handled by the NavHost and pops the whole `settings` route --
+    // dumping the user on the Map tab instead of the section list. Intercept Back while a
+    // section is open and mirror the in-app TopRow "Back" button.
+    BackHandler(enabled = current != null) {
+        current = null
+        focusChannelSlot = null
+    }
 
     when (val sec = current) {
         null -> SectionList(onPick = { current = it })
