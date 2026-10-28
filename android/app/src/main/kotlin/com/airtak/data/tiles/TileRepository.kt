@@ -112,10 +112,14 @@ class TileRepository @Inject constructor(
     private val _configuredTileTemplate = MutableStateFlow(configuredTileUrlOrNull() ?: "")
     val configuredTileTemplate: StateFlow<String> = _configuredTileTemplate.asStateFlow()
 
-    /** The shipped loopback listener. TileRepository owns its lifecycle. */
-    private val tileServer: TileServer by lazy {
-        TileServer(scope, LocalTileReader { z, x, y -> readTile(z, x, y) }, remoteSource)
-    }
+    /**
+     * The shipped loopback listener, created on first [ensureServer].
+     *
+     * Deliberately not `by lazy`. Constructing it reads [remoteSource], and a field declared later
+     * in the class body is still unassigned while the constructor and init block run, so a lazy
+     * delegate reached from init threw a null reference on launch.
+     */
+    @Volatile private var tileServerField: TileServer? = null
 
     @Volatile private var mbtilesFiles: List<File> = emptyList()
 
@@ -455,7 +459,7 @@ class TileRepository @Inject constructor(
     }.getOrNull()
 
     private fun localTileUrl(): String? {
-        return tileServer.port?.takeIf { it > 0 }?.let { port ->
+        return tileServerField?.port?.takeIf { it > 0 }?.let { port ->
             if (mbtilesFiles.isNotEmpty()) "http://127.0.0.1:$port/tiles/{z}/{x}/{y}.png?v=$mbtilesRevision" else null
         }
     }
@@ -475,14 +479,17 @@ class TileRepository @Inject constructor(
      * cancellation entirely. Routing it here is what keeps those guarantees real.
      */
     private fun remoteProxyUrl(): String? {
-        val port = tileServer.port.takeIf { it > 0 } ?: return null
+        val port = tileServerField?.port?.takeIf { it > 0 } ?: return null
         val provider = configuredTileUrlOrNull() ?: return null
         if (TileProviderPolicy.verdictForLiveFetch(provider) !is LiveFetchVerdict.Allowed) return null
         return "http://127.0.0.1:$port/remote/{z}/{x}/{y}.png"
     }
 
     private fun ensureServer() {
-        runCatching { tileServer.start() }
+        if (tileServerField?.isRunning == true) return
+        val server = TileServer(scope, LocalTileReader { z, x, y -> readTile(z, x, y) }, remoteSource)
+        tileServerField = server
+        runCatching { server.start() }.onFailure { tileServerField = null }
     }
 
     /**
@@ -490,7 +497,12 @@ class TileRepository @Inject constructor(
      * blocked in a synchronous archive read cannot be preempted, so the report is the honest answer
      * rather than an assumption that everything drained.
      */
-    fun shutdown(): TileServer.ShutdownReport = tileServer.shutdown()
+    fun shutdown(): TileServer.ShutdownReport {
+        val server = tileServerField ?: return TileServer.ShutdownReport(true, 0, true, 0)
+        val report = server.shutdown()
+        tileServerField = null
+        return report
+    }
 
     private fun ByteArray.contentType(): String = when {
         size >= 8 && this[0] == 0x89.toByte() && this[1] == 0x50.toByte() && this[2] == 0x4E.toByte() -> "image/png"
