@@ -146,14 +146,43 @@ class TileServer(
      * closing the socket underneath. A handler blocked on a provider fetch is released by the scope
      * the caller owns; the socket close is what makes it observable to the client immediately.
      */
+    /**
+     * What a shutdown actually achieved.
+     *
+     * A handler blocked in a synchronous read cannot be preempted: closing the socket disconnects
+     * the client, but the worker keeps running until its read returns, and a `suspend` modifier on
+     * the reader would not change that for a blocking call such as a SQLite query. Releasing the
+     * slot at socket close instead would let blocked workers pile up without bound while the
+     * counter reported them gone. So the honest answer is a report: the port and the connections
+     * are always closed, and slot release is reported as pending when a worker is uncooperative.
+     */
+    data class ShutdownReport(
+        val portClosed: Boolean,
+        val connectionsClosed: Int,
+        val slotsReleased: Boolean,
+        val slotsStillHeld: Int,
+    )
+
     @Synchronized
-    fun shutdown() {
+    fun shutdown(drainWaitMs: Long = DEFAULT_DRAIN_WAIT_MS): ShutdownReport {
         running = false
         server?.let { runCatching { it.close() } }
         server = null
         val sockets = synchronized(openSockets) { openSockets.toList() }
         sockets.forEach { runCatching { it.close() } }
         synchronized(openSockets) { openSockets.clear() }
+
+        val deadline = System.currentTimeMillis() + drainWaitMs
+        while (activeHandlers > 0 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20)
+        }
+        val held = activeHandlers
+        return ShutdownReport(
+            portClosed = server == null,
+            connectionsClosed = sockets.size,
+            slotsReleased = held == 0,
+            slotsStillHeld = held,
+        )
     }
 
     private suspend fun handle(socket: Socket) = withContext(Dispatchers.IO) {
@@ -279,5 +308,6 @@ class TileServer(
         const val ACCEPT_BACKLOG = 16
         const val DEFAULT_SOCKET_TIMEOUT_MS = 5_000
         const val DEFAULT_MAX_HANDLERS = 8
+        const val DEFAULT_DRAIN_WAIT_MS = 2_000L
     }
 }

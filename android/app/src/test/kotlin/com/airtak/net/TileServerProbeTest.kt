@@ -109,9 +109,36 @@ class TileServerProbeTest {
 
         assertEquals(405, exchange(server.port, "POST /tiles/1/1/1.png HTTP/1.1\r\nHost: h\r\n\r\n").status)
         assertEquals(501, exchange(server.port, get("/tiles/1/1/1.png", "Range: bytes=0-10\r\n")).status)
-        assertEquals(400, exchange(server.port, get("/tiles/99/0/0.png")).status)
-        assertEquals(400, exchange(server.port, get("/tiles/3/9999/0.png")).status)
-        assertEquals(400, exchange(server.port, get("/remote/3/4/5.png", "X-AirTak-Url: https://evil.example/{z}/{x}/{y}\r\n")).status)
+        val highZoom = exchange(server.port, get("/tiles/99/0/0.png"))
+        assertEquals(400, highZoom.status, "raw response was: ${highZoom.head}")
+        val wideX = exchange(server.port, get("/tiles/3/9999/0.png"))
+        assertEquals(400, wideX.status, "raw response was: ${wideX.head}")
+        // A remote route with no provider configured correctly answers 503. Whether a client-supplied
+        // URL header influences anything is a separate property, proven in
+        // clientSuppliedUrlHeaderCannotChooseTheProvider.
+        val smuggle = exchange(server.port, get("/remote/3/4/5.png", "X-AirTak-Url: https://evil.example/{z}/{x}/{y}\r\n"))
+        assertEquals(503, smuggle.status, smuggle.head)
+    }
+
+    /**
+     * The provider is resolved inside the app, never from a request header. Proven by giving the
+     * fake provider a call log: the request must reach the fake, and the header's URL must not
+     * become the destination.
+     */
+    @Test
+    fun clientSuppliedUrlHeaderCannotChooseTheProvider() {
+        val called = mutableListOf<Triple<Int, Int, Int>>()
+        val remote = object : RemoteTileSource {
+            override suspend fun fetch(z: Int, x: Int, y: Int): RemoteTileOutcome {
+                called += Triple(z, x, y)
+                return RemoteTileOutcome.Found(png())
+            }
+        }
+        val server = start(LocalTileReader { _, _, _ -> null }, remote)
+
+        val res = exchange(server.port, get("/remote/3/4/5.png", "X-AirTak-Url: https://evil.example/{z}/{x}/{y}\r\n"))
+        assertEquals(200, res.status, res.head)
+        assertEquals(listOf(Triple(3, 4, 5)), called, "header must not redirect the provider choice")
     }
 
     @Test
@@ -184,14 +211,26 @@ class TileServerProbeTest {
         }.apply { isDaemon = true; start() }
 
         assertTrue(waitUntil { server.activeHandlers == 1 }, "live handler never registered")
-        server.shutdown()
+        // This reader is deliberately non-cooperative: it blocks in a plain call that no socket
+        // close can interrupt. shutdown() must still close the port and drop the client, and must
+        // report the slot as still held rather than pretend it was freed.
+        val report = server.shutdown(drainWaitMs = 500)
         assertFalse(server.isRunning)
-        assertTrue(waitUntil { server.activeHandlers == 0 }, "handler slot not released on shutdown")
+        assertTrue(report.portClosed, "port was not closed")
+        assertTrue(report.connectionsClosed >= 1, "live connection was not counted as closed")
+        assertFalse(report.slotsReleased, "a blocked synchronous reader cannot be preempted")
+        assertEquals(1, report.slotsStillHeld)
 
         // A client blocked on a held handler must be disconnected, not left hanging.
         live.join(6_000)
-        assertNotEquals(200, runCatching { exchange(port, get("/tiles/1/1/1.png"), 1_500).status }.getOrNull() ?: 200)
+        // Assert the refusal itself. Substituting a status when the connect fails would collide
+        // with the very value being ruled out and fail on success.
+        val refused = runCatching { exchange(port, get("/tiles/1/1/1.png"), 1_500) }
+        assertTrue(refused.isFailure, "old port still answered after shutdown: ${refused.getOrNull()?.head}")
+
+        // Once the reader returns on its own, the slot is released.
         hold.countDown()
+        assertTrue(waitUntil { server.activeHandlers == 0 }, "slot never released after the reader returned")
     }
 
     @Test
@@ -239,7 +278,7 @@ class TileServerProbeTest {
             assertEquals(503, exchange(server.port, get("/remote/3/4/4.png")).status)
 
             // A provider that said nothing must not be left for the engine to guess about.
-            val silent = exchange(server.port, get("/remote/3/4/9.png"))
+            val silent = exchange(server.port, get("/remote/5/4/9.png"))
             assertEquals(200, silent.status)
             assertTrue(silent.lower.contains("cache-control: no-store"), "silent provider must yield no-store: ${silent.head}")
             assertNotNull(seen)
