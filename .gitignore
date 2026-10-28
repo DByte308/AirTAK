@@ -1,3 +1,7 @@
 /NUL
 .venv/
 .kilo/
+
+# Python tooling artefacts — never commit these
+__pycache__/
+*.py[cod]

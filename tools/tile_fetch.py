@@ -5,14 +5,17 @@
 #
 # Usage:
 #   python tools/tile_fetch.py \
-#     --bbox "51.5,-0.2,51.6,-0.1" \
-#     --zoom 10-16 \
-#     --output tiles/london.mbtiles \
-#     --url "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+#     --bbox "50.30,8.68,50.37,8.82" \
+#     --zoom 10-14 \
+#     --output tiles/friedberg.mbtiles \
+#     --url "https://tiles.example.com/{z}/{x}/{y}.png"
 #
 # The resulting .mbtiles file can be loaded by TileRepository on Android.
-# IMPORTANT: Respect the tile provider's terms of service and rate limits.
-# For production, use a self-hosted tile server or a licensed tile provider.
+#
+# This tool performs bulk downloads. Bulk requests against the public OpenStreetMap tile
+# server are refused outright, with no override flag: pacing does not make bulk use of that
+# shared service acceptable, and an option to bypass the check would be accepted by reflex.
+# Point --url at a server you operate or are licensed to use.
 
 import argparse
 import math
@@ -24,7 +27,71 @@ import sys
 from typing import Tuple, Iterator
 
 TILE_SIZE = 256
-DEFAULT_DELAY_SECONDS = 0.1  # Polite rate limit (10 req/s)
+
+# One request per second. The previous default of 0.1 s was ten requests per second, which is
+# bulk traffic by any reading and was described in the help text as "polite".
+DEFAULT_DELAY_SECONDS = 1.0
+MIN_DELAY_SECONDS = 1.0
+
+# Identification with a reachable contact. The previous value pointed at a placeholder URL,
+# so an operator seeing this traffic had no way to reach whoever sent it.
+USER_AGENT = "AirTAK-tile-fetch/1.0 (+https://github.com/DByte308/AirTAK)"
+
+# Hosts refused for bulk download, with no override.
+PROHIBITED_BULK_HOSTS = frozenset({"tile.openstreetmap.org", "openstreetmap.org", "osm.org"})
+
+
+class BulkPolicyError(SystemExit):
+    """Refusal that must stop the run before any socket is opened."""
+
+
+def _host_of(url: str) -> str:
+    scheme_sep = url.find("://")
+    if scheme_sep <= 0:
+        raise BulkPolicyError(
+            "[tile_fetch] Tile URL must use http or https. Got: %r" % url)
+    rest = url[scheme_sep + 3:]
+    for sep in ("/", "?", "#"):
+        rest = rest.split(sep)[0]
+    if "@" in rest:
+        raise BulkPolicyError("[tile_fetch] Tile URL must not contain credentials.")
+    host = rest.split(":")[0]
+    return host.lower().rstrip(".")
+
+
+def check_bulk_policy(url_template: str) -> str:
+    """Refuse bulk download from shared public infrastructure. Returns the host if allowed."""
+    host = _host_of(url_template)
+    if not host:
+        raise BulkPolicyError("[tile_fetch] Tile URL has no usable hostname.")
+    labels = host.split(".")
+    if host in PROHIBITED_BULK_HOSTS or any(
+        ".".join(labels[i:]) in PROHIBITED_BULK_HOSTS for i in range(len(labels) - 1)
+    ):
+        raise BulkPolicyError(
+            "[tile_fetch] Refusing bulk download from %s.\n"
+            "  The public OpenStreetMap tile server is shared community infrastructure and its\n"
+            "  usage policy does not permit bulk downloading. Slowing the loop down does not\n"
+            "  change that, so there is no --force flag here.\n"
+            "  Use a tile server you operate or are licensed to use. For a self-hosted stack,\n"
+            "  see the OpenMapTiles / tilemaker route described in the offline map notes." % host)
+    return host
+
+
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    """urllib follows redirects silently by default.
+
+    A redirect moves the download onto a host the policy above never examined, so it is
+    refused rather than followed.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
+        raise BulkPolicyError(
+            "[tile_fetch] Refusing redirect (%s) from %s to %s. The redirect target was not "
+            "checked against the bulk policy." % (code, req.full_url, newurl))
+
+
+_OPENER = urllib.request.build_opener(_RefuseRedirects())
 
 
 def lat_lon_to_tile(lat: float, lon: float, zoom: int) -> Tuple[int, int]:
@@ -81,8 +148,8 @@ def set_metadata(conn: sqlite3.Connection, name: str, **kwargs: str) -> None:
 def fetch_tile(url_template: str, z: int, x: int, y: int) -> bytes:
     """Download a single tile. Raises urllib.error.URLError on failure."""
     url = url_template.replace("{z}", str(z)).replace("{x}", str(x)).replace("{y}", str(y))
-    req = urllib.request.Request(url, headers={"User-Agent": "AirTAK-tile-fetch/1.0 (+https://github.com/your-repo/airtak)"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with _OPENER.open(req, timeout=30) as resp:
         return resp.read()
 
 
@@ -95,6 +162,13 @@ def main() -> None:
     parser.add_argument("--delay",  type=float, default=DEFAULT_DELAY_SECONDS,
                         help=f"Delay between requests in seconds (default {DEFAULT_DELAY_SECONDS})")
     args = parser.parse_args()
+
+    # Checked before the database is created or any request is made.
+    provider_host = check_bulk_policy(args.url)
+    if args.delay < MIN_DELAY_SECONDS:
+        raise BulkPolicyError(
+            "[tile_fetch] --delay %s is below the %s s floor. Bulk fetching faster than one "
+            "request per second is not something this tool will do." % (args.delay, MIN_DELAY_SECONDS))
 
     # Parse zoom range
     if "-" in args.zoom:
@@ -111,13 +185,17 @@ def main() -> None:
                  minzoom=str(z_min),
                  maxzoom=str(z_max),
                  type="overlay",
-                 version="1")
+                 version="1",
+                 # Source identity, so an archive is never anonymous once it is copied around.
+                 attribution="provider:%s" % provider_host)
 
     total = sum(1 for z in range(z_min, z_max + 1) for _ in tile_range(args.bbox, z))
     downloaded = 0
     skipped    = 0
 
-    print(f"[tile_fetch] Downloading ~{total} tiles ({z_min}–{z_max}) to {args.output}")
+    print(f"[tile_fetch] {total} tiles ({z_min}-{z_max}) from {provider_host} -> {args.output}")
+    print(f"[tile_fetch] Pacing at 1 request per {args.delay:g}s; expect "
+          f"~{total * args.delay / 60:.0f} min. Press Ctrl-C to stop; stored tiles stay valid.")
 
     for z in range(z_min, z_max + 1):
         for _, x, y in tile_range(args.bbox, z):
