@@ -21,6 +21,7 @@ import com.airtak.config.constants.UI_QR_SIZE_DEFAULT_PX
 import com.airtak.data.config.ConfigRepository
 import com.airtak.data.moderation.ModerationRepository
 import com.airtak.data.prefs.AppPreferences
+import com.airtak.ui.i18n.AppLanguage
 import com.airtak.data.status.DeviceStatusRepository
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -469,6 +470,16 @@ class SettingsViewModel @Inject constructor(
     private val _themeMode = MutableStateFlow(prefs.themeMode())
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
     fun setThemeMode(mode: ThemeMode) { prefs.setThemeMode(mode); _themeMode.value = mode }
+
+    private val _language = MutableStateFlow(prefs.language())
+    val language: StateFlow<AppLanguage> = _language.asStateFlow()
+
+    /**
+     * Persists the language choice. The caller is responsible for recreating the
+     * activity -- resources are bound in attachBaseContext, so the whole UI has to
+     * be rebuilt for the new locale to take effect.
+     */
+    fun setLanguage(lang: AppLanguage) { prefs.setLanguage(lang); _language.value = lang }
 
     private val _tileUrl = MutableStateFlow(prefs.tileServerUrl().orEmpty())
     val tileUrl: StateFlow<String> = _tileUrl.asStateFlow()

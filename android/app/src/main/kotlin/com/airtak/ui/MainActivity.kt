@@ -11,6 +11,7 @@
 package com.airtak.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbManager
 import android.os.Build
@@ -29,6 +30,7 @@ import androidx.core.content.ContextCompat
 import com.airtak.data.ble.service.LinkService
 import com.airtak.data.gps.PhoneGpsProvider
 import com.airtak.data.prefs.AppPreferences
+import com.airtak.ui.i18n.withAppLanguage
 import com.airtak.ui.theme.AirTakTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -50,6 +52,15 @@ class MainActivity : ComponentActivity() {
     private val requestPerms = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { phoneGps.refresh() }
+
+    /**
+     * Applies the stored app-language override before any resource is resolved, so
+     * stringResource() picks the right values-* folder. No-op when following the
+     * system language. Changing the setting calls recreate(), which re-enters here.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withAppLanguage())
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -16,6 +16,7 @@ const val APP_PREFS_FILE = "airtak.prefs"
 
 /** Preferences key: selected theme mode. */
 const val KEY_THEME = "theme_mode"
+const val KEY_LANGUAGE = "app_language"
 /** Preferences key: configured tile server URL. */
 const val KEY_TILE_URL = "tile_url"
 /** Preferences key: bonded device MAC address. */

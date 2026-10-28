@@ -18,6 +18,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -72,6 +73,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -102,25 +105,35 @@ import com.airtak.proto.ChannelRole
 import com.airtak.proto.GpsSource
 import com.airtak.proto.LoraRegion
 import com.airtak.proto.PhyProfile
+import com.airtak.R
 import com.airtak.ui.components.HudCard
 import com.airtak.ui.components.SectionLabel
 import com.airtak.ui.components.TacticalText
+import com.airtak.ui.help.HELP_TOPICS
+import com.airtak.ui.i18n.AppLanguage
 import com.airtak.ui.theme.AccentAmber
 import com.airtak.ui.theme.StatusActive
 import com.airtak.ui.theme.ThemeMode
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 
-private enum class Section(val title: String, val subtitle: String) {
-    Player("Player", "Callsign, name, unit hierarchy, hit button"),
-    Lora("LoRa Radio", "Region, TX power, PHY profiles"),
-    Channels("Channels", "8 channel slots with PSK"),
-    PositionPower("Position & Power", "GPS broadcast, smart-beacon, battery saving"),
-    Security("Security", "BLE bond count"),
-    Moderation("Moderation", "Vote-kick bans, ban list, unban"),
-    App("Application", "Theme, tile server, defaults"),
-    Share("Share Config", "QR export / scan import of LoRa, channels, unit setup"),
-    About("About", "Diagnostics, factory reset"),
+// Titles and subtitles are string resources, not literals: hardcoding them here left
+// the settings_* keys in strings.xml dead and made the Config list untranslatable.
+private enum class Section(
+    @StringRes val titleRes: Int,
+    @StringRes val subtitleRes: Int,
+) {
+    Player(R.string.sec_player_title, R.string.sec_player_sub),
+    Lora(R.string.sec_lora_title, R.string.sec_lora_sub),
+    Channels(R.string.sec_channels_title, R.string.sec_channels_sub),
+    PositionPower(R.string.sec_position_title, R.string.sec_position_sub),
+    Security(R.string.sec_security_title, R.string.sec_security_sub),
+    Moderation(R.string.sec_moderation_title, R.string.sec_moderation_sub),
+    App(R.string.sec_app_title, R.string.sec_app_sub),
+    Language(R.string.sec_language_title, R.string.sec_language_sub),
+    Share(R.string.sec_share_title, R.string.sec_share_sub),
+    Help(R.string.sec_help_title, R.string.sec_help_sub),
+    About(R.string.sec_about_title, R.string.sec_about_sub),
 }
 
 @Composable
@@ -145,7 +158,7 @@ fun SettingsScreen(
     when (val sec = current) {
         null -> SectionList(onPick = { current = it })
         else -> {
-            val title = sec.title
+            val title = stringResource(sec.titleRes)
             Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 TopRow(
                         title = title,
@@ -172,6 +185,8 @@ fun SettingsScreen(
                     Section.Moderation -> ModerationSection(viewModel)
                     Section.App -> AppSection(viewModel)
                     Section.Share -> ShareSection(viewModel)
+                    Section.Language -> LanguageSection(viewModel)
+                    Section.Help -> HelpSection()
                     Section.About -> AboutSection(viewModel, onFirmwareSelected)
                 }
             }
@@ -203,7 +218,7 @@ private fun SectionList(onPick: (Section) -> Unit) {
     ) {
         item {
             Text(
-                    "CONFIG",
+                    stringResource(R.string.nav_settings).uppercase(),
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onBackground
             )
@@ -214,12 +229,12 @@ private fun SectionList(onPick: (Section) -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                                sec.title,
+                                stringResource(sec.titleRes),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                         )
                         TacticalText(
-                                sec.subtitle,
+                                stringResource(sec.subtitleRes),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -230,6 +245,79 @@ private fun SectionList(onPick: (Section) -> Unit) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LanguageSection(vm: SettingsViewModel) {
+    val current by vm.language.collectAsState()
+    // Resources are bound in attachBaseContext, so a locale change needs a full
+    // activity recreate -- there is no live re-theme path for string resources.
+    val activity = LocalContext.current as? android.app.Activity
+
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+        SectionLabel(stringResource(R.string.sec_language_title))
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AppLanguage.entries.forEach { lang ->
+                val label =
+                        if (lang == AppLanguage.System) stringResource(R.string.lang_system)
+                        else lang.nativeName
+                val selected = current == lang
+                if (selected) {
+                    Button(onClick = { vm.setLanguage(lang); activity?.recreate() },
+                            modifier = Modifier.weight(1f)) {
+                        Text(label)
+                    }
+                } else {
+                    OutlinedButton(
+                            onClick = { vm.setLanguage(lang); activity?.recreate() },
+                            modifier = Modifier.weight(1f)
+                    ) { Text(label) }
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(
+                stringResource(R.string.lang_restart_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun HelpSection() {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+        HELP_TOPICS.forEach { topic ->
+            SectionLabel(topic.title)
+            if (topic.intro.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                        topic.intro,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            topic.entries.forEach { entry ->
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Text(
+                            entry.label,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                            entry.explanation,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.height(18.dp))
         }
     }
 }

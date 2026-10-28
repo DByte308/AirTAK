@@ -15,12 +15,14 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.airtak.config.constants.APP_PREFS_FILE
 import com.airtak.config.constants.KEY_BONDED_ADDR
+import com.airtak.config.constants.KEY_LANGUAGE
 import com.airtak.config.constants.KEY_MAP_ZOOM
 import com.airtak.config.constants.KEY_THEME
 import com.airtak.config.constants.KEY_TILE_URL
 import com.airtak.config.constants.KEY_PREFIX_UNIT_CHANNEL
 import com.airtak.config.constants.MAP_ZOOM_DEFAULT
 import com.airtak.config.constants.UNIT_CHANNEL_SLOT_DEFAULT
+import com.airtak.ui.i18n.AppLanguage
 import com.airtak.ui.theme.ThemeMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
@@ -41,6 +43,14 @@ class AppPreferences @Inject constructor(
     }.getOrDefault(ThemeMode.System)
 
     fun setThemeMode(mode: ThemeMode) { prefs.edit().putString(KEY_THEME, mode.name).apply() }
+
+    /** App language override. [AppLanguage.System] follows the device setting. */
+    fun language(): AppLanguage =
+        AppLanguage.entries.firstOrNull {
+            it.name == prefs.getString(KEY_LANGUAGE, AppLanguage.System.name)
+        } ?: AppLanguage.System
+
+    fun setLanguage(lang: AppLanguage) { prefs.edit().putString(KEY_LANGUAGE, lang.name).apply() }
 
     fun tileServerUrl(): String? = prefs.getString(KEY_TILE_URL, null)
     fun setTileServerUrl(url: String?) { prefs.edit().putString(KEY_TILE_URL, url).apply() }

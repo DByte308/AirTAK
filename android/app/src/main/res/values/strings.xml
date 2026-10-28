@@ -57,4 +57,34 @@
     <string name="settings_security">Security</string>
     <string name="settings_app">App</string>
     <string name="settings_about">About</string>
+
+    <!-- Config section list rows. The Section enum used to hardcode these in
+         English, which left the settings_* keys above dead and made the Config
+         list impossible to translate. These are the live ones. -->
+    <string name="sec_player_title">Player</string>
+    <string name="sec_player_sub">Callsign, name, unit hierarchy, hit button</string>
+    <string name="sec_lora_title">LoRa Radio</string>
+    <string name="sec_lora_sub">Region, TX power, PHY profiles</string>
+    <string name="sec_channels_title">Channels</string>
+    <string name="sec_channels_sub">8 channel slots with PSK</string>
+    <string name="sec_position_title">Position &amp; Power</string>
+    <string name="sec_position_sub">GPS broadcast, smart-beacon, battery saving</string>
+    <string name="sec_security_title">Security</string>
+    <string name="sec_security_sub">BLE bond count</string>
+    <string name="sec_moderation_title">Moderation</string>
+    <string name="sec_moderation_sub">Vote-kick bans, ban list, unban</string>
+    <string name="sec_app_title">Application</string>
+    <string name="sec_app_sub">Theme, tile server, defaults</string>
+    <string name="sec_language_title">Language</string>
+    <string name="sec_language_sub">App display language</string>
+    <string name="sec_share_title">Share Config</string>
+    <string name="sec_share_sub">QR export / scan import of LoRa, channels, unit setup</string>
+    <string name="sec_help_title">Help</string>
+    <string name="sec_help_sub">What each screen and button does</string>
+    <string name="sec_about_title">About</string>
+    <string name="sec_about_sub">Diagnostics, factory reset</string>
+
+    <!-- Language picker -->
+    <string name="lang_system">System default</string>
+    <string name="lang_restart_note">The app rebuilds its screens when you change this, so any screen you had open closes.</string>
 </resources>
