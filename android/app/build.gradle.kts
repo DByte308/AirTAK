@@ -123,6 +123,14 @@ dependencies {
     testRuntimeOnly(libs.junit5.engine)
     testImplementation(libs.mockk)
 
+    // Test-only: MockEngine for request-policy tests, virtual time for pacing/cancellation.
+    // Both pinned to the existing ktor / coroutines versions; no product dependency changes.
+    // Re-added on purpose: net/RemoteTileFetcherTest imports io.ktor.client.engine.mock.MockEngine
+    // and kotlinx.coroutines.test.runTest, so these are used rather than speculative. They were
+    // removed in the M1 cleanup for exactly that reason, and this slice is what earns them back.
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.coroutines.test)
+
     // Instrumented tests
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.test.ext.junit)
