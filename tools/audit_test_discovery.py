@@ -50,7 +50,7 @@ def declared_tests(root):
     annotation = re.compile(r"^\s*@Test\b")
     fun = re.compile(r"^\s*fun\s+(\w+)\s*\(")
     class_decl = re.compile(r"^\s*(?:open\s+|abstract\s+|internal\s+|private\s+)*class\s+(\w+)")
-    package_decl = re.compile(r"^\s*package\s+([\w.]+)\s*$")
+    package_decl = re.compile(r"^\s*package\s+([\w.]+)\s*;?\s*(?://.*)?$")
 
     for dirpath, _dirs, files in os.walk(root):
         for name in files:
@@ -61,7 +61,7 @@ def declared_tests(root):
                 lines = handle.read().splitlines()
 
             pkg = None
-            for line in lines[:20]:
+            for line in lines:
                 pm = package_decl.match(line)
                 if pm:
                     pkg = pm.group(1)

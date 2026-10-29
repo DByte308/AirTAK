@@ -154,6 +154,28 @@ class BazTest {
         finally:
             f.destroy()
 
+    def test_testinstance_annotation_is_not_a_test(self):
+        # @TestInstance is a JUnit 5 CLASS-LEVEL lifecycle annotation, NOT a test method. The audit's
+        # `@Test\b` regex must NOT match it, and its owning class must still declare its real @Test
+        # methods normally. This pins mi50's 18-vs-19 finding: the extra `grep @Test` hit is
+        # @TestInstance, not a test, so the true count is 18 on main.
+        f = FixtureRepo.make()
+        try:
+            f.write_kt("com/airtak/db/ATest.kt", """\
+package com.airtak.db
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class ATest {
+    @Test fun real() {}
+}
+""")
+            declared, unmatched = audit.declared_tests(f.root)
+            self.assertIn(("com.airtak.db.ATest", "real"), declared)
+            self.assertEqual(len(declared), 1, "@TestInstance must NOT be counted as a test method")
+            self.assertEqual([], unmatched)
+        finally:
+            f.destroy()
+
 
 class ExecutedParse(unittest.TestCase):
     """The results-XML parser: what counts as executed, package handling, malformed input."""
@@ -536,6 +558,27 @@ class BarTest {
             declared, unmatched = audit.declared_tests(f.root)
             self.assertNotIn(("FqnTest", "f"), declared, "FQN @org.junit...Test is not matched")
             self.assertEqual([], unmatched, "FQN annotation is not unmatched either (unseen)")
+        finally:
+            f.destroy()
+
+    def test_package_declared_after_long_license_header(self):
+        # LICENSE HEADER >20 lines pushes the `package` declaration past the old 20-line scan limit.
+        # The package scan must cover the WHOLE file (stop at first match) so a long header does not
+        # cause a false "missing identity" (class mis-keyed as default-package simple name).
+        f = FixtureRepo.make()
+        try:
+            header = "// AirTAK test file\n" + "// " + ("license line %d\n" % 0) * 30
+            # ^ 31 comment lines, well past 20 -> package sits after them.
+            src = header + "package com.airtak.late\nclass LateTest {\n    @Test fun ok() {}\n}\n"
+            f.write_kt("late/LateTest.kt", src)
+            f.write_xml("TEST-A.xml", _testsuite("com.airtak.late",
+                                                 [("com.airtak.late.LateTest", "ok()", "")]))
+            declared, unmatched = audit.declared_tests(f.root)
+            self.assertIn(("com.airtak.late.LateTest", "ok"), declared,
+                          "package past line 20 must still be attributed fully-qualified")
+            self.assertEqual([], unmatched)
+            rc, out = _main_rc(f.root)
+            self.assertEqual(0, rc, "long header must not cause a false missing identity")
         finally:
             f.destroy()
 
