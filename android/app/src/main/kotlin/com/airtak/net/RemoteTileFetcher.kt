@@ -5,6 +5,9 @@ import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import com.airtak.config.constants.NET_TILE_FETCH_TOTAL_TIMEOUT_MS
 import io.ktor.http.contentLength
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.readAvailable
@@ -76,6 +79,12 @@ class RemoteTileFetcher(
      */
     private val client: HttpClient = AirTakHttp.newClient(followRedirects = false),
     private val maxResponseBytes: Int = MAX_TILE_RESPONSE_BYTES,
+    /**
+     * Outer bound on one fetch. The client's own timeout plugin covers connect and per-phase reads;
+     * this is the backstop for a response that starts and then trickles, and it is what keeps a
+     * stalled provider from holding a shared per-provider budget slot indefinitely.
+     */
+    private val totalTimeoutMs: Long? = NET_TILE_FETCH_TOTAL_TIMEOUT_MS,
 ) {
 
     sealed interface Result {
@@ -125,6 +134,14 @@ class RemoteTileFetcher(
         // Shared with bulk downloads against the same provider, deliberately not a private budget.
         budgets.tileBudgetFor(host).acquire()
 
+        if (maxZoom < 0 || z < 0 || z > maxZoom) {
+            // The router validates this already, but fetch() is public and takes the coordinates
+            // itself, so nothing structurally stops a caller from asking for z=30 against a
+            // maxZoom of 12. Re-checking here costs one comparison and makes the method safe on
+            // its own rather than safe only when reached through one particular caller.
+            return Result.Refused("Zoom $z is outside the configured ceiling 0..$maxZoom.")
+        }
+
         val url = buildTemplateUrl(trimmed, z, x, y)
             ?: return Result.Refused("Tile URL template is malformed.")
 
@@ -133,60 +150,82 @@ class RemoteTileFetcher(
         // to memory that has already been spent. execute { } streams and disposes the response on
         // every exit path, including the early returns below, so an over-cap or refused body is
         // cancelled rather than drained.
+        val timeoutMs = totalTimeoutMs
         return runCatching {
-            client.prepareGet(url).execute { response ->
-                val usedHost = runCatching { response.call.request.url.host }
-                    .getOrNull()
-                    ?.lowercase()
-                    ?.trimEnd('.')
-                if (usedHost != null && usedHost != host) {
-                    // Should be unreachable with redirects disabled. Kept because a silent host
-                    // change is exactly the failure this guard exists to prevent.
-                    return@execute Result.Refused("Request ended at $usedHost instead of $host.")
-                }
+            bounded(timeoutMs) {
+                client.prepareGet(url).execute { response ->
+                    val usedHost = runCatching { response.call.request.url.host }
+                        .getOrNull()
+                        ?.lowercase()
+                        ?.trimEnd('.')
+                    if (usedHost != null && usedHost != host) {
+                        // Should be unreachable with redirects disabled. Kept because a silent host
+                        // change is exactly the failure this guard exists to prevent.
+                        return@execute Result.Refused("Request ended at $usedHost instead of $host.")
+                    }
 
-                when (response.status) {
-                    HttpStatusCode.NotFound -> return@execute Result.NotFound(host)
-                    HttpStatusCode.MovedPermanently, HttpStatusCode.Found,
-                    HttpStatusCode.SeeOther, HttpStatusCode.TemporaryRedirect,
-                    HttpStatusCode.PermanentRedirect,
-                    -> return@execute Result.Refused("Provider responded with a redirect, which is not followed.")
+                    when (response.status) {
+                        HttpStatusCode.NotFound -> return@execute Result.NotFound(host)
+                        HttpStatusCode.MovedPermanently, HttpStatusCode.Found,
+                        HttpStatusCode.SeeOther, HttpStatusCode.TemporaryRedirect,
+                        HttpStatusCode.PermanentRedirect,
+                        -> return@execute Result.Refused("Provider responded with a redirect, which is not followed.")
 
-                    else -> {
-                        if (!response.status.isSuccess()) {
-                            return@execute Result.Failed("Provider returned ${response.status.value}.")
-                        }
-                        val declared = response.contentLength()
-                        if (declared != null && declared > maxResponseBytes) {
-                            return@execute Result.Failed(
-                                "Provider declared $declared bytes, over the $maxResponseBytes tile limit.",
+                        else -> {
+                            if (!response.status.isSuccess()) {
+                                return@execute Result.Failed("Provider returned ${response.status.value}.")
+                            }
+                            val declared = response.contentLength()
+                            if (declared != null && declared > maxResponseBytes) {
+                                return@execute Result.Failed(
+                                    "Provider declared $declared bytes, over the $maxResponseBytes tile limit.",
+                                )
+                            }
+                            val bytes = readBounded(response, maxResponseBytes)
+                                ?: return@execute Result.Failed(
+                                    "Provider body exceeded the $maxResponseBytes tile limit.",
+                                )
+                            if (bytes.isEmpty()) {
+                                return@execute Result.Failed("Provider returned an empty tile body.")
+                            }
+                            Result.Fetched(
+                                bytes = bytes,
+                                providerHost = host,
+                                directives = ProviderCacheDirectives.parse(
+                                    cacheControl = response.headers[HttpHeaders.CacheControl],
+                                    etag = response.headers[HttpHeaders.ETag],
+                                    lastModified = response.headers[HttpHeaders.LastModified],
+                                ),
                             )
                         }
-                        val bytes = readBounded(response, maxResponseBytes)
-                            ?: return@execute Result.Failed(
-                                "Provider body exceeded the $maxResponseBytes tile limit.",
-                            )
-                        if (bytes.isEmpty()) {
-                            return@execute Result.Failed("Provider returned an empty tile body.")
-                        }
-                        Result.Fetched(
-                            bytes = bytes,
-                            providerHost = host,
-                            directives = ProviderCacheDirectives.parse(
-                                cacheControl = response.headers[HttpHeaders.CacheControl],
-                                etag = response.headers[HttpHeaders.ETag],
-                                lastModified = response.headers[HttpHeaders.LastModified],
-                            ),
-                        )
                     }
                 }
             }
         }.getOrElse { error ->
-            // Cancellation must propagate untouched so proxy teardown actually stops fetches.
+            // TimeoutCancellationException IS a CancellationException, so it has to be matched
+            // first. Letting it fall into the branch below would turn "the provider stalled" into a
+            // cancellation that tears down the caller's scope — the opposite of bounding the wait.
+            if (error is TimeoutCancellationException) {
+                return Result.Failed(
+                    "Tile fetch from $host timed out after ${timeoutMs}ms.",
+                )
+            }
+            // Real cancellation must propagate untouched so proxy teardown actually stops fetches.
             if (error is kotlinx.coroutines.CancellationException) throw error
             Result.Failed("Tile fetch failed: ${error.message ?: error.javaClass.simpleName}")
         }
     }
+
+    /**
+     * Runs [block] under [withTimeout] when [timeoutMs] is set, and unbounded when it is null.
+     *
+     * The null case exists for virtual-time tests only: under `runTest` the coroutine clock is
+     * skipped forward, so a real deadline fires immediately and every policy test would report a
+     * timeout instead of the policy outcome it is actually asserting. Production always passes a
+     * bound, and `AirTakHttpTimeoutTest` asserts that the shipped client carries one.
+     */
+    private suspend fun <T> bounded(timeoutMs: Long?, block: suspend () -> T): T =
+        if (timeoutMs != null) withTimeout(timeoutMs) { block() } else block()
 
     /**
      * Read at most [maxBytes] from the response, returning null as soon as it is exceeded rather

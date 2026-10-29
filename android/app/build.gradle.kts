@@ -131,6 +131,12 @@ dependencies {
     testImplementation(libs.ktor.client.mock)
     testImplementation(libs.coroutines.test)
 
+    // Test-only real HTTP engine for the localhost stall probe. No product engine change: the
+    // shipped client still uses the Android engine. Added because a test needs a socket that
+    // really stalls — MockEngine buffers the whole response, so it cannot reproduce a provider
+    // that accepts the connection and then never sends anything.
+    testImplementation(libs.ktor.client.cio)
+
     // Instrumented tests
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.test.ext.junit)
