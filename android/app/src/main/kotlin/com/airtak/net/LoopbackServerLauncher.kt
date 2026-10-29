@@ -16,6 +16,11 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * Generic over the listener type so the class is constructible in a plain JVM test with no Android
  * context and no real socket: the regression for a failed bind is a lambda that throws.
+ *
+ * [ensure] and [closeCurrent] are serialised on one lock. Two callers reaching `ensure` at the same
+ * moment would otherwise each run the check-then-open sequence and each bind a socket, while only
+ * one handle could be stored — the other listener would keep accepting connections with nothing
+ * left to close it.
  */
 class LoopbackServerLauncher<S>(
     private val open: () -> S,
@@ -35,6 +40,8 @@ class LoopbackServerLauncher<S>(
         data class Failed(val reason: String) : State
     }
 
+    private val lock = Any()
+
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
 
@@ -52,43 +59,77 @@ class LoopbackServerLauncher<S>(
      * on the next call, so refusing to retry would turn a momentary collision into a permanently
      * dead proxy.
      */
-    fun ensure(): S? {
+    fun ensure(): S? = synchronized(lock) {
         handle?.let { return it }
-        return try {
-            val started = open()
-            handle = started
-            val port = portOf(started)
-            _state.value = State.Running(port)
-            onDiagnostic("loopback tile listener started on port $port")
-            started
+
+        val started = try {
+            open()
         } catch (t: Throwable) {
             if (t is CancellationException) throw t
-            handle = null
-            val reason = t.message ?: t.javaClass.simpleName
-            _state.value = State.Failed(reason)
-            onDiagnostic("loopback tile listener failed to start: $reason")
-            null
+            noteFailure("listener failed to start", t)
+            return null
         }
+
+        // A successful open whose port lookup throws must not orphan the socket that is already
+        // bound: the handle is not stored yet, so nothing else would ever close this listener.
+        val port = try {
+            portOf(started)
+        } catch (t: Throwable) {
+            closeQuietly(started)
+            if (t is CancellationException) throw t
+            noteFailure("listener started but its port could not be read", t)
+            return null
+        }
+
+        handle = started
+        _state.value = State.Running(port)
+        // Diagnostics run after the transition and cannot throw into it. A log sink that fails is
+        // not allowed to turn a live listener into a null return.
+        diagnose("loopback tile listener started on port $port")
+        started
     }
 
     /**
      * Close the current listener and return to [State.Idle] so a later [ensure] opens a fresh one.
-     * A close failure is reported but does not clear the failure state of a later start attempt.
+     * The handle is dropped before [close] runs, so a close that throws cannot leave a listener
+     * that is still reachable through this launcher but never closed again.
      */
-    fun closeCurrent(): State {
+    fun closeCurrent(): State = synchronized(lock) {
         val existing = handle ?: return _state.value
         handle = null
-        return try {
+        val next = try {
             close(existing)
-            _state.value = State.Idle
-            onDiagnostic("loopback tile listener closed")
             State.Idle
         } catch (t: Throwable) {
             if (t is CancellationException) throw t
-            val reason = t.message ?: t.javaClass.simpleName
-            _state.value = State.Failed("close failed: $reason")
-            onDiagnostic("loopback tile listener close failed: $reason")
-            State.Failed("close failed: $reason")
+            State.Failed("close failed: ${reasonOf(t)}")
         }
+        _state.value = next
+        diagnose(
+            if (next is State.Idle) "loopback tile listener closed"
+            else "loopback tile listener close failed: ${(next as State.Failed).reason}",
+        )
+        next
     }
+
+    private fun noteFailure(context: String, t: Throwable) {
+        handle = null
+        val reason = reasonOf(t)
+        _state.value = State.Failed(reason)
+        diagnose("loopback tile $context: $reason")
+    }
+
+    private fun closeQuietly(candidate: S) {
+        runCatching { close(candidate) }
+    }
+
+    /**
+     * A diagnostic sink is an observer, not part of the lifecycle contract. If it throws, the
+     * listener state must be exactly what it was before the log line.
+     */
+    private fun diagnose(message: String) {
+        runCatching { onDiagnostic(message) }
+    }
+
+    private fun reasonOf(t: Throwable): String = t.message ?: t.javaClass.simpleName
 }

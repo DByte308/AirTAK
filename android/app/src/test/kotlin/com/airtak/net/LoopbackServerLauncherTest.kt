@@ -1,6 +1,10 @@
 package com.airtak.net
 
 import java.io.IOException
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
@@ -150,6 +154,119 @@ class LoopbackServerLauncherTest {
         assertTrue(
             h.launcher.state.value is LoopbackServerLauncher.State.Idle,
             "a cancelled caller must not be reported as a listener failure",
+        )
+    }
+
+    @Test
+    fun concurrentEnsureOpensExactlyOneListener() {
+        // The check-then-open sequence in ensure() is not atomic. Without serialisation both
+        // threads bind a socket and only one handle survives, leaving a listener that accepts
+        // connections and can never be closed.
+        // Barrier releases all four threads into ensure() at the same instant; the sleep inside
+        // open() widens the window the lock is supposed to close so a missing lock fails loudly
+        // rather than passing by timing luck.
+        val barrier = CyclicBarrier(4)
+        val opened = AtomicInteger()
+        val h = Harness {
+            Thread.sleep(40)
+            FakeListener(8000 + opened.incrementAndGet())
+        }
+
+        val results = java.util.concurrent.CopyOnWriteArrayList<FakeListener?>()
+        val threads = (1..4).map {
+            Thread {
+                barrier.await(5, TimeUnit.SECONDS)
+                results += h.launcher.ensure()
+            }.apply { isDaemon = true }
+        }
+        threads.forEach { it.start() }
+        threads.forEach { it.join(10_000) }
+
+        assertEquals(1, opened.get(), "ensure() opened ${opened.get()} listeners, expected exactly 1")
+        assertEquals(4, results.size)
+        assertTrue(results.all { it === results.first() }, "callers received different listener instances")
+        assertNotNull(results.first(), "every caller must get the one live listener")
+    }
+
+    @Test
+    fun closeAndEnsureNeverInterleaveIntoTwoListeners() {
+        val opened = AtomicInteger()
+        val closed = AtomicInteger()
+        val launcher = LoopbackServerLauncher(
+            open = { Thread.sleep(15); FakeListener(9000 + opened.incrementAndGet()) },
+            close = { closed.incrementAndGet(); Thread.sleep(10) },
+            portOf = { it.port },
+        )
+
+        val stop = AtomicBoolean(true)
+        val churn = (1..4).map {
+            Thread {
+                while (stop.get()) {
+                    launcher.ensure()
+                    launcher.closeCurrent()
+                }
+            }.apply { isDaemon = true; start() }
+        }
+        Thread.sleep(600)
+        stop.set(false)
+        churn.forEach { it.join(10_000) }
+
+        launcher.closeCurrent()
+        // Every listener that was opened must have been closed: open count == close count means no
+        // socket was dropped on the floor by a concurrent ensure/close interleaving.
+        assertEquals(
+            opened.get(),
+            closed.get(),
+            "opened ${opened.get()} listeners but closed ${closed.get()} — a listener leaked",
+        )
+        assertEquals(LoopbackServerLauncher.State.Idle, launcher.state.value)
+    }
+
+    @Test
+    fun aThrowingDiagnosticDoesNotDropALiveListener() {
+        // Logging is an observer. If the sink throws after a successful open, the caller must still
+        // receive the live listener rather than null with a socket still bound.
+        var opens = 0
+        val launcher = LoopbackServerLauncher(
+            open = { opens++; FakeListener(6000) },
+            close = { },
+            portOf = { it.port },
+            onDiagnostic = { throw IllegalStateException("log sink is broken") },
+        )
+
+        val listener = launcher.ensure()
+
+        assertNotNull(listener, "a broken log sink must not turn a successful start into null")
+        assertEquals(LoopbackServerLauncher.State.Running(6000), launcher.state.value)
+        assertSame(listener, launcher.current)
+        assertEquals(1, opens)
+        // And the failure path still reports state even when the sink is broken.
+        val failing = LoopbackServerLauncher<FakeListener>(
+            open = { throw IOException("bind refused") },
+            close = { },
+            portOf = { it.port },
+            onDiagnostic = { throw IllegalStateException("log sink is broken") },
+        )
+        assertNull(failing.ensure())
+        assertTrue(failing.state.value is LoopbackServerLauncher.State.Failed)
+    }
+
+    @Test
+    fun portLookupFailureClosesTheListenerItAlreadyOpened() {
+        var closed = 0
+        val launcher = LoopbackServerLauncher(
+            open = { FakeListener(6100) },
+            close = { closed++ },
+            portOf = { throw IllegalStateException("port not assigned") },
+        )
+
+        assertNull(launcher.ensure())
+        assertEquals(1, closed, "a listener opened before a failed port lookup must be closed")
+        assertNull(launcher.current)
+        assertTrue(
+            (launcher.state.value as? LoopbackServerLauncher.State.Failed)?.reason
+                ?.contains("port not assigned") == true,
+            "expected the port reason, got ${launcher.state.value}",
         )
     }
 
