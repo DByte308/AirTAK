@@ -122,10 +122,6 @@ dependencies {
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)
     testImplementation(libs.mockk)
-    // Test-only: MockEngine for request-policy tests, virtual time for pacing/cancellation.
-    // Both pinned to the existing ktor / coroutines versions; no product dependency changes.
-    testImplementation(libs.ktor.client.mock)
-    testImplementation(libs.coroutines.test)
 
     // Instrumented tests
     androidTestImplementation(libs.espresso.core)
@@ -135,7 +131,8 @@ dependencies {
 // The suite is JUnit 5 (junit-jupiter-api + junit-jupiter-engine), but Gradle's test task
 // defaults to the JUnit 4 runner. Without this the task reports BUILD SUCCESSFUL while
 // discovering zero tests: app/build/test-results contained only binary/ stubs and the HTML
-// report read "0 tests" despite 19 @Test methods in src/test.
+// report read "0 tests" while src/test held four classes of real @Test methods. Counting them
+// here would only go stale, so the durable signal is the empty test-results directory instead.
 tasks.withType<Test> {
     useJUnitPlatform()
 }
