@@ -748,6 +748,12 @@ fun MapScreen(
             }
         }
 
+        // A listener that failed to bind used to look exactly like an app with no tiles to serve.
+        TileServerProblemBanner(
+            reason = ui.tileServerProblem,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+
         FloatingActionButton(
             onClick = {
                 val readyMap = map

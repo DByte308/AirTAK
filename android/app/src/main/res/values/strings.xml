@@ -87,4 +87,5 @@
     <!-- Language picker -->
     <string name="lang_system">System default</string>
     <string name="lang_restart_note">The app rebuilds its screens when you change this, so any screen you had open closes.</string>
+    <string name="map_tile_server_problem">Map tile service is not running. Tiles may not load.</string>
 </resources>

@@ -67,4 +67,5 @@
     <string name="sec_about_sub">Diagnose, Werkseinstellungen</string>
     <string name="lang_system">System</string>
     <string name="lang_restart_note">Beim Sprachwechsel werden die Ansichten neu aufgebaut. Die gerade geöffnete Ansicht wird dabei geschlossen.</string>
+    <string name="map_tile_server_problem">Kartendienst läuft nicht. Kacheln werden möglicherweise nicht geladen.</string>
 </resources>
