@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.airtak.data.ble.service.LinkService
+import com.airtak.data.gps.PhoneGpsProvider
 import com.airtak.data.prefs.AppPreferences
 import com.airtak.ui.theme.AirTakTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -37,11 +38,18 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var prefs: AppPreferences
 
+    /**
+     * Phone GPS is a singleton built while the permission dialog is still on screen, so its first
+     * registration attempt can fail for a reason that disappears seconds later. Nothing else
+     * observes the grant, so this activity — which owns the prompt — hands the result to it.
+     */
+    @Inject lateinit var phoneGps: PhoneGpsProvider
+
     private val appShellViewModel: AppShellViewModel by viewModels()
 
     private val requestPerms = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { /* result evaluated reactively by repositories */ }
+    ) { phoneGps.refresh() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +73,13 @@ class MainActivity : ComponentActivity() {
                 AppShell()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Covers the path where the grant arrives through system settings rather than through our
+        // own callback, and the case where the user turns device location back on.
+        phoneGps.refresh()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {

@@ -4,6 +4,7 @@ package com.airtak.ui.map
 
 import android.graphics.BitmapFactory
 import android.graphics.PointF
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -103,6 +104,7 @@ import com.airtak.config.constants.UI_MARKER_DESC_MAX_LEN
 import com.airtak.config.constants.UI_METERS_TO_KM
 import com.airtak.config.constants.UI_RGB_MASK
 import com.airtak.config.constants.UI_TILE_URL_MAX_LEN
+import com.airtak.data.gps.noPositionReason
 import com.airtak.data.tiles.TileBounds
 import com.airtak.data.tiles.TileDownloadState
 import com.airtak.data.overlays.MissionOverlay
@@ -191,6 +193,9 @@ fun MapScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
+    val phoneGpsActive by viewModel.phoneGpsActive.collectAsState()
+    val phoneGpsFix by viewModel.phoneGpsFix.collectAsState()
+    val gpsStartFailure by viewModel.gpsStartFailure.collectAsState()
     val isDark = MaterialTheme.colorScheme.background == DarkBackground
     val bgColor = (if (isDark) DarkBackground else LightBackground).toArgb()
     val textColor = MaterialTheme.colorScheme.onBackground.toArgb()
@@ -506,11 +511,15 @@ fun MapScreen(
         map?.getStyle { style -> updateTileSelectionLayer(style, selectedTileBounds) }
     }
 
-    LaunchedEffect(ui.ownPosition) {
-        val pos = ui.ownPosition
-        if (!centeredOnce && pos != null) {
+    // Keyed on `map` as well as on the position. getMapAsync is asynchronous, and the previous
+    // version consumed `centeredOnce` while `map` was still null: the camera call no-oped, the flag
+    // was spent, and nothing re-ran, so the map stayed on the world-view default.
+    LaunchedEffect(map, ui.ownPosition) {
+        val readyMap = map ?: return@LaunchedEffect
+        val pos = ui.ownPosition ?: return@LaunchedEffect
+        if (!centeredOnce) {
             centeredOnce = true
-            map?.animateCamera(northUpCamera(LatLng(pos.latitude, pos.longitude), MAP_SELF_ZOOM))
+            readyMap.animateCamera(northUpCamera(LatLng(pos.latitude, pos.longitude), MAP_SELF_ZOOM))
         }
     }
 
@@ -740,8 +749,23 @@ fun MapScreen(
 
         FloatingActionButton(
             onClick = {
-                val pos = ui.ownPosition ?: return@FloatingActionButton
-                map?.animateCamera(northUpCamera(LatLng(pos.latitude, pos.longitude), MAP_SELF_ZOOM))
+                val readyMap = map
+                val pos = ui.ownPosition
+                if (readyMap == null || pos == null) {
+                    // An enabled button that does nothing is indistinguishable from a broken
+                    // camera; say which of the two it is.
+                    Toast.makeText(
+                        context,
+                        noPositionReason(
+                            registered = phoneGpsActive,
+                            hasFix = phoneGpsFix,
+                            failure = gpsStartFailure,
+                        ),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    return@FloatingActionButton
+                }
+                readyMap.animateCamera(northUpCamera(LatLng(pos.latitude, pos.longitude), MAP_SELF_ZOOM))
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)

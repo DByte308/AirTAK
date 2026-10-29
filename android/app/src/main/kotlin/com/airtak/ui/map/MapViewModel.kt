@@ -14,6 +14,7 @@ import com.airtak.data.db.WaypointDao
 import com.airtak.data.db.WaypointEntity
 import com.airtak.data.geocoding.GeocodingRepository
 import com.airtak.data.geocoding.GeocodingResult
+import com.airtak.data.gps.GpsStartFailure
 import com.airtak.data.gps.PhoneGpsProvider
 import com.airtak.data.marker.TacticalMarkerRepository
 import com.airtak.data.mesh.MeshRepository
@@ -226,6 +227,14 @@ class MapViewModel @Inject constructor(
     val ownPosition: StateFlow<Pair<Double, Double>?> = uiState
         .map { it.ownPosition?.let { pos -> pos.latitude to pos.longitude } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * Phone GPS registration state, surfaced so the map can explain why there is no own position
+     * instead of letting the recenter control fail silently.
+     */
+    val phoneGpsActive: StateFlow<Boolean> = phoneGps.isActive
+    val phoneGpsFix: StateFlow<Boolean> = phoneGps.hasFix
+    val gpsStartFailure: StateFlow<GpsStartFailure> = phoneGps.startFailure
 
     fun setShowPlayers(show: Boolean) { showPlayers.value = show }
     fun setShowWaypoints(show: Boolean) { showWaypoints.value = show }
