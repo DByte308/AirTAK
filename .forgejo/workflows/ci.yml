@@ -16,6 +16,21 @@
 #       * Self-hosted:      use the label(s) you registered (e.g. linux, ci)
 #   - Minimum resources: 4 vCPU, 8 GB RAM, 20 GB disk (Android SDK ~2 GB)
 #   - The runner must have python3, bash, curl, unzip, and sudo in the image.
+#
+# ── Test gates ────────────────────────────────────────────────────────────
+# JUnit 5 silently skips a @Test whose return type is not Unit; gradle alone reports green
+# for a suite that ran nothing. These gates fail CI when tests are not run or discovered
+# (DByte308/AirTAK#12).
+#   * Fresh results: debug test-results dir is deleted before rerun, and the audit only runs
+#     on a --rerun-tasks execution, so it never reads a reused report.
+#   * Audit gate: `tools/audit_test_discovery.py` compares @Test declarations in
+#     `android/app/src/test/**/*.kt` vs the JUnit XML the debug task produced. Exit 0 = all
+#     declared tests executed; 1 = zero executed, declared-but-never-executed, or unparseable
+#     @Test; 2 = results dir absent. Gated (no continue-on-error); a missing audit fails the job.
+#   * Python tooling canary (separate job, no JDK/SDK): runs offline stdlib-only guards
+#     `tools/test_audit_test_discovery.py` (audit self-test) and
+#     `tools/test_tile_fetch.py` (T.6). Both build fixtures / inject a fake fetch rather than
+#     contact a tile server. Kept separate from the gradle audit gate.
 
 name: AirTAK CI
 
@@ -221,14 +236,30 @@ jobs:
           echo "JAVA_HOME=$JAVA_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
+      - name: Clear stale test results
+        run: |
+          # Delete only the debug results dir the audit reads, so the rerun below produces
+          # fresh reports. Absent on a clean checkout; idempotent. No mtime gate.
+          rm -rf android/app/build/test-results/testDebugUnitTest
+
       - name: Run Android unit tests
         run: |
+          # Single invocation runs the full `test` task (all unit-test variants) AND the debug
+          # variant the audit reads (hardcoded testDebugUnitTest path). --rerun-tasks forces
+          # re-execution so the audit never reads a reused report; the deletes above guarantee
+          # freshness. Avoids running the task graph twice.
           export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
           export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
           export ANDROID_HOME="$ANDROID_SDK_ROOT"
           export GRADLE_USER_HOME="$(pwd)/android/.gradle-home"
           cd android
-          ./gradlew test --no-daemon
+          ./gradlew test :app:testDebugUnitTest --rerun-tasks --no-daemon
+
+      - name: Audit test discovery (declared vs executed)
+        run: |
+          # Gated, not continued-on-error; argv is '.' (repo root), never an absolute path.
+          test -f tools/audit_test_discovery.py || { echo "FAIL: tools/audit_test_discovery.py missing"; exit 1; }
+          python3 tools/audit_test_discovery.py .
 
       - name: Build debug APK
         run: |
@@ -250,3 +281,28 @@ jobs:
           name: android-debug-apk
           path: artifacts/android/
           retention-days: 30
+
+  # ── Python tooling: offline, stdlib-only regression canaries (no JDK/SDK) ───
+  # Runs the self-tests for the audit and the T.6 tile-fetcher. Both are offline + stdlib-only
+  # (fixtures / fake fetch, never a real tile server). Separate from the android gradle audit
+  # gate on purpose: a cheap canary that needs no gradle/JDK/SDK and does not depend on the
+  # android job. No continue-on-error; a failing suite fails the job.
+  python-tools:
+    name: Python tooling regressions (offline)
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install python3
+        run: apt-get update -qq && apt-get install -y -qq python3
+
+      - name: Guard suite self-test (audit regression)
+        run: |
+          test -f tools/test_audit_test_discovery.py || { echo "FAIL: tools/test_audit_test_discovery.py missing"; exit 1; }
+          python3 tools/test_audit_test_discovery.py
+
+      - name: T.6 tile_fetch regressions
+        run: |
+          test -f tools/test_tile_fetch.py || { echo "FAIL: tools/test_tile_fetch.py missing"; exit 1; }
+          python3 tools/test_tile_fetch.py
