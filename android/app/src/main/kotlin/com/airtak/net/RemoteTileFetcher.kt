@@ -154,12 +154,12 @@ class RemoteTileFetcher(
 
                     else -> {
                         if (!response.status.isSuccess()) {
-                            return@execute Result.Failed("Provider returned ${'$'}{response.status.value}.")
+                            return@execute Result.Failed("Provider returned ${response.status.value}.")
                         }
                         val declared = response.contentLength()
                         if (declared != null && declared > maxResponseBytes) {
                             return@execute Result.Failed(
-                                "Provider declared ${'$'}declared bytes, over the $maxResponseBytes tile limit.",
+                                "Provider declared $declared bytes, over the $maxResponseBytes tile limit.",
                             )
                         }
                         val bytes = readBounded(response, maxResponseBytes)
@@ -184,7 +184,7 @@ class RemoteTileFetcher(
         }.getOrElse { error ->
             // Cancellation must propagate untouched so proxy teardown actually stops fetches.
             if (error is kotlinx.coroutines.CancellationException) throw error
-            Result.Failed("Tile fetch failed: ${'$'}{error.message ?: error.javaClass.simpleName}")
+            Result.Failed("Tile fetch failed: ${error.message ?: error.javaClass.simpleName}")
         }
     }
 

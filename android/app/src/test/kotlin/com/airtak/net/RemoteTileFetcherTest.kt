@@ -333,3 +333,102 @@ class LiveFetchVerdictTest {
         }
     }
 }
+
+/**
+ * A diagnostic that never interpolated is worse than no diagnostic: the operator reads
+ * "Provider returned ${response.status.value}." on screen, and it looks like a number was there.
+ * Three of these messages shipped that way, so the assertion is on the actual value reaching the
+ * text, plus a blanket check that no un-substituted placeholder survives in any failure reason.
+ */
+class RemoteTileFetcherDiagnosticsTest {
+
+    private val budgets = RequestBudgets(tileSpacingMs = 0L)
+
+    private fun fetcher(engine: io.ktor.client.engine.HttpClientEngine, cap: Int = 1024) =
+        RemoteTileFetcher(
+            budgets,
+            AirTakHttp.newClient(engine = engine, followRedirects = false),
+            maxResponseBytes = cap,
+        )
+
+    /** `${'$'}foo` or `${'$'}{foo}` surviving means the template was never evaluated. */
+    private fun assertNoUnsubstitutedPlaceholder(reason: String) {
+        assertTrue(!reason.contains("\${"), "un-substituted expression in: $reason")
+        assertTrue(
+            !Regex("""\$[A-Za-z_][A-Za-z0-9_]*""").containsMatchIn(reason),
+            "un-substituted variable reference in: $reason",
+        )
+    }
+
+    private fun failed(result: RemoteTileFetcher.Result): String {
+        assertTrue(result is RemoteTileFetcher.Result.Failed, "expected Failed, got $result")
+        return (result as RemoteTileFetcher.Result.Failed).reason
+    }
+
+    @Test
+    fun nonSuccessStatusReportsTheActualStatusCodeNotTheTemplate() = runTest {
+        val engine = MockEngine {
+            respond(ByteArray(0), HttpStatusCode.ServiceUnavailable, headersOf())
+        }
+        val reason = failed(
+            fetcher(engine).fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
+        )
+        assertTrue(reason.contains("503"), "the status code must reach the operator: $reason")
+        assertNoUnsubstitutedPlaceholder(reason)
+    }
+
+    @Test
+    fun declaredSizeOverCapReportsBothTheDeclaredSizeAndTheCap() = runTest {
+        val engine = MockEngine {
+            respond(
+                ByteArray(4),
+                HttpStatusCode.OK,
+                headersOf(HttpHeaders.ContentLength to listOf("999999")),
+            )
+        }
+        val reason = failed(
+            fetcher(engine, cap = 1024).fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
+        )
+        assertTrue(reason.contains("999999"), "declared size must be named: $reason")
+        assertTrue(reason.contains("1024"), "the cap that was exceeded must be named: $reason")
+        assertNoUnsubstitutedPlaceholder(reason)
+    }
+
+    @Test
+    fun bodyOverCapNamesTheCapItHit() = runTest {
+        val engine = MockEngine {
+            respond(ByteArray(4096), HttpStatusCode.OK, headersOf())
+        }
+        val reason = failed(
+            fetcher(engine, cap = 64).fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
+        )
+        assertTrue(reason.contains("64"), "the cap must be named: $reason")
+        assertNoUnsubstitutedPlaceholder(reason)
+    }
+
+    @Test
+    fun transportErrorCarriesTheUnderlyingMessage() = runTest {
+        val engine = MockEngine { throw java.io.IOException("provider stalled mid-body") }
+        val reason = failed(
+            fetcher(engine).fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
+        )
+        assertTrue(
+            reason.contains("provider stalled mid-body"),
+            "the underlying error text must survive into the reason: $reason",
+        )
+        assertNoUnsubstitutedPlaceholder(reason)
+    }
+
+    @Test
+    fun transportErrorWithoutAMessageFallsBackToTheClassNameNotAnEmptyString() = runTest {
+        val engine = MockEngine { throw java.io.IOException() }
+        val reason = failed(
+            fetcher(engine).fetch("https://tiles.example/{z}/{x}/{y}.png", 3, 4, 5, 14)
+        )
+        assertTrue(
+            reason.contains("IOException"),
+            "a null message must fall back to the class name rather than print null: $reason",
+        )
+        assertNoUnsubstitutedPlaceholder(reason)
+    }
+}
