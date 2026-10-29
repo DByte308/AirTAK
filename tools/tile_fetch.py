@@ -116,15 +116,17 @@ def normalize_template(url: str) -> str:
     authority, tail = rest[:end], rest[end:]
     at = authority.rfind("@")
     prefix, host_port = ("", authority) if at == -1 else (authority[: at + 1], authority[at + 1:])
+    # An IPv6 literal keeps its brackets and is delimited by `]`, so its port follows the `]`.
     if host_port.startswith("["):
         close = host_port.find("]")
-        host = host_port[: close + 1] if close != -1 else host_port
+        if close == -1:
+            raise BulkPolicyError("[tile_fetch] Malformed IPv6 literal in tile URL.")
+        host = host_port[: close + 1]
+        port = host_port[close + 1:] if len(host_port) > close + 1 else ""
     else:
-        host = host_port.split(":")[0]
+        host, _, port = host_port.partition(":")
+        port = (":" + port) if port else ""
     # Rebuild the authority with the host lowercased and any port preserved.
-    port = ""
-    if not host_port.startswith("[") and ":" in host_port:
-        port = ":" + host_port.split(":", 1)[1]
     return "%s://%s%s%s%s" % (scheme, prefix, host.lower().rstrip("."), port, tail)
 
 
@@ -181,20 +183,88 @@ _OPENER = urllib.request.build_opener(_RefuseRedirects())
 
 
 def lat_lon_to_tile(lat: float, lon: float, zoom: int) -> Tuple[int, int]:
-    """Convert lat/lon to tile x/y at the given zoom level (slippy map convention)."""
+    """Convert lat/lon to tile x/y at the given zoom level (slippy map convention).
+
+    Always returns a valid tile index in [0, 2**zoom - 1] for both x and y. The slippy Mercator
+    formula maps the world to a square: longitude -180..180 spans x 0..n, so lon=+180 yields
+    exactly x=n (one past the last valid tile) and is clamped to n-1; latitude at the Mercator
+    boundary (+/-85.051128...) yields exactly y=n and is likewise clamped to n-1. Both are
+    boundary values, not interior, so clamping to the last tile is the correct end-of-world
+    answer rather than a silent data loss.
+    """
+    # The Mercator projection used by the slippy map is defined only for |lat| <= 85.051128.
+    # At the poles the formula takes log of zero (tan(pi/2)) and throws; an out-of-range or
+    # pole latitude is clamped to the Mercator boundary so it maps to a valid edge tile rather
+    # than aborting the run with a cryptic math-domain error.
+    lat = max(-85.051128, min(85.051128, lat))
     n = 2 ** zoom
     x = int((lon + 180.0) / 360.0 * n)
     lat_rad = math.radians(lat)
     y = int((1.0 - math.log(math.tan(lat_rad) + 1.0 / math.cos(lat_rad)) / math.pi) / 2.0 * n)
-    # Clamp to valid tile range
+    # Clamp to valid tile range. lon=+180 gives x=n and the Mercator boundary gives y=n, both one
+    # past the last tile; this clamp keeps the returned index within [0, n-1] for the whole world.
     x = max(0, min(n - 1, x))
     y = max(0, min(n - 1, y))
     return x, y
 
 
+def parse_bbox(bbox: str) -> Tuple[float, float, float, float]:
+    """Validate and split a bbox string 'min_lat,min_lon,max_lat,max_lon'.
+
+    Returns (min_lat, min_lon, max_lat, max_lon). Rejects malformed input, an inverted box
+    (min > max for either axis), and coordinates outside the valid WGS84 range. Without this a
+    nonsense box silently downloads nothing (inverted) or a physically impossible area
+    (lon out of range), and a too-many-fields string aborts deep inside the projection math with
+    an unhelpful ValueError.
+    """
+    parts = bbox.split(",")
+    if len(parts) != 4:
+        raise ValueError(
+            "bbox must be exactly 4 comma-separated numbers: min_lat,min_lon,max_lat,max_lon. Got %r"
+            % bbox)
+    try:
+        min_lat, min_lon, max_lat, max_lon = (float(p) for p in parts)
+    except ValueError:
+        raise ValueError("bbox must be 4 numbers, one per field. Got %r" % bbox)
+
+    if min_lat > max_lat or min_lon > max_lon:
+        raise ValueError(
+            "bbox is inverted: min values must be <= max values. Got %r" % bbox)
+    if not (-90 <= min_lat <= 90 and -90 <= max_lat <= 90):
+        raise ValueError("bbox latitude must be in [-90, 90]. Got %r" % bbox)
+    if not (-180 <= min_lon <= 180 and -180 <= max_lon <= 180):
+        raise ValueError("bbox longitude must be in [-180, 180]. Got %r" % bbox)
+    return min_lat, min_lon, max_lat, max_lon
+
+
+def parse_zoom(zoom: str) -> Tuple[int, int]:
+    """Validate a zoom spec 'Z' or 'Zmin-Zmax'. Returns (z_min, z_max).
+
+    Rejects a non-integer, more than one range dash, or an inverted range (z_min > z_max).
+    Without this, --zoom 14-10 silently downloads nothing and --zoom abc aborts with the
+    interpreter's raw ValueError during int() conversion.
+    """
+    if "-" in zoom:
+        fields = zoom.split("-")
+        if len(fields) != 2:
+            raise ValueError("zoom range must be 'Z' or 'Zmin-Zmax'. Got %r" % zoom)
+    else:
+        fields = [zoom]
+    try:
+        zooms = tuple(int(f) for f in fields)
+    except ValueError:
+        raise ValueError("zoom must be a non-negative integer or 'Zmin-Zmax'. Got %r" % zoom)
+    z_min, z_max = (zooms[0], zooms[0]) if len(zooms) == 1 else zooms
+    if z_min < 0 or z_max < 0:
+        raise ValueError("zoom must be non-negative. Got %r" % zoom)
+    if z_min > z_max:
+        raise ValueError("zoom range is inverted: min zoom must be <= max zoom. Got %r" % zoom)
+    return z_min, z_max
+
+
 def tile_range(bbox: str, zoom: int) -> Iterator[Tuple[int, int, int]]:
     """Yield (z, x, y) tile coords for the given bbox string 'min_lat,min_lon,max_lat,max_lon'."""
-    min_lat, min_lon, max_lat, max_lon = map(float, bbox.split(","))
+    min_lat, min_lon, max_lat, max_lon = parse_bbox(bbox)
     x_min, y_max = lat_lon_to_tile(min_lat, min_lon, zoom)
     x_max, y_min = lat_lon_to_tile(max_lat, max_lon, zoom)
     for x in range(x_min, x_max + 1):
@@ -254,16 +324,32 @@ def main() -> None:
 
     # Checked before the database is created or any request is made.
     provider_host = check_bulk_policy(args.url)
+
+    # Non-finite delays (NaN, +inf, -inf) slip past a `args.delay < MIN` comparison: NaN compares
+    # False to everything and inf is not less, so both would be accepted, then time.sleep() would
+    # raise ValueError (NaN) or OverflowError (inf) partway through a download. Reject them here.
+    if not math.isfinite(args.delay):
+        raise BulkPolicyError(
+            "[tile_fetch] --delay %s is not a finite number. Bulk fetching needs a real "
+            "positive per-request interval." % args.delay)
     if args.delay < MIN_DELAY_SECONDS:
         raise BulkPolicyError(
             "[tile_fetch] --delay %s is below the %s s floor. Bulk fetching faster than one "
             "request per second is not something this tool will do." % (args.delay, MIN_DELAY_SECONDS))
 
-    # Parse zoom range
-    if "-" in args.zoom:
-        z_min, z_max = map(int, args.zoom.split("-"))
-    else:
-        z_min = z_max = int(args.zoom)
+    # Validate the request surface before creating the .mbtiles file, so a bad --bbox or --zoom
+    # cannot leave a stray archive behind.
+    bbox = args.bbox
+    try:
+        parse_bbox(bbox)
+    except ValueError as exc:
+        raise BulkPolicyError(
+            "[tile_fetch] %s" % exc)
+    try:
+        z_min, z_max = parse_zoom(args.zoom)
+    except ValueError as exc:
+        raise BulkPolicyError(
+            "[tile_fetch] %s" % exc)
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)) or ".", exist_ok=True)
     conn = init_mbtiles(args.output)
@@ -343,23 +429,32 @@ def run_download(
                     skipped += 1
                     continue
 
+                download_ok = False
                 try:
                     data = fetch(url_template, z, x, y)
+                    download_ok = True
                 except (KeyboardInterrupt, SystemExit) as exc:
                     interrupted = exc
                     break
                 except Exception as exc:
                     print(f"  [WARN] Failed to fetch {z}/{x}/{y}: {exc}", file=sys.stderr)
-                    continue
 
-                conn.execute(
-                    "INSERT OR REPLACE INTO tiles(zoom_level, tile_column, tile_row, tile_data) VALUES (?,?,?,?)",
-                    (z, x, tms_y, sqlite3.Binary(data)),
-                )
-                conn.commit()
-                downloaded += 1
-                if downloaded % 100 == 0:
-                    print(f"  {downloaded}/{total} tiles downloaded...")
+                # Pacing runs after EVERY request attempt, success or failure. A refused request is
+                # still a request, and a server answering 429 / rate-limited is precisely when the
+                # tool must back off. The previous code skipped sleep() on the failure path (the
+                # `continue` jumped over it), so a refused response got re-requested as fast as the
+                # fetch callback could run instead of once per delay_seconds. That is the defect;
+                # the exact requests-per-second figure depends on the fetch, not on the network.
+                # Cache hits make no request, so they are correctly not paced.
+                if download_ok:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO tiles(zoom_level, tile_column, tile_row, tile_data) VALUES (?,?,?,?)",
+                        (z, x, tms_y, sqlite3.Binary(data)),
+                    )
+                    conn.commit()
+                    downloaded += 1
+                    if downloaded % 100 == 0:
+                        print(f"  {downloaded}/{total} tiles downloaded...")
                 sleep(delay_seconds)
             if interrupted is not None:
                 break

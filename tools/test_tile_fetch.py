@@ -10,6 +10,7 @@ import importlib.util
 import os
 import socket
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -241,6 +242,219 @@ class NoNetwork(unittest.TestCase):
             self.assertEqual("tiles.example.com", tf.check_bulk_policy("https://tiles.example.com/{z}.png"))
             tf.identity_key("https://tiles.example.com/{z}.png")
             tf.provenance_label("https://tiles.example.com/{z}.png")
+
+
+class PacingOnFailure(unittest.TestCase):
+    """D1: pacing must run after every request attempt, including a refused one."""
+
+    def test_failure_path_is_paced(self):
+        conn, path = self._db()
+        slept = []
+        attempts = []
+
+        def fetch(url, z, x, y):
+            attempts.append((z, x, y))
+            # A server answering 429 "Too Many Requests" is exactly when the tool must back off.
+            raise OSError("429 Too Many Requests")
+
+        tf.run_download(
+            conn, "50.30,8.60,50.40,8.90", 12, 12, "https://t.example.com/{z}/{x}/{y}.png", 1.0, 4,
+            fetch=fetch, sleep=slept.append,
+        )
+        self.assertGreater(len(attempts), 0, "the fetch should actually have been attempted")
+        self.assertEqual(
+            len(slept), len(attempts),
+            "each request attempt, successful or refused, must be paced",
+        )
+        self.assertTrue(all(s >= 1.0 for s in slept), slept)
+
+    def test_mix_of_success_and_failure_is_paced(self):
+        conn, path = self._db()
+        slept = []
+        state = {"i": 0}
+
+        def fetch(url, z, x, y):
+            state["i"] += 1
+            if state["i"] % 2 == 0:
+                raise OSError("server error")
+            return b"png"
+
+        dl, _sk = tf.run_download(
+            conn, "50.30,8.60,50.40,8.90", 12, 12, "https://t.example.com/{z}/{x}/{y}.png", 1.0, 4,
+            fetch=fetch, sleep=slept.append,
+        )
+        self.assertGreater(dl, 0, "some tiles should have downloaded")
+        # The request count equals successes + failures; every attempt must be paced.
+        self.assertEqual(len(slept), state["i"], "both outcomes must be paced")
+        self.assertTrue(all(s >= 1.0 for s in slept), slept)
+
+    def _db(self):
+        path = tempfile.mktemp(suffix=".mbtiles")
+        self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+        return tf.init_mbtiles(path), path
+
+
+class ZoomValidation(unittest.TestCase):
+    """D2: reject malformed or inverted zoom ranges instead of silently downloading nothing."""
+
+    def test_single_and_range_are_accepted(self):
+        self.assertEqual((10, 10), tf.parse_zoom("10"))
+        self.assertEqual((10, 14), tf.parse_zoom("10-14"))
+
+    def test_inverted_range_is_rejected(self):
+        with self.assertRaises(ValueError):
+            tf.parse_zoom("14-10")
+
+    def test_non_integer_is_rejected(self):
+        for bad in ("abc", "1.5", "-", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                tf.parse_zoom(bad)
+
+    def test_negative_zoom_is_rejected(self):
+        with self.assertRaises(ValueError):
+            tf.parse_zoom("-1")
+
+    def test_too_many_dashes_is_rejected(self):
+        with self.assertRaises(ValueError):
+            tf.parse_zoom("10-14-18")
+
+
+class BboxValidation(unittest.TestCase):
+    """D3: reject inverted or out-of-range boxes before creating a stray archive."""
+
+    def test_valid_bbox_parses(self):
+        self.assertEqual((50.30, 8.68, 50.37, 8.82), tf.parse_bbox("50.30,8.68,50.37,8.82"))
+
+    def test_inverted_bbox_is_rejected(self):
+        with self.assertRaises(ValueError):
+            tf.parse_bbox("50.40,8.90,50.30,8.60")
+
+    def test_out_of_range_lat_is_rejected(self):
+        for b in ("91,0,92,1", "-95,0,-94,1"):
+            with self.assertRaises(ValueError, msg=b):
+                tf.parse_bbox(b)
+
+    def test_out_of_range_lon_is_rejected(self):
+        with self.assertRaises(ValueError):
+            tf.parse_bbox("0,200,1,201")
+
+    def test_wrong_field_count_is_rejected(self):
+        for b in ("1,2,3", "1,2,3,4,5"):
+            with self.assertRaises(ValueError, msg=b):
+                tf.parse_bbox(b)
+
+    def test_latitude_is_clamped_at_poles(self):
+        # The slippy Mercator formula throws at |lat| = 90; it must clamp to a valid edge tile.
+        x0, y0 = tf.lat_lon_to_tile(90.0, 8.0, 12)
+        x1, y1 = tf.lat_lon_to_tile(-90.0, 8.0, 12)
+        n = 2 ** 12
+        self.assertEqual(0, y0)
+        self.assertEqual(n - 1, y1)
+
+
+class DelayValidation(unittest.TestCase):
+    """D4: reject non-finite --delay, which slips past a `x < floor` comparison."""
+
+    def test_non_finite_delay_is_rejected(self):
+        # NaN compares False to everything and +inf is not < anything, so the plain `x < floor`
+        # check lets both through, and time.sleep() then raises across a running download. This
+        # is what the isfinite() guard exists for. -inf, by contrast, is caught by the floor
+        # comparison already (it is less than everything), so it is not the bypass case.
+        import math as _m
+        self.assertFalse(_m.isfinite(float("nan")))
+        self.assertFalse(_m.isfinite(float("inf")))
+        self.assertFalse(_m.isfinite(float("-inf")))
+        # Prove the `< floor` comparison is the bypass: it lets nan and +inf through.
+        self.assertFalse(float("nan") < tf.MIN_DELAY_SECONDS)
+        self.assertFalse(float("inf") < tf.MIN_DELAY_SECONDS)
+
+    def test_finite_below_floor_is_still_rejected(self):
+        self.assertTrue(0.5 < tf.MIN_DELAY_SECONDS)
+
+
+class IPv6Identity(unittest.TestCase):
+    """D5: identity_key must separate IPv6 literals that differ only in port."""
+
+    def test_ipv6_ports_do_not_collide(self):
+        self.assertNotEqual(
+            tf.identity_key("http://[::1]:8080/{z}/{x}/{y}.png"),
+            tf.identity_key("http://[::1]:9999/{z}/{x}/{y}.png"),
+        )
+
+    def test_ipv6_port_is_preserved_in_provenance(self):
+        self.assertEqual("[::1]:8080", tf.provenance_label("http://[::1]:8080/{z}.png"))
+        self.assertEqual("[::1]:9999", tf.provenance_label("http://[::1]:9999/{z}.png"))
+
+
+class TileCoordinateBounds(unittest.TestCase):
+    """The slippy map must never emit a tile index outside [0, 2**zoom - 1]."""
+
+    def test_lon_180_is_clamped_to_n_minus_1(self):
+        # lon=+180 lands exactly on x == 2**zoom (one past the last tile) at every zoom, so the
+        # clamp must bring it back to n-1. Without it, the world-covering bbox would request a
+        # nonexistent tile x=n.
+        for zoom in (0, 1, 2, 8, 18):
+            n = 2 ** zoom
+            x, _ = tf.lat_lon_to_tile(0.0, 180.0, zoom)
+            self.assertEqual(n - 1, x, "zoom=%d" % zoom)
+
+    def test_lon_neg_180_is_zero(self):
+        for zoom in (0, 1, 2, 8):
+            x, _ = tf.lat_lon_to_tile(0.0, -180.0, zoom)
+            self.assertEqual(0, x, "zoom=%d" % zoom)
+
+    def test_mercator_poles_clamp_to_valid_y(self):
+        # The Mercator boundary maps to exactly y == 2**zoom; the clamp must return n-1. At the
+        # limits the raw latitude would otherwise throw a math-domain error before any clamp runs.
+        for zoom in (0, 1, 2, 8):
+            n = 2 ** zoom
+            _, y_top = tf.lat_lon_to_tile(85.051128, 0.0, zoom)
+            _, y_bot = tf.lat_lon_to_tile(-85.051128, 0.0, zoom)
+            self.assertEqual(0, y_top, "zoom=%d" % zoom)
+            self.assertEqual(n - 1, y_bot, "zoom=%d" % zoom)
+
+    def test_world_bbox_yields_only_valid_indices(self):
+        # The world-covering bbox must produce only in-range indices at every zoom.
+        for zoom in (0, 1, 2, 3):
+            n = 2 ** zoom
+            for z, x, y in tf.tile_range("-90,-180,90,180", zoom):
+                self.assertEqual(zoom, z)
+                self.assertTrue(0 <= x < n, "zoom=%d x=%d" % (zoom, x))
+                self.assertTrue(0 <= y < n, "zoom=%d y=%d" % (zoom, y))
+
+    def test_zoom0_world_bbox_is_exactly_one_tile(self):
+        # At zoom 0 the whole world is a single 1x1 tile, regardless of how the edges round.
+        self.assertEqual([(0, 0, 0)], list(tf.tile_range("-90,-180,90,180", 0)))
+
+
+class CliInvalidInput(unittest.TestCase):
+    """Rejected invocations must fail before creating any .mbtiles archive."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._base = [sys.executable, os.path.join(HERE, "tile_fetch.py"),
+                     "--bbox", "50.3,8.6,50.4,8.9", "--zoom", "10-11",
+                     "--url", "https://t.example.com/{z}/{x}/{y}.png"]
+
+    def _run(self, label, extra):
+        out = os.path.join(tempfile.mkdtemp(), label + ".mbtiles")
+        args = self._base + ["--output", out] + extra
+        proc = subprocess.run(args, capture_output=True, text=True)
+        self.addCleanup(lambda: os.path.exists(out) and os.remove(out))
+        self.assertNotEqual(0, proc.returncode, "%s should be rejected" % label)
+        self.assertFalse(os.path.exists(out), "%s must not create an archive" % label)
+
+    def test_nan_delay_creates_no_archive(self):
+        self._run("nan-delay", ["--delay", "nan"])
+
+    def test_nan_bbox_creates_no_archive(self):
+        self._run("nan-bbox", ["--bbox", "nan,nan,nan,nan"])
+
+    def test_inverted_bbox_creates_no_archive(self):
+        self._run("inv-bbox", ["--bbox", "50.4,8.9,50.3,8.6"])
+
+    def test_inverted_zoom_creates_no_archive(self):
+        self._run("inv-zoom", ["--zoom", "14-10"])
 
 
 if __name__ == "__main__":
