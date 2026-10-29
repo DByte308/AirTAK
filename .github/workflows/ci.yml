@@ -1,0 +1,148 @@
+# AirTAK CI — GitHub Actions mirror (Android + Python tooling).
+#
+# Intended surface: the GitHub fork (origin = github.com/DByte308/AirTAK). The Forgejo
+# workflow lives at .forgejo/workflows/ci.yml and is NOT seen by GitHub Actions — this file
+# is the GHA-native counterpart. Firmware build matrix is a separate, optional future
+# addition and is deliberately NOT duplicated here.
+#
+# Scope: Android (compileSdk 35 / targetSdk 35 unit tests + debug APK) and the offline
+# Python tooling suites. No secrets. No pull_request_target. No privileged install of
+# untrusted PR code. Least-privilege (contents: read).
+name: AirTAK CI (GitHub)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel a superseded run on the same ref (push->PR churn) — safe, never leaves two
+# active runs writing the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Offline Python tooling suites (no JDK / SDK) ─────────────────────────────
+  python-tools:
+    name: Python tooling regressions (offline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Guard suite self-test (audit regression)
+        run: |
+          test -f tools/test_audit_test_discovery.py || { echo "FAIL: tools/test_audit_test_discovery.py missing"; exit 1; }
+          python3 tools/test_audit_test_discovery.py
+
+      - name: T.6 tile_fetch regressions
+        run: |
+          test -f tools/test_tile_fetch.py || { echo "FAIL: tools/test_tile_fetch.py missing"; exit 1; }
+          python3 tools/test_tile_fetch.py
+
+      - name: Firmware TFT patch regression tests
+        run: |
+          test -f firmware/scripts/test_patch_tft_espi_standalone.py || { echo "FAIL: firmware/scripts/test_patch_tft_espi_standalone.py missing"; exit 1; }
+          python3 firmware/scripts/test_patch_tft_espi_standalone.py
+
+      - name: MBTiles verifier regression tests
+        run: |
+          test -f tools/test_mbtiles_verify.py || { echo "FAIL: tools/test_mbtiles_verify.py missing"; exit 1; }
+          python3 tools/test_mbtiles_verify.py
+
+      - name: MBTiles migrator regression tests
+        run: |
+          test -f tools/test_mbtiles_migrate.py || { echo "FAIL: tools/test_mbtiles_migrate.py missing"; exit 1; }
+          python3 tools/test_mbtiles_migrate.py
+
+  # ── Android: committed generated sources, unit tests + audit + debug APK ─────
+  android:
+    name: Android (debug APK + unit tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Commit generated sources (proto to java/kt) are what the build compiles; protoc is NOT
+      # needed at build time for Gradle-generated java (protobuf-kotlin-lite runtime). Regeneration
+      # reproducibility is tracked separately (future; needs exact generator version + normalization).
+      - name: Install Android SDK platform 35 + build-tools 35.0.0 (explicit, matches compileSdk 35)
+        run: |
+          set -euo pipefail
+          ANDROID_SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          CMDBIN="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          if [ -z "$CMDBIN" ]; then
+            echo "FAIL: sdkmanager not found under \$ANDROID_SDK_ROOT/cmdline-tools (path: $ANDROID_SDK_ROOT)"
+            exit 1
+          fi
+          # License acceptance: suppress only the `yes` noise, but DO NOT suppress package
+          # install errors (no `>/dev/null 2>&1` on the install call below).
+          set +o pipefail
+          yes | "$CMDBIN" --sdk_root="$ANDROID_SDK_ROOT" --licenses >/dev/null 2>&1
+          set -o pipefail
+          # Use explicit `--install` and surface errors/warnings (no output suppression).
+          "$CMDBIN" --sdk_root="$ANDROID_SDK_ROOT" --install \
+            "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Clear stale test results (freshness)
+        run: |
+          rm -rf android/app/build/test-results/testDebugUnitTest
+
+      - name: Run Android unit tests (all variants + debug, forced rerun)
+        run: |
+          export JAVA_HOME="${JAVA_HOME}"
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export GRADLE_USER_HOME="$(pwd)/android/.gradle-home"
+          cd android
+          ./gradlew test :app:testDebugUnitTest --rerun-tasks --no-daemon
+
+      - name: Audit test discovery (declared vs executed)
+        run: |
+          test -f tools/audit_test_discovery.py || { echo "FAIL: tools/audit_test_discovery.py missing"; exit 1; }
+          python3 tools/audit_test_discovery.py .
+
+      - name: Build debug APK
+        run: |
+          export JAVA_HOME="${JAVA_HOME}"
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export GRADLE_USER_HOME="$(pwd)/android/.gradle-home"
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Collect APK artifacts
+        run: |
+          mkdir -p artifacts/android
+          find android/app/build/outputs/apk -name '*.apk' -exec cp {} artifacts/android/ \;
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: artifacts/android/
+          retention-days: 30
+          if-no-files-found: error
