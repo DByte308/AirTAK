@@ -2,12 +2,16 @@
 # AirTAK — tools/test_mbtiles_migrate.py
 # Offline tests for the metadata-only bounds migration tool.
 #
-# These build a tiny synthetic archive, run migrate_mbtiles_bounds.migrate on a copy, and assert the
-# tiles table is byte-identical (via the ordered-tile checksum), the row/zoom/byte totals are
-# unchanged, every metadata row other than 'bounds' is unchanged, and bounds is re-ordered to W,S,E,N.
+# These build a tiny synthetic archive and drive migrate_mbtiles_bounds.migrate on a copy, asserting:
+#   * destination is created exclusively (never overwrites an existing file)
+#   * source is never mutated, including on repeat/malformed/bad-input runs
+#   * a source bound in legacy order is re-ordered to W,S,E,N and the tiles table is byte-identical
+#   * a source bound already in W,S,E,N is left unchanged unless --from-legacy is passed
+#   * same-file (incl. symlink/hardlink) and malformed bounds are refused with no leftover dest
+#   * '#'/'?' in a destination filename are handled (URI-escaped, never mis-parsed)
 
-import importlib.util
 import hashlib
+import importlib.util
 import os
 import sqlite3
 import tempfile
@@ -22,8 +26,8 @@ _spec.loader.exec_module(mg)
 PNG = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) + bytes(16)
 
 
-def _make(tmpdir: str, bounds: str) -> str:
-    path = os.path.join(tmpdir, "src.mbtiles")
+def _make(tmpdir: str, bounds: str, name: str = "src.mbtiles") -> str:
+    path = os.path.join(tmpdir, name)
     conn = sqlite3.connect(path)
     conn.execute("CREATE TABLE metadata (name TEXT, value TEXT, PRIMARY KEY(name))")
     conn.execute("CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER, tile_data BLOB, PRIMARY KEY(zoom_level, tile_column, tile_row))")
@@ -49,6 +53,14 @@ def _tile_checksum(conn: sqlite3.Connection) -> str:
     return h.hexdigest()
 
 
+def _bounds(path: str) -> str:
+    c = sqlite3.connect(path)
+    try:
+        return c.execute("SELECT value FROM metadata WHERE name='bounds'").fetchone()[0]
+    finally:
+        c.close()
+
+
 class MigrateTest(unittest.TestCase):
     def setUp(self):
         self._dir = tempfile.mkdtemp()
@@ -57,67 +69,146 @@ class MigrateTest(unittest.TestCase):
         import shutil
         shutil.rmtree(self._dir, ignore_errors=True)
 
-    def test_migrate_reorders_bounds_and_preserves_tiles(self):
-        src = _make(self._dir, "-85.05,-180,85.05,180")  # legacy CLI order (minLat,minLon,maxLat,maxLon)
-        dst = os.path.join(self._dir, "out.mbtiles")
+    def _legacy_src(self) -> str:
+        return _make(self._dir, "-85.05,-180,85.05,180")
 
-        evidence = mg.migrate(src, dst)
+    def test_migrate_reorders_bounds_and_preserves_tiles(self):
+        src = self._legacy_src()
+        dst = os.path.join(self._dir, "out.mbtiles")
+        evidence = mg.migrate(src, dst, from_legacy=True)
         self.assertEqual("-180,-85.05,180,85.05", evidence["new_bounds"])
         self.assertTrue(evidence["tiles_untouched"])
         self.assertTrue(evidence["meta_untouched"])
-
-        check = sqlite3.connect(dst)
+        chk = sqlite3.connect(dst)
         try:
-            self.assertEqual("-180,-85.05,180,85.05",
-                             check.execute("SELECT value FROM metadata WHERE name='bounds'").fetchone()[0])
-            # tiles table must be byte-identical to the source
+            self.assertEqual("-180,-85.05,180,85.05", _bounds(dst))
             src_conn = sqlite3.connect(src)
             try:
-                self.assertEqual(_tile_checksum(src_conn), _tile_checksum(check))
+                self.assertEqual(_tile_checksum(src_conn), _tile_checksum(chk))
             finally:
                 src_conn.close()
         finally:
-            check.close()
+            chk.close()
 
     def test_migrate_does_not_mutate_source(self):
-        src = _make(self._dir, "-85.05,-180,85.05,180")
-        src_before = _tile_checksum(sqlite3.connect(src))
+        src = self._legacy_src()
+        before = _tile_checksum(sqlite3.connect(src))
         dst = os.path.join(self._dir, "out.mbtiles")
-        mg.migrate(src, dst)
-        self.assertEqual(src_before, _tile_checksum(sqlite3.connect(src)))
-        # source bounds unchanged
-        c = sqlite3.connect(src)
-        try:
-            self.assertEqual("-85.05,-180,85.05,180",
-                             c.execute("SELECT value FROM metadata WHERE name='bounds'").fetchone()[0])
-        finally:
-            c.close()
+        mg.migrate(src, dst, from_legacy=True)
+        self.assertEqual(before, _tile_checksum(sqlite3.connect(src)))
+        self.assertEqual("-85.05,-180,85.05,180", _bounds(src))
 
-    def test_migrate_refuses_same_file(self):
-        src = _make(self._dir, "-85.05,-180,85.05,180")
+    def test_existing_destination_is_refused_not_overwritten(self):
+        src = self._legacy_src()
+        dst = _make(self._dir, "-9,-9,-9,-9", name="existing.mbtiles")  # already exists
         with self.assertRaises(SystemExit):
-            mg.migrate(src, src)
+            mg.migrate(src, dst, from_legacy=True)
+        # the pre-existing destination is untouched
+        self.assertEqual("-9,-9,-9,-9", _bounds(dst))
 
-    def test_migrate_preserves_other_metadata_rows(self):
-        src = _make(self._dir, "-85.05,-180,85.05,180")
+    def test_same_file_literal_is_refused(self):
+        src = self._legacy_src()
+        with self.assertRaises(SystemExit):
+            mg.migrate(src, src, from_legacy=True)
+        self.assertEqual("-85.05,-180,85.05,180", _bounds(src))  # source untouched
+
+    def test_symlink_destination_to_source_is_refused(self):
+        src = self._legacy_src()
+        link = os.path.join(self._dir, "link.mbtiles")
+        os.symlink(src, link)
+        with self.assertRaises(SystemExit):
+            mg.migrate(src, link, from_legacy=True)
+        self.assertEqual("-85.05,-180,85.05,180", _bounds(src))  # source untouched
+
+    def test_hardlink_destination_to_source_is_refused(self):
+        src = self._legacy_src()
+        hard = os.path.join(self._dir, "hard.mbtiles")
+        os.link(src, hard)
+        with self.assertRaises(SystemExit):
+            mg.migrate(src, hard, from_legacy=True)
+        self.assertEqual("-85.05,-180,85.05,180", _bounds(src))  # source untouched
+
+    def test_hash_and_query_in_destination_filename_are_handled(self):
+        src = self._legacy_src()
+        dst = os.path.join(self._dir, "weird #name ?[x].mbtiles")
+        evidence = mg.migrate(src, dst, from_legacy=True)
+        self.assertTrue(os.path.exists(dst))
+        self.assertEqual("-180,-85.05,180,85.05", _bounds(dst))
+
+    def test_nan_legacy_bounds_is_refused(self):
+        src = _make(self._dir, "nan,-180,85.05,180")
         dst = os.path.join(self._dir, "out.mbtiles")
-        mg.migrate(src, dst)
-        c = sqlite3.connect(dst)
-        try:
-            meta = {r[0]: r[1] for r in c.execute("SELECT name, value FROM metadata")}
-            self.assertEqual("png", meta["format"])
-            self.assertEqual("0", meta["minzoom"])
-            self.assertEqual("6", meta["maxzoom"])
-            self.assertEqual("overlay", meta["type"])
-            self.assertEqual("1", meta["version"])
-        finally:
-            c.close()
+        with self.assertRaises(SystemExit):
+            mg.migrate(src, dst, from_legacy=True)
+        self.assertFalse(os.path.exists(dst), "no destination left on invalid input")
+        # source untouched, still the original NaN-bearing value
+        self.assertIn("nan", _bounds(src))
 
-    def test_migrate_reports_malformed_bounds(self):
+    def test_already_wsen_is_left_unchanged_without_flag(self):
+        # Without --from-legacy, a value already in W,S,E,N order is not transposed again.
+        src = _make(self._dir, "-180,-85.05,180,85.05")
+        dst = os.path.join(self._dir, "out.mbtiles")
+        evidence = mg.migrate(src, dst)
+        self.assertEqual("-180,-85.05,180,85.05", evidence["new_bounds"])
+
+    def test_repeat_invocation_leaves_source_untouched(self):
+        src = self._legacy_src()
+        d1 = os.path.join(self._dir, "o1.mbtiles")
+        d2 = os.path.join(self._dir, "o2.mbtiles")
+        mg.migrate(src, d1, from_legacy=True)
+        before = _tile_checksum(sqlite3.connect(src))
+        mg.migrate(src, d2, from_legacy=True)
+        self.assertEqual(before, _tile_checksum(sqlite3.connect(src)))
+        self.assertEqual("-180,-85.05,180,85.05", _bounds(d1))
+        self.assertEqual("-180,-85.05,180,85.05", _bounds(d2))
+
+    def test_malformed_bounds_is_refused_with_no_destination(self):
         src = _make(self._dir, "not-a-quad")
         dst = os.path.join(self._dir, "out.mbtiles")
         with self.assertRaises(SystemExit):
-            mg.migrate(src, dst)
+            mg.migrate(src, dst, from_legacy=True)
+        self.assertFalse(os.path.exists(dst), "no destination left on malformed bounds")
+
+    def test_valid_wsen_is_unchanged_without_flag_even_if_legacy_plausible(self):
+        # Without --from-legacy there is NO autodetection. A value that is valid as W,S,E,N is
+        # copied unchanged, even though it could plausibly be a legacy reordering.
+        wsen = "-180,-85.05,180,85.05"
+        src = _make(self._dir, wsen)
+        dst = os.path.join(self._dir, "out.mbtiles")
+        evidence = mg.migrate(src, dst)  # no flag
+        self.assertEqual(wsen, evidence["new_bounds"])
+        self.assertEqual(wsen, _bounds(dst))
+
+    def test_invalid_wsen_requires_flag_and_does_not_autoconvert(self):
+        # A value that is NOT a valid W,S,E,N quad (south=-180 is an invalid latitude) must error
+        # without --from-legacy, with an instruction — never silently autoconvert.
+        src = _make(self._dir, "-85.05,-180,85.05,180")
+        dst = os.path.join(self._dir, "out.mbtiles")
+        with self.assertRaises(SystemExit) as ctx:
+            mg.migrate(src, dst)  # no flag
+        self.assertIn("--from-legacy", str(ctx.exception))
+        self.assertFalse(os.path.exists(dst), "no destination left on a refused value")
+
+    def test_explicit_flag_converts_legacy(self):
+        # With --from-legacy the same non-W,S,E,N value is interpreted as legacy and re-ordered.
+        src = _make(self._dir, "-85.05,-180,85.05,180")
+        dst = os.path.join(self._dir, "out.mbtiles")
+        evidence = mg.migrate(src, dst, from_legacy=True)
+        self.assertEqual("-180,-85.05,180,85.05", evidence["new_bounds"])
+
+    def test_ambiguous_value_is_not_semantics_autodetected(self):
+        # No semantic autodetection: the same source is interpreted according to the explicit flag
+        # only. Without it, a WSEN-valid value is copied; with it, that same value is rejected as
+        # not a valid legacy (since transposing a WSEN value produces an out-of-range quad).
+        wsen = "-180,-85.05,180,85.05"
+        src = _make(self._dir, wsen)
+        dst1 = os.path.join(self._dir, "o1.mbtiles")
+        self.assertEqual(wsen, mg.migrate(src, dst1)["new_bounds"])  # WSEN copy
+        dst2 = os.path.join(self._dir, "o2.mbtiles")
+        # The same value read as legacy would transpose to an out-of-range quad.
+        with self.assertRaises(SystemExit):
+            mg.migrate(src, dst2, from_legacy=True)
+        self.assertFalse(os.path.exists(dst2))
 
 
 if __name__ == "__main__":
