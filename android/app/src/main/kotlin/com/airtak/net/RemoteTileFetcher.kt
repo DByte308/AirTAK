@@ -6,7 +6,9 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withTimeoutOrNull
 import com.airtak.config.constants.NET_TILE_FETCH_TOTAL_TIMEOUT_MS
 import io.ktor.http.contentLength
 import io.ktor.http.isSuccess
@@ -15,11 +17,17 @@ import java.io.ByteArrayOutputStream
 
 // Fetches one raster tile from the user-configured provider on behalf of the loopback proxy.
 //
-// Three things this is responsible for that the raw client is not: it takes a slot from the
-// shared per-provider budget, it refuses redirects so a 3xx cannot move the fetch onto a host the
+// Three things this is responsible for that the raw client is not: it waits for the shared
+// per-provider pacing budget, it refuses redirects so a 3xx cannot move the fetch onto a host the
 // policy already refused, and it re-checks the host of the URL actually used before returning any
 // bytes. Redirects are already disabled on the client, so the re-check is defence in depth rather
 // than the primary control.
+//
+// Terminology, because "slot" was misleading here: the budget is a MinimumIntervalPacer, which
+// enforces a minimum spacing between requests. It is not a semaphore and holds no countable slot —
+// acquire() waits out the interval and records the timestamp, and nothing is ever released. Saying
+// "hold a slot" implied a resource that could leak and be returned, which is not what this is and
+// would send a future reader looking for a release path that does not exist.
 
 /**
  * Provider cache directives relevant to tile reuse. Only what the app actually acts on.
@@ -82,7 +90,8 @@ class RemoteTileFetcher(
     /**
      * Outer bound on one fetch. The client's own timeout plugin covers connect and per-phase reads;
      * this is the backstop for a response that starts and then trickles, and it is what keeps a
-     * stalled provider from holding a shared per-provider budget slot indefinitely.
+     * stalled provider from delaying every later request to that provider indefinitely: the pacer
+     * records when the request started, and an unbounded fetch keeps that interval occupied.
      */
     private val totalTimeoutMs: Long? = NET_TILE_FETCH_TOTAL_TIMEOUT_MS,
 ) {
@@ -131,16 +140,14 @@ class RemoteTileFetcher(
             is LiveFetchVerdict.Invalid -> return Result.Refused(verdict.reason)
         }
 
+        // Coordinates are validated BEFORE the budget is touched. The pacer reserves real elapsed
+        // time per provider, so a request that was never going to be issued would still push back
+        // every later request to that provider by the pacing interval. Rejecting first means an
+        // invalid request costs nothing it cannot get back.
+        coordinateError(z, x, y, maxZoom)?.let { return Result.Refused(it) }
+
         // Shared with bulk downloads against the same provider, deliberately not a private budget.
         budgets.tileBudgetFor(host).acquire()
-
-        if (maxZoom < 0 || z < 0 || z > maxZoom) {
-            // The router validates this already, but fetch() is public and takes the coordinates
-            // itself, so nothing structurally stops a caller from asking for z=30 against a
-            // maxZoom of 12. Re-checking here costs one comparison and makes the method safe on
-            // its own rather than safe only when reached through one particular caller.
-            return Result.Refused("Zoom $z is outside the configured ceiling 0..$maxZoom.")
-        }
 
         val url = buildTemplateUrl(trimmed, z, x, y)
             ?: return Result.Refused("Tile URL template is malformed.")
@@ -152,7 +159,10 @@ class RemoteTileFetcher(
         // cancelled rather than drained.
         val timeoutMs = totalTimeoutMs
         return runCatching {
-            bounded(timeoutMs) {
+            // withTimeoutOrNull, not withTimeout: our own expiry is a null return, so any
+            // TimeoutCancellationException that reaches the handler below belongs to somebody else's
+            // clock and must not be translated. See the getOrElse comment.
+            val outcome = bounded(timeoutMs) {
                 client.prepareGet(url).execute { response ->
                     val usedHost = runCatching { response.call.request.url.host }
                         .getOrNull()
@@ -201,11 +211,29 @@ class RemoteTileFetcher(
                     }
                 }
             }
+            // null is the timeout: the block itself can only return a non-null Result.
+            outcome ?: Result.Failed("Tile fetch from $host timed out after ${timeoutMs}ms.")
         }.getOrElse { error ->
-            // TimeoutCancellationException IS a CancellationException, so it has to be matched
-            // first. Letting it fall into the branch below would turn "the provider stalled" into a
-            // cancellation that tears down the caller's scope — the opposite of bounding the wait.
+            // Our own expiry never reaches this handler: withTimeoutOrNull reports it as a null
+            // return, handled inside the block above. A TimeoutCancellationException here therefore
+            // came from somebody else's clock, almost always a caller's own outer withTimeout.
+            //
+            // Translating that into Failed is the flaw this guard exists for: the parent is going
+            // away, but it would receive a normal-looking result, keep waiting on a fetch it has
+            // already abandoned, and its scope would never observe the cancellation. ensureActive()
+            // asks the only question that separates the two cases — is THIS coroutine still alive?
+            // Ours is when only the inner clock fired; it is not when an outer scope is being torn
+            // down.
+            //
+            // Honest limitation, recorded rather than hidden: no test in this suite fails when this
+            // line is removed, and that was checked by removing it. With both a real engine and a
+            // suspending MockEngine, an outer cancellation arrives here as JobCancellationException
+            // — a CancellationException that is not a TimeoutCancellationException — so the branch
+            // below already rethrows it. This guard covers the remaining race where the caller is
+            // cancelled at the same instant our own clock fires, which the harness cannot schedule
+            // deterministically.
             if (error is TimeoutCancellationException) {
+                currentCoroutineContext().ensureActive()
                 return Result.Failed(
                     "Tile fetch from $host timed out after ${timeoutMs}ms.",
                 )
@@ -217,6 +245,26 @@ class RemoteTileFetcher(
     }
 
     /**
+     * Why [z], [x], [y] are not acceptable for [maxZoom], or null when they are.
+     *
+     * The router validates coordinates too, but `fetch` is public and takes its own coordinates, so
+     * nothing structural stopped a different caller from asking for z=30 against a maxZoom of 12, or
+     * for x outside 0..2^z-1 at a zoom that would then shift a huge value into the URL. The zoom is
+     * additionally capped at [TileProxyHandler.MAX_SUPPORTED_ZOOM] so a large z cannot overflow the 1L shl z shift
+     * used for the coordinate bound.
+     */
+    private fun coordinateError(z: Int, x: Int, y: Int, maxZoom: Int): String? {
+        if (maxZoom < 0) return "Configured max zoom $maxZoom is negative."
+        val ceiling = minOf(maxZoom.toLong(), TileProxyHandler.MAX_SUPPORTED_ZOOM.toLong())
+        if (z < 0 || z > ceiling) return "Zoom $z is outside the configured ceiling 0..$ceiling."
+        val span = 1L shl z
+        if (x < 0 || x >= span || y < 0 || y >= span) {
+            return "Tile $x,$y is outside 0..${span - 1} at zoom $z."
+        }
+        return null
+    }
+
+    /**
      * Runs [block] under [withTimeout] when [timeoutMs] is set, and unbounded when it is null.
      *
      * The null case exists for virtual-time tests only: under `runTest` the coroutine clock is
@@ -224,8 +272,8 @@ class RemoteTileFetcher(
      * timeout instead of the policy outcome it is actually asserting. Production always passes a
      * bound, and `AirTakHttpTimeoutTest` asserts that the shipped client carries one.
      */
-    private suspend fun <T> bounded(timeoutMs: Long?, block: suspend () -> T): T =
-        if (timeoutMs != null) withTimeout(timeoutMs) { block() } else block()
+    private suspend fun <T> bounded(timeoutMs: Long?, block: suspend () -> T): T? =
+        if (timeoutMs != null) withTimeoutOrNull(timeoutMs) { block() } else block()
 
     /**
      * Read at most [maxBytes] from the response, returning null as soon as it is exceeded rather
