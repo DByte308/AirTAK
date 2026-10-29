@@ -194,6 +194,7 @@ fun MapScreen(
     val searchResults by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val phoneGpsActive by viewModel.phoneGpsActive.collectAsState()
+    val phoneGpsProvidersEnabled by viewModel.phoneGpsProvidersEnabled.collectAsState()
     val phoneGpsFix by viewModel.phoneGpsFix.collectAsState()
     val gpsStartFailure by viewModel.gpsStartFailure.collectAsState()
     val isDark = MaterialTheme.colorScheme.background == DarkBackground
@@ -758,6 +759,7 @@ fun MapScreen(
                         context,
                         noPositionReason(
                             registered = phoneGpsActive,
+                            providersEnabled = phoneGpsProvidersEnabled,
                             hasFix = phoneGpsFix,
                             failure = gpsStartFailure,
                         ),

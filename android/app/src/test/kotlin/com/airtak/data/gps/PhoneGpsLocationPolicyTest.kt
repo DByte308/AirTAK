@@ -38,6 +38,14 @@ class PhoneGpsLocationPolicyTest {
         assertFalse(hasUsableAccuracy(-1f))
     }
 
+    @Test fun nonFiniteAccuracyIsNotUsable() {
+        // POSITIVE_INFINITY > 0f is true, so a positivity-only check would call this usable and
+        // then treat it as unbeatable, blocking every real fix afterwards.
+        assertFalse(hasUsableAccuracy(Float.POSITIVE_INFINITY))
+        assertFalse(hasUsableAccuracy(Float.NaN))
+        assertFalse(hasUsableAccuracy(Float.NEGATIVE_INFINITY))
+    }
+
     @Test fun positiveAccuracyIsUsable() {
         assertTrue(hasUsableAccuracy(5f))
     }
@@ -125,6 +133,28 @@ class PhoneGpsLocationPolicyTest {
         assertEquals(a, b, 1e-6)
     }
 
+    @Test fun antipodalDistanceStaysFinite() {
+        // Near-antipodal points can push the haversine sum outside [0, 1] in floating point; sqrt
+        // of a negative is NaN, and NaN compares false against every threshold, which would
+        // silently stop the position from ever being treated as "moved".
+        val cases = listOf(
+            Triple(0.0, 0.0, 180.0) to Triple(0.0, 180.0, 0.0),
+            Triple(89.9999, 0.0, 0.0) to Triple(-89.9999, 180.0, 0.0),
+            Triple(-45.0, 135.0, 0.0) to Triple(45.0, -45.0, 0.0),
+        )
+        for ((from, to) in cases) {
+            val metres = groundDistanceM(from.first, from.second, to.first, to.second)
+            assertFalse(metres.isNaN(), "NaN for $from -> $to")
+            assertTrue(metres.isFinite(), "non-finite for $from -> $to")
+            assertTrue(metres > 0.0, "expected positive distance for $from -> $to, got $metres")
+        }
+    }
+
+    @Test fun antipodalDistanceIsCloseToHalfCircumference() {
+        val metres = groundDistanceM(0.0, 0.0, 0.0, 180.0)
+        assertTrue(metres in 20_000_000.0..20_100_000.0, "got $metres")
+    }
+
     @Test fun thresholdConstantIsWhatThePolicyAssumes() {
         // The policy compares against GPS_MIN_DISTANCE_M; a silent change to that constant would
         // change behaviour without any test above noticing. Pin the value the tests reason about.
@@ -165,6 +195,7 @@ class PhoneGpsLocationPolicyTest {
     @Test fun permissionFailureIsNamedAsPermission() {
         val reason = noPositionReason(
             registered = false,
+            providersEnabled = true,
             hasFix = false,
             failure = GpsStartFailure.PermissionMissing,
         )
@@ -174,6 +205,7 @@ class PhoneGpsLocationPolicyTest {
     @Test fun waitingForFixIsNamedAsFixAndNotAsPermission() {
         val reason = noPositionReason(
             registered = true,
+            providersEnabled = true,
             hasFix = false,
             failure = GpsStartFailure.None,
         )
@@ -184,19 +216,48 @@ class PhoneGpsLocationPolicyTest {
     @Test fun missingProviderIsNamedAsProvider() {
         val reason = noPositionReason(
             registered = false,
+            providersEnabled = true,
             hasFix = false,
             failure = GpsStartFailure.NoProvider,
         )
         assertTrue(reason.contains("provider", ignoreCase = true), reason)
     }
 
+    @Test fun registeredButLocationOffIsNamedAsLocationOff() {
+        // The registered-vs-enabled distinction: the subscription is held, the radio is off. Telling
+        // this user to grant a permission would send them to the wrong setting.
+        val reason = noPositionReason(
+            registered = true,
+            providersEnabled = false,
+            hasFix = false,
+            failure = GpsStartFailure.None,
+        )
+        assertTrue(reason.contains("off", ignoreCase = true) || reason.contains("turn", ignoreCase = true), reason)
+        assertFalse(reason.contains("permission", ignoreCase = true), reason)
+    }
+
+    @Test fun notRegisteredAndLocationOffPrefersLocationOffOverProviderAbsence() {
+        val reason = noPositionReason(
+            registered = false,
+            providersEnabled = false,
+            hasFix = false,
+            failure = GpsStartFailure.NoProvider,
+        )
+        assertTrue(reason.contains("turn", ignoreCase = true), reason)
+    }
+
     @Test fun everyNoPositionStateProducesNonEmptyText() {
         // The bug this replaces was a silent `return`; an empty string would reproduce it.
         for (failure in GpsStartFailure.entries) {
             for (registered in listOf(true, false)) {
-                for (hasFix in listOf(true, false)) {
-                    val reason = noPositionReason(registered, hasFix, failure)
-                    assertTrue(reason.isNotBlank(), "$registered/$hasFix/$failure produced '$reason'")
+                for (enabled in listOf(true, false)) {
+                    for (hasFix in listOf(true, false)) {
+                        val reason = noPositionReason(registered, enabled, hasFix, failure)
+                        assertTrue(
+                            reason.isNotBlank(),
+                            "$registered/$enabled/$hasFix/$failure produced '$reason'",
+                        )
+                    }
                 }
             }
         }

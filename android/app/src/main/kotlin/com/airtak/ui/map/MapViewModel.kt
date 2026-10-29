@@ -233,6 +233,7 @@ class MapViewModel @Inject constructor(
      * instead of letting the recenter control fail silently.
      */
     val phoneGpsActive: StateFlow<Boolean> = phoneGps.isActive
+    val phoneGpsProvidersEnabled: StateFlow<Boolean> = phoneGps.providersEnabled
     val phoneGpsFix: StateFlow<Boolean> = phoneGps.hasFix
     val gpsStartFailure: StateFlow<GpsStartFailure> = phoneGps.startFailure
 

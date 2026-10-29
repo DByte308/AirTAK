@@ -73,8 +73,8 @@ import com.airtak.config.constants.GPS_MIN_DISTANCE_M
 import com.airtak.config.constants.GPS_MIN_TIME_MS
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.roundToLong
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -99,13 +99,81 @@ data class PhoneLocation(
 /** Why phone GPS is not currently registered. Published so the UI can say something true. */
 enum class GpsStartFailure { None, PermissionMissing, NoProvider }
 
+/** Outcome of one registration attempt against the platform. */
+internal data class GpsRegisterOutcome(
+    val registered: Boolean,
+    val failure: GpsStartFailure = GpsStartFailure.None,
+)
+
+/**
+ * Phone-GPS registration state machine, deliberately free of Android types.
+ *
+ * The issue #13 defect lived in exactly this logic and was untestable where it sat: `active` was
+ * assigned from intent before the platform call could fail, so a failed registration looked like a
+ * successful one and no later path retried it. Keeping the state machine pure means that failure
+ * mode — and the retry after a permission grant — is covered by JVM tests instead of only by a
+ * device.
+ *
+ * [register] is the only effectful part and is injected, so tests can make it fail once and then
+ * succeed, which is the real first-launch sequence.
+ */
+internal class GpsRegistrationController(
+    private val register: () -> GpsRegisterOutcome,
+) {
+    /** True only while a platform registration actually exists. Never set from intent. */
+    var isActive: Boolean = false
+        private set
+
+    /** What the surrounding link/config state asks for, independent of whether it worked. */
+    var wantActive: Boolean = false
+        private set
+
+    var failure: GpsStartFailure = GpsStartFailure.None
+        private set
+
+    /** Apply a want-active request; returns the registration state afterwards. */
+    fun applyState(want: Boolean): Boolean {
+        wantActive = want
+        if (want && !isActive) attempt()
+        else if (!want && isActive) markStopped()
+        return isActive
+    }
+
+    /** Retry after something changed outside the link/config streams. Idempotent. */
+    fun refresh(): Boolean {
+        if (wantActive && !isActive) attempt()
+        return isActive
+    }
+
+    /** Called once the platform listener has actually been removed. */
+    fun markStopped() {
+        isActive = false
+        failure = GpsStartFailure.None
+    }
+
+    private fun attempt() {
+        val outcome = try {
+            register()
+        } catch (e: Exception) {
+            // A platform call that throws must not leave this machine claiming a registration
+            // that never happened; that is the bug this class exists to prevent.
+            GpsRegisterOutcome(registered = false, failure = GpsStartFailure.NoProvider)
+        }
+        isActive = outcome.registered
+        failure = if (outcome.registered) GpsStartFailure.None else outcome.failure
+    }
+}
+
 /**
  * True when an accuracy figure is present and meaningful.
  *
  * [Location.getAccuracy] returns 0.0f when the provider does not supply accuracy, and
- * [Location.hasAccuracy] is the documented test. A non-positive figure carries no information.
+ * [Location.hasAccuracy] is the documented test. A non-positive figure carries no information, and
+ * neither does a non-finite one: `Float.POSITIVE_INFINITY > 0f` is true, so a bare positivity check
+ * would call an infinite accuracy "usable" and then treat it as the best value on the device.
  */
-internal fun hasUsableAccuracy(accuracyM: Float?): Boolean = accuracyM != null && accuracyM > 0f
+internal fun hasUsableAccuracy(accuracyM: Float?): Boolean =
+    accuracyM != null && accuracyM.isFinite() && accuracyM > 0f
 
 /**
  * Ground distance in metres between two points (haversine, spherical earth).
@@ -122,12 +190,14 @@ internal fun groundDistanceM(
     val earthRadiusM = 6_371_000.0
     val dLat = Math.toRadians(lat2 - lat1)
     val dLon = Math.toRadians(lon2 - lon1)
-    val a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2) * sin(dLon / 2)
-    return 2 * earthRadiusM * atan2Safe(sqrt(a), sqrt(1 - a))
+    // Clamped before the square roots: for near-antipodal points the floating-point sum can land a
+    // hair outside [0, 1], and sqrt() of a negative is NaN — which would then compare false against
+    // every threshold and silently stop the position from ever updating.
+    val a = (sin(dLat / 2) * sin(dLat / 2) +
+        cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2) * sin(dLon / 2))
+        .coerceIn(0.0, 1.0)
+    return 2 * earthRadiusM * atan2(sqrt(a), sqrt(1 - a))
 }
-
-private fun atan2Safe(y: Double, x: Double): Double = kotlin.math.atan2(y, x)
 
 /**
  * Decide whether [incoming] replaces [current] as the phone position.
@@ -180,18 +250,29 @@ internal fun isLastKnownUsable(ageMs: Long, accuracyM: Float?): Boolean {
     return hasUsableAccuracy(accuracyM) && accuracyM!! <= GPS_LAST_KNOWN_MAX_ACCURACY_M
 }
 
-/** Reason text for a recenter that cannot happen. Kept here so the strings are testable in one place. */
+/**
+ * Reason text for a recenter that cannot happen.
+ *
+ * Kept here, and given the three separate facts, so the strings are testable in one place: being
+ * registered, having a provider switched on, and having a fix are different states and the user
+ * needs the one that matches what to do about it.
+ */
 internal fun noPositionReason(
     registered: Boolean,
+    providersEnabled: Boolean,
     hasFix: Boolean,
     failure: GpsStartFailure,
 ): String = when {
     !registered && failure == GpsStartFailure.PermissionMissing ->
         "Location permission not granted — allow location to see your position"
+    !registered && !providersEnabled ->
+        "Device location is off — turn it on, or connect a device"
     !registered && failure == GpsStartFailure.NoProvider ->
-        "No location provider available — turn device location on"
+        "No location provider available — no GPS or network location on this device"
     !registered ->
-        "Location not active — turn device location on or connect a device"
+        "Location updates not running — reopen the map or connect a device"
+    registered && !providersEnabled ->
+        "Device location is off — turn it on to update your position"
     !hasFix ->
         "No position yet — waiting for a GPS fix"
     else ->
@@ -206,11 +287,13 @@ class PhoneGpsProvider @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    /** What the current link/config state asks for, independent of whether registration worked. */
-    private var wantActive = false
-
-    /** True only while at least one provider is actually registered. Never set from intent. */
-    private var active = false
+    /**
+     * The single authority on whether phone GPS is registered. Nothing else may write [_isActive]:
+     * the previous code had `active` set from intent in one place and `_isActive` overwritten from
+     * provider-enabled guesses in another, so the UI could report a registration that did not exist
+     * and the retry path could be skipped because a flag said one did.
+     */
+    private val registration = GpsRegistrationController(::registerOnce)
     private var sendToBle = false
 
     private val _location = MutableStateFlow<PhoneLocation?>(null)
@@ -227,6 +310,17 @@ class PhoneGpsProvider @Inject constructor(
     /** Why registration is not working, so the UI can name the reason instead of doing nothing. */
     val startFailure: StateFlow<GpsStartFailure> = _startFailure.asStateFlow()
 
+    /**
+     * Whether any location provider is switched on, which is a different fact from being
+     * registered: a subscription stays in place while the user has device location off, and it
+     * starts delivering again without any re-registration when they turn it back on.
+     *
+     * Collapsing the two into one flag is what made the old code both wrong and unrecoverable —
+     * `onProviderDisabled` overwrote the availability guess over the registration truth.
+     */
+    private val _providersEnabled = MutableStateFlow(false)
+    val providersEnabled: StateFlow<Boolean> = _providersEnabled.asStateFlow()
+
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(loc: Location) {
             _hasFix.value = true
@@ -240,6 +334,9 @@ class PhoneGpsProvider @Inject constructor(
             if (shouldEmitLocation(_location.value, phoneLoc)) {
                 _location.value = phoneLoc
             }
+            // A delivery is proof the subscription is live and a provider is on, whichever
+            // callback path missed saying so.
+            if (!_providersEnabled.value) _providersEnabled.value = true
             if (sendToBle) {
                 val req = AdminRequest.newBuilder()
                     .setCommand(AdminCommand.SET_PHONE_GPS)
@@ -257,16 +354,34 @@ class PhoneGpsProvider @Inject constructor(
         }
 
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-        override fun onProviderEnabled(provider: String) {}
+
+        /**
+         * A provider the user switched back on.
+         *
+         * Resume only when we want updates and do not currently hold a registration. A registration
+         * that exists while its provider is disabled is still a registration — Android keeps it and
+         * resumes delivery on its own — so re-registering here would add a second listener and start
+         * duplicate fixes flowing to the firmware.
+         */
+        override fun onProviderEnabled(provider: String) {
+            if (registration.wantActive && !registration.isActive) {
+                registration.refresh()
+            }
+            publishState()
+        }
+
         override fun onProviderDisabled(provider: String) {
             val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
             val gpsStillOn = runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
             val netStillOn = runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)
-            _isActive.value = gpsStillOn || netStillOn
+            // Registration state is deliberately untouched here: the subscription is still held,
+            // it just has nothing to deliver, and re-registering would duplicate it. Availability
+            // is published separately, and the fix we were holding is now stale.
             if (!gpsStillOn && !netStillOn) {
                 _hasFix.value = false
                 _location.value = null
             }
+            publishState()
         }
     }
 
@@ -302,17 +417,13 @@ class PhoneGpsProvider @Inject constructor(
     }
 
     private fun applyState(wantActive: Boolean, targetBle: Boolean) {
-        this.wantActive = wantActive
         sendToBle = targetBle
-        if (wantActive && !active) {
-            // Registration result, not intent, decides `active`. If it fails the state stays
-            // false, so a later refresh() (permission grant, resume) takes the same branch again
-            // instead of being skipped by an "already active" flag that was never true.
-            active = register()
-        } else if (!wantActive && active) {
-            stop()
-            active = false
-        }
+        val wasActive = registration.isActive
+        val nowActive = registration.applyState(wantActive)
+        // The controller flipped to inactive because the request went away, not because a retry
+        // failed: only that case has platform state to tear down.
+        if (wasActive && !nowActive) unregister()
+        publishState()
     }
 
     /**
@@ -322,7 +433,26 @@ class PhoneGpsProvider @Inject constructor(
      * Cheap and idempotent: it does nothing when registration is already in place.
      */
     fun refresh() {
-        if (wantActive && !active) active = register()
+        registration.refresh()
+        publishState()
+    }
+
+    /**
+     * Publish the authoritative state and nothing else: registration comes from the controller,
+     * availability from the platform, so the UI can never drift from either.
+     */
+    private fun publishState() {
+        _isActive.value = registration.isActive
+        _startFailure.value = registration.failure
+        _providersEnabled.value = anyProviderEnabled()
+    }
+
+    private fun anyProviderEnabled(): Boolean {
+        val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return false
+        val gps = runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
+        val network = runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)
+        return gps || network
     }
 
     /**
@@ -333,20 +463,16 @@ class PhoneGpsProvider @Inject constructor(
      * built, and swallowing that exception left no trace of why the app had no position.
      */
     @SuppressLint("MissingPermission")
-    private fun register(): Boolean {
-        val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: run {
-            _startFailure.value = GpsStartFailure.NoProvider
-            _isActive.value = false
-            return false
-        }
+    private fun registerOnce(): GpsRegisterOutcome {
+        val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return GpsRegisterOutcome(false, GpsStartFailure.NoProvider)
         if (!hasLocationPermission()) {
-            _startFailure.value = GpsStartFailure.PermissionMissing
-            _isActive.value = false
-            return false
+            return GpsRegisterOutcome(false, GpsStartFailure.PermissionMissing)
         }
 
         val available = runCatching { lm.allProviders }.getOrNull().orEmpty()
         var registered = false
+        var permissionDenied = false
         for (provider in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
             if (provider !in available) continue
             try {
@@ -359,16 +485,25 @@ class PhoneGpsProvider @Inject constructor(
                 )
                 registered = true
             } catch (_: SecurityException) {
-                _startFailure.value = GpsStartFailure.PermissionMissing
+                // Remembered rather than reported immediately: the other provider may still
+                // register, and the final reason is decided once below.
+                permissionDenied = true
             } catch (_: IllegalArgumentException) {
                 // Provider vanished between the query and the call; the other one may still work.
             }
         }
 
-        _startFailure.value = if (registered) GpsStartFailure.None else GpsStartFailure.NoProvider
-        _isActive.value = registered
-        if (registered) seedFromLastKnown(lm)
-        return registered
+        if (registered) {
+            seedFromLastKnown(lm)
+            publishState()
+            return GpsRegisterOutcome(true, GpsStartFailure.None)
+        }
+        // A permission denial outranks "no provider": it is the actionable cause, and losing it
+        // behind a generic NoProvider would send the user to the wrong setting.
+        return GpsRegisterOutcome(
+            registered = false,
+            failure = if (permissionDenied) GpsStartFailure.PermissionMissing else GpsStartFailure.NoProvider,
+        )
     }
 
     private fun hasLocationPermission(): Boolean {
@@ -407,13 +542,15 @@ class PhoneGpsProvider @Inject constructor(
         }
     }
 
-    private fun stop() {
-        val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
-        lm.removeUpdates(locationListener)
+    private fun unregister() {
+        val lm = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        lm?.removeUpdates(locationListener)
+        registration.markStopped()
         _isActive.value = false
         _hasFix.value = false
         _location.value = null
         _startFailure.value = GpsStartFailure.None
+        _providersEnabled.value = false
     }
 
 
