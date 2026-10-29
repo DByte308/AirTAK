@@ -494,8 +494,11 @@ class PhoneGpsProvider @Inject constructor(
         }
 
         if (registered) {
+            // Only the position cache is touched here. Registration state belongs to the
+            // controller, which has not committed this outcome yet — publishing from inside the
+            // attempt would expose a state the caller is about to write again. The caller
+            // (applyState / refresh) publishes once the outcome is committed.
             seedFromLastKnown(lm)
-            publishState()
             return GpsRegisterOutcome(true, GpsStartFailure.None)
         }
         // A permission denial outranks "no provider": it is the actionable cause, and losing it
