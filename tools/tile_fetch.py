@@ -295,8 +295,9 @@ def init_mbtiles(path: str) -> sqlite3.Connection:
     return conn
 
 
-def set_metadata(conn: sqlite3.Connection, name: str, **kwargs: str) -> None:
-    for key, val in kwargs.items():
+def set_metadata(conn: sqlite3.Connection, **metadata: str) -> None:
+    """Write name/value rows into the metadata table for the given keyword metadata."""
+    for key, val in metadata.items():
         conn.execute("INSERT OR REPLACE INTO metadata(name, value) VALUES (?, ?)", (key, val))
     conn.commit()
 
@@ -341,7 +342,7 @@ def main() -> None:
     # cannot leave a stray archive behind.
     bbox = args.bbox
     try:
-        parse_bbox(bbox)
+        min_lat, min_lon, max_lat, max_lon = parse_bbox(bbox)
     except ValueError as exc:
         raise BulkPolicyError(
             "[tile_fetch] %s" % exc)
@@ -356,7 +357,11 @@ def main() -> None:
     set_metadata(conn,
                  name=os.path.basename(args.output),
                  format="png",
-                 bounds=args.bbox,
+                 # MBTiles bounds are W,S,E,N (west,south,east,north), i.e. lon,lat,lon,lat.
+                 # The CLI --bbox is min_lat,min_lon,max_lat,max_lon, so reorder here for the
+                 # metadata only; the CLI contract is unchanged, and the archive now serialises
+                 # in the order an MBTiles consumer expects.
+                 bounds="%s,%s,%s,%s" % (min_lon, min_lat, max_lon, max_lat),
                  minzoom=str(z_min),
                  maxzoom=str(z_max),
                  type="overlay",

@@ -234,6 +234,120 @@ class Attribution(unittest.TestCase):
         self.assertGreaterEqual(tf.DEFAULT_DELAY_SECONDS, 1.0)
 
 
+class BoundsMetadata(unittest.TestCase):
+    """The producer must serialise MBTiles bounds as W,S,E,N (lon,lat,lon,lat)."""
+
+    def _run_producer(self, bbox: str) -> str:
+        """Run the real main() and return the 'bounds' metadata it wrote."""
+        import io
+        import contextlib
+        path = tempfile.mktemp(suffix=".mbtiles")
+        self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+
+        # Stub the download loop so main() writes metadata and returns without touching the
+        # network or sleeping. main() passes the open connection to run_download; our stub closes
+        # it after committing, mirroring the real path's cleanup.
+        def _stub_run_download(conn, *args, **kwargs):
+            try:
+                conn.commit()
+            finally:
+                conn.close()
+
+        saved = tf.run_download
+        tf.run_download = _stub_run_download
+        saved_argv = sys.argv
+        try:
+            sys.argv = ["tile_fetch", "--bbox", bbox, "--zoom", "10-11", "--output", path,
+                        "--url", "https://t.example.com/{z}/{x}/{y}.png"]
+            with contextlib.redirect_stderr(io.StringIO()):
+                tf.main()
+        finally:
+            tf.run_download = saved
+            sys.argv = saved_argv
+
+        check = sqlite3.connect(path)
+        try:
+            row = check.execute("SELECT value FROM metadata WHERE name='bounds'").fetchone()
+        finally:
+            check.close()
+        return row[0]
+
+    def test_bounds_are_serialised_as_west_south_east_north(self):
+        # CLI --bbox is min_lat,min_lon,max_lat,max_lon. The metadata must be W,S,E,N, i.e.
+        # minLon,minLat,maxLon,maxLat. We compare as floats so trailing-zero formatting does not
+        # matter (8.6 vs 8.60 both mean the same longitude).
+        value = self._run_producer("50.30,8.68,50.37,8.82")
+        w, s, e, n = (float(p) for p in value.split(","))
+        self.assertEqual((8.68, 50.30, 8.82, 50.37), (w, s, e, n))
+
+    def test_bounds_are_not_raw_cli_order(self):
+        # The first token must be the longitude (W), not the latitude (the raw CLI would start 50.30).
+        value = self._run_producer("50.30,8.68,50.37,8.82")
+        self.assertEqual("8.68", value.split(",")[0])
+        self.assertEqual("50.3", value.split(",")[1])  # float-printed; 50.30 -> 50.3
+
+    def test_negative_coordinates_are_preserved_in_wsen_order(self):
+        # CLI bbox: min_lat=-33.5, min_lon=-70.6, max_lat=-33.1, max_lon=-70.2 (valid, min<=max).
+        # The metadata must be W,S,E,N = minLon,minLat,maxLon,maxLat (parsed as floats).
+        value = self._run_producer("-33.5,-70.6,-33.1,-70.2")
+        w, s, e, n = (float(p) for p in value.split(","))
+        self.assertEqual((-70.6, -33.5, -70.2, -33.1), (w, s, e, n))
+
+
+class CliMainSmoke(unittest.TestCase):
+    """A standalone end-to-end CLI main() run with the network fetch swapped for a fake.
+
+    This drives main() through the real run_download loop offline, so it proves the archive has a
+    persisted metadata.name and at least one valid tile row after a full CLI invocation. It also
+    guards the pre-existing set_metadata crash by asserting main() completes without raising.
+    """
+
+    def _run(self, bbox: str) -> str:
+        import io
+        import contextlib
+        path = tempfile.mktemp(suffix=".mbtiles")
+        self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+
+        # run_download captures fetch=fetch_tile and sleep=time.sleep as defaults at def time, so
+        # rebinding tf.fetch_tile alone does not reach the loop. Swap BOTH defaults: fetch becomes a
+        # fake returning a real PNG, sleep becomes a no-op so the test is instant and offline.
+        fake_fetch = lambda url, z, x, y: bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) + bytes(16)
+        saved_defaults = tf.run_download.__defaults__
+        tf.run_download.__defaults__ = (fake_fetch, lambda _s: None)
+        saved_argv = sys.argv
+        try:
+            sys.argv = ["tile_fetch", "--bbox", bbox, "--zoom", "10-11", "--output", path,
+                        "--url", "https://t.example.com/{z}/{x}/{y}.png"]
+            with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+                tf.main()
+        finally:
+            tf.run_download.__defaults__ = saved_defaults
+            sys.argv = saved_argv
+        return path
+
+    def test_main_persists_metadata_name_and_a_valid_tile(self):
+        path = self._run("50.30,8.68,50.37,8.82")
+        self.assertTrue(os.path.exists(path), "main() should have produced an archive")
+        check = sqlite3.connect(path)
+        try:
+            row = check.execute("SELECT value FROM metadata WHERE name='name'").fetchone()
+            self.assertIsNotNone(row, "metadata.name was not persisted by set_metadata")
+            self.assertEqual(os.path.basename(path), row[0])
+            tile = check.execute("SELECT tile_data FROM tiles LIMIT 1").fetchone()
+            self.assertIsNotNone(tile, "no tile was persisted to the tiles table")
+            self.assertTrue(tile[0] and len(tile[0]) > 0)
+            self.assertTrue(tile[0].startswith(bytes([0x89, 0x50, 0x4E, 0x47])))
+        finally:
+            check.close()
+
+    def test_main_completes_without_type_error(self):
+        # Regression for the pre-existing set_metadata TypeError (missing positional 'name'): the
+        # attribution block must not raise. main() completing without an exception is the assertion.
+        path = self._run("50.30,8.68,50.37,8.82")
+        self.assertTrue(os.path.exists(path))
+        self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+
+
 class NoNetwork(unittest.TestCase):
     def test_policy_checks_never_touch_the_network(self):
         with _NoNetwork():
