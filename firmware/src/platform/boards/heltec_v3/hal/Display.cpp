@@ -271,6 +271,28 @@ void Display::showShutdownWarning() {
     s_dirty_mask = DISPLAY_DIRTY_ALL;
 }
 
+void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
+    s_display.clearDisplay();
+
+    s_display.setTextSize(1);
+    s_display.setTextColor(SSD1306_WHITE);
+    s_display.setCursor(4, 2);
+    s_display.print("SAFE MODE");
+    s_display.drawLine(0, 11, DISP_WIDTH, 11, SSD1306_WHITE);
+
+    int16_t y = 16;
+    const int16_t LH = DISP_LINE_HEIGHT;
+    s_display.setCursor(4, y); s_display.print(config_erased ? "Config: ERASED" : "Config: kept"); y += LH;
+    s_display.setCursor(4, y); s_display.print(bonds_cleared ? "BLE bonds: CLEARED" : "BLE bonds: kept"); y += LH + 2;
+    s_display.setCursor(4, y); s_display.print("Name: AirTAK Recovery"); y += LH;
+    s_display.setCursor(4, y); s_display.print("Hold 10s: erase cfg"); y += LH;
+    s_display.setCursor(4, y); s_display.print("Power cycle to exit.");
+
+    s_display.display();
+    s_dirty_mask = 0;
+    s_last_refresh_ms = millis();
+}
+
 void Display::nextScreen() {
     uint8_t next = (static_cast<uint8_t>(s_current_screen) + 1) % SCREEN_COUNT;
     s_current_screen = static_cast<ScreenId>(next);
