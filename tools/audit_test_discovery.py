@@ -86,7 +86,15 @@ def declared_tests(root):
 
 
 def executed_tests(root):
-    """Return {(class, method)} from the JUnit XML results."""
+    """Return {(class, method)} from the JUnit XML results.
+
+    A <skipped> testcase is deliberately NOT counted as executed: JUnit emits the testcase node
+    for a skipped test, but it was never attempted, so counting it as executed would hide a
+    declared test that silently never reached execution. A <failure> or <error> testcase IS
+    counted, because the test was discovered and at least attempted (Gradle fails the build on
+    it); the audit is discovery-only and must not double-report a mismatch Gradle already
+    surfaces. This makes no claim about why it failed: a setup error also counts as discovered.
+    """
     if not os.path.isdir(root):
         return set()
     found = set()
@@ -95,6 +103,8 @@ def executed_tests(root):
             continue
         tree = ET.parse(os.path.join(root, name))
         for case in tree.getroot().iter("testcase"):
+            if case.find("skipped") is not None:
+                continue
             cls = (case.get("classname") or "").split(".")[-1]
             method = (case.get("name") or "").split("(")[0].strip()
             if cls and method:
@@ -116,6 +126,19 @@ def main():
 
     print("declared (class, method) pairs: %d" % len(declared))
     print("executed (class, method) pairs: %d" % len(executed))
+
+    # Zero-test gate (DByte308/AirTAK#12): a Gradle task can report success while executing zero
+    # tests (the test task is not wired to useJUnitPlatform()). This must be rejected, not green.
+    # Reject ONLY when executed == 0, regardless of declared. A legitimate parameterized-only suite
+    # still executes >0 testcases so it is NOT flagged. Note: we must not key this off a non-empty
+    # results dir, because Gradle leaves a `binary/` subdirectory there even when zero TEST-*.xml
+    # are produced.
+    if not executed:
+        print("\nFAIL: ZERO TESTS EXECUTED.")
+        print("executed() returned no (class, method) pairs. If Gradle reported success, the test")
+        print("task is likely not wired to useJUnitPlatform(), so an empty or invalid suite")
+        print("reports green. Zero executed tests must be treated as a failure.")
+        return 1
 
     missing = sorted(declared - executed)
     extra = sorted(executed - declared)
