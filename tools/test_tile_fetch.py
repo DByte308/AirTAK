@@ -257,7 +257,7 @@ class BoundsMetadata(unittest.TestCase):
         tf.run_download = _stub_run_download
         saved_argv = sys.argv
         try:
-            sys.argv = ["tile_fetch", "--bbox", bbox, "--zoom", "10-11", "--output", path,
+            sys.argv = ["tile_fetch", "--bbox=" + bbox, "--zoom", "10-11", "--output", path,
                         "--url", "https://t.example.com/{z}/{x}/{y}.png"]
             with contextlib.redirect_stderr(io.StringIO()):
                 tf.main()
@@ -316,7 +316,7 @@ class CliMainSmoke(unittest.TestCase):
         tf.run_download.__defaults__ = (fake_fetch, lambda _s: None)
         saved_argv = sys.argv
         try:
-            sys.argv = ["tile_fetch", "--bbox", bbox, "--zoom", "10-11", "--output", path,
+            sys.argv = ["tile_fetch", "--bbox=" + bbox, "--zoom", "10-11", "--output", path,
                         "--url", "https://t.example.com/{z}/{x}/{y}.png"]
             with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
                 tf.main()
