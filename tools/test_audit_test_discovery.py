@@ -109,8 +109,8 @@ class FooTest {
 }
 """)
             pairs = f.declared()
-            self.assertIn(("FooTest", "one"), pairs, "helper class must not capture the @Test")
-            self.assertNotIn(("FakeServer", "one"), pairs)
+            self.assertIn(("com.airtak.a.FooTest", "one"), pairs, "helper class must not capture the @Test")
+            self.assertNotIn(("com.airtak.a.FakeServer", "one"), pairs)
         finally:
             f.destroy()
 
@@ -123,7 +123,7 @@ class BarTest {
     @Test fun inline() {}
 }
 """)
-            self.assertIn(("BarTest", "inline"), f.declared())
+            self.assertIn(("com.airtak.a.BarTest", "inline"), f.declared())
         finally:
             f.destroy()
 
@@ -137,7 +137,7 @@ class BazTest {
     fun spaced() {}
 }
 """)
-            self.assertIn(("BazTest", "spaced"), f.declared())
+            self.assertIn(("com.airtak.a.BazTest", "spaced"), f.declared())
         finally:
             f.destroy()
 
@@ -223,18 +223,16 @@ class ExecutedParse(unittest.TestCase):
         finally:
             f.destroy()
 
-    def test_package_collision_is_a_known_limitation(self):
-        # KNOWN LIMITATION: the parser drops the package (classname -> last dot segment). Two
-        # packages declaring the same simple class + method collide in the set, masking a real
-        # mismatch. This is a duplicate identity, not a duplicate name. It is reported separately
-        # from the zero-test / skipped fix because a broad parser change is required.
+    def test_package_collision_identity_is_preserved(self):
+        # FIXED BEHAVIOR (was a KNOWN LIMITATION): two packages with the same simple class+method
+        # must remain DISTINCT identities once the parser keys on the fully-qualified classname.
         f = FixtureRepo.make()
         try:
-            f.write_xml("TEST-A.xml", _testsuite("com.airtak.a", [("a.pkg.FooTest", "same()", "")]))
-            f.write_xml("TEST-B.xml", _testsuite("com.airtak.b", [("b.pkg.FooTest", "same()", "")]))
+            f.write_xml("TEST-A.xml", _testsuite("com.airtak.a", [("com.airtak.a.FooTest", "same()", "")]))
+            f.write_xml("TEST-B.xml", _testsuite("com.airtak.b", [("com.airtak.b.FooTest", "same()", "")]))
             got = f.executed()
-            self.assertEqual(1, len(got),
-                             "current parser collapses distinct packages onto one (class, method)")
+            self.assertEqual({("com.airtak.a.FooTest", "same"), ("com.airtak.b.FooTest", "same")}, got,
+                             "distinct packages must NOT collapse onto one (class, method)")
         finally:
             f.destroy()
 
@@ -379,8 +377,8 @@ class CliMain(unittest.TestCase):
             f.write_kt("com/airtak/a/FooTest.kt",
                        "package com.airtak.a\nclass FooTest {\n    @Test fun a() {}\n    @Test fun b() {}\n}\n")
             f.write_xml("TEST-A.xml", _testsuite("com.airtak.a", [
-                ("FooTest", "a()", ""),
-                ("FooTest", "b()", ""),
+                ("com.airtak.a.FooTest", "a()", ""),
+                ("com.airtak.a.FooTest", "b()", ""),
             ]))
             rc, out = _main_rc(f.root)
             self.assertEqual(0, rc, "valid matching nonzero suite must be clean (rc0)")
@@ -395,11 +393,11 @@ class CliMain(unittest.TestCase):
         try:
             f.write_kt("com/airtak/a/FooTest.kt",
                        "package com.airtak.a\nclass FooTest {\n    @Test fun a() {}\n    @Test fun b() {}\n}\n")
-            f.write_xml("TEST-A.xml", _testsuite("com.airtak.a", [("FooTest", "a()", "")]))
+            f.write_xml("TEST-A.xml", _testsuite("com.airtak.a", [("com.airtak.a.FooTest", "a()", "")]))
             rc, out = _main_rc(f.root)
             self.assertEqual(1, rc, "declared-but-not-executed must be rc1")
             self.assertIn("DECLARED BUT NEVER EXECUTED", out)
-            self.assertIn("FooTest.b", out)
+            self.assertIn("com.airtak.a.FooTest.b", out)
         finally:
             f.destroy()
 
@@ -423,7 +421,7 @@ class CliMain(unittest.TestCase):
             f.write_kt("com/airtak/a/DeepTest.kt",
                        "package com.airtak.a\nclass DeepTest {\n" +
                        "    @Test\n" + "    // filler\n" * 9 + "    fun tooFar() {}\n}\n")
-            f.write_xml("TEST-A.xml", _testsuite("com.airtak.a", [("DeepTest", "tooFar()", "")]))
+            f.write_xml("TEST-A.xml", _testsuite("com.airtak.a", [("com.airtak.a.DeepTest", "tooFar()", "")]))
             rc, out = _main_rc(f.root)
             self.assertEqual(1, rc, "unresolvable @Test must be rc1")
             self.assertIn("could not resolve", out)
@@ -442,6 +440,102 @@ class CliMain(unittest.TestCase):
             rc, out = _main_rc(f.root)
             self.assertEqual(0, rc, "extra (executed-without-declaration) must not be fatal")
             self.assertIn("EXECUTED WITHOUT A MATCHING @Test DECLARATION", out)
+        finally:
+            f.destroy()
+
+
+class PackageIdentity(unittest.TestCase):
+    """Package-qualified identity: the fix that stops two packages with the same simple class+method
+    from collapsing into one identity. This is the regression that the earlier KNOWN LIMITATION
+    described; now it must be preserved.
+    """
+
+    def _bidir_fixture(self, alpha_runs, beta_runs):
+        f = FixtureRepo.make()
+        for pkg in ("alpha", "beta"):
+            f.write_kt("com/airtak/%s/FooTest.kt" % pkg,
+                       "package com.airtak.%s\nclass FooTest {\n    @Test fun same() {}\n}\n" % pkg)
+        cases = []
+        if alpha_runs:
+            cases.append(("com.airtak.alpha.FooTest", "same()", ""))
+        if beta_runs:
+            cases.append(("com.airtak.beta.FooTest", "same()", ""))
+        f.write_xml("TEST-A.xml", _testsuite("com.airtak.alpha", cases))
+        return f
+
+    def test_only_alpha_runs_must_fail_rc1(self):
+        # alpha.FooTest.same declares + executes, beta.FooTest.same declares but never runs (silently
+        # skipped). Before the fix both collapsed to (FooTest, same), the audit reported clean (rc0);
+        # now the fully-qualified identity keeps beta's missing test visible -> it must FAIL rc1.
+        f = self._bidir_fixture(alpha_runs=True, beta_runs=False)
+        try:
+            declared = f.declared()
+            self.assertEqual({("com.airtak.alpha.FooTest", "same"),
+                              ("com.airtak.beta.FooTest", "same")}, declared)
+            rc, out = _main_rc(f.root)
+            self.assertEqual(1, rc, "beta's missing test must be flagged (was masked by collision)")
+            self.assertIn("com.airtak.beta.FooTest.same", out)
+        finally:
+            f.destroy()
+
+    def test_both_packages_run_passes_rc0(self):
+        # Both alpha and beta execute `same`; both declare it. No mismatch -> rc0.
+        f = self._bidir_fixture(alpha_runs=True, beta_runs=True)
+        try:
+            rc, out = _main_rc(f.root)
+            self.assertEqual(0, rc, "both packages run their test -> clean")
+            self.assertIn("No declared @Test was silently skipped.", out)
+        finally:
+            f.destroy()
+
+    def test_default_package_matches_simple_classname(self):
+        # A file with NO package statement: declared keys on the simple class name, and JUnit's
+        # default-package classname is also the bare simple name -> they match -> rc0.
+        f = FixtureRepo.make()
+        try:
+            f.write_kt("FooTest.kt", "class FooTest {\n    @Test fun plain() {}\n}\n")
+            f.write_xml("TEST-A.xml", _testsuite("np", [("FooTest", "plain()", "")]))
+            rc, out = _main_rc(f.root)
+            self.assertEqual(0, rc, "default package must match simple classname")
+            self.assertIn("No declared @Test was silently skipped.", out)
+        finally:
+            f.destroy()
+
+    def test_multiple_top_level_classes_same_file(self):
+        # Two top-level test classes in ONE file, same package; both run -> each attributed under its
+        # FQN -> rc0. (The owner-attribution walk attributes each @Test to the nearest preceding
+        # *Test class, so FooTest and BarTest are kept separate.)
+        f = FixtureRepo.make()
+        try:
+            f.write_kt("multi/MultiTest.kt", """\
+package com.airtak.multi
+class FooTest {
+    @Test fun a() {}
+}
+class BarTest {
+    @Test fun b() {}
+}
+""")
+            f.write_xml("TEST-A.xml", _testsuite("com.airtak.multi", [
+                ("com.airtak.multi.FooTest", "a()", ""),
+                ("com.airtak.multi.BarTest", "b()", ""),
+            ]))
+            rc, out = _main_rc(f.root)
+            self.assertEqual(0, rc, "multiple top-level classes in one file, both run -> clean")
+        finally:
+            f.destroy()
+
+    def test_no_general_kotlin_parser_fqn_annotation_boundary(self):
+        # BOUNDARY (reviewer): a fully-qualified `@org.junit.jupiter.api.Test` is NOT matched by the
+        # `@Test\b` regex, so that method is neither counted as declared nor flagged unmatched. This
+        # pins the documented limit: the parser handles `@Test` / `@Test(...)` forms, not
+        # FQN-qualified annotation names. (No general Kotlin parser expansion requested.)
+        f = FixtureRepo.make()
+        try:
+            f.write_kt("FqnTest.kt", "class FqnTest {\n    @org.junit.jupiter.api.Test fun f() {}\n}\n")
+            declared, unmatched = audit.declared_tests(f.root)
+            self.assertNotIn(("FqnTest", "f"), declared, "FQN @org.junit...Test is not matched")
+            self.assertEqual([], unmatched, "FQN annotation is not unmatched either (unseen)")
         finally:
             f.destroy()
 

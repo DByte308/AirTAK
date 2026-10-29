@@ -38,12 +38,19 @@ def declared_tests(root):
     Each @Test is attributed to the nearest preceding class whose name ends in Test. Test files
     here declare helper classes (fake servers, recorders) and sometimes more than one test class,
     so neither "innermost enclosing class" nor "the file's first class" is correct.
+
+    Keys are the FULLY-QUALIFIED class identity: `package + '.' + class` when the file declares a
+    package, else just the simple class name. This matches how JUnit writes the `classname` the
+    results-XML parser reads, so `declared - executed` compares like with like (see the
+    package-collision note: before this, two packages with the same simple class+method collapsed
+    into one identity and masked a real missing test).
     """
     found = set()
     unmatched = []
     annotation = re.compile(r"^\s*@Test\b")
     fun = re.compile(r"^\s*fun\s+(\w+)\s*\(")
     class_decl = re.compile(r"^\s*(?:open\s+|abstract\s+|internal\s+|private\s+)*class\s+(\w+)")
+    package_decl = re.compile(r"^\s*package\s+([\w.]+)\s*$")
 
     for dirpath, _dirs, files in os.walk(root):
         for name in files:
@@ -52,6 +59,16 @@ def declared_tests(root):
             path = os.path.join(dirpath, name)
             with open(path, encoding="utf-8") as handle:
                 lines = handle.read().splitlines()
+
+            pkg = None
+            for line in lines[:20]:
+                pm = package_decl.match(line)
+                if pm:
+                    pkg = pm.group(1)
+                    break
+
+            def fq(owner):
+                return "%s.%s" % (pkg, owner) if pkg else owner
 
             owner = None
             i = 0
@@ -64,7 +81,7 @@ def declared_tests(root):
                     # @Test and fun on the same line is legal and used in this repo.
                     same_line = re.search(r"\bfun\s+(\w+)\s*\(", lines[i])
                     if same_line:
-                        found.add((owner, same_line.group(1))) if owner else unmatched.append((path, i + 1))
+                        found.add((fq(owner), same_line.group(1))) if owner else unmatched.append((path, i + 1))
                         i += 1
                         continue
                     j = i + 1
@@ -78,7 +95,7 @@ def declared_tests(root):
                             method = fm.group(1)
                         break
                     if method and owner:
-                        found.add((owner, method))
+                        found.add((fq(owner), method))
                     else:
                         unmatched.append((path, i + 1))
                 i += 1
@@ -105,7 +122,10 @@ def executed_tests(root):
         for case in tree.getroot().iter("testcase"):
             if case.find("skipped") is not None:
                 continue
-            cls = (case.get("classname") or "").split(".")[-1]
+            # Key on the FULLY-QUALIFIED classname (JUnit writes `com.pkg.Class`) so identity
+            # matches the declared_tests() package-qualified keys. Do NOT reduce to the last dot
+            # segment: two packages with the same simple class+method would collapse.
+            cls = (case.get("classname") or "").strip()
             method = (case.get("name") or "").split("(")[0].strip()
             if cls and method:
                 found.add((cls, method))
