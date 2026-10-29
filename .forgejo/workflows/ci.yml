@@ -306,3 +306,21 @@ jobs:
         run: |
           test -f tools/test_tile_fetch.py || { echo "FAIL: tools/test_tile_fetch.py missing"; exit 1; }
           python3 tools/test_tile_fetch.py
+
+      - name: Firmware TFT patch regression tests
+        run: |
+          test -f firmware/scripts/test_patch_tft_espi_standalone.py || { echo "FAIL: firmware/scripts/test_patch_tft_espi_standalone.py missing"; exit 1; }
+          python3 firmware/scripts/test_patch_tft_espi_standalone.py
+
+      # MBTiles verifier/migrator regression suites (T6 tooling). stdlib-only, offline.
+      # These land via the T6 toolchain commits; guard so they fail loudly (not silently skip)
+      # if the files are absent, matching every other python-tools step.
+      - name: MBTiles verifier regression tests
+        run: |
+          test -f tools/test_mbtiles_verify.py || { echo "FAIL: tools/test_mbtiles_verify.py missing"; exit 1; }
+          python3 tools/test_mbtiles_verify.py
+
+      - name: MBTiles migrator regression tests
+        run: |
+          test -f tools/test_mbtiles_migrate.py || { echo "FAIL: tools/test_mbtiles_migrate.py missing"; exit 1; }
+          python3 tools/test_mbtiles_migrate.py
