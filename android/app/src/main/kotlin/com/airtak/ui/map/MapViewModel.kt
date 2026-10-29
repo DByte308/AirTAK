@@ -32,6 +32,7 @@ import com.airtak.data.routing.RoutingRepository
 import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.util.NodeNames
 import com.airtak.data.tiles.TileBounds
+import com.airtak.net.LoopbackServerLauncher
 import com.airtak.data.tiles.TileDownloadState
 import com.airtak.data.tiles.TileRepository
 import com.airtak.proto.ConfigGroup
@@ -122,6 +123,13 @@ data class MapUiState(
     val configuredTileTemplate: String = "",
     val tileDownload: TileDownloadState = TileDownloadState.Idle,
     val missionOverlay: MissionOverlay? = null,
+    /**
+     * Why the loopback tile listener is not serving, or null when it is running.
+     *
+     * Surfaced because a listener that failed to bind used to be indistinguishable from one that
+     * had no tiles to serve. The map can state the reason instead of showing an empty map.
+     */
+    val tileServerProblem: String? = null,
 )
 
 @HiltViewModel
@@ -218,7 +226,12 @@ class MapViewModel @Inject constructor(
         )
     }
 
-    val uiState: StateFlow<MapUiState> = combine(mapCore, tileState, missionOverlayRepository.overlay) { core, tile, overlay ->
+    val uiState: StateFlow<MapUiState> = combine(
+        mapCore,
+        tileState,
+        missionOverlayRepository.overlay,
+        tileRepository.tileServerState,
+    ) { core, tile, overlay, serverState ->
         core.copy(
             tileTemplate = tile.baseTemplate,
             localTileTemplate = tile.localTemplate,
@@ -226,6 +239,7 @@ class MapViewModel @Inject constructor(
             configuredTileTemplate = tile.configuredTemplate,
             tileDownload = tile.download,
             missionOverlay = overlay,
+            tileServerProblem = (serverState as? LoopbackServerLauncher.State.Failed)?.reason,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapUiState())
 

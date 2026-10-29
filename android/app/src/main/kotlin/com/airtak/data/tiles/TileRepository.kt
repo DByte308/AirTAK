@@ -32,6 +32,7 @@ import com.airtak.config.constants.MAP_MERCATOR_MAX_LON
 import com.airtak.config.constants.MAP_MERCATOR_MIN_LAT
 import com.airtak.config.constants.MAP_MERCATOR_MIN_LON
 import com.airtak.config.constants.MAP_MAX_TILES_PER_DOWNLOAD
+import com.airtak.net.LoopbackServerLauncher
 import com.airtak.net.LocalTileReader
 import com.airtak.net.RemoteTileOutcome
 import com.airtak.net.RemoteTileSource
@@ -119,13 +120,71 @@ class TileRepository @Inject constructor(
      * in the class body is still unassigned while the constructor and init block run, so a lazy
      * delegate reached from init threw a null reference on launch.
      */
-    @Volatile private var tileServerField: TileServer? = null
+    private val tileServerLauncher by lazy {
+        LoopbackServerLauncher<TileServer>(
+            open = {
+                TileServer(
+                    scope = scope,
+                    localTiles = LocalTileReader { z, x, y -> readTile(z, x, y) },
+                    remoteTiles = remoteSource,
+                ).also { it.start() }
+            },
+            close = { it.shutdown() },
+            portOf = { it.port },
+            onDiagnostic = { message -> tileServerDiagnostic(message) },
+        )
+    }
+
+    /**
+     * Why the loopback tile listener is not serving, or null when it is.
+     *
+     * Exposed rather than swallowed so a bind failure is a fact the UI can state instead of an
+     * absence the user has to infer.
+     */
+    val tileServerState: StateFlow<LoopbackServerLauncher.State> = tileServerLauncher.state
+
+    /**
+     * Sink for listener lifecycle diagnostics. A field rather than a direct `Log` call so the JVM
+     * regression can capture it: `android.util.Log` throws "not mocked" in unit tests, which would
+     * make the very failure this path exists to report break the test that reports it.
+     */
+    internal var tileServerDiagnostic: (String) -> Unit = { message ->
+        android.util.Log.w("TileRepository", message)
+    }
 
     @Volatile private var mbtilesFiles: List<File> = emptyList()
 
     /** Recomputed whenever the archives or the configured provider change. */
     @Volatile private var servingFiles: List<File> = emptyList()
     @Volatile private var mbtilesRevision: Long = 0L
+
+    /**
+     * Adapts the policy-aware fetcher to the listener's narrow outcome contract.
+     *
+     * Declared before the init block on purpose. Kotlin runs property initializers and init blocks
+     * in declaration order, and init starts the listener, so a `remoteSource` declared after init
+     * was still unassigned when the listener was built — the shipped listener received a null
+     * remote source and every /remote route answered 503 for the life of the process. Nothing in
+     * the JVM suite caught it because TileRepository needs an Android context to construct.
+     */
+    private val remoteSource = object : RemoteTileSource {
+        override suspend fun fetch(z: Int, x: Int, y: Int): RemoteTileOutcome =
+            when (
+                val r = remoteTiles.fetch(
+                    configuredTileUrlOrNull(),
+                    z,
+                    x,
+                    y,
+                    TileProxyHandler.MAX_SUPPORTED_ZOOM,
+                )
+            ) {
+                is RemoteTileFetcher.Result.Fetched -> RemoteTileOutcome.Found(r.bytes, r.rawCacheControl)
+                is RemoteTileFetcher.Result.NotFound -> RemoteTileOutcome.Missing
+                is RemoteTileFetcher.Result.Failed -> RemoteTileOutcome.Unavailable
+                is RemoteTileFetcher.Result.Refused -> RemoteTileOutcome.Refused
+                is RemoteTileFetcher.Result.NoProvider -> RemoteTileOutcome.Refused
+            }
+    }
 
     init {
         tileDir.mkdirs()
@@ -345,26 +404,6 @@ class TileRepository @Inject constructor(
         override fun toString(): String = "Outcome(stored=$stored)"
     }
 
-    /** Adapts the policy-aware fetcher to the listener's narrow outcome contract. */
-    private val remoteSource = object : RemoteTileSource {
-        override suspend fun fetch(z: Int, x: Int, y: Int): RemoteTileOutcome =
-            when (
-                val r = remoteTiles.fetch(
-                    configuredTileUrlOrNull(),
-                    z,
-                    x,
-                    y,
-                    TileProxyHandler.MAX_SUPPORTED_ZOOM,
-                )
-            ) {
-                is RemoteTileFetcher.Result.Fetched -> RemoteTileOutcome.Found(r.bytes, r.rawCacheControl)
-                is RemoteTileFetcher.Result.NotFound -> RemoteTileOutcome.Missing
-                is RemoteTileFetcher.Result.Failed -> RemoteTileOutcome.Unavailable
-                is RemoteTileFetcher.Result.Refused -> RemoteTileOutcome.Refused
-                is RemoteTileFetcher.Result.NoProvider -> RemoteTileOutcome.Refused
-            }
-    }
-
     private suspend fun fillDatabase(
         db: SQLiteDatabase,
         bounds: TileBounds,
@@ -459,7 +498,7 @@ class TileRepository @Inject constructor(
     }.getOrNull()
 
     private fun localTileUrl(): String? {
-        return tileServerField?.port?.takeIf { it > 0 }?.let { port ->
+        return tileServerLauncher.current?.port?.takeIf { it > 0 }?.let { port ->
             if (mbtilesFiles.isNotEmpty()) "http://127.0.0.1:$port/tiles/{z}/{x}/{y}.png?v=$mbtilesRevision" else null
         }
     }
@@ -479,17 +518,14 @@ class TileRepository @Inject constructor(
      * cancellation entirely. Routing it here is what keeps those guarantees real.
      */
     private fun remoteProxyUrl(): String? {
-        val port = tileServerField?.port?.takeIf { it > 0 } ?: return null
+        val port = tileServerLauncher.current?.port?.takeIf { it > 0 } ?: return null
         val provider = configuredTileUrlOrNull() ?: return null
         if (TileProviderPolicy.verdictForLiveFetch(provider) !is LiveFetchVerdict.Allowed) return null
         return "http://127.0.0.1:$port/remote/{z}/{x}/{y}.png"
     }
 
     private fun ensureServer() {
-        if (tileServerField?.isRunning == true) return
-        val server = TileServer(scope, LocalTileReader { z, x, y -> readTile(z, x, y) }, remoteSource)
-        tileServerField = server
-        runCatching { server.start() }.onFailure { tileServerField = null }
+        tileServerLauncher.ensure()
     }
 
     /**
@@ -498,9 +534,9 @@ class TileRepository @Inject constructor(
      * rather than an assumption that everything drained.
      */
     fun shutdown(): TileServer.ShutdownReport {
-        val server = tileServerField ?: return TileServer.ShutdownReport(true, 0, true, 0)
+        val server = tileServerLauncher.current ?: return TileServer.ShutdownReport(true, 0, true, 0)
         val report = server.shutdown()
-        tileServerField = null
+        tileServerLauncher.closeCurrent()
         return report
     }
 
