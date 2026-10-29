@@ -18,6 +18,7 @@
 #define NRF_FICR_DEVICEADDR1 (*(volatile uint32_t*)(NRF_FICR_BASE + 0x0A8))
 #elif defined(AIRTAK_PLATFORM_ESP32)
 #include <esp_efuse.h>
+#include <esp_mac.h>
 #include <SPI.h>
 #include <Wire.h>
 #endif
