@@ -191,18 +191,46 @@ class TileServer(
             socket.soTimeout = socketTimeoutMs
             val input = socket.getInputStream()
 
-            // Overflow throws rather than returning null. A null meaning "too long" and a null
-            // meaning "end of stream" are different events, and reading the first as the second
-            // would route a truncated header block as if it were a complete request.
-            val requestLine = input.readCappedLine(TileProxyHandler.MAX_REQUEST_LINE_BYTES)
-                ?: run {
-                    writeStatus(socket, 414)
-                    return@withContext
+            // A request is only routable once its header block has actually terminated. EOF is not
+            // a terminator: a client that half-closes after the request line has not sent a
+            // complete request, and routing it would consult a tile source on a header-less request.
+            val requestLine = try {
+                when (val line = input.readCappedLine(TileProxyHandler.MAX_REQUEST_LINE_BYTES)) {
+                    is RequestLine.Complete -> line.value
+                    is RequestLine.Absent -> {
+                        writeStatus(socket, 400)
+                        return@withContext
+                    }
+
+                    is RequestLine.Truncated -> {
+                        writeStatus(socket, 400)
+                        return@withContext
+                    }
                 }
+            } catch (tooLong: RequestLineTooLong) {
+                writeStatus(socket, 414)
+                return@withContext
+            }
             val headerNames = mutableListOf<String>()
             var headerLines = 0
             while (true) {
-                val line = input.readCappedLine(TileProxyHandler.MAX_HEADER_BYTES) ?: break
+                val line = try {
+                    when (val read = input.readCappedLine(TileProxyHandler.MAX_HEADER_BYTES)) {
+                        is RequestLine.Complete -> read.value
+                        is RequestLine.Absent -> {
+                            writeStatus(socket, 400)
+                            return@withContext
+                        }
+
+                        is RequestLine.Truncated -> {
+                            writeStatus(socket, 400)
+                            return@withContext
+                        }
+                    }
+                } catch (tooLong: RequestLineTooLong) {
+                    writeStatus(socket, 431)
+                    return@withContext
+                }
                 if (line.isEmpty()) break
                 headerLines++
                 if (headerLines > TileProxyHandler.MAX_HEADER_LINES) {
@@ -244,21 +272,45 @@ class TileServer(
         }
     }
 
-    private fun InputStream.readCappedLine(maxBytes: Int): String? {
+    /**
+     * One line read from the request stream, distinguishing the three things that used to be
+     * conflated. A single nullable String could not tell "stream ended cleanly" from "stream ended
+     * in the middle of a line", and treating the second as the first is what let a truncated
+     * header block be routed as a complete request.
+     */
+    private sealed interface RequestLine {
+        /** End of stream with nothing buffered: the client sent nothing more. */
+        data object Absent : RequestLine
+
+        /** End of stream with buffered bytes that never reached a newline. */
+        data class Truncated(val value: String) : RequestLine
+
+        /** A real LF ended the line, so the line is complete. */
+        data class Complete(val value: String) : RequestLine
+    }
+
+    /** Thrown on overflow only. Overflow and end-of-stream must not share a signal. */
+    private class RequestLineTooLong(maxBytes: Int) :
+        IOException("request line or header exceeds $maxBytes bytes")
+
+    private fun InputStream.readCappedLine(maxBytes: Int): RequestLine {
         val bytes = ByteArrayOutputStream(maxOf(64, minOf(maxBytes, 1024)))
-        var terminated = false
         while (true) {
             val b = read()
-            if (b == -1) break
-            if (b == '\n'.code) {
-                terminated = true
-                break
+            if (b == -1) {
+                if (bytes.size() == 0) return RequestLine.Absent
+                return RequestLine.Truncated(
+                    bytes.toByteArray().toString(Charsets.US_ASCII).trimEnd('\r'),
+                )
             }
-            if (bytes.size() >= maxBytes) throw IOException("header line exceeds $maxBytes bytes")
+            if (b == '\n'.code) {
+                return RequestLine.Complete(
+                    bytes.toByteArray().toString(Charsets.US_ASCII).trimEnd('\r'),
+                )
+            }
+            if (bytes.size() >= maxBytes) throw RequestLineTooLong(maxBytes)
             bytes.write(b)
         }
-        if (!terminated && bytes.size() == 0) return null
-        return bytes.toByteArray().toString(Charsets.US_ASCII).trimEnd('\r')
     }
 
     private fun writeStatus(socket: Socket, status: Int, headOnly: Boolean = false) {
@@ -283,8 +335,27 @@ class TileServer(
         if (headOnly) return
     }
 
+    /**
+     * The forwarded value is only safe if it cannot end its own header line. Ktor's client rejects
+     * CR and LF inside a header value while parsing, so a value arriving through
+     * [RemoteTileFetcher] is already constrained — but [RemoteTileSource] is a single-method
+     * interface any caller can implement, and this is the last checkpoint before the bytes go on
+     * the wire. An embedded CRLF would turn one value into two headers.
+     *
+     * An unsafe value is replaced with `no-store` rather than dropped: refusing to say anything
+     * would let the engine apply its own default caching, which is the failure the forwarding
+     * exists to prevent.
+     */
+    private fun cacheControlHeader(value: String?): String? {
+        val trimmed = value?.trim() ?: return null
+        val safe = trimmed.isNotEmpty() &&
+            trimmed.length <= MAX_FORWARDED_HEADER_CHARS &&
+            trimmed.none { it == '\r' || it == '\n' || it == '\u0000' }
+        return if (safe) "Cache-Control: $trimmed\r\n" else "Cache-Control: no-store\r\n"
+    }
+
     private fun writeTile(socket: Socket, bytes: ByteArray, headOnly: Boolean, cacheControl: String?) {
-        val cc = cacheControl?.let { "Cache-Control: $it\r\n" }.orEmpty()
+        val cc = cacheControlHeader(cacheControl).orEmpty()
         val head = "HTTP/1.1 200 OK\r\nContent-Type: ${bytes.contentType()}\r\n$cc" +
             "Content-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
         runCatching {
@@ -305,6 +376,9 @@ class TileServer(
 
     companion object {
         const val LOOPBACK = "127.0.0.1"
+
+        /** Ceiling for a forwarded header value; longer values are replaced, not truncated. */
+        const val MAX_FORWARDED_HEADER_CHARS = 512
         const val ACCEPT_BACKLOG = 16
         const val DEFAULT_SOCKET_TIMEOUT_MS = 5_000
         const val DEFAULT_MAX_HANDLERS = 8

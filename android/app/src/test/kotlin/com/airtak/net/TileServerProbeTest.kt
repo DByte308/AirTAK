@@ -302,6 +302,146 @@ class TileServerProbeTest {
         return predicate()
     }
 
+    /** Sends bytes, half-closes the request direction, and reads whatever response arrives. */
+    private fun exchangeHalfClose(port: Int, payload: String, readTimeoutMs: Int = 4_000): Exchange {
+        Socket(TILE_LOOPBACK, port).use { socket ->
+            socket.soTimeout = readTimeoutMs
+            socket.getOutputStream().write(payload.toByteArray(Charsets.US_ASCII))
+            socket.getOutputStream().flush()
+            // No more request bytes, but the response direction stays open. This is what a client
+            // that dies mid-request actually does to the stream.
+            socket.shutdownOutput()
+            val all = socket.getInputStream().readBytes()
+            val text = all.toString(Charsets.ISO_8859_1)
+            val end = text.indexOf("\r\n\r\n").let { if (it == -1) text.length else it + 4 }
+            return Exchange(text.substring(0, end), all.copyOfRange(end, all.size))
+        }
+    }
+
+    private inner class CountingLocalReader : LocalTileReader {
+        val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
+        override fun read(z: Int, x: Int, y: Int): ByteArray? {
+            calls += "$z/$x/$y"
+            return png()
+        }
+    }
+
+    private inner class CountingRemoteSource(
+        private val outcome: RemoteTileOutcome = RemoteTileOutcome.Missing,
+    ) : RemoteTileSource {
+        val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
+        override suspend fun fetch(z: Int, x: Int, y: Int): RemoteTileOutcome {
+            calls += "$z/$x/$y"
+            return outcome
+        }
+    }
+
+    @Test
+    fun halfCloseAfterRequestLineIsRefusedAndNeverReachesASource() {
+        // A complete request line with no header block is not a request. Routing it would consult
+        // a tile source for a header-less request the client never finished sending.
+        val local = CountingLocalReader()
+        val remote = CountingRemoteSource()
+        val server = start(local, remote)
+
+        val res = exchangeHalfClose(server.port, "GET /tiles/3/4/5.png HTTP/1.1\r\n")
+
+        assertEquals(400, res.status, "raw response was: ${res.head}")
+        assertTrue(local.calls.isEmpty(), "local reader was consulted: ${local.calls}")
+        assertTrue(remote.calls.isEmpty(), "remote source was consulted: ${remote.calls}")
+    }
+
+    @Test
+    fun partialHeaderWithoutNewlineIsRefusedAndNeverReachesASource() {
+        // The header line never terminated. Reading EOF-with-data as a finished header is the
+        // exact conflation this path used to make.
+        val local = CountingLocalReader()
+        val remote = CountingRemoteSource()
+        val server = start(local, remote)
+
+        val res = exchangeHalfClose(
+            server.port,
+            "GET /tiles/3/4/5.png HTTP/1.1\r\nHost: 127.0.0.1",
+        )
+
+        assertEquals(400, res.status, "raw response was: ${res.head}")
+        assertTrue(local.calls.isEmpty(), "local reader was consulted: ${local.calls}")
+        assertTrue(remote.calls.isEmpty(), "remote source was consulted: ${remote.calls}")
+    }
+
+    @Test
+    fun missingFinalBlankLineIsRefusedAndNeverReachesASource() {
+        // Every header line is newline-terminated, but the empty line that ends the block is
+        // absent. A parser that stops at EOF instead of the terminator accepts this.
+        val local = CountingLocalReader()
+        val remote = CountingRemoteSource()
+        val server = start(local, remote)
+
+        val res = exchangeHalfClose(
+            server.port,
+            "GET /tiles/3/4/5.png HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: */*\r\n",
+        )
+
+        assertEquals(400, res.status, "raw response was: ${res.head}")
+        assertTrue(local.calls.isEmpty(), "local reader was consulted: ${local.calls}")
+        assertTrue(remote.calls.isEmpty(), "remote source was consulted: ${remote.calls}")
+    }
+
+    @Test
+    fun completeRequestStillRoutesAfterTheTruncationGuards() {
+        // Guards that refuse too much are a regression too: the same server must still serve a
+        // well-formed request, otherwise the four-hundred path could pass by refusing everything.
+        val local = CountingLocalReader()
+        val server = start(local)
+
+        val res = exchange(server.port, get("/tiles/3/4/5.png"))
+
+        assertEquals(200, res.status, "raw response was: ${res.head}")
+        assertEquals(listOf("3/4/5"), local.calls)
+    }
+
+    @Test
+    fun forwardedCacheControlWithCrlfCannotInjectASecondHeader() {
+        // Ktor constrains header values on parse, but RemoteTileSource is an interface any caller
+        // can implement, so the write path has to hold the line itself.
+        val injected = "no-store\r\nX-Injected: pwned\r\nX-Also: yes"
+        val remote = CountingRemoteSource(
+            RemoteTileOutcome.Found(png(), injected),
+        )
+        val server = start(LocalTileReader { _, _, _ -> null }, remote)
+
+        val res = exchange(server.port, get("/remote/3/4/5.png"))
+
+        assertEquals(200, res.status, "raw response was: ${res.head}")
+        assertFalse(res.lower.contains("x-injected"), "injected header reached the wire: ${res.head}")
+        assertFalse(res.lower.contains("x-also"), "injected header reached the wire: ${res.head}")
+        assertTrue(
+            res.lower.contains("cache-control: no-store"),
+            "expected a fail-closed no-store, got ${res.head}",
+        )
+        // Exactly one Cache-Control line, and the head block is not longer than it should be.
+        val ccLines = res.head.lines().count { it.lowercase().startsWith("cache-control:") }
+        assertEquals(1, ccLines, "expected one Cache-Control, got ${res.head}")
+        assertEquals(listOf("3/4/5"), remote.calls)
+    }
+
+    @Test
+    fun ordinaryCacheControlStillForwardsVerbatim() {
+        // The injection guard must not quietly strip legitimate provider policy.
+        val remote = CountingRemoteSource(
+            RemoteTileOutcome.Found(png(), "public, max-age=3600, stale-while-revalidate=60"),
+        )
+        val server = start(LocalTileReader { _, _, _ -> null }, remote)
+
+        val res = exchange(server.port, get("/remote/3/4/5.png"))
+
+        assertEquals(200, res.status, "raw response was: ${res.head}")
+        assertTrue(
+            res.lower.contains("cache-control: public, max-age=3600, stale-while-revalidate=60"),
+            "provider policy was altered: ${res.head}",
+        )
+    }
+
     private fun assertNotEquals(unexpected: Int, actual: Int) =
         org.junit.jupiter.api.Assertions.assertNotEquals(unexpected, actual)
 
