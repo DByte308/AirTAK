@@ -408,4 +408,19 @@ class RemoteTileFetcherCoordinateGateTest {
         val fetcher = fetcher(RequestBudgets(tileSpacingMs = 0L))
         assertTrue(fetcher.fetch(template(), 3, 4, 5, maxZoom = -1) is RemoteTileFetcher.Result.Refused)
     }
+
+    @Test
+    fun malformedTemplateIsRejectedWithoutSpendingTheProviderInterval() = runTest {
+        val budgets = RequestBudgets(tileSpacingMs = 5_000L)
+        val fetcher = fetcher(budgets)
+        // A stray placeholder fails the URL build, which must happen before the pacing budget is
+        // touched: a rejected request must not delay every later request to that provider.
+        val r = fetcher.fetch("https://tiles.example/{z}/{x}/{y}/{w}.png", 3, 4, 5, maxZoom = 14)
+        assertTrue(r is RemoteTileFetcher.Result.Refused, "got $r")
+        assertEquals(
+            0L,
+            budgets.tileBudgetFor("tiles.example").pendingDelayMs(),
+            "a malformed template must not have spent any of the provider's pacing interval",
+        )
+    }
 }

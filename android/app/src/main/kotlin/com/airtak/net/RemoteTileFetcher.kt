@@ -5,7 +5,6 @@ import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeoutOrNull
@@ -23,11 +22,10 @@ import java.io.ByteArrayOutputStream
 // bytes. Redirects are already disabled on the client, so the re-check is defence in depth rather
 // than the primary control.
 //
-// Terminology, because "slot" was misleading here: the budget is a MinimumIntervalPacer, which
-// enforces a minimum spacing between requests. It is not a semaphore and holds no countable slot —
-// acquire() waits out the interval and records the timestamp, and nothing is ever released. Saying
-// "hold a slot" implied a resource that could leak and be returned, which is not what this is and
-// would send a future reader looking for a release path that does not exist.
+// The budget is a MinimumIntervalPacer: it enforces a minimum spacing between request starts. It is
+// not a semaphore and holds no countable resource — acquire() waits out the interval, records the
+// timestamp, and nothing is ever released. A slow fetch therefore does not "hold" the interval; it
+// just means the next request to that provider waits from the last start time, not from now.
 
 /**
  * Provider cache directives relevant to tile reuse. Only what the app actually acts on.
@@ -90,8 +88,7 @@ class RemoteTileFetcher(
     /**
      * Outer bound on one fetch. The client's own timeout plugin covers connect and per-phase reads;
      * this is the backstop for a response that starts and then trickles, and it is what keeps a
-     * stalled provider from delaying every later request to that provider indefinitely: the pacer
-     * records when the request started, and an unbounded fetch keeps that interval occupied.
+     * stalled provider from occupying a proxy worker indefinitely.
      */
     private val totalTimeoutMs: Long? = NET_TILE_FETCH_TOTAL_TIMEOUT_MS,
 ) {
@@ -146,11 +143,13 @@ class RemoteTileFetcher(
         // invalid request costs nothing it cannot get back.
         coordinateError(z, x, y, maxZoom)?.let { return Result.Refused(it) }
 
-        // Shared with bulk downloads against the same provider, deliberately not a private budget.
-        budgets.tileBudgetFor(host).acquire()
-
+        // Rejected requests must not pay the provider's pacing interval, so everything that can
+        // fail without touching the network happens before acquire().
         val url = buildTemplateUrl(trimmed, z, x, y)
             ?: return Result.Refused("Tile URL template is malformed.")
+
+        // Shared with bulk downloads against the same provider, deliberately not a private budget.
+        budgets.tileBudgetFor(host).acquire()
 
         // prepareGet().execute { } rather than get(). get() saves the response, which buffers the
         // whole body before the caller sees a status, so a cap checked afterwards would be applied
@@ -159,9 +158,7 @@ class RemoteTileFetcher(
         // cancelled rather than drained.
         val timeoutMs = totalTimeoutMs
         return runCatching {
-            // withTimeoutOrNull, not withTimeout: our own expiry is a null return, so any
-            // TimeoutCancellationException that reaches the handler below belongs to somebody else's
-            // clock and must not be translated. See the getOrElse comment.
+            // withTimeoutOrNull, not withTimeout: our own expiry is a value, never an exception.
             val outcome = bounded(timeoutMs) {
                 client.prepareGet(url).execute { response ->
                     val usedHost = runCatching { response.call.request.url.host }
@@ -211,34 +208,17 @@ class RemoteTileFetcher(
                     }
                 }
             }
-            // null is the timeout: the block itself can only return a non-null Result.
-            outcome ?: Result.Failed("Tile fetch from $host timed out after ${timeoutMs}ms.")
-        }.getOrElse { error ->
-            // Our own expiry never reaches this handler: withTimeoutOrNull reports it as a null
-            // return, handled inside the block above. A TimeoutCancellationException here therefore
-            // came from somebody else's clock, almost always a caller's own outer withTimeout.
-            //
-            // Translating that into Failed is the flaw this guard exists for: the parent is going
-            // away, but it would receive a normal-looking result, keep waiting on a fetch it has
-            // already abandoned, and its scope would never observe the cancellation. ensureActive()
-            // asks the only question that separates the two cases — is THIS coroutine still alive?
-            // Ours is when only the inner clock fired; it is not when an outer scope is being torn
-            // down.
-            //
-            // Honest limitation, recorded rather than hidden: no test in this suite fails when this
-            // line is removed, and that was checked by removing it. With both a real engine and a
-            // suspending MockEngine, an outer cancellation arrives here as JobCancellationException
-            // — a CancellationException that is not a TimeoutCancellationException — so the branch
-            // below already rethrows it. This guard covers the remaining race where the caller is
-            // cancelled at the same instant our own clock fires, which the harness cannot schedule
-            // deterministically.
-            if (error is TimeoutCancellationException) {
+            // null means our own clock expired. Check the caller is still alive first: a null can
+            // also mean the caller's scope went away, and that must not become a result.
+            if (outcome == null) {
                 currentCoroutineContext().ensureActive()
-                return Result.Failed(
+                return@runCatching Result.Failed(
                     "Tile fetch from $host timed out after ${timeoutMs}ms.",
                 )
             }
-            // Real cancellation must propagate untouched so proxy teardown actually stops fetches.
+            outcome
+        }.getOrElse { error ->
+            // Cancellation propagates untouched so proxy teardown actually stops fetches.
             if (error is kotlinx.coroutines.CancellationException) throw error
             Result.Failed("Tile fetch failed: ${error.message ?: error.javaClass.simpleName}")
         }
@@ -265,12 +245,9 @@ class RemoteTileFetcher(
     }
 
     /**
-     * Runs [block] under [withTimeout] when [timeoutMs] is set, and unbounded when it is null.
-     *
-     * The null case exists for virtual-time tests only: under `runTest` the coroutine clock is
-     * skipped forward, so a real deadline fires immediately and every policy test would report a
-     * timeout instead of the policy outcome it is actually asserting. Production always passes a
-     * bound, and `AirTakHttpTimeoutTest` asserts that the shipped client carries one.
+     * Runs [block] under [withTimeoutOrNull] when [timeoutMs] is set, unbounded when it is null.
+     * Returns null on timeout. The null case is for virtual-time tests, where `runTest` skips the
+     * clock forward; production always passes a bound.
      */
     private suspend fun <T> bounded(timeoutMs: Long?, block: suspend () -> T): T? =
         if (timeoutMs != null) withTimeoutOrNull(timeoutMs) { block() } else block()
