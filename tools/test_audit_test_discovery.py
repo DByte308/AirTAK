@@ -547,17 +547,78 @@ class BarTest {
         finally:
             f.destroy()
 
-    def test_no_general_kotlin_parser_fqn_annotation_boundary(self):
-        # BOUNDARY (reviewer): a fully-qualified `@org.junit.jupiter.api.Test` is NOT matched by the
-        # `@Test\b` regex, so that method is neither counted as declared nor flagged unmatched. This
-        # pins the documented limit: the parser handles `@Test` / `@Test(...)` forms, not
-        # FQN-qualified annotation names. (No general Kotlin parser expansion requested.)
+    def test_fqn_annotation_is_recognized(self):
+        # FIXED: a fully-qualified `@org.junit.jupiter.api.Test` is now RECOGNIZED as a @Test
+        # declaration. Previously the `@Test\b` regex missed it, so a suite that used only the FQN
+        # form would report declared=0 while executing N tests (a false green). The method must be
+        # counted as declared under its package-qualified identity, NOT silently ignored.
         f = FixtureRepo.make()
         try:
             f.write_kt("FqnTest.kt", "class FqnTest {\n    @org.junit.jupiter.api.Test fun f() {}\n}\n")
             declared, unmatched = audit.declared_tests(f.root)
-            self.assertNotIn(("FqnTest", "f"), declared, "FQN @org.junit...Test is not matched")
-            self.assertEqual([], unmatched, "FQN annotation is not unmatched either (unseen)")
+            self.assertIn(("FqnTest", "f"), declared, "FQN @org.junit...Test must be a declared test")
+            self.assertNotIn(("org.junit.jupiter.api.Test", "f"), declared, "FQN must key on simple class")
+            self.assertEqual([], unmatched, "FQN annotation must NOT be flagged unmatched")
+        finally:
+            f.destroy()
+
+    def test_fqn_annotation_with_matching_xml_is_rc0(self):
+        # FQN-declared test that executes -> clean (rc0).
+        f = FixtureRepo.make()
+        try:
+            f.write_kt("FqnTest.kt", "class FqnTest {\n    @org.junit.jupiter.api.Test fun f() {}\n}\n")
+            f.write_xml("TEST-A.xml", _testsuite("np", [("FqnTest", "f()", "")]))
+            rc, out = _main_rc(f.root)
+            self.assertEqual(0, rc, "FQN test that runs must be rc0")
+            self.assertIn("No declared @Test was silently skipped.", out)
+        finally:
+            f.destroy()
+
+    def test_fqn_annotation_without_xml_is_rc1(self):
+        # The critical regression: the FQN-declared test does NOT run (only an unrelated test does), so
+        # it must be flagged as a missing declared test (rc1). Before the fix the FQN @Test was
+        # silently ignored (declared=0, green). A distinct executed test makes executed>0, so the
+        # declared-vs-executed mismatch block (not the zero-test gate) is what fires.
+        f = FixtureRepo.make()
+        try:
+            f.write_kt("FqnTest.kt", "class FqnTest {\n    @org.junit.jupiter.api.Test fun f() {}\n}\n")
+            # A DIFFERENT test runs; FqnTest.f does not -> executed>0, so it is a missing declared test.
+            f.write_xml("TEST-OTHER.xml", _testsuite("np", [("OtherTest", "runs()", "")]))
+            rc, out = _main_rc(f.root)
+            self.assertEqual(1, rc, "an FQN-declared test that did not run must be flagged missed")
+            self.assertIn("DECLARED BUT NEVER EXECUTED", out)
+            self.assertIn("FqnTest.f", out)
+        finally:
+            f.destroy()
+
+    def test_fqn_annotation_in_package_keys_on_qualified_class(self):
+        # The FQN annotation in a file with a package must attribute to the package-qualified class.
+        f = FixtureRepo.make()
+        try:
+            f.write_kt("pkg/FqnTest.kt", "package com.airtak.pkg\nclass FqnTest {\n    @org.junit.jupiter.api.Test fun q() {}\n}\n")
+            f.write_xml("TEST-A.xml", _testsuite("com.airtak.pkg", [("com.airtak.pkg.FqnTest", "q()", "")]))
+            rc, out = _main_rc(f.root)
+            self.assertEqual(0, rc, "package-qualified FQN test that runs must be rc0")
+        finally:
+            f.destroy()
+
+    def test_fqn_annotation_does_not_mistake_testinstance(self):
+        # GUARD: the bounded @(?:[\w.]+\.)?Test\b regex must NOT match @TestInstance (a class-level
+        # lifecycle annotation). A file with @TestInstance + a real @Test must yield exactly one
+        # declared test (the real one), and @TestInstance must not be counted.
+        f = FixtureRepo.make()
+        try:
+            f.write_kt("com/airtak/db/ITest.kt", """\
+package com.airtak.db
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class ITest {
+    @Test fun real() {}
+}
+""")
+            declared, unmatched = audit.declared_tests(f.root)
+            self.assertEqual({("com.airtak.db.ITest", "real")}, declared,
+                             "@TestInstance must NOT be mistaken for a @Test; only real() is declared")
+            self.assertEqual([], unmatched)
         finally:
             f.destroy()
 

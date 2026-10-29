@@ -47,7 +47,7 @@ def declared_tests(root):
     """
     found = set()
     unmatched = []
-    annotation = re.compile(r"^\s*@Test\b")
+    annotation = re.compile(r"^\s*@(?:org\.junit\.jupiter\.api\.)?Test\b")
     fun = re.compile(r"^\s*fun\s+(\w+)\s*\(")
     class_decl = re.compile(r"^\s*(?:open\s+|abstract\s+|internal\s+|private\s+)*class\s+(\w+)")
     package_decl = re.compile(r"^\s*package\s+([\w.]+)\s*;?\s*(?://.*)?$")
