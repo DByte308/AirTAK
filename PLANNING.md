@@ -2006,7 +2006,14 @@ pio device monitor -b 115200
 | Compose BOM | ≥ 2025.01.00 | Jetpack Compose library set |
 | Hilt | ≥ 2.51 | Dependency injection |
 | Room | ≥ 2.7.0 | Local database |
-| MapLibre GL Android | ≥ 11.0.0 | Map rendering |
+| MapLibre GL Android | ≥ 11.6.1 | Map rendering |
+
+> **16 KB page-size compatibility (issue #14).** Android 15+ and some Android 16 devices use a
+> 16 KB memory page size, and a native library whose ELF `PT_LOAD` segments or in-archive data sit
+> below 16 KB cannot be mapped there. MapLibre shipped 4 KB-aligned `libmaplibre.so` through 11.6.0
+> and 16 KB-aligned from 11.6.1 onwards, so the version floor above is the first that satisfies the
+> requirement, not a conservative bound. `tools/check_16kb_alignment.py` measures the built APK and
+> is enforced in CI; do not silence it by bumping back below 11.6.1.
 | protobuf-kotlin | ≥ 4.26.0 | Protobuf runtime |
 | Ktor client | ≥ 2.3.9 | HTTP for tile download |
 | JUnit 5 | ≥ 5.10.0 | Unit tests |

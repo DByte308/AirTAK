@@ -66,6 +66,15 @@ jobs:
           test -f tools/test_mbtiles_migrate.py || { echo "FAIL: tools/test_mbtiles_migrate.py missing"; exit 1; }
           python3 tools/test_mbtiles_migrate.py
 
+      # Issue #14: 16 KB alignment checker must be provably correct on its own, not just
+      # exercised against whatever APK happened to build. The self-test builds synthetic
+      # ELFs/ZIPs and asserts the checker fails the bad ones — the same property the gate
+      # relies on. stdlib-only, offline.
+      - name: 16 KB alignment gate self-test
+        run: |
+          test -f tools/test_check_16kb_alignment.py || { echo "FAIL: tools/test_check_16kb_alignment.py missing"; exit 1; }
+          python3 tools/test_check_16kb_alignment.py
+
       # Issue #11: the translation surface only stays translated if a new literal fails here.
       - name: i18n — no hardcoded user-visible UI strings
         run: python3 tools/check_i18n.py .
@@ -142,6 +151,21 @@ jobs:
           export GRADLE_USER_HOME="$(pwd)/android/.gradle-home"
           cd android
           ./gradlew assembleDebug --no-daemon
+
+      # Issue #14: Android 15+/16 devices may run a 16 KB page size. A native library whose
+      # ELF PT_LOAD segments or in-archive data sit below 16 KB cannot be mapped there. This
+      # measures the built APK rather than trusting Play's warning (which has named
+      # libandroidx.graphics.path.so, a library that measured clean, while the real offender
+      # was libmaplibre.so). The gate refuses to pass while any strict-ABI library is misaligned.
+      - name: 16 KB page-size alignment gate (issue #14)
+        run: |
+          APK="$(find android/app/build/outputs/apk -name '*.apk' | head -n 1)"
+          if [ -z "$APK" ]; then
+            echo "FAIL: no APK built"
+            exit 1
+          fi
+          python3 tools/test_check_16kb_alignment.py
+          python3 tools/check_16kb_alignment.py "$APK" --expect-clean
 
       - name: Collect APK artifacts
         run: |
