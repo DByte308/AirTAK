@@ -105,7 +105,7 @@ constexpr uint32_t DISPLAY_BRIGHTNESS_PCT_DEF  = 100;
     constexpr uint16_t DISP_FOOTER_Y       = 218;
     /// Line height for TFT text rendering
     constexpr int16_t  DISP_LINE_HEIGHT       = 18;
-#elif defined(AIRTAK_BOARD_HELTEC_V3) || defined(AIRTAK_BOARD_T3S3)
+#elif defined(AIRTAK_BOARD_HELTEC_V3) || defined(AIRTAK_BOARD_HELTEC_V4) || defined(AIRTAK_BOARD_T3S3)
     // SSD1306 OLED — 128×64 pixels, monochrome
     /// Display width in pixels
     constexpr uint16_t DISP_WIDTH           = 128;

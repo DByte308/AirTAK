@@ -1,0 +1,56 @@
+{
+  "_comment": "AirTAK — Airsoft Team Awareness Kit | firmware/boards/heltec_v4.json",
+  "_pin_reference": "Pin mapping derived from meshtastic/firmware variants/esp32s3/heltec_v4/variant.h and Heltec-Aaron-Lee/WiFi_Kit_series pins_arduino.h, verified 2026-05-28.",
+  "_hardware": "Heltec WiFi LoRa 32 V4. ESP32-S3R2 (16MB flash, 2MB PSRAM). SX1262 sub-GHz LoRa, SSD1306 128×64 OLED (I2C), Vext peripheral power control, battery ADC with voltage divider.",
+
+  "build": {
+    "arduino": {
+      "ldscript": "esp32s3_out.ld",
+      "partitions": "default_16MB.csv"
+    },
+    "core": "esp32",
+    "extra_flags": "-DARDUINO_ESP32S3_DEV -DARDUINO_USB_MODE=1 -DARDUINO_USB_CDC_ON_BOOT=1",
+    "f_cpu": "240000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "qio",
+    "flash_freq": "80m",
+    "mcu": "esp32s3",
+    "variant": "esp32s3"
+  },
+  "connectivity": ["wifi", "bluetooth"],
+  "debug": {
+    "openocd_target": "esp32s3.cfg"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "name": "Heltec WiFi LoRa 32 V4",
+  "upload": {
+    "flash_size": "16MB",
+    "maximum_ram_size": 327680,
+    "maximum_size": 16777216,
+    "require_upload_port": true,
+    "speed": 460800,
+    "protocol": "esptool",
+    "protocols": ["esptool"]
+  },
+  "url": "https://heltec.org/project/wifi-lora-32-v4/",
+  "vendor": "Heltec Automation",
+
+  "_pin_mapping": {
+    "_note": "Heltec V3 pin map. ESP32-S3 with SSD1306 OLED (I2C on 17/18), SX1262 LoRa on SPI (SCK=9, MISO=11, MOSI=10, CS=8). Vext (GPIO 36, active low) powers OLED and LoRa antenna boost. Battery voltage divider on GPIO 1 with ADC_CTRL (GPIO 37, active low).",
+    "OLED_SDA":        "GPIO 17  — I2C SDA for SSD1306 OLED",
+    "OLED_SCL":        "GPIO 18  — I2C SCL for SSD1306 OLED",
+    "OLED_RST":        "GPIO 21  — OLED reset",
+    "LORA_SCK":        "GPIO 9   — SX1262 SPI SCK",
+    "LORA_MISO":       "GPIO 11  — SX1262 SPI MISO",
+    "LORA_MOSI":       "GPIO 10  — SX1262 SPI MOSI",
+    "LORA_CS":         "GPIO 8   — SX1262 SPI CS (NSS)",
+    "LORA_RESET":      "GPIO 12  — SX1262 RESET",
+    "LORA_DIO1":       "GPIO 14  — SX1262 DIO1 (IRQ)",
+    "LORA_BUSY":       "GPIO 13  — SX1262 BUSY (DIO2)",
+    "VEXT":            "GPIO 36  — peripheral power (OLED + LoRa boost), active LOW",
+    "BAT_ADC":         "GPIO 1   — battery voltage divider (ADC1_CH1)",
+    "ADC_CTRL":        "GPIO 37  — battery ADC control, active LOW",
+    "LED":             "GPIO 35  — user LED, active HIGH",
+    "BUTTON":          "GPIO 0   — BOOT button, active LOW (needs pullup)"
+  }
+}
