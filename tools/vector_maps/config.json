@@ -1,0 +1,25 @@
+{
+  "layers": {
+    "landuse": {"minzoom": 6, "maxzoom": 12, "simplify_below": 12, "simplify_level": 0.0002},
+    "water": {"minzoom": 6, "maxzoom": 12, "simplify_below": 12, "simplify_level": 0.0001},
+    "waterway": {"minzoom": 8, "maxzoom": 12, "simplify_below": 12, "simplify_level": 0.0001},
+    "transportation": {"minzoom": 6, "maxzoom": 12, "simplify_below": 12, "simplify_level": 0.0001},
+    "building": {"minzoom": 12, "maxzoom": 12},
+    "place": {"minzoom": 6, "maxzoom": 12}
+  },
+  "settings": {
+    "minzoom": 6,
+    "maxzoom": 12,
+    "basezoom": 12,
+    "include_ids": false,
+    "name": "AirTAK offline field map",
+    "version": "1",
+    "description": "AirTAK minimal vector schema v1, locally generated",
+    "compress": "gzip",
+    "metadata": {
+      "airtak:vector-schema": "airtak-minimal-v1",
+      "attribution": "© OpenStreetMap contributors, ODbL 1.0",
+      "license": "https://www.openstreetmap.org/copyright"
+    }
+  }
+}
