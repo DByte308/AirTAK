@@ -1,13 +1,14 @@
 // AirTAK — Airsoft Team Awareness Kit
-// firmware/src/platform/boards/heltec_v3/hal/Display.cpp — SSD1306 OLED display driver
+// firmware/src/platform/boards/heltec_v4/hal/Display.cpp — SSD1306 OLED display driver
 // Planning: §9.6 | Roadmap: 1.4
 //
 // Implements the board-agnostic Display.h interface using Adafruit SSD1306 on
-// the Heltec WiFi LoRa 32 V3's 0.96" 128×64 monochrome OLED (I2C).
+// the Heltec WiFi LoRa 32 V4's 0.96" 128×64 monochrome OLED (I2C).
 //
 // The SSD1306 is connected via I2C0 (SDA=GPIO17, SCL=GPIO18, RST=GPIO21).
 // Vext (GPIO 36, active LOW) must be enabled before the OLED is usable.
-// ADC_CTRL (GPIO 37, active LOW) enables the battery voltage divider.
+// ADC_CTRL (GPIO 37) enables the battery voltage divider. The V4 needs it HIGH;
+// the V3 needs it LOW. Honour AIRTAK_ADC_CTRL_ACTIVE_HIGH.
 
 #include "hal/Display.h"
 #include "ui/Screens.h"
@@ -195,9 +196,16 @@ void Display::init() {
     digitalWrite(AIRTAK_PIN_POWER_EN, LOW);
     delay(PERIPH_POWER_SETTLE_MS); // allow OLED and LoRa boost to stabilise
 
-    // Enable battery ADC voltage divider (ADC_CTRL, active LOW).
+    // Enable battery ADC voltage divider (ADC_CTRL). The V4 enables it HIGH; the V3
+    // enables it LOW. Mirror Battery.cpp so the display init cannot disable the divider.
     pinMode(AIRTAK_PIN_ADC_CTRL, OUTPUT);
+#if defined(AIRTAK_ADC_CTRL_ACTIVE_HIGH)
+    digitalWrite(AIRTAK_PIN_ADC_CTRL, HIGH);
+#elif defined(AIRTAK_POWER_EN_ACTIVE_LOW)
     digitalWrite(AIRTAK_PIN_ADC_CTRL, LOW);
+#else
+    digitalWrite(AIRTAK_PIN_ADC_CTRL, HIGH);
+#endif
 
     Wire.begin(AIRTAK_PIN_OLED_SDA, AIRTAK_PIN_OLED_SCL);
 
