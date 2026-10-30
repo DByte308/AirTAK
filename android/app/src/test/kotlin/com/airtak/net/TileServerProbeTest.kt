@@ -261,9 +261,16 @@ class TileServerProbeTest {
     @Test
     fun shutdownClosesPortReleasesHandlersAndDropsLiveConnections() {
         val hold = CountDownLatch(1)
+        // Signals when the reader lambda has actually been entered. `activeHandlers == 1` fires at
+        // handler registration, which is before the handler reads the request line; under load the
+        // handler can still be mid-read when shutdown closes the socket, in which case the read
+        // fails and the slot is released — falsely implying the blocked reader could be preempted.
+        // Waiting for reader entry makes the shutdown timing deterministic.
+        val readerEntered = CountDownLatch(1)
         val server = start(
             LocalTileReader { _, _, _ ->
-                hold.await(8, TimeUnit.SECONDS)
+                readerEntered.countDown()
+                hold.await(30, TimeUnit.SECONDS)
                 png()
             },
         )
@@ -279,6 +286,7 @@ class TileServerProbeTest {
             }
         }.apply { isDaemon = true; start() }
 
+        assertTrue(readerEntered.await(5, TimeUnit.SECONDS), "reader was never entered")
         assertTrue(waitUntil { server.activeHandlers == 1 }, "live handler never registered")
         // This reader is deliberately non-cooperative: it blocks in a plain call that no socket
         // close can interrupt. shutdown() must still close the port and drop the client, and must

@@ -357,7 +357,6 @@
     <string name="settings_gps_source">GPS source</string>
     <string name="settings_position_channel">Position broadcast channel</string>
     <string name="settings_power_saving">Power saving</string>
-    <string name="settings_adc_multiplier">Battery ADC multiplier</string>
     <string name="settings_bonded_devices">Bonded devices: %1$d</string>
     <string name="settings_active_bans">Active vote-kick bans</string>
     <string name="settings_theme">Theme</string>
@@ -380,6 +379,7 @@
     <string name="settings_scan_prompt">Scan an AirTAK config QR code</string>
     <string name="settings_import_summary">Import summary</string>
     <string name="settings_moderation_votes">%1$d / %2$d votes · %3$d distinct voters</string>
+    <string name="settings_adc_multiplier">Battery ADC multiplier</string>
     <string name="settings_factory_reset_note">Factory reset requires a HMAC confirm-token and ships in Phase 6.</string>
     <string name="preset_long_range">Long range / moderate speed</string>
     <string name="preset_short_fast">Short range / fast</string>

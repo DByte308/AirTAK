@@ -401,6 +401,7 @@ ROWS = [
     ("settings_moderation_votes",
      "%1$d / %2$d votes · %3$d distinct voters",
      "%1$d / %2$d Stimmen · %3$d verschiedene Wähler", True),
+    ("settings_adc_multiplier", "Battery ADC multiplier", "Akku-ADC-Multiplikator", True),
     ("settings_factory_reset_note",
      "Factory reset requires a HMAC confirm-token and ships in Phase 6.",
      "Der Werkseinstellung braucht ein HMAC-Bestätigungstoken und kommt in Phase 6.", True),

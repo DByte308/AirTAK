@@ -337,7 +337,6 @@
     <string name="settings_gps_source">GPS-Quelle</string>
     <string name="settings_position_channel">Kanal der Positionsübertragung</string>
     <string name="settings_power_saving">Energiesparen</string>
-    <string name="settings_adc_multiplier">Akku-ADC-Multiplikator</string>
     <string name="settings_bonded_devices">Gespeicherte Kopplungen: %1$d</string>
     <string name="settings_active_bans">Aktive Abstimmungssperren</string>
     <string name="settings_theme">Design</string>
@@ -360,6 +359,7 @@
     <string name="settings_scan_prompt">AirTAK-Konfigurations-QR scannen</string>
     <string name="settings_import_summary">Überblick über den Import</string>
     <string name="settings_moderation_votes">%1$d / %2$d Stimmen · %3$d verschiedene Wähler</string>
+    <string name="settings_adc_multiplier">Akku-ADC-Multiplikator</string>
     <string name="settings_factory_reset_note">Der Werkseinstellung braucht ein HMAC-Bestätigungstoken und kommt in Phase 6.</string>
     <string name="preset_long_range">Weite Reichweite / mittlere Geschwindigkeit</string>
     <string name="preset_short_fast">Kurze Reichweite / schnell</string>
