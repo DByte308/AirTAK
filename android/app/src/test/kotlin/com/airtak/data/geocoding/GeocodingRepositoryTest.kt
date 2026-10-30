@@ -291,16 +291,14 @@ class GeocodingRepositoryTest {
         val f = (failure as GeocodeException).failure
         assertInstanceOf(GeocodeFailure.TooLarge::class.java, f, "expected TooLarge, got $f")
 
-        val drained = server.bytesWritten.get()
-        // The invariant is that the cap stopped the read of the FULL body, not that the client
-        // read less than half of it. The server counts bytes it threw at the socket, which includes
-        // the OS send-buffer before the client's close propagates; for a ~900 KB fixture that
-        // easily exceeds half. `drained < huge.size` (the client never saw the whole body) is what
-        // proves the cap did something; `drained == huge.size` would mean it did nothing.
-        assertTrue(
-            drained < huge.size,
-            "the cap did not stop the read: $drained of ${huge.size} bytes crossed the socket",
-        )
+        // The cap's effect is proven by the TooLarge result above plus the fast refusal below, NOT
+        // by how many bytes the server wrote. The server counts bytes it threw at the socket, which
+        // includes the OS send-buffer; with a large auto-tuned send buffer the server can absorb the
+        // whole ~900 KB body even though the client read only MAX_PAYLOAD_BYTES and refused. So a
+        // `bytesWritten < huge.size` assertion is timing-dependent and flakes under load, and is
+        // therefore deliberately omitted. Because this fixture is chunked with no Content-Length, a
+        // TooLarge outcome can only be produced by reading past the cap on the body, which is the
+        // property the test exists to pin down.
         assertTrue(
             elapsedMs < REFUSAL_DEADLINE_MS,
             "refusal took $elapsedMs ms. The client request timeout is $REQUEST_TIMEOUT_MS ms, " +

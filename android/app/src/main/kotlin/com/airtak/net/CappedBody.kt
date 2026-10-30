@@ -71,7 +71,13 @@ object CappedBody {
             }
             idle = 0
             total += read
-            if (total > maxBytes) return Result.TooLarge
+            if (total > maxBytes) {
+                // Abandon the rest of the body so the request finishes promptly. Without this the
+                // body job keeps reading, the request is still "in flight", and the HttpTimeout
+                // request phase (REQUEST_TIMEOUT_MS) — not the cap — is what ends the call.
+                channel.cancel(kotlinx.coroutines.CancellationException("payload exceeded the cap"))
+                return Result.TooLarge
+            }
             out.write(buffer, 0, read)
         }
     }
