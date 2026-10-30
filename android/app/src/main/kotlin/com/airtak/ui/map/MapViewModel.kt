@@ -123,6 +123,8 @@ data class MapUiState(
     val tileTemplate: String? = null,
     val localTileTemplate: String? = null,
     val localTileMaxZoom: Int? = null,
+    val localVectorTileTemplate: String? = null,
+    val localVectorMaxZoom: Int? = null,
     val configuredTileTemplate: String = "",
     val tileDownload: TileDownloadState = TileDownloadState.Idle,
     val missionOverlay: MissionOverlay? = null,
@@ -162,10 +164,13 @@ class MapViewModel @Inject constructor(
     }
 
     private data class LayerState(val players: Boolean, val waypoints: Boolean)
+    private data class VectorState(val template: String?, val maxZoom: Int?)
     private data class TileState(
         val baseTemplate: String?,
         val localTemplate: String?,
         val localMaxZoom: Int?,
+        val localVectorTemplate: String?,
+        val localVectorMaxZoom: Int?,
         val configuredTemplate: String,
         val download: TileDownloadState,
     )
@@ -189,14 +194,26 @@ class MapViewModel @Inject constructor(
             ?: GameConfig.getDefaultInstance()
     }
 
-    private val tileState = combine(
+    private val rasterTileState = combine(
         tileRepository.tileTemplate,
         tileRepository.localTileTemplate,
         tileRepository.localTileMaxZoom,
         tileRepository.configuredTileTemplate,
         tileRepository.downloadState,
     ) { baseTemplate, localTemplate, localMaxZoom, configuredTemplate, download ->
-        TileState(baseTemplate, localTemplate, localMaxZoom, configuredTemplate, download)
+        TileState(baseTemplate, localTemplate, localMaxZoom, null, null, configuredTemplate, download)
+    }
+
+    private val localVectorTileState = combine(
+        tileRepository.localVectorTileTemplate,
+        tileRepository.localVectorMaxZoom,
+    ) { template, maxZoom -> VectorState(template, maxZoom) }
+
+    private val tileState = combine(rasterTileState, localVectorTileState) { raster, vector ->
+        raster.copy(
+            localVectorTemplate = vector.template,
+            localVectorMaxZoom = vector.maxZoom,
+        )
     }
 
     private val sourceState = combine(
@@ -239,6 +256,8 @@ class MapViewModel @Inject constructor(
             tileTemplate = tile.baseTemplate,
             localTileTemplate = tile.localTemplate,
             localTileMaxZoom = tile.localMaxZoom,
+            localVectorTileTemplate = tile.localVectorTemplate,
+            localVectorMaxZoom = tile.localVectorMaxZoom,
             configuredTileTemplate = tile.configuredTemplate,
             tileDownload = tile.download,
             missionOverlay = overlay,

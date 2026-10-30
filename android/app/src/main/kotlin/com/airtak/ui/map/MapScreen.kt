@@ -487,8 +487,19 @@ fun MapScreen(
         if (missionOverlayEditMode) updateOverlayCornerPoints()
     }
 
-    LaunchedEffect(map, bgColor, ui.tileTemplate, ui.localTileTemplate, ui.localTileMaxZoom, textColor, isDark) {
-        map?.setStyle(Style.Builder().fromJson(mapStyleJson(bgColor, ui.tileTemplate, ui.localTileTemplate, ui.localTileMaxZoom, isDark))) { style ->
+    LaunchedEffect(
+        map, bgColor, ui.tileTemplate, ui.localTileTemplate, ui.localTileMaxZoom,
+        ui.localVectorTileTemplate, ui.localVectorMaxZoom, textColor, isDark,
+    ) {
+        map?.setStyle(Style.Builder().fromJson(mapStyleJson(
+            bgColor,
+            ui.tileTemplate,
+            ui.localTileTemplate,
+            ui.localTileMaxZoom,
+            ui.localVectorTileTemplate,
+            ui.localVectorMaxZoom,
+            isDark,
+        ))) { style ->
             ensureLayers(style, textColor)
             updateMissionOverlay(style, ui.missionOverlay)
             updateMissionOverlayEditLayer(style, ui.missionOverlay, missionOverlayEditMode)
@@ -2504,11 +2515,22 @@ private data class TileXY(val x: Int, val y: Int)
 private fun emptyGeoJsonSource(id: String): GeoJsonSource = GeoJsonSource(id, emptyFeatureCollection())
 private fun emptyFeatureCollection(): FeatureCollection = FeatureCollection.fromFeatures(emptyList())
 
-private fun mapStyleJson(
+/**
+ * Self-authored MapLibre style for the AirTAK field map.
+ *
+ * The vector layers reference the `airtak-minimal-v1` schema that tilemaker emits from
+ * `tools/vector_maps/config.json` + `process.lua`. Layer ids are landuse, water, waterway,
+ * transportation, building, place, and the `class` attribute carries the OSM tag value. This is a
+ * deliberate contract: the style must match the layers the pipeline emits, not OpenMapTiles. The
+ * font stack pulls from the bundled Noto glyphs (assets/glyphs).
+ */
+internal fun mapStyleJson(
     @androidx.annotation.ColorInt bgArgb: Int,
     baseTileTemplate: String?,
     localTileTemplate: String?,
     localTileMaxZoom: Int?,
+    vectorTileTemplate: String?,
+    vectorTileMaxZoom: Int?,
     isDark: Boolean,
 ): String {
     val bgHex = "#%06X".format(bgArgb and UI_RGB_MASK)
@@ -2519,12 +2541,17 @@ private fun mapStyleJson(
         val maxZoom = localTileMaxZoom?.let { ", \"maxzoom\": $it" }.orEmpty()
         ",\n        \"local-tiles\": { \"type\": \"raster\", \"tiles\": [\"$url\"], \"tileSize\": $MAP_TILE_SIZE_PX$maxZoom }"
     }.orEmpty()
+    val vectorSource = vectorTileTemplate?.jsonEscaped()?.let { url ->
+        val maxZoom = vectorTileMaxZoom?.let { ", \"maxzoom\": $it" }.orEmpty()
+        ",\n        \"local-vector\": { \"type\": \"vector\", \"tiles\": [\"$url\"]$maxZoom }"
+    }.orEmpty()
     val baseLayer = if (baseTileTemplate != null) {
         ",\n        { \"id\": \"base-tiles\", \"type\": \"raster\", \"source\": \"base-tiles\" }"
     } else ""
     val localLayer = if (localTileTemplate != null) {
         ",\n        { \"id\": \"local-tiles\", \"type\": \"raster\", \"source\": \"local-tiles\" }"
     } else ""
+    val vectorLayers = if (vectorTileTemplate != null) vectorLayerJson(isDark, bgHex) else ""
     return """
     {
       "version": 8,
@@ -2534,13 +2561,50 @@ private fun mapStyleJson(
         "blank": { "type": "geojson", "data": { "type": "FeatureCollection", "features": [] } }
         $baseSource
         $localSource
+        $vectorSource
       },
       "layers": [
         { "id": "background", "type": "background", "paint": { "background-color": "$bgHex" } }
         $baseLayer
         $localLayer
+        $vectorLayers
       ]
     }
+    """.trimIndent()
+}
+
+/**
+ * Vector layers for the local `.pbf` source, in draw order: fill, then line, then label.
+ *
+ * Colors are chosen to read on the field background regardless of theme; `class` comes from the
+ * tilemaker `process.lua`, so the match arms must mirror the schema there.
+ */
+internal fun vectorLayerJson(isDark: Boolean, bgHex: String): String {
+    val water = if (isDark) "#4a7ea8" else "#8ab4d8"
+    val road = if (isDark) "#e0e0e0" else "#f0f0d8"
+    val roadCasing = if (isDark) "#8a8a8a" else "#b8b89a"
+    val building = if (isDark) "#6a6a7a" else "#c9c2b0"
+    val label = if (isDark) "#f0f0f0" else "#2a2a2a"
+    return """
+,
+        { "id": "local-landuse", "type": "fill", "source": "local-vector", "source-layer": "landuse",
+          "paint": { "fill-color": ["match", ["get","class"], "residential", "#c9c2b0", "commercial", "#cbc0b0", "industrial", "#c8c0b8", "retail", "#ccc5b5", "forest", "#a7c79a", "wood", "#a7c79a", "scrub", "#b0c7a8", "park", "#b8d0b8", "#cfcfc2"], "fill-opacity": 0.55 } },
+        { "id": "local-water", "type": "fill", "source": "local-vector", "source-layer": "water",
+          "paint": { "fill-color": "$water", "fill-opacity": 0.85 } },
+        { "id": "local-waterway", "type": "line", "source": "local-vector", "source-layer": "waterway",
+          "paint": { "line-color": "$water", "line-width": ["interpolate",["linear"],["zoom"],6,0.4,12,1.8] } },
+        { "id": "local-road-casing", "type": "line", "source": "local-vector", "source-layer": "transportation",
+          "paint": { "line-color": "$roadCasing",
+            "line-width": ["interpolate",["linear"],["zoom"],6,0.5,12,5],
+            "line-gap-width": ["interpolate",["linear"],["zoom"],6,1,12,5] } },
+        { "id": "local-road", "type": "line", "source": "local-vector", "source-layer": "transportation",
+          "paint": { "line-color": ["match", ["get","class"], "motorway", "#e08a5a", "trunk", "#e08a5a", "primary", "#e0a05a", "secondary", "#d0b060", "tertiary", "#d0c080", "rail", "#9a9a9a", "$road"],
+            "line-width": ["interpolate",["linear"],["zoom"],6,0.4,12,4] } },
+        { "id": "local-building", "type": "fill", "source": "local-vector", "source-layer": "building",
+          "minzoom": 11, "paint": { "fill-color": "$building", "fill-opacity": 0.75 } },
+        { "id": "local-place", "type": "symbol", "source": "local-vector", "source-layer": "place",
+          "layout": { "text-field": ["get","name"], "text-size": ["interpolate",["linear"],["zoom"],6,10,12,14], "text-font": ["Noto Sans Regular"] },
+          "paint": { "text-color": "$label", "text-halo-color": "$bgHex", "text-halo-width": 1.2 } }
     """.trimIndent()
 }
 
