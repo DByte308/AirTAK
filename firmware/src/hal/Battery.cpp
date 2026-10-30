@@ -36,10 +36,14 @@ void Battery::init() {
 #endif
 #if defined(AIRTAK_PIN_ADC_CTRL) && AIRTAK_PIN_ADC_CTRL >= 0
     pinMode(AIRTAK_PIN_ADC_CTRL, OUTPUT);
-    // Drive active to enable the voltage divider.  The Heltec V3 uses active
-    // LOW (ADC_CTRL pulls the divider to GND); boards that need active HIGH
-    // (e.g. T114) handle ADC_CTRL in their Display::init() instead.
-#ifdef AIRTAK_POWER_EN_ACTIVE_LOW
+    // Drive active to enable the voltage divider.  The Heltec V3 enables with
+    // LOW (it pulls the divider to GND); the Heltec V4 enables with HIGH
+    // (its divider uses a MOSFET that ADC_CTRL turns on). A board that needs
+    // active HIGH advertises AIRTAK_ADC_CTRL_ACTIVE_HIGH; otherwise fall back
+    // to the Vext polarity (active LOW if Vext is active LOW).
+#if defined(AIRTAK_ADC_CTRL_ACTIVE_HIGH)
+    digitalWrite(AIRTAK_PIN_ADC_CTRL, HIGH);
+#elif defined(AIRTAK_POWER_EN_ACTIVE_LOW)
     digitalWrite(AIRTAK_PIN_ADC_CTRL, LOW);
 #else
     digitalWrite(AIRTAK_PIN_ADC_CTRL, HIGH);

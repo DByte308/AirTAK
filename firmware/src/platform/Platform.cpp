@@ -127,6 +127,8 @@ uint8_t meshtasticHwModel() {
     return 43;
 #elif defined(AIRTAK_BOARD_HELTEC_V3)        //  43 HELTEC_V3
     return 43;
+#elif defined(AIRTAK_BOARD_HELTEC_V4)        //  43 HELTEC_V3 (V4 uses the same Meshtastic node type)
+    return 43;
 #elif defined(AIRTAK_BOARD_T3S3)             //  16 TLORA_T3_S3
     return 16;
 #elif defined(AIRTAK_PLATFORM_NATIVE)        //   0 UNSET

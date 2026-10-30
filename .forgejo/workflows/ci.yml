@@ -330,6 +330,9 @@ jobs:
       # MBTiles verifier/migrator regression suites (T6 tooling). stdlib-only, offline.
       # These land via the T6 toolchain commits; guard so they fail loudly (not silently skip)
       # if the files are absent, matching every other python-tools step.
+      - name: ESP32 BLE memory-retention guard self-test
+        run: python3 tools/test_check_ble_memory.py
+
       - name: MBTiles verifier regression tests
         run: |
           test -f tools/test_mbtiles_verify.py || { echo "FAIL: tools/test_mbtiles_verify.py missing"; exit 1; }

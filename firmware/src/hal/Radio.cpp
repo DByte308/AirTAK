@@ -156,6 +156,21 @@ void Radio::init() {
             s_radio_sx1262.setCurrentLimit(SX1262_CURRENT_LIMIT_MA);
             s_radio_sx1262.setRxBoostedGainMode(true);
             s_mod_sx1262.SPIsetRegValue(SX1262_REG_TX_CLAMP_CFG, SX1262_TX_CLAMP_VALUE, 0, 0);
+
+#if defined(AIRTAK_PIN_FEM_CSD)
+            // Heltec V4.3 KCT8103L RF FEM (PA/LNA). Power the FEM rail and chip-enable
+            // it. The SX1262 DIO2 (setDio2AsRfSwitch) drives the FEM CPS pin, so TX/RX
+            // path select is automatic. CTX selects RX LNA (LOW) vs RX bypass (HIGH);
+            // the PA transmit path needs CTX=H + CPS=1, so drive CTX HIGH. (Kept HIGH
+            // so TX reaches the PA; RX then uses bypass rather than the LNA — a known
+            // trade-off pending a TX/RX-aware CTX toggle via RadioLib's RF-switch hook.)
+            pinMode(AIRTAK_PIN_FEM_VFEM, OUTPUT);
+            pinMode(AIRTAK_PIN_FEM_CSD, OUTPUT);
+            pinMode(AIRTAK_PIN_FEM_CTX, OUTPUT);
+            digitalWrite(AIRTAK_PIN_FEM_CSD, HIGH);
+            digitalWrite(AIRTAK_PIN_FEM_VFEM, HIGH);
+            digitalWrite(AIRTAK_PIN_FEM_CTX, HIGH);
+#endif
         }
     }
 

@@ -6,3 +6,10 @@
 .vscode/ipch
 compile_commands.json
 compile_commands_*.json
+
+# pioarduino / ESP-IDF-CMake generated files (regenerated from custom_sdkconfig each build)
+sdkconfig
+sdkconfig.*
+.dummy/
+managed_components/
+dependencies.lock

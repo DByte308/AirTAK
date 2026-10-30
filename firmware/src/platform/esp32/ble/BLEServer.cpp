@@ -11,6 +11,15 @@
 //   — Advertising restarts automatically on disconnect
 
 #include <Arduino.h>
+
+// Arduino 3.3.12+ reclaims unused BLE RAM before setup(). NimBLE-Arduino 1.x
+// predates this usage marker: its btStarted() call cannot retain the memory.
+// The framework header installs a constructor that marks BLE in use early.
+#if __has_include(<esp32-hal-alloc-ble-mem.h>)
+#include <esp32-hal-alloc-ble-mem.h>
+#include <esp32-hal-bt.h>
+#define AIRTAK_ARDUINO_BLE_MEMORY_MARKER 1
+#endif
 #include <NimBLEDevice.h>
 // NimBLE-Arduino v1.4 defines compatibility macros like:
 //   #define BLEServer NimBLEServer
@@ -179,6 +188,12 @@ class SecurityCallbacks : public NimBLESecurityCallbacks {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 void BLEServer::init(QueueHandle_t mesh_rx_queue) {
+#ifdef AIRTAK_ARDUINO_BLE_MEMORY_MARKER
+    // Fail here rather than corrupting the heap inside the controller if a
+    // future link/startup change drops the pre-main usage constructor.
+    configASSERT(bleInUse());
+    Serial.println("[BLE] controller memory retained");
+#endif
     NimBLEDevice::init(defaults::DEVICE_LONG_NAME);
     NimBLEDevice::setMTU(BLE_MTU);                 // negotiate 517-byte MTU on all connections (§10.2)
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);   // ESP_PWR_LVL_P9 = +9 dBm, see BLE_TX_POWER_ESP32
