@@ -9,6 +9,10 @@ package com.airtak.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.airtak.config.constants.ADC_MULTIPLIER_DEFAULT
+import com.airtak.config.constants.ADC_MULTIPLIER_MAX
+import com.airtak.config.constants.ADC_MULTIPLIER_MIN
+import com.airtak.config.constants.AdcMultiplierDefaults
 import com.airtak.config.constants.DEVICE_BROADCAST_INTERVAL_SECS
 import com.airtak.config.constants.DEVICE_MIN_TX_INTERVAL_SECS
 import com.airtak.config.constants.QR_SCHEME
@@ -92,7 +96,12 @@ class SettingsViewModel @Inject constructor(
         val gpsSource: GpsSource = GpsSource.DEVICE_GPS,
         val positionChannelIndex: Int = 0,
     )
-    data class PowerState(val gpsDutyCycle: Boolean = false, val displayOffSecs: Int = 0, val brightnessPct: Int = 100)
+    data class PowerState(
+        val gpsDutyCycle: Boolean = false,
+        val displayOffSecs: Int = 0,
+        val brightnessPct: Int = 100,
+        val adcMultiplier: Float = ADC_MULTIPLIER_DEFAULT,
+    )
     data class GameState(
         val callsign: String = "",
         val fireteamId: String = "",
@@ -112,7 +121,7 @@ class SettingsViewModel @Inject constructor(
     private val _lora     = MutableStateFlow(LoraState());     val lora:     StateFlow<LoraState>     = _lora.asStateFlow()
     private val _channels = MutableStateFlow(EditableChannelsState()); val channels: StateFlow<EditableChannelsState> = _channels.asStateFlow()
     private val _position = MutableStateFlow(PositionState()); val position: StateFlow<PositionState> = _position.asStateFlow()
-    private val _power    = MutableStateFlow(PowerState());    val power:    StateFlow<PowerState>    = _power.asStateFlow()
+    private val _power    = MutableStateFlow(PowerState(adcMultiplier = prefs.adcMultiplier()));    val power:    StateFlow<PowerState>    = _power.asStateFlow()
     private val _game     = MutableStateFlow(GameState());     val game:     StateFlow<GameState>     = _game.asStateFlow()
     private val _security = MutableStateFlow(SecurityState()); val security: StateFlow<SecurityState> = _security.asStateFlow()
 
@@ -123,6 +132,22 @@ class SettingsViewModel @Inject constructor(
             platoonChannelSlot = prefs.unitChannelSlot("platoon"),
             companyChannelSlot = prefs.unitChannelSlot("company"),
         )
+
+        // Issue #1: when the device reports its board id, prefill the ADC multiplier
+        // with the device table value if the user has not yet set one (still at the
+        // neutral default). This is the "default from the device table" behavior.
+        viewModelScope.launch {
+            deviceStatus.collect { status ->
+                val boardId = status?.boardId
+                if (boardId.isNullOrBlank()) return@collect
+                val wanted = AdcMultiplierDefaults.defaultFor(boardId)
+                val current = _power.value.adcMultiplier
+                if (current <= 0f || current == ADC_MULTIPLIER_DEFAULT) {
+                    _power.value = _power.value.copy(adcMultiplier = wanted)
+                    prefs.setAdcMultiplier(wanted)
+                }
+            }
+        }
         viewModelScope.launch {
             config.groupBytes.collect { map ->
                 map[ConfigGroup.DEVICE]?.let { b -> tryDecode { DeviceConfig.parseFrom(b) } }?.let {
@@ -144,7 +169,10 @@ class SettingsViewModel @Inject constructor(
                     if (ns != _position.value) _position.value = ns
                 }
                 map[ConfigGroup.POWER]?.let { b -> tryDecode { PowerConfig.parseFrom(b) } }?.let {
-                    _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs, it.brightnessPct)
+                    // Issue #1: prefer the device's configured multiplier; when it reports
+                    // 0 (absent/unset) keep whatever we already show (prefs or board default).
+                    val multiplier = if (it.adcMultiplier > 0f) it.adcMultiplier else _power.value.adcMultiplier
+                    _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs, it.brightnessPct, multiplier)
                 }
                 map[ConfigGroup.GAME]?.let { b -> tryDecode { GameConfig.parseFrom(b) } }?.let {
                     val ns = GameState(
@@ -220,6 +248,18 @@ class SettingsViewModel @Inject constructor(
     }
     fun updatePosition(block: PositionState.() -> PositionState){_position.value = _position.value.block() }
     fun updatePower(block: PowerState.() -> PowerState)        { _power.value    = _power.value.block() }
+
+    /**
+     * Set and persist the per-device ADC battery-voltage multiplier (Issue #1).
+     * Clamped to [ADC_MULTIPLIER_MIN, ADC_MULTIPLIER_MAX] so an out-of-range value
+     * cannot be pushed to the device. The firmware only applies a value > 0, so the
+     * minimum is kept above 0.
+     */
+    fun setAdcMultiplier(value: Float) {
+        val clamped = value.coerceIn(ADC_MULTIPLIER_MIN, ADC_MULTIPLIER_MAX)
+        _power.value = _power.value.copy(adcMultiplier = clamped)
+        prefs.setAdcMultiplier(clamped)
+    }
     fun updateGame(block: GameState.() -> GameState) {
         val newState = _game.value.block()
         _game.value = newState
@@ -283,7 +323,8 @@ class SettingsViewModel @Inject constructor(
         val msg = PowerConfig.newBuilder()
             .setGpsDutyCycle(s.gpsDutyCycle)
             .setDisplayOffSecs(s.displayOffSecs)
-            .setBrightnessPct(s.brightnessPct).build()
+            .setBrightnessPct(s.brightnessPct)
+            .setAdcMultiplier(s.adcMultiplier).build()
         config.apply(ConfigGroup.POWER, msg.toByteArray())
     }
     fun applyGame() {

@@ -1263,6 +1263,27 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                 steps = UI_BRIGHTNESS_STEPS,
                 modifier = Modifier.fillMaxWidth(),
         )
+        Spacer(Modifier.height(8.dp))
+        // Issue #1: per-device ADC battery-voltage multiplier, synced to the device
+        // via POWER config (adc_multiplier). Defaults from the device table when the
+        // board is known, else the sensible default; user-editable.
+        OutlinedTextField(
+                value = if (power.adcMultiplier == power.adcMultiplier.toInt().toFloat()) {
+                    power.adcMultiplier.toInt().toString()
+                } else {
+                    power.adcMultiplier.toString()
+                },
+                onValueChange = { v ->
+                    val parsed = v.replace(',', '.').toFloatOrNull()
+                    if (parsed != null) vm.setAdcMultiplier(parsed)
+                },
+                label = { Text(stringResource(R.string.settings_adc_multiplier)) },
+                keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal
+                        ),
+                modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(16.dp))
         val busy = vm.busy.collectAsState().value
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

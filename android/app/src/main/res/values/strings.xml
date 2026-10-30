@@ -357,6 +357,7 @@
     <string name="settings_gps_source">GPS source</string>
     <string name="settings_position_channel">Position broadcast channel</string>
     <string name="settings_power_saving">Power saving</string>
+    <string name="settings_adc_multiplier">Battery ADC multiplier</string>
     <string name="settings_bonded_devices">Bonded devices: %1$d</string>
     <string name="settings_active_bans">Active vote-kick bans</string>
     <string name="settings_theme">Theme</string>

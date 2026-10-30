@@ -68,6 +68,11 @@ public:
     static uint32_t powerDisplayOffSecs();
     static uint8_t  powerBrightnessPct();
 
+    // Returns the configured ADC battery-voltage multiplier (field 6 of
+    // PowerConfig). Returns 0.0f when the field is absent/unset, signalling
+    // callers to fall back to the board's compile-time AIRTAK_ADC_MULTIPLIER.
+    static float    powerAdcMultiplier();
+
     // ── Position parameter accessors (read from POSITION config buffer) ─────
     static uint32_t positionBroadcastIntervalSecs();
     static uint32_t positionMinTxIntervalSecs();

@@ -140,6 +140,31 @@ public object PowerConfigKt {
     public fun clearBrightnessPct() {
       _builder.clearBrightnessPct()
     }
+
+    /**
+     * ```
+     * per-device ADC voltage multiplier (battery calibration);
+     * ```
+     *
+     * `float adc_multiplier = 6;`
+     */
+    public var adcMultiplier: kotlin.Float
+      @kotlin.jvm.JvmName("getAdcMultiplier")
+        get() = _builder.adcMultiplier
+      @kotlin.jvm.JvmName("setAdcMultiplier")
+        set(value) {
+        _builder.adcMultiplier = value
+      }
+    /**
+     * ```
+     * per-device ADC voltage multiplier (battery calibration);
+     * ```
+     *
+     * `float adc_multiplier = 6;`
+     */
+    public fun clearAdcMultiplier() {
+      _builder.clearAdcMultiplier()
+    }
   }
 }
 public inline fun com.airtak.proto.PowerConfig.copy(block: `com.airtak.proto`.PowerConfigKt.Dsl.() -> kotlin.Unit): com.airtak.proto.PowerConfig =

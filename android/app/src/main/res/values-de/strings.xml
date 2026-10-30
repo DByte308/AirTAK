@@ -337,6 +337,7 @@
     <string name="settings_gps_source">GPS-Quelle</string>
     <string name="settings_position_channel">Kanal der Positionsübertragung</string>
     <string name="settings_power_saving">Energiesparen</string>
+    <string name="settings_adc_multiplier">Akku-ADC-Multiplikator</string>
     <string name="settings_bonded_devices">Gespeicherte Kopplungen: %1$d</string>
     <string name="settings_active_bans">Aktive Abstimmungssperren</string>
     <string name="settings_theme">Design</string>
