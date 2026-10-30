@@ -4,11 +4,19 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.InetAddress
-import java.net.ServerSocket
+import java.net.InetSocketAddress
 import java.net.Socket
+import java.nio.ByteBuffer
+import java.nio.channels.SelectionKey
+import java.nio.channels.Selector
+import java.nio.channels.ServerSocketChannel
+import java.nio.channels.SocketChannel
 import java.util.Collections
 import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -68,7 +76,7 @@ class TileServer(
     private val maxZoom: Int = TileProxyHandler.MAX_SUPPORTED_ZOOM,
 ) {
     @Volatile
-    private var server: ServerSocket? = null
+    private var server: ServerSocketChannel? = null
 
     @Volatile
     private var running = false
@@ -76,9 +84,19 @@ class TileServer(
     private val handlerSlots = Semaphore(maxConcurrentHandlers)
     private val openSockets: MutableSet<Socket> = Collections.synchronizedSet(mutableSetOf())
 
+    // Lazy disconnect watcher (a dedicated Selector thread, never a Dispatchers.IO thread).
+    // Created on first use so a server that never serves a remote tile pays no thread cost.
+    @Volatile
+    private var disconnectWatcher: DisconnectWatcher? = null
+
+    private fun disconnectWatcher(): DisconnectWatcher =
+        disconnectWatcher ?: synchronized(this) {
+            disconnectWatcher ?: DisconnectWatcher().also { disconnectWatcher = it }
+        }
+
     /** Ephemeral port once started, or -1 when stopped. */
     val port: Int
-        get() = server?.localPort ?: -1
+        get() = (server?.localAddress as? InetSocketAddress)?.port ?: -1
 
     val isRunning: Boolean
         get() = running
@@ -95,33 +113,38 @@ class TileServer(
     @Synchronized
     fun start() {
         if (running) return
-        // ServerSocket(port, backlog, address). Port 0 asks the kernel for an ephemeral port.
-        // Passing the backlog in the port slot bound the listener to a fixed low port instead,
-        // which collides with another service or fails outright on a device.
-        val socket = ServerSocket(0, ACCEPT_BACKLOG, InetAddress.getByName(LOOPBACK))
-        server = socket
+        // ServerSocketChannel(loopback, port 0) asks the kernel for an ephemeral port.
+        // The old ServerSocket(port, backlog, address) call put the backlog in the port slot and
+        // bound a fixed low port instead, which collides with another service or fails outright on
+        // a device. A ServerSocketChannel is also required so each accepted connection exposes a
+        // SocketChannel (via Socket.getChannel()), which is what the non-blocking disconnect
+        // watcher needs to observe a client going away (issue #9).
+        val channel = ServerSocketChannel.open()
+        channel.bind(InetSocketAddress(InetAddress.getByName(LOOPBACK), 0))
+        server = channel
         running = true
-        scope.launch { acceptLoop(socket) }
+        scope.launch { acceptLoop(channel) }
     }
 
-    private suspend fun acceptLoop(socket: ServerSocket) {
-        while (running && !socket.isClosed) {
+    private suspend fun acceptLoop(socket: ServerSocketChannel) {
+        while (running && socket.isOpen) {
             val accepted = runCatching { socket.accept() }.getOrNull() ?: break
+            val acceptedSocket = accepted.socket()
             // A finite backlog bounds only the kernel's pending set. accept() hands each connection
             // straight on, so without a slot ceiling a burst grows an unbounded number of live
             // handlers on a phone.
             if (!handlerSlots.tryAcquire()) {
-                rejectOverload(accepted)
+                rejectOverload(acceptedSocket)
                 continue
             }
-            openSockets.add(accepted)
+            openSockets.add(acceptedSocket)
             scope.launch {
                 try {
-                    handle(accepted)
+                    handle(acceptedSocket)
                 } finally {
-                    openSockets.remove(accepted)
+                    openSockets.remove(acceptedSocket)
                     handlerSlots.release()
-                    runCatching { accepted.close() }
+                    runCatching { acceptedSocket.close() }
                 }
             }
         }
@@ -136,6 +159,16 @@ class TileServer(
                     ).toByteArray(),
             )
             socket.getOutputStream().flush()
+            // The listener never reads this connection's request (it is refused on arrival), so the
+            // client's bytes sit unread in the receive buffer. On a channel-backed socket (from the
+            // ServerSocketChannel listener) closing with unread inbound data sends an RST and drops
+            // the 503 above. Draining the buffered bytes makes the close graceful so the client
+            // actually sees the refusal and can honour Retry-After.
+            socket.getInputStream().let { input ->
+                while (input.available() > 0) {
+                    if (input.read() < 0) break
+                }
+            }
         }
         runCatching { socket.close() }
     }
@@ -170,6 +203,8 @@ class TileServer(
         running = false
         server?.let { runCatching { it.close() } }
         server = null
+        disconnectWatcher?.let { runCatching { it.close() } }
+        disconnectWatcher = null
         val sockets = synchronized(openSockets) { openSockets.toList() }
         sockets.forEach { runCatching { it.close() } }
         synchronized(openSockets) { openSockets.clear() }
@@ -269,7 +304,24 @@ class TileServer(
                             writeStatus(socket, 503, route.headOnly)
                             return@withContext
                         }
-                    when (val result = source.fetch(route.z, route.x, route.y)) {
+
+                    // Issue #9: while the (potentially long, up to the request timeout) fetch is
+                    // running, watch the client socket for disconnect without occupying a thread of
+                    // the bounded Dispatchers.IO pool. The watcher is a single dedicated Selector
+                    // thread that does a non-blocking read (EOF detection) on the client connection.
+                    // On EOF it cancels this handler job, which releases the handler slot promptly
+                    // instead of holding it until the fetch's own timeout expires.
+                    val handlerJob = currentCoroutineContext().job
+                    val channel = socket.getChannel()
+                    val watchKey = channel?.let { disconnectWatcher().watch(it) { handlerJob.cancel() } }
+                    val result = try {
+                        source.fetch(route.z, route.x, route.y)
+                    } finally {
+                        // Restore the channel as blocking for the response write and drop the watch.
+                        // Idempotent and safe if the watcher already cancelled the key on disconnect.
+                        if (watchKey != null) runCatching { disconnectWatcher().unwatch(watchKey) }
+                    }
+                    when (result) {
                         is RemoteTileOutcome.Found ->
                             // Forward what the provider said. When it said nothing, say no-store
                             // rather than staying silent and letting the engine guess.
@@ -423,5 +475,150 @@ class TileServer(
 
         /** MapLibre accepts this for a vector tile source (`application/x-protobuf` also works). */
         const val VECTOR_CONTENT_TYPE = "application/vnd.mapbox-vector-tile"
+    }
+}
+
+/**
+ * Detects a client disconnecting mid-request without occupying a thread of the bounded
+ * Dispatchers.IO pool (issue #9).
+ *
+ * A single dedicated daemon thread runs a java.nio [Selector]. Each in-progress connection is
+ * registered (OP_READ) while its handler is busy serving the request. When the peer closes, the
+ * channel becomes readable and a non-blocking read returns EOF; the watcher then invokes the
+ * registered callback, which the handler uses to cancel its own job and release its handler slot
+ * promptly instead of holding it until the fetch's own request timeout expires.
+ *
+ * Because the read is non-blocking and lives on one selector thread shared by every connection, no
+ * connection ever blocks a worker thread — that is what the reverted version got wrong (it did a
+ * blocking read that starved Dispatchers.IO and broke seven tests).
+ *
+ * The channel's blocking mode is owned by the handler: blocking during request parsing and response
+ * writing, non-blocking only while a fetch is in flight. [watch] flips it to non-blocking and
+ * registers it; [unwatch] restores blocking so the response can be written. [lock] serialises
+ * channel access between the selector thread and the handler so the two never toggle the mode
+ * concurrently.
+ */
+private class DisconnectWatcher {
+    private val selector: Selector = Selector.open()
+    private val running = AtomicBoolean(true)
+    // Keys awaiting deregistration, mapped to a latch the selector thread counts down once it has
+    // processed the key cancellation and the channel can be returned to blocking mode. This lets
+    // a handler restore the channel to blocking synchronously without calling selectNow()/select()
+    // on the selector concurrently with the selector thread (which hangs in the JDK).
+    private val deregistering: MutableMap<SelectionKey, java.util.concurrent.CountDownLatch> =
+        java.util.Collections.synchronizedMap(mutableMapOf())
+    private val thread = Thread(::loop).apply {
+        isDaemon = true
+        name = "airtak-tile-disconnect"
+        start()
+    }
+
+    /**
+     * Registers [channel] for EOF detection. Returns the [SelectionKey], or null if the selector or
+     * channel is already closed (in which case the caller should just serve the request normally).
+     */
+    fun watch(channel: SocketChannel, onDisconnect: () -> Unit): SelectionKey? {
+        if (!selector.isOpen || !channel.isOpen) return null
+        return try {
+            channel.configureBlocking(false)
+            val key = channel.register(selector, SelectionKey.OP_READ)
+            key.attach(onDisconnect)
+            selector.wakeup()
+            key
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * Cancels [key] and restores the channel as blocking so the handler can write its response.
+     *
+     * The channel can only be put back in blocking mode once the selector has deregistered it;
+     * doing so on the selector thread is privileged. So we cancel the key, wake the selector, and
+     * wait (bounded) for the selector thread to confirm the channel is deregistered. This never
+     * calls select()/selectNow() from the handler on the selector concurrently with the selector
+     * thread, which would otherwise hang.
+     */
+    fun unwatch(key: SelectionKey) {
+        val channel = key.channel() as SocketChannel
+        val latch = java.util.concurrent.CountDownLatch(1)
+        deregistering[key] = latch
+        if (key.isValid) key.cancel()
+        runCatching { selector.wakeup() }
+        try {
+            latch.await(1, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+        // The selector thread normally removes + counts down the latch; drop the entry regardless
+        // so a timed-out wait cannot leak the map entry.
+        deregistering.remove(key)
+        if (channel.isOpen && !channel.isBlocking) {
+            runCatching { channel.configureBlocking(true) }
+        }
+    }
+
+    /** Stops the selector thread. Safe to call when the watcher is idle. */
+    fun close() {
+        if (running.getAndSet(false)) {
+            runCatching { selector.close() }
+            runCatching { selector.wakeup() }
+            // Release any handlers waiting on deregistration so they don't linger.
+            val waiters = synchronized(deregistering) { deregistering.keys.toList() }
+            waiters.forEach { deregistering[it]?.countDown() }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun loop() {
+        while (running.get() && selector.isOpen) {
+            val ready = runCatching { selector.select() }.getOrElse { return }
+            if (ready == 0) continue
+            val it = selector.selectedKeys().iterator()
+            while (it.hasNext()) {
+                val key = it.next()
+                it.remove()
+                if (!key.isValid) continue
+                val channel = key.channel() as SocketChannel
+                val onDisconnect = key.attachment() as? (() -> Unit) ?: continue
+                val eof = try {
+                    drainDetectEof(channel)
+                } catch (e: java.nio.channels.IllegalBlockingModeException) {
+                    // The handler re-configured the channel as blocking (unwatch). Not a
+                    // disconnect; the handler is about to write and will handle the socket.
+                    false
+                } catch (e: Throwable) {
+                    // Read error means the connection is gone.
+                    true
+                }
+                if (eof) {
+                    if (key.isValid) key.cancel()
+                    runCatching { onDisconnect() }
+                }
+            }
+            // The selector processes registrations/cancellations on each select(). Release any
+            // handler waiting to deregister once the channel is actually deregistered (isValid()
+            // goes false the instant cancel() is called, which is too early — the channel is not
+            // deregistered until the selector has removed the key).
+            synchronized(deregistering) {
+                // isValid() flips false the instant cancel() is called, but the channel is not
+                // deregistered until the selector removes the key; isRegistered is the real signal.
+                val deregistered = deregistering.keys.filter { key ->
+                    !(key.channel() as SocketChannel).isRegistered
+                }
+                deregistered.forEach { deregistering.remove(it)?.countDown() }
+            }
+        }
+    }
+
+    /** Reads until EOF (-1) or no more data (0). True only when the peer has gone away. */
+    private fun drainDetectEof(channel: SocketChannel): Boolean {
+        val buf = ByteBuffer.allocate(256)
+        while (true) {
+            val read = channel.read(buf)
+            if (read < 0) return true
+            if (read == 0) return false
+            buf.clear()
+        }
     }
 }

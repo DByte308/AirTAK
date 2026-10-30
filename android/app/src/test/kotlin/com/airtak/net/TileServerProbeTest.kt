@@ -5,6 +5,7 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -428,6 +429,65 @@ class TileServerProbeTest {
         assertEquals(503, exchange(server.port, get("/remote/3/4/5.png")).status)
         // The listener survives the refused route and keeps serving.
         assertEquals(200, exchange(server.port, get("/tiles/1/1/1.png")).status)
+    }
+
+    /**
+     * Issue #9: a client that disconnects mid-fetch must release its handler slot promptly,
+     * without starving concurrent serves.
+     *
+     * This asserts POOL USAGE, not merely that cancellation eventually happened. The reverted
+     * version also cancelled the fetch yet starved the Dispatchers.IO pool with a blocking read;
+     * if the disconnect watcher ever blocks a worker thread, this test keeps failing because the
+     * slot is not released here (the fetch is cancellable) or a concurrent serve is denied.
+     *
+     * The remote source blocks on a CompletableDeferred so the handler is genuinely "in the fetch"
+     * when the client abandons the connection. Cancelling the handler job cancels that await, which
+     * is exactly what a Ktor fetch does.
+     */
+    @Test
+    fun clientDisconnectMidFetchReleasesSlotWithoutStarvingConcurrentServes() = runBlocking {
+        withTimeout(20_000) {
+            val fetchBlocked = CompletableDeferred<RemoteTileOutcome>()
+            val remote = object : RemoteTileSource {
+                override suspend fun fetch(z: Int, x: Int, y: Int): RemoteTileOutcome =
+                    fetchBlocked.await()
+            }
+            val server = start(LocalTileReader { _, _, _ -> png() }, remote)
+
+            // A client that sends a full remote request, then abandons the connection mid-fetch
+            // (closes the socket without reading a response).
+            val client = Thread {
+                runCatching {
+                    Socket(TILE_LOOPBACK, server.port).use { socket ->
+                        socket.soTimeout = 4_000
+                        socket.getOutputStream().write(
+                            get("/remote/3/4/5.png").toByteArray(Charsets.US_ASCII),
+                        )
+                        socket.getOutputStream().flush()
+                        Thread.sleep(400) // let the handler reach the fetch
+                    } // socket closes here -> client disconnected mid-fetch
+                }
+            }.apply { isDaemon = true; start() }
+
+            // The single handler is now busy in the (blocked) fetch.
+            assertTrue(
+                waitUntil { server.activeHandlers == 1 },
+                "handler never entered the fetch",
+            )
+            // The client abandons the connection.
+            client.join(4_000)
+
+            // POOL-USAGE ASSERTION: the slot must be released promptly, NOT held until
+            // fetchBlocked completes (which never happens without the fix, and would otherwise
+            // pin the slot until the request timeout anyway).
+            assertTrue(
+                waitUntil(3_000) { server.activeHandlers == 0 },
+                "handler slot stayed held after client disconnect mid-fetch (pool exhausted)",
+            )
+
+            // A concurrent serve must not be starved: a fresh request is still served.
+            assertEquals(200, exchange(server.port, get("/tiles/1/1/1.png")).status)
+        }
     }
 
     private fun waitUntil(windowMs: Long = 4_000, predicate: () -> Boolean): Boolean {
