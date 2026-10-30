@@ -33,12 +33,12 @@ import com.airtak.data.routing.RoutePoint
 import com.airtak.data.routing.RoutingRepository
 import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.util.NodeNames
+import com.airtak.util.LocalNodeIdentity
 import com.airtak.data.tiles.TileBounds
 import com.airtak.net.LoopbackServerLauncher
 import com.airtak.data.tiles.TileDownloadState
 import com.airtak.data.tiles.TileRepository
 import com.airtak.proto.ConfigGroup
-import com.airtak.proto.GameConfig
 import com.airtak.proto.MarkerType
 import com.airtak.proto.PlayerStatePacket
 import com.airtak.proto.PlayerStatus
@@ -178,7 +178,7 @@ class MapViewModel @Inject constructor(
         val status: com.airtak.proto.DeviceStatus?,
         val nodes: List<RemoteNodeEntity>,
         val waypoints: List<WaypointEntity>,
-        val gameConfig: GameConfig,
+        val identity: LocalNodeIdentity,
     )
 
     private val layerState = combine(showPlayers, showWaypoints) { players, waypoints ->
@@ -186,13 +186,13 @@ class MapViewModel @Inject constructor(
     }
 
     init {
-        viewModelScope.launch { config.read(ConfigGroup.GAME) }
+        viewModelScope.launch {
+            config.read(ConfigGroup.GAME)
+            config.read(ConfigGroup.DEVICE)
+        }
     }
 
-    private val gameConfig = config.groupBytes.map { map ->
-        map[ConfigGroup.GAME]?.let { runCatching { GameConfig.parseFrom(it) }.getOrNull() }
-            ?: GameConfig.getDefaultInstance()
-    }
+    private val identity = config.groupBytes.map { LocalNodeIdentity.from(it) }
 
     private val rasterTileState = combine(
         tileRepository.tileTemplate,
@@ -220,18 +220,13 @@ class MapViewModel @Inject constructor(
         statusRepo.status,
         remoteNodes.nodes,
         waypointDao.observeAll(),
-        gameConfig,
-    ) { status, nodes, waypoints, gameConfig ->
-        SourceState(status, nodes, waypoints, gameConfig)
+        identity,
+    ) { status, nodes, waypoints, identity ->
+        SourceState(status, nodes, waypoints, identity)
     }
 
     private val mapCore = combine(sourceState, layerState, clock, phoneGps.location) { source, layers, now, phoneLoc ->
-        // Same precedence as every other label. DeviceStatus.nodeName is the device
-        // long name (ble.proto), so it now ranks BELOW callsign instead of replacing it.
-        val ownLabel = NodeNames.resolveOrNull(
-            callsign = source.gameConfig.callsign,
-            longName = source.status?.nodeName,
-        ) ?: "You"
+        val ownLabel = source.identity.displayName(source.status, fallback = "You")
         val own = source.status?.gps?.takeIf { it.fix }?.let { OwnPosition(it.latitude, it.longitude, ownLabel) }
             ?: phoneLoc?.let { OwnPosition(it.latitude, it.longitude, ownLabel) }
         val ownNodeId = source.status?.nodeId?.toLong()?.and(0xFFFF_FFFFL)
@@ -284,14 +279,9 @@ class MapViewModel @Inject constructor(
 
     private fun broadcastOwnStatus(statusValue: PlayerStatus, transition: Boolean) {
         val device = status.value ?: return
-        val cfg = runCatching { uiState.value }.getOrNull()
-        val callsign = cfg?.ownPosition?.label?.takeIf { it.isNotBlank() }
-            ?: device.nodeName.ifBlank { "AirTAK" }
-        val gameConfig = runCatching {
-            config.groupBytes.value[ConfigGroup.GAME]?.let {
-                GameConfig.parseFrom(it)
-            }
-        }.getOrNull() ?: GameConfig.getDefaultInstance()
+        val identity = LocalNodeIdentity.from(config.groupBytes.value)
+        val callsign = identity.broadcastCallsign()
+        val gameConfig = identity.game
         val packet = PlayerStatePacket.newBuilder()
             .setNodeId(device.nodeId)
             .setCallsign(callsign)

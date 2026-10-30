@@ -10,10 +10,8 @@ package com.airtak.data.game
 import com.airtak.data.config.ConfigRepository
 import com.airtak.data.mesh.MeshRepository
 import com.airtak.data.status.DeviceStatusRepository
-import com.airtak.util.NodeNames
+import com.airtak.util.LocalNodeIdentity
 import com.airtak.config.constants.GAME_DEFAULT_PLAYER_COLOR
-import com.airtak.proto.ConfigGroup
-import com.airtak.proto.GameConfig
 import com.airtak.proto.PlayerStatePacket
 import com.airtak.proto.PlayerStatus
 import kotlinx.coroutines.CoroutineScope
@@ -60,13 +58,9 @@ class GameRepository @Inject constructor(
 
     private fun broadcastActiveTransition(active: Boolean) {
         val device = status.status.value ?: return
-        val gameBytes = config.groupBytes.value[ConfigGroup.GAME]
-        val cfg = gameBytes?.let { runCatching { GameConfig.parseFrom(it) }.getOrNull() }
-            ?: GameConfig.getDefaultInstance()
-        // Callsign first, device long name only as fallback (was the other way round
-        // in spirit: nodeName is DeviceConfig.long_name, see ble.proto).
-        val callsign = NodeNames.resolveOrNull(cfg.callsign, longName = device.nodeName)
-            ?: "AirTAK"
+        val identity = LocalNodeIdentity.from(config.groupBytes.value)
+        val cfg = identity.game
+        val callsign = identity.broadcastCallsign()
         val packet = PlayerStatePacket.newBuilder()
             .setNodeId(device.nodeId)
             .setCallsign(callsign)

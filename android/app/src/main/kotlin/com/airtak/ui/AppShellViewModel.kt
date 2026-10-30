@@ -8,9 +8,7 @@ import com.airtak.data.ble.BleRepository
 import com.airtak.data.config.ConfigRepository
 import com.airtak.data.gps.PhoneGpsProvider
 import com.airtak.data.status.DeviceStatusRepository
-import com.airtak.proto.ConfigGroup
-import com.airtak.proto.GameConfig
-import com.airtak.util.NodeNames
+import com.airtak.util.LocalNodeIdentity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,13 +35,11 @@ class AppShellViewModel @Inject constructor(
      * HUD title. The bar used to show DeviceStatus.node_name unconditionally, and
      * that field is DeviceConfig.long_name (proto/airtak/ble.proto), so the top bar
      * displayed the 39-byte device long name while the map showed the callsign. Now
-     * uses the shared rule: callsign first, long name only as fallback (issue #7).
+     * uses the same callsign/short-name/long-name/id rule as the own map and roster.
      */
     val hudTitle =
         combine(status.status, config.groupBytes) { st, groups ->
-            val callsign = groups[ConfigGroup.GAME]
-                ?.let { runCatching { GameConfig.parseFrom(it).callsign }.getOrNull() }
-            NodeNames.resolveOrNull(callsign = callsign, longName = st?.nodeName) ?: "AirTAK"
+            LocalNodeIdentity.from(groups).displayName(st)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "AirTAK")
 
     private val _pendingDmNodeId = MutableStateFlow<Long?>(null)

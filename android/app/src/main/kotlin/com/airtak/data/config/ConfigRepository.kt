@@ -17,11 +17,13 @@ package com.airtak.data.config
 import com.airtak.config.constants.MESH_CONFIG_BUFFER
 import com.airtak.data.ble.BleRepository
 import com.airtak.data.ble.InboundChannel
+import com.airtak.data.ble.LinkState
 import com.airtak.proto.ConfigAck
 import com.airtak.proto.ConfigGroup
 import com.airtak.proto.ConfigPayload
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -36,10 +38,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class ConfigRepository @Inject constructor(
+class ConfigRepository internal constructor(
     private val ble: BleRepository,
+    private val scope: CoroutineScope,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Inject constructor(ble: BleRepository) : this(
+        ble, CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    )
 
     /** Raw most-recent serialized group bytes returned by the device. */
     private val _groupBytes = MutableStateFlow<Map<ConfigGroup, ByteArray>>(emptyMap())
@@ -49,10 +54,12 @@ class ConfigRepository @Inject constructor(
     val acks: SharedFlow<ConfigAck> = _acks.asSharedFlow()
 
     init {
-        scope.launch {
+        // Subscribe before the connection observer can request a config read.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             ble.inbound
                 .filter { it.channel == InboundChannel.ConfigRw }
                 .collect { frame ->
+                    if (ble.linkState.value !is LinkState.Connected) return@collect
                     // The device emits one of two messages on CONFIG_RW: a
                     // ConfigPayload (in response to a read) or a ConfigAck
                     // (after a commit). Both are protobufs in the airtak
@@ -61,10 +68,12 @@ class ConfigRepository @Inject constructor(
                     val ack = runCatching { ConfigAck.parseFrom(frame.payload) }.getOrNull()
                     if (ack != null && (ack.success || ack.error.isNotEmpty())) {
                         _acks.emit(ack)
+                        if (ack.success && ack.group != ConfigGroup.UNRECOGNIZED) read(ack.group)
                         return@collect
                     }
                     val payload = runCatching { ConfigPayload.parseFrom(frame.payload) }.getOrNull()
-                    if (payload != null && payload.data.size() > 0) {
+                    // Empty serialized groups are valid (e.g. clearing both device names).
+                    if (payload != null && payload.group != ConfigGroup.UNRECOGNIZED) {
                         _groupBytes.value = _groupBytes.value.toMutableMap().apply {
                             put(payload.group, payload.data.toByteArray())
                         }
@@ -72,6 +81,19 @@ class ConfigRepository @Inject constructor(
                         _acks.emit(ack)
                     }
                 }
+        }
+        scope.launch {
+            ble.linkState.collect { state ->
+                if (state is LinkState.Connected) {
+                    // Screen init can run while linking, when BLE drops writes.
+                    // Refresh identity on every connection, not only on screen entry.
+                    read(ConfigGroup.GAME)
+                    read(ConfigGroup.DEVICE)
+                } else {
+                    // Never display or broadcast the previous device's config.
+                    _groupBytes.value = emptyMap()
+                }
+            }
         }
     }
 
@@ -82,7 +104,7 @@ class ConfigRepository @Inject constructor(
     fun stage(group: ConfigGroup, data: ByteArray) {
         send(ConfigPayload.newBuilder()
             .setGroup(group)
-            .setData(ByteString.copyFrom(data))
+            .setData(ByteString.copyFrom(identityConfigWireBytes(group, data)))
             .setCommit(false)
             .build())
     }
@@ -90,7 +112,7 @@ class ConfigRepository @Inject constructor(
     fun apply(group: ConfigGroup, data: ByteArray) {
         send(ConfigPayload.newBuilder()
             .setGroup(group)
-            .setData(ByteString.copyFrom(data))
+            .setData(ByteString.copyFrom(identityConfigWireBytes(group, data)))
             .setCommit(true)
             .build())
     }

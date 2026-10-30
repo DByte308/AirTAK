@@ -14,8 +14,8 @@ import com.airtak.data.mesh.RemoteNodeRepository
 import com.airtak.data.moderation.ModerationRepository
 import com.airtak.data.status.DeviceStatusRepository
 import com.airtak.util.NodeNames
+import com.airtak.util.LocalNodeIdentity
 import com.airtak.proto.ConfigGroup
-import com.airtak.proto.GameConfig
 import com.airtak.proto.ModerationAction
 import com.airtak.proto.PlayerStatePacket
 import com.airtak.proto.PlayerStatus
@@ -96,22 +96,21 @@ constructor(
     private data class Source(
             val nodes: List<RemoteNodeEntity>,
             val deviceStatus: com.airtak.proto.DeviceStatus?,
-            val gameConfig: GameConfig,
+            val identity: LocalNodeIdentity,
     )
 
     init {
-        viewModelScope.launch { config.read(ConfigGroup.GAME) }
+        viewModelScope.launch {
+            config.read(ConfigGroup.GAME)
+            config.read(ConfigGroup.DEVICE)
+        }
     }
 
-    private val gameConfig =
-            config.groupBytes.map { map ->
-                map[ConfigGroup.GAME]?.let { runCatching { GameConfig.parseFrom(it) }.getOrNull() }
-                        ?: GameConfig.getDefaultInstance()
-            }
+    private val identity = config.groupBytes.map { LocalNodeIdentity.from(it) }
 
     private val source =
-            combine(remoteNodes.nodes, status, gameConfig) { nodes, deviceStatus, cfg ->
-                Source(nodes, deviceStatus, cfg)
+            combine(remoteNodes.nodes, status, identity) { nodes, deviceStatus, identity ->
+                Source(nodes, deviceStatus, identity)
             }
 
     val uiState: StateFlow<PlayersUiState> =
@@ -134,17 +133,12 @@ constructor(
                                                     deviceStatus.nodeId.toLong() and 0xFFFF_FFFFL
                                             PlayerRow(
                                                     nodeId = selfNodeId,
-                                                    callsign =
-                                                            source.gameConfig.callsign.ifBlank {
-                                                                deviceStatus.nodeName.ifBlank {
-                                                                    "You"
-                                                                }
-                                                            },
-                                                    fireteamId = source.gameConfig.fireteamId,
-                                                    squadId = source.gameConfig.squadId,
-                                                    platoonId = source.gameConfig.platoonId,
-                                                    companyId = source.gameConfig.companyId,
-                                                    colorRgb = source.gameConfig.playerColorRgb,
+                                                    callsign = source.identity.displayName(deviceStatus, fallback = "You"),
+                                                    fireteamId = source.identity.game.fireteamId,
+                                                    squadId = source.identity.game.squadId,
+                                                    platoonId = source.identity.game.platoonId,
+                                                    companyId = source.identity.game.companyId,
+                                                    colorRgb = source.identity.game.playerColorRgb,
                                                     status = own,
                                                     lastSeenMs = now,
                                                     lastPlayerMs = now,
@@ -265,25 +259,20 @@ constructor(
 
     private fun broadcastOwnStatus(statusValue: PlayerStatus, transition: Boolean) {
         val currentStatus = status.value ?: return
-        val cfg = runCatching { uiState.value }.getOrNull()
-        val allPlayers =
-                (cfg?.hierarchy?.groups?.flatMap { allPlayers(it) }
-                        ?: emptyList()) + (cfg?.hierarchy?.ungrouped ?: emptyList())
-        val row = allPlayers.firstOrNull { it.isSelf }
-        val callsign =
-                row?.callsign?.takeIf { it.isNotBlank() }
-                        ?: currentStatus.nodeName.ifBlank { "AirTAK" }
+        val identity = LocalNodeIdentity.from(config.groupBytes.value)
+        val game = identity.game
+        val callsign = identity.broadcastCallsign()
         val packet =
                 PlayerStatePacket.newBuilder()
                         .setNodeId(currentStatus.nodeId)
                         .setCallsign(callsign)
                         .setStatus(statusValue)
-                        .setColorRgb(row?.colorRgb ?: 0xFFFFFF)
+                        .setColorRgb(game.playerColorRgb.takeIf { it != 0 } ?: 0xFFFFFF)
                         .setIsStateTransition(transition)
-                        .setFireteamId(row?.fireteamId ?: "")
-                        .setSquadId(row?.squadId ?: "")
-                        .setPlatoonId(row?.platoonId ?: "")
-                        .setCompanyId(row?.companyId ?: "")
+                        .setFireteamId(game.fireteamId)
+                        .setSquadId(game.squadId)
+                        .setPlatoonId(game.platoonId)
+                        .setCompanyId(game.companyId)
                         .build()
         mesh.sendPlayerState(packet)
     }
