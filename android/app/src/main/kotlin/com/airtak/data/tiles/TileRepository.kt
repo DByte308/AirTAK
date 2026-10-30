@@ -101,7 +101,11 @@ class TileRepository @Inject constructor(
     private val _downloadState = MutableStateFlow<TileDownloadState>(TileDownloadState.Idle)
     val downloadState: StateFlow<TileDownloadState> = _downloadState.asStateFlow()
 
-    private val _tileTemplate = MutableStateFlow<String?>(remoteProxyUrl())
+    private val _tileTemplate = MutableStateFlow<String?>(null)
+    // Initialised to null, not remoteProxyUrl(): that reads tileServerLauncher, which is
+    // a lazy declared later in the class body and is still unassigned while the property
+    // initializers run. Accessing it here threw a null-reference on launch. The real value
+    // is set in refreshLocalTiles() once the listener + tiles are ready.
     val tileTemplate: StateFlow<String?> = _tileTemplate.asStateFlow()
 
     private val _localTileTemplate = MutableStateFlow<String?>(null)
@@ -121,11 +125,40 @@ class TileRepository @Inject constructor(
     val configuredTileTemplate: StateFlow<String> = _configuredTileTemplate.asStateFlow()
 
     /**
+     * Adapts the policy-aware fetcher to the listener's narrow outcome contract.
+     *
+     * Declared before the init block on purpose. Kotlin runs property initializers and init blocks
+     * in declaration order, and init starts the listener, so a `remoteSource` declared after init
+     * was still unassigned when the listener was built — the shipped listener received a null
+     * remote source and every /remote route answered 503 for the life of the process. Nothing in
+     * the JVM suite caught it because TileRepository needs an Android context to construct.
+     */
+    private val remoteSource = object : RemoteTileSource {
+        override suspend fun fetch(z: Int, x: Int, y: Int): RemoteTileOutcome =
+            when (
+                val r = remoteTiles.fetch(
+                    configuredTileUrlOrNull(),
+                    z,
+                    x,
+                    y,
+                    TileProxyHandler.MAX_SUPPORTED_ZOOM,
+                )
+            ) {
+                is RemoteTileFetcher.Result.Fetched -> RemoteTileOutcome.Found(r.bytes, r.rawCacheControl)
+                is RemoteTileFetcher.Result.NotFound -> RemoteTileOutcome.Missing
+                is RemoteTileFetcher.Result.Failed -> RemoteTileOutcome.Unavailable
+                is RemoteTileFetcher.Result.Refused -> RemoteTileOutcome.Refused
+                is RemoteTileFetcher.Result.NoProvider -> RemoteTileOutcome.Refused
+            }
+    }
+
+    /**
      * The shipped loopback listener, created on first [ensureServer].
      *
-     * Deliberately not `by lazy`. Constructing it reads [remoteSource], and a field declared later
-     * in the class body is still unassigned while the constructor and init block run, so a lazy
-     * delegate reached from init threw a null reference on launch.
+     * Lazy so it is only started on first use; [remoteSource] is declared above it (not below) so
+     * the lazy body reads an initialised remote source. Do NOT move this below [remoteSource] or
+     * re-introduce a call to it from a property initializer that runs before this line: both made
+     * the constructor throw a null reference on launch (see the block comment on [remoteSource]).
      */
     private val tileServerLauncher by lazy {
         LoopbackServerLauncher<TileServer>(
@@ -164,34 +197,6 @@ class TileRepository @Inject constructor(
     /** Recomputed whenever the archives or the configured provider change. */
     @Volatile private var servingFiles: List<File> = emptyList()
     @Volatile private var mbtilesRevision: Long = 0L
-
-    /**
-     * Adapts the policy-aware fetcher to the listener's narrow outcome contract.
-     *
-     * Declared before the init block on purpose. Kotlin runs property initializers and init blocks
-     * in declaration order, and init starts the listener, so a `remoteSource` declared after init
-     * was still unassigned when the listener was built — the shipped listener received a null
-     * remote source and every /remote route answered 503 for the life of the process. Nothing in
-     * the JVM suite caught it because TileRepository needs an Android context to construct.
-     */
-    private val remoteSource = object : RemoteTileSource {
-        override suspend fun fetch(z: Int, x: Int, y: Int): RemoteTileOutcome =
-            when (
-                val r = remoteTiles.fetch(
-                    configuredTileUrlOrNull(),
-                    z,
-                    x,
-                    y,
-                    TileProxyHandler.MAX_SUPPORTED_ZOOM,
-                )
-            ) {
-                is RemoteTileFetcher.Result.Fetched -> RemoteTileOutcome.Found(r.bytes, r.rawCacheControl)
-                is RemoteTileFetcher.Result.NotFound -> RemoteTileOutcome.Missing
-                is RemoteTileFetcher.Result.Failed -> RemoteTileOutcome.Unavailable
-                is RemoteTileFetcher.Result.Refused -> RemoteTileOutcome.Refused
-                is RemoteTileFetcher.Result.NoProvider -> RemoteTileOutcome.Refused
-            }
-    }
 
     init {
         tileDir.mkdirs()
