@@ -34,9 +34,15 @@ const val KEY_PREFIX_UNIT_CHANNEL = "unit_channel_"
 /** Preferences key: per-device ADC battery-voltage multiplier. */
 const val KEY_ADC_MULTIPLIER = "adc_multiplier"
 /** Sensible default multiplier when the device type is unknown. */
-const val ADC_MULTIPLIER_DEFAULT = 1.0f
+// 0 means "use the device's own compile-time board default", not a 1.0 balance.
+// Issue #1 gives the per-device target TOTAL multiplier (e.g. 5.1205 for heltec_v3);
+// the firmware separates that into DIVIDER(2.0) * MULTIPLIER. Sending the issue total
+// direct would double-count the divider (read ~2x high), so the app never auto-applies
+// it. It is only ever a value the user enters deliberately, and 0 restores the board
+// default.
+const val ADC_MULTIPLIER_DEFAULT = 0.0f
 /** Minimum supported ADC multiplier (bounds the settings input). */
-const val ADC_MULTIPLIER_MIN = 0.01f
+const val ADC_MULTIPLIER_MIN = 0.0f
 /** Maximum supported ADC multiplier (bounds the settings input). */
 const val ADC_MULTIPLIER_MAX = 100.0f
 

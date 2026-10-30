@@ -165,7 +165,13 @@ class TileRepository @Inject constructor(
             open = {
                 TileServer(
                     scope = scope,
-                    localTiles = LocalTileReader { z, x, y -> readTile(z, x, y) },
+                    localTiles = LocalTileReader { z, x, y -> readTile(z, x, y, vector = false) },
+                    // A pbf archive and a raster archive are distinct files, but readTile walked
+                    // every serving archive and returned the first hit at z/x/y regardless of the
+                    // request's kind — so a .png route could be served a vector archive's gzipped
+                    // MVT (and a .pbf route a raster PNG). Serving with the matching reader keeps
+                    // the kinds separate (issue #7).
+                    localVectorTiles = LocalTileReader { z, x, y -> readTile(z, x, y, vector = true) },
                     remoteTiles = remoteSource,
                 ).also { it.start() }
             },
@@ -516,7 +522,11 @@ class TileRepository @Inject constructor(
 
     private fun localTileUrl(): String? {
         return tileServerLauncher.current?.port?.takeIf { it > 0 }?.let { port ->
-            if (mbtilesFiles.isNotEmpty()) "http://127.0.0.1:$port/tiles/{z}/{x}/{y}.png?v=$mbtilesRevision" else null
+            // Only register a raster source when a raster archive is actually present. Previously
+            // any archive (including a vector-only install) made this emit a .png template, and
+            // MapLibre then requested raster tiles that readTile could not serve as raster.
+            val hasRasterArchive = mbtilesFiles.any { !isVectorArchive(it) }
+            if (hasRasterArchive) "http://127.0.0.1:$port/tiles/{z}/{x}/{y}.png?v=$mbtilesRevision" else null
         }
     }
 
@@ -587,12 +597,16 @@ class TileRepository @Inject constructor(
         else -> "application/octet-stream"
     }
 
-    private fun readTile(z: Int, x: Int, y: Int): ByteArray? {
+    private fun readTile(z: Int, x: Int, y: Int, vector: Boolean): ByteArray? {
         if (z < 0 || z > TileProxyHandler.MAX_SUPPORTED_ZOOM) return null
         val span = 1L shl z
         if (x < 0L || x >= span || y < 0L || y >= span) return null
         val tmsY = ((1L shl z) - 1 - y).toInt()
         for (file in servingFiles) {
+            // Only serve archives of the requested kind. A vector-only install must not serve a
+            // .png route out of the vector archive (gzipped MVT mislabelled), and a .pbf route must
+            // not be served a colliding raster PNG.
+            if (isVectorArchive(file) != vector) continue
             val bytes = runCatching {
                 val db = SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
                 try {

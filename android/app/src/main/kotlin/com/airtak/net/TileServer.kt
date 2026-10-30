@@ -60,6 +60,8 @@ interface RemoteTileSource {
 class TileServer(
     private val scope: CoroutineScope,
     private val localTiles: LocalTileReader,
+    /** Reader for vector (format=pbf) archives, or null to fall back to [localTiles]. */
+    private val localVectorTiles: LocalTileReader? = null,
     private val remoteTiles: RemoteTileSource? = null,
     private val socketTimeoutMs: Int = DEFAULT_SOCKET_TIMEOUT_MS,
     private val maxConcurrentHandlers: Int = DEFAULT_MAX_HANDLERS,
@@ -244,7 +246,8 @@ class TileServer(
                 is TileRoute.Reject -> writeStatus(socket, route.status)
 
                 is TileRoute.Local -> {
-                    val raw = localTiles.read(route.z, route.x, route.y)
+                    val reader = if (route.vector) (localVectorTiles ?: localTiles) else localTiles
+                    val raw = reader.read(route.z, route.x, route.y)
                     if (raw == null) {
                         writeStatus(socket, 404, route.headOnly)
                     } else if (route.vector) {
