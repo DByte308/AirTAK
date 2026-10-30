@@ -367,6 +367,24 @@ ROWS = [
     # ── Map: alignment list row ────────────────────────────────────────────
     ("map_alignment_row", "Node %1$s · %2$s", "Knoten %1$s · %2$s", True),
 
+    # ── Geocoder failures shown in the search dialog ───────────────────────
+    # The ViewModel publishes the typed failure, not a sentence: it cannot call
+    # stringResource, and a ViewModel that phrases its own errors is a ViewModel
+    # whose errors cannot be translated.
+    ("geocode_err_http_busy",
+     "Geocoder is busy; try again in %1$d s.",
+     "Kartensuchdienst ist beschäftigt; bitte in %1$d s erneut versuchen.", True),
+    ("geocode_err_http", "Geocoder returned HTTP %1$d.", "Kartensuchdienst meldete HTTP %1$d.", True),
+    ("geocode_err_malformed",
+     "Geocoder returned a response AirTAK could not read.",
+     "Die Antwort des Kartensuchdiensts war für AirTAK nicht lesbar.", True),
+    ("geocode_err_too_large",
+     "Geocoder response was too large to be a result set.",
+     "Die Antwort des Kartensuchdiensts war zu groß für eine Ergebnisliste.", True),
+    ("geocode_err_transport",
+     "Geocoder unreachable: %1$s",
+     "Kartensuchdienst nicht erreichbar: %1$s", True),
+
     ("settings_value_with_unit", "%1$s %2$s", None, False),
 
     # ── Settings: section headings and the remaining literals ───────────────
@@ -472,7 +490,8 @@ def main() -> int:
         if BEGIN in text:
             head, _, rest = text.partition(BEGIN)
             _, _, tail = rest.partition(END)
-            updated = head + block + tail
+            # The block already ends in a newline; the text after END starts with one too.
+            updated = head + block + tail.lstrip("\n")
         else:
             assert text.rstrip().endswith("</resources>"), f"{path} does not end with </resources>"
             head, _, _ = text.rpartition("</resources>")

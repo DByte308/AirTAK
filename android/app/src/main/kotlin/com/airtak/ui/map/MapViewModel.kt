@@ -12,6 +12,8 @@ import com.airtak.data.db.RemoteNodeEntity
 import com.airtak.data.db.TacticalMarkerEntity
 import com.airtak.data.db.WaypointDao
 import com.airtak.data.db.WaypointEntity
+import com.airtak.data.geocoding.GeocodeException
+import com.airtak.data.geocoding.GeocodeFailure
 import com.airtak.data.geocoding.GeocodingRepository
 import com.airtak.data.geocoding.GeocodingResult
 import com.airtak.data.gps.GpsStartFailure
@@ -43,6 +45,7 @@ import com.airtak.proto.PlayerStatus
 import com.airtak.proto.Scope
 import com.airtak.proto.TeamControl
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -464,6 +467,16 @@ class MapViewModel @Inject constructor(
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching
 
+    /**
+     * Why the last lookup failed, or null.
+     *
+     * Kept separate from the result list so an outage is not displayed as "no places found",
+     * and kept as the typed failure rather than a sentence so the wording can live in string
+     * resources. See [asText].
+     */
+    private val _searchError = MutableStateFlow<GeocodeFailure?>(null)
+    val searchError: StateFlow<GeocodeFailure?> = _searchError
+
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
         if (query.isBlank()) {
@@ -474,12 +487,24 @@ class MapViewModel @Inject constructor(
     fun searchLocations(query: String) {
         if (query.isBlank()) {
             _searchResults.value = emptyList()
+            _searchError.value = null
             return
         }
         viewModelScope.launch {
             _isSearching.value = true
-            _searchResults.value = geocodingRepository.search(query)
-            _isSearching.value = false
+            _searchError.value = null
+            try {
+                _searchResults.value = geocodingRepository.search(query)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (g: GeocodeException) {
+                // "No such place" and "could not ask the server" are different answers, and the
+                // repository used to collapse them into an empty list.
+                _searchResults.value = emptyList()
+                _searchError.value = g.failure
+            } finally {
+                _isSearching.value = false
+            }
         }
     }
 

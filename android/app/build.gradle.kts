@@ -131,6 +131,11 @@ dependencies {
     testRuntimeOnly(libs.junit5.engine)
     testImplementation(libs.mockk)
 
+    // Android's org.json is a stub that throws "Method ... not mocked" on the JVM, so any test
+    // that builds or parses JSON through the real GeocodingRepository needs a real implementation
+    // on the unit-test classpath. Placed before the android.jar stub by Gradle's classpath order.
+    testImplementation("org.json:json:20240303")
+
     // Test-only: MockEngine for request-policy tests, virtual time for pacing/cancellation.
     // Both pinned to the existing ktor / coroutines versions; no product dependency changes.
     // Re-added on purpose: net/RemoteTileFetcherTest imports io.ktor.client.engine.mock.MockEngine

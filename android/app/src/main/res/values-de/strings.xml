@@ -344,6 +344,11 @@
     <string name="settings_configured_channels">Konfigurierte Kanäle</string>
     <string name="settings_reserved_slots">Reservierte Slots (nicht wählbar)</string>
     <string name="map_alignment_row">Knoten %1$s · %2$s</string>
+    <string name="geocode_err_http_busy">Kartensuchdienst ist beschäftigt; bitte in %1$d s erneut versuchen.</string>
+    <string name="geocode_err_http">Kartensuchdienst meldete HTTP %1$d.</string>
+    <string name="geocode_err_malformed">Die Antwort des Kartensuchdiensts war für AirTAK nicht lesbar.</string>
+    <string name="geocode_err_too_large">Die Antwort des Kartensuchdiensts war zu groß für eine Ergebnisliste.</string>
+    <string name="geocode_err_transport">Kartensuchdienst nicht erreichbar: %1$s</string>
     <string name="settings_value_with_unit" translatable="false">%1$s %2$s</string>
     <string name="settings_sec_device_ids">Geräte-Identifikation</string>
     <string name="settings_sec_unit_hierarchy">Einheitshierarchie (optional, selbst organisiert)</string>
@@ -392,8 +397,4 @@
     <string name="open_or_encrypted" translatable="false">%1$s · %2$s</string>
     <string name="index_with_label" translatable="false">%1$d: %2$s</string>
 <!-- i18n:end generated -->
-
-
-
-
 </resources>

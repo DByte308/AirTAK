@@ -89,6 +89,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.airtak.R
+import com.airtak.data.geocoding.GeocodeFailure
 import com.airtak.ui.i18n.labelText
 import com.airtak.ui.i18n.priorityText
 import com.airtak.ui.i18n.uiLabel
@@ -198,6 +199,7 @@ fun MapScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
+    val searchError by viewModel.searchError.collectAsState()
     val phoneGpsActive by viewModel.phoneGpsActive.collectAsState()
     val phoneGpsProvidersEnabled by viewModel.phoneGpsProvidersEnabled.collectAsState()
     val phoneGpsFix by viewModel.phoneGpsFix.collectAsState()
@@ -1003,6 +1005,7 @@ fun MapScreen(
             query = searchQuery,
             results = searchResults,
             isSearching = isSearching,
+            error = searchError,
             onQueryChange = { viewModel.setSearchQuery(it) },
             onSearch = { viewModel.searchLocations(searchQuery) },
             onSelectResult = { result ->
@@ -1079,6 +1082,7 @@ private fun SearchDialog(
     query: String,
     results: List<GeocodingResult>,
     isSearching: Boolean,
+    error: GeocodeFailure?,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     onSelectResult: (GeocodingResult) -> Unit,
@@ -1131,6 +1135,15 @@ private fun SearchDialog(
                             }
                         }
                     }
+                }
+                // An outage is not "no places found". The repository used to return an empty
+                // list for both, which hid a dead geocoder behind an empty result panel.
+                error?.let { failure ->
+                    Text(
+                        failure.asText(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         },
