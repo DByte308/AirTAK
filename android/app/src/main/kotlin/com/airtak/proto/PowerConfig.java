@@ -185,6 +185,44 @@ public  final class PowerConfig extends
     brightnessPct_ = 0;
   }
 
+  public static final int ADC_MULTIPLIER_FIELD_NUMBER = 6;
+  private float adcMultiplier_;
+  /**
+   * <pre>
+   * per-device ADC voltage multiplier (battery calibration);
+   * </pre>
+   *
+   * <code>float adc_multiplier = 6;</code>
+   * @return The adcMultiplier.
+   */
+  @java.lang.Override
+  public float getAdcMultiplier() {
+    return adcMultiplier_;
+  }
+  /**
+   * <pre>
+   * per-device ADC voltage multiplier (battery calibration);
+   * </pre>
+   *
+   * <code>float adc_multiplier = 6;</code>
+   * @param value The adcMultiplier to set.
+   */
+  private void setAdcMultiplier(float value) {
+    
+    adcMultiplier_ = value;
+  }
+  /**
+   * <pre>
+   * per-device ADC voltage multiplier (battery calibration);
+   * </pre>
+   *
+   * <code>float adc_multiplier = 6;</code>
+   */
+  private void clearAdcMultiplier() {
+
+    adcMultiplier_ = 0F;
+  }
+
   public static com.airtak.proto.PowerConfig parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -462,6 +500,46 @@ public  final class PowerConfig extends
       return this;
     }
 
+    /**
+     * <pre>
+     * per-device ADC voltage multiplier (battery calibration);
+     * </pre>
+     *
+     * <code>float adc_multiplier = 6;</code>
+     * @return The adcMultiplier.
+     */
+    @java.lang.Override
+    public float getAdcMultiplier() {
+      return instance.getAdcMultiplier();
+    }
+    /**
+     * <pre>
+     * per-device ADC voltage multiplier (battery calibration);
+     * </pre>
+     *
+     * <code>float adc_multiplier = 6;</code>
+     * @param value The adcMultiplier to set.
+     * @return This builder for chaining.
+     */
+    public Builder setAdcMultiplier(float value) {
+      copyOnWrite();
+      instance.setAdcMultiplier(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * per-device ADC voltage multiplier (battery calibration);
+     * </pre>
+     *
+     * <code>float adc_multiplier = 6;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearAdcMultiplier() {
+      copyOnWrite();
+      instance.clearAdcMultiplier();
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:airtak.PowerConfig)
   }
   @java.lang.Override
@@ -483,10 +561,11 @@ public  final class PowerConfig extends
             "gpsOffSecs_",
             "displayOffSecs_",
             "brightnessPct_",
+            "adcMultiplier_",
           };
           java.lang.String info =
-              "\u0000\u0005\u0000\u0000\u0001\u0005\u0005\u0000\u0000\u0000\u0001\u0007\u0002\u000b" +
-              "\u0003\u000b\u0004\u000b\u0005\u000b";
+              "\u0000\u0006\u0000\u0000\u0001\u0006\u0006\u0000\u0000\u0000\u0001\u0007\u0002\u000b" +
+              "\u0003\u000b\u0004\u000b\u0005\u000b\u0006\u0001";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       case GET_DEFAULT_INSTANCE: {

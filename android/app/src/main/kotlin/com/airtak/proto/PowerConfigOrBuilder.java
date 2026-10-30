@@ -50,4 +50,14 @@ public interface PowerConfigOrBuilder extends
    * @return The brightnessPct.
    */
   int getBrightnessPct();
+
+  /**
+   * <pre>
+   * per-device ADC voltage multiplier (battery calibration);
+   * </pre>
+   *
+   * <code>float adc_multiplier = 6;</code>
+   * @return The adcMultiplier.
+   */
+  float getAdcMultiplier();
 }

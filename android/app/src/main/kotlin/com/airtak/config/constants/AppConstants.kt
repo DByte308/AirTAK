@@ -30,6 +30,16 @@ const val UNIT_CHANNEL_SLOT_DEFAULT = -1
 /** Preferences key prefix for unit channel slot bindings. */
 const val KEY_PREFIX_UNIT_CHANNEL = "unit_channel_"
 
+// ── ADC multiplier (Issue #1) ──────────────────────────
+/** Preferences key: per-device ADC battery-voltage multiplier. */
+const val KEY_ADC_MULTIPLIER = "adc_multiplier"
+/** Sensible default multiplier when the device type is unknown. */
+const val ADC_MULTIPLIER_DEFAULT = 1.0f
+/** Minimum supported ADC multiplier (bounds the settings input). */
+const val ADC_MULTIPLIER_MIN = 0.01f
+/** Maximum supported ADC multiplier (bounds the settings input). */
+const val ADC_MULTIPLIER_MAX = 100.0f
+
 // ── Foreground service (§10.3) ──────────────────────────
 /** Notification channel ID for the BLE link foreground service. */
 const val LINK_CHANNEL_ID = "airtak.link"

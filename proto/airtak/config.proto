@@ -153,6 +153,8 @@ message PowerConfig {
   uint32 gps_off_secs     = 3;
   uint32 display_off_secs = 4;   // 0 = never off; seconds of idle before screen sleep
   uint32 brightness_pct   = 5;   // 0–100; 0=backlight off, 100=max; default 100
+  float  adc_multiplier   = 6;   // per-device ADC voltage multiplier (battery calibration);
+                                 // 0 = use the board's compile-time default (firmware fallback)
 }
 
 // ── Game ──────────────────────────────────────────────────────────────────────

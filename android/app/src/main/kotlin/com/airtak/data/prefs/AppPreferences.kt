@@ -13,7 +13,9 @@ package com.airtak.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.airtak.config.constants.ADC_MULTIPLIER_DEFAULT
 import com.airtak.config.constants.APP_PREFS_FILE
+import com.airtak.config.constants.KEY_ADC_MULTIPLIER
 import com.airtak.config.constants.KEY_BONDED_ADDR
 import com.airtak.config.constants.KEY_LANGUAGE
 import com.airtak.config.constants.KEY_MAP_ZOOM
@@ -66,6 +68,14 @@ class AppPreferences @Inject constructor(
 
     fun setUnitChannelSlot(level: String, slot: Int) {
         prefs.edit().putInt("${KEY_PREFIX_UNIT_CHANNEL}$level", slot).apply()
+    }
+
+    /** Last-used ADC battery-voltage multiplier (Issue #1). */
+    fun adcMultiplier(): Float =
+        prefs.getFloat(KEY_ADC_MULTIPLIER, ADC_MULTIPLIER_DEFAULT)
+
+    fun setAdcMultiplier(value: Float) {
+        prefs.edit().putFloat(KEY_ADC_MULTIPLIER, value).apply()
     }
 
     fun observe(): Flow<Unit> = callbackFlow {

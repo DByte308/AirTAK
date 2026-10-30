@@ -525,6 +525,29 @@ uint8_t ConfigManager::powerBrightnessPct() {
     return static_cast<uint8_t>(defaults::POWER_BRIGHTNESS_PCT);
 }
 
+float ConfigManager::powerAdcMultiplier() {
+    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::POWER);
+    const uint8_t* buf = s_buffers[gidx];
+    size_t n = s_sizes[gidx];
+    size_t pos = 0;
+    while (pos < n) {
+        uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
+        uint8_t wire  = tag & PROTO_WIRE_TYPE_MASK;
+        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
+        if (wire == PROTO_WIRE_I32 && field == POWERCONFIG_FIELD_ADC_MULTIPLIER) {
+            // adc_multiplier = field 6 (float); protobuf floats are stored
+            // little-endian 32-bit IEEE 754 (wire type 5).
+            if (pos + 4 > n) return 0.0f;
+            float value;
+            memcpy(&value, buf + pos, sizeof(value));
+            return value;
+        } else {
+            if (!skipProtoField(buf, n, pos, wire)) break;
+        }
+    }
+    return 0.0f;   // absent/unset → caller falls back to board default
+}
+
 static uint32_t readPositionVarintField(uint32_t wanted_field, uint32_t fallback) {
     uint8_t gidx = static_cast<uint8_t>(ConfigGroup::POSITION);
     const uint8_t* buf = s_buffers[gidx];

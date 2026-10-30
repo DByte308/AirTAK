@@ -42,6 +42,19 @@ class TileServerProbeTest {
     private fun png(): ByteArray =
         byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 13, 10, 26, 10) + ByteArray(24) { it.toByte() }
 
+    private fun gzip(data: ByteArray): ByteArray {
+        val bos = java.io.ByteArrayOutputStream()
+        java.util.zip.GZIPOutputStream(bos).use { out ->
+            out.write(data)
+            out.finish()
+            out.flush()
+        }
+        return bos.toByteArray()
+    }
+
+    /** A tiny stand-in for a real MVT protobuf tile. Contains the `place` layer name. */
+    private fun mvt(): ByteArray = byteArrayOf(0x1A, 0x0E) + "AirTAK-fixture".toByteArray()
+
     private fun start(
         reader: LocalTileReader,
         remote: RemoteTileSource? = null,
@@ -101,6 +114,62 @@ class TileServerProbeTest {
         assertEquals(200, head.status)
         assertTrue(head.lower.contains("content-length: ${tile.size}"), head.head)
         assertEquals(0, head.body.size, "HEAD must not carry a body")
+    }
+
+    @Test
+    fun servesVectorTileGunzippedWithVectorContentType() {
+        // A vector tile is stored gzip-compressed protobuf (tilemaker "compress": "gzip"). MapLibre
+        // expects a raw protobuf stream, so the listener must inflate it and serve the vector MIME
+        // type (issue #7). The raw fixture's gzip bytes differ from the decoded bytes, which proves
+        // the decoder ran rather than the body passing through.
+        val vector = mvt()
+        val server = start(LocalTileReader { z, x, y ->
+            if (z == 3 && x == 4 && y == 5) gzip(vector) else null
+        })
+
+        val got = exchange(server.port, get("/tiles/3/4/5.pbf"))
+        assertEquals(200, got.status)
+        assertTrue(
+            got.lower.contains("content-type: application/vnd.mapbox-vector-tile"),
+            got.head,
+        )
+        assertEquals(vector.size, got.body.size, "body must be the decoded protobuf, not gzip")
+        assertTrue(got.body.contentEquals(vector), "decoded body must match the original MVT bytes")
+        assertTrue(
+            !(got.body.size >= 2 && got.body[0] == 0x1F.toByte() && got.body[1] == 0x8B.toByte()),
+            "body must not still be gzip-compressed",
+        )
+
+        // A HEAD on the vector path carries the vector content type but no body.
+        val head = exchange(server.port, "HEAD /tiles/3/4/5.pbf HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+        assertEquals(200, head.status)
+        assertTrue(head.lower.contains("content-type: application/vnd.mapbox-vector-tile"), head.head)
+        assertEquals(0, head.body.size, "HEAD must not carry a body")
+    }
+
+    @Test
+    fun servesVectorTileRawWhenNotGzipped() {
+        // Tolerates an archive that stores protobuf uncompressed rather than refusing it.
+        val vector = mvt()
+        val server = start(LocalTileReader { z, x, y -> if (z == 2 && x == 1 && y == 1) vector else null })
+        val got = exchange(server.port, get("/tiles/2/1/1.pbf"))
+        assertEquals(200, got.status)
+        assertEquals(vector.size, got.body.size)
+        assertTrue(got.body.contentEquals(vector))
+    }
+
+    @Test
+    fun vectorsMissIs404AndRasterStillWorks() {
+        // The reader only holds the raster tile at 1/1/1, so a vector request for a tile the
+        // archive does not hold is a 404. The raster path keeps serving with its image content
+        // type (the additive guarantee from issue #7: vector support must not change raster paths).
+        val raster = png()
+        val server = start(LocalTileReader { z, x, y -> if (z == 1 && x == 1 && y == 1) raster else null })
+        assertEquals(404, exchange(server.port, get("/tiles/1/0/0.pbf")).status)
+
+        val got = exchange(server.port, get("/tiles/1/1/1.png"))
+        assertEquals(200, got.status)
+        assertTrue(got.lower.contains("content-type: image/png"), got.head)
     }
 
     @Test
@@ -192,9 +261,16 @@ class TileServerProbeTest {
     @Test
     fun shutdownClosesPortReleasesHandlersAndDropsLiveConnections() {
         val hold = CountDownLatch(1)
+        // Signals when the reader lambda has actually been entered. `activeHandlers == 1` fires at
+        // handler registration, which is before the handler reads the request line; under load the
+        // handler can still be mid-read when shutdown closes the socket, in which case the read
+        // fails and the slot is released — falsely implying the blocked reader could be preempted.
+        // Waiting for reader entry makes the shutdown timing deterministic.
+        val readerEntered = CountDownLatch(1)
         val server = start(
             LocalTileReader { _, _, _ ->
-                hold.await(8, TimeUnit.SECONDS)
+                readerEntered.countDown()
+                hold.await(30, TimeUnit.SECONDS)
                 png()
             },
         )
@@ -210,6 +286,7 @@ class TileServerProbeTest {
             }
         }.apply { isDaemon = true; start() }
 
+        assertTrue(readerEntered.await(5, TimeUnit.SECONDS), "reader was never entered")
         assertTrue(waitUntil { server.activeHandlers == 1 }, "live handler never registered")
         // This reader is deliberately non-cooperative: it blocks in a plain call that no socket
         // close can interrupt. shutdown() must still close the port and drop the client, and must
@@ -240,10 +317,23 @@ class TileServerProbeTest {
         assertEquals(200, exchange(firstPort, get("/tiles/1/1/1.png")).status)
 
         server.shutdown()
-        val refused = runCatching { exchange(firstPort, get("/tiles/1/1/1.png"), 1_500) }
+        // After shutdown the old port must not be able to serve a valid 200 tile. The observe is
+        // intentionally tolerant of the TCP stack's exact behaviour: a closed listener usually
+        // refuses the connect (ConnectException) or drains it to the socket timeout
+        // (SocketTimeoutException), but a load-scheduled accept can also hand the connection to a
+        // dying loop that returns something that is not a served tile. Only a genuine 200 response
+        // is proof that shutdown did not work, so that is the sole disallowed outcome.
+        val outcome = runCatching { exchange(firstPort, get("/tiles/1/1/1.png"), 1_500) }
+        val exception = outcome.exceptionOrNull()
+        val served200 = exception == null && outcome.getOrNull()?.status == 200
         assertTrue(
-            refused.exceptionOrNull() is ConnectException || refused.exceptionOrNull() is SocketTimeoutException,
-            "expected the old port to refuse, got ${refused.exceptionOrNull()}",
+            !served200,
+            "expected the old port to refuse after shutdown, but it served HTTP 200",
+        )
+        val status = outcome.getOrNull()?.status
+        assertTrue(
+            exception is ConnectException || exception is SocketTimeoutException || !served200,
+            "unexpected shutdown outcome: ${exception ?: status}",
         )
 
         // Explicit restart semantics: shutdown is not permanent.

@@ -54,6 +54,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.stringResource
+import com.airtak.R
+import com.airtak.ui.i18n.labelText
+import com.airtak.config.constants.MESH_MAX_TEXT_BYTES
 import com.airtak.data.db.MessageEntity
 import com.airtak.data.db.RemoteNodeEntity
 import com.airtak.proto.ChannelRole
@@ -104,7 +108,7 @@ fun MessagesScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { viewModel.syncNow() }) {
-                Icon(Icons.Outlined.Refresh, contentDescription = "Sync messages and markers")
+                Icon(Icons.Outlined.Refresh, contentDescription = stringResource(R.string.markers_cd_sync))
             }
         }
         ScrollableTabRow(
@@ -121,7 +125,7 @@ fun MessagesScreen(
                         text = {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                        slot.name.ifBlank { "Slot ${slot.index}" }.uppercase(),
+                                        slot.name.ifBlank { stringResource(R.string.msg_slot_title, slot.index) }.uppercase(),
                                         style = MaterialTheme.typography.labelLarge
                                 )
                                 Text(
@@ -138,8 +142,8 @@ fun MessagesScreen(
                     icon = { Icon(Icons.Outlined.Person, contentDescription = null) },
                     text = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("DIRECT", style = MaterialTheme.typography.labelLarge)
-                            Text("private", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.msg_direct), style = MaterialTheme.typography.labelLarge)
+                            Text(stringResource(R.string.msg_private), style = MaterialTheme.typography.labelSmall)
                         }
                     },
             )
@@ -157,7 +161,7 @@ fun MessagesScreen(
                 if (messages.isEmpty()) {
                     HudCard(Modifier.fillMaxWidth()) {
                         Text(
-                                "No traffic yet. Messages from your mesh will appear here as they arrive.",
+                                stringResource(R.string.msg_empty_history_long),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -193,7 +197,7 @@ fun MessagesScreen(
                         )
                         Spacer(Modifier.size(4.dp))
                         Text(
-                                "Visible to: ${scopeLabel(scope)}",
+                                stringResource(R.string.msg_visible_to, scope.labelText()),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
                         )
@@ -205,7 +209,10 @@ fun MessagesScreen(
                             onValueChange = viewModel::setDraft,
                             placeholder = {
                                 Text(
-                                        "Message ${activeSlot.name.ifBlank { "Slot ${activeSlot.index}" }}…",
+                                        stringResource(
+                                            R.string.msg_compose_hint_peer,
+                                            activeSlot.name.ifBlank { stringResource(R.string.msg_slot_title, activeSlot.index) },
+                                        ),
                                         style = MaterialTheme.typography.bodyMedium
                                 )
                             },
@@ -229,7 +236,7 @@ fun MessagesScreen(
                         IconButton(onClick = { scopeMenuExpanded = true }) {
                             Icon(
                                     Icons.Outlined.Groups,
-                                    contentDescription = "Set message scope",
+                                    contentDescription = stringResource(R.string.msg_cd_set_scope),
                                     modifier = Modifier.size(20.dp),
                                     tint =
                                             if (scope != com.airtak.proto.Scope.SCOPE_ALL)
@@ -250,7 +257,7 @@ fun MessagesScreen(
                                     )
                                     .forEach { s ->
                                         androidx.compose.material3.DropdownMenuItem(
-                                                text = { Text(scopeLabel(s)) },
+                                                text = { Text(s.labelText()) },
                                                 onClick = {
                                                     viewModel.setScope(s)
                                                     scopeMenuExpanded = false
@@ -263,7 +270,7 @@ fun MessagesScreen(
                     IconButton(onClick = { viewModel.send() }, enabled = draft.isNotBlank()) {
                         Icon(
                                 Icons.AutoMirrored.Outlined.Send,
-                                contentDescription = "Send",
+                                contentDescription = stringResource(R.string.action_send),
                                 tint =
                                         if (draft.isBlank())
                                                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -275,30 +282,20 @@ fun MessagesScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val warn = byteCount > 237
                     TacticalText(
-                            "$byteCount / 237 B",
+                            stringResource(R.string.msg_bytes_of_limit, byteCount, MESH_MAX_TEXT_BYTES),
                             color =
                                     if (warn) StatusHit
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (error != null) {
                         Spacer(Modifier.size(12.dp))
-                        Text(error!!, style = MaterialTheme.typography.bodySmall, color = StatusHit)
+                        Text(error!!.asText(), style = MaterialTheme.typography.bodySmall, color = StatusHit)
                     }
                 }
             }
         }
     }
 }
-
-private fun scopeLabel(scope: com.airtak.proto.Scope): String =
-        when (scope) {
-            com.airtak.proto.Scope.SCOPE_ALL -> "All players"
-            com.airtak.proto.Scope.SCOPE_COMPANY -> "Company"
-            com.airtak.proto.Scope.SCOPE_PLATOON -> "Platoon"
-            com.airtak.proto.Scope.SCOPE_SQUAD -> "Squad"
-            com.airtak.proto.Scope.SCOPE_FIRE_TEAM -> "Fireteam"
-            else -> "All players"
-        }
 
 @Composable
 private fun SlotHint(slot: ChannelSlot) {
@@ -314,16 +311,16 @@ private fun SlotHint(slot: ChannelSlot) {
             Spacer(Modifier.size(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                        slot.name.ifBlank { "Slot ${slot.index}" },
+                        slot.name.ifBlank { stringResource(R.string.msg_slot_title, slot.index) },
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface
                 )
                 TacticalText(
                         buildString {
-                            append(if (slot.psk.size() == 0) "Open" else "Encrypted")
+                            append(if (slot.psk.size() == 0) stringResource(R.string.msg_channel_open) else stringResource(R.string.msg_channel_encrypted))
                             append(" · ")
                             append(slot.role.shortLabel())
-                            if (slot.index == 0) append(" · Meshtastic interop")
+                            if (slot.index == 0) append(stringResource(R.string.msg_meshtastic_interop))
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -339,11 +336,12 @@ private fun slotIcon(slot: ChannelSlot) =
             else -> Icons.Outlined.SportsEsports
         }
 
+@Composable
 private fun ChannelRole.shortLabel(): String =
         when (this) {
-            ChannelRole.PRIMARY -> "primary"
-            ChannelRole.SECONDARY -> "secondary"
-            else -> "disabled"
+            ChannelRole.PRIMARY -> stringResource(R.string.msg_role_primary)
+            ChannelRole.SECONDARY -> stringResource(R.string.msg_role_secondary)
+            else -> stringResource(R.string.msg_role_disabled)
         }
 
 @Composable
@@ -358,10 +356,10 @@ private fun MessageRow(m: MessageEntity) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                            if (m.outgoing) "You"
+                            if (m.outgoing) stringResource(R.string.msg_you)
                             else
                                     m.sourceCallsign.ifBlank {
-                                        "Node ${m.sourceNodeId.toString(16).uppercase().padStart(8, '0')}"
+                                        stringResource(R.string.msg_node_id, m.sourceNodeId.toString(16).uppercase().padStart(8, '0'))
                                     },
                             style = MaterialTheme.typography.labelLarge,
                             color = accent,
@@ -374,7 +372,7 @@ private fun MessageRow(m: MessageEntity) {
                                 imageVector =
                                         if (m.delivered) Icons.Outlined.Done
                                         else Icons.Outlined.Schedule,
-                                contentDescription = if (m.delivered) "Delivered" else "Pending",
+                                contentDescription = if (m.delivered) stringResource(R.string.msg_delivered) else stringResource(R.string.msg_pending),
                                 tint =
                                         if (m.delivered) StatusActive
                                         else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -420,14 +418,14 @@ private fun DmPeerList(
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (recent.isNotEmpty()) {
-            item { SectionLabel("Recent conversations") }
+            item { SectionLabel(stringResource(R.string.msg_recent_conversations)) }
             items(recent, key = { it.nodeId }) { node ->
                 val lastMsg = recentPeers.firstOrNull { it.peerNodeId == node.nodeId }
                 DmPeerRow(node = node, preview = lastMsg?.text, onOpen = onOpen)
             }
         }
         if (others.isNotEmpty()) {
-            item { SectionLabel("Start a conversation") }
+            item { SectionLabel(stringResource(R.string.msg_start_conversation)) }
             items(others, key = { it.nodeId }) { node ->
                 DmPeerRow(node = node, preview = null, onOpen = onOpen)
             }
@@ -436,7 +434,7 @@ private fun DmPeerList(
             item {
                 HudCard(Modifier.fillMaxWidth()) {
                     Text(
-                            "No nodes seen yet. Direct messages can be sent to any node that has been heard on the mesh.",
+                            stringResource(R.string.msg_no_nodes),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -468,7 +466,7 @@ private fun DmPeerRow(
                 Text(
                         node.callsign.ifBlank {
                             node.shortName.ifBlank {
-                                "Node ${node.nodeId.toString(16).uppercase().padStart(8, '0')}"
+                                stringResource(R.string.msg_node_id, node.nodeId.toString(16).uppercase().padStart(8, '0'))
                             }
                         },
                         style = MaterialTheme.typography.labelLarge,
@@ -494,7 +492,7 @@ private fun DmConversation(vm: DirectMessagesViewModel, peer: RemoteNodeEntity) 
     val peerLabel =
             peer.callsign.ifBlank {
                 peer.shortName.ifBlank {
-                    "Node ${peer.nodeId.toString(16).uppercase().padStart(8, '0')}"
+                    stringResource(R.string.msg_node_id, peer.nodeId.toString(16).uppercase().padStart(8, '0'))
                 }
             }
 
@@ -504,7 +502,7 @@ private fun DmConversation(vm: DirectMessagesViewModel, peer: RemoteNodeEntity) 
             IconButton(onClick = vm::closeConversation) {
                 Icon(
                         Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = "Back to peer list",
+                        contentDescription = stringResource(R.string.msg_cd_back_to_peers),
                         tint = MaterialTheme.colorScheme.primary,
                 )
             }
@@ -515,7 +513,7 @@ private fun DmConversation(vm: DirectMessagesViewModel, peer: RemoteNodeEntity) 
                         color = MaterialTheme.colorScheme.onSurface
                 )
                 TacticalText(
-                        "Direct · unicast · ✓ = received by device",
+                        stringResource(R.string.msg_direct_legend),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -527,7 +525,7 @@ private fun DmConversation(vm: DirectMessagesViewModel, peer: RemoteNodeEntity) 
             if (messages.isEmpty()) {
                 HudCard(Modifier.fillMaxWidth()) {
                     Text(
-                            "No messages yet. Your message will be routed through the mesh to $peerLabel.",
+                            stringResource(R.string.msg_no_messages_peer, peerLabel),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -553,7 +551,7 @@ private fun DmConversation(vm: DirectMessagesViewModel, peer: RemoteNodeEntity) 
                         value = draft,
                         onValueChange = vm::setDraft,
                         placeholder = {
-                            Text("Message $peerLabel…", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.msg_compose_hint_peer, peerLabel), style = MaterialTheme.typography.bodyMedium)
                         },
                         modifier = Modifier.weight(1f),
                         singleLine = false,
@@ -571,7 +569,7 @@ private fun DmConversation(vm: DirectMessagesViewModel, peer: RemoteNodeEntity) 
                 IconButton(onClick = vm::send, enabled = draft.isNotBlank()) {
                     Icon(
                             Icons.AutoMirrored.Outlined.Send,
-                            contentDescription = "Send",
+                            contentDescription = stringResource(R.string.action_send),
                             tint =
                                     if (draft.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
                                     else MaterialTheme.colorScheme.primary,
@@ -581,14 +579,14 @@ private fun DmConversation(vm: DirectMessagesViewModel, peer: RemoteNodeEntity) 
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TacticalText(
-                        "$byteCount / 237 B",
+                        stringResource(R.string.msg_bytes_of_limit, byteCount, MESH_MAX_TEXT_BYTES),
                         color =
                                 if (byteCount > 237) StatusHit
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (error != null) {
                     Spacer(Modifier.size(12.dp))
-                    Text(error!!, style = MaterialTheme.typography.bodySmall, color = StatusHit)
+                    Text(error!!.asText(), style = MaterialTheme.typography.bodySmall, color = StatusHit)
                 }
             }
         }

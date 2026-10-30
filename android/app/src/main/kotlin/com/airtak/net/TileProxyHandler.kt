@@ -14,8 +14,17 @@ package com.airtak.net
 
 /** Outcome of routing one loopback tile request. */
 sealed interface TileRoute {
-    /** Serve from the local MBTiles archive. */
-    data class Local(val z: Int, val x: Int, val y: Int, val headOnly: Boolean) : TileRoute
+    /**
+     * Serve from the local MBTiles archive.
+     *
+     * [vector] is true for a `.pbf` request. A raster archive and a vector archive are distinct
+     * files, and the app offers exactly one template per archive set (the raster `.png` template
+     * or the vector `.pbf` template), so the route's extension is what the server uses to pick the
+     * content type and to un-gzip the vector payload. An MVT tile is stored gzip-compressed as
+     * protobuf (tilemaker `"compress": "gzip"`), and MapLibre expects the raw protobuf stream, so
+     * the server must decode it before writing.
+     */
+    data class Local(val z: Int, val x: Int, val y: Int, val headOnly: Boolean, val vector: Boolean = false) : TileRoute
 
     /** Fetch from the configured provider. The caller resolves the provider, never the request. */
     data class Remote(val z: Int, val x: Int, val y: Int, val headOnly: Boolean) : TileRoute
@@ -39,7 +48,13 @@ object TileProxyHandler {
      */
     const val MAX_SUPPORTED_ZOOM = 30
 
+    /** Raster local tile: `.png`. */
     private val LOCAL_PATH = Regex("^/tiles/(\\d+)/(\\d+)/(\\d+)\\.png$")
+
+    /** Vector local tile: `.pbf`. A `.png` request and a `.pbf` request hit the same coordinates
+     *  but different archives; the extension is the only thing distinguishing them. */
+    private val LOCAL_VECTOR_PATH = Regex("^/tiles/(\\d+)/(\\d+)/(\\d+)\\.pbf$")
+
     private val REMOTE_PATH = Regex("^/remote/(\\d+)/(\\d+)/(\\d+)\\.png$")
 
     /**
@@ -84,12 +99,16 @@ object TileProxyHandler {
         val headOnly = method == "HEAD"
 
         val matcher = when {
-            path.startsWith("/tiles/") -> LOCAL_PATH.matchEntire(path)?.let { TileKind.Local to it }
-            path.startsWith("/remote/") -> REMOTE_PATH.matchEntire(path)?.let { TileKind.Remote to it }
+            path.startsWith("/tiles/") -> {
+                LOCAL_VECTOR_PATH.matchEntire(path)?.let { TileKind.Local to (it to true) }
+                    ?: LOCAL_PATH.matchEntire(path)?.let { TileKind.Local to (it to false) }
+            }
+            path.startsWith("/remote/") -> REMOTE_PATH.matchEntire(path)?.let { TileKind.Remote to (it to false) }
             else -> null
         } ?: return TileRoute.Reject(400, "Unrecognised tile path.")
 
-        val (kind, match) = matcher
+        val (kind, matchAndVector) = matcher
+        val (match, vector) = matchAndVector
         val z = match.groupValues[1].toLongOrNull()
         val x = match.groupValues[2].toLongOrNull()
         val y = match.groupValues[3].toLongOrNull()
@@ -111,7 +130,7 @@ object TileProxyHandler {
         val xi = x.toInt()
         val yi = y.toInt()
         return when (kind) {
-            TileKind.Local -> TileRoute.Local(zi, xi, yi, headOnly)
+            TileKind.Local -> TileRoute.Local(zi, xi, yi, headOnly, vector)
             TileKind.Remote -> TileRoute.Remote(zi, xi, yi, headOnly)
         }
     }

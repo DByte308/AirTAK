@@ -270,6 +270,21 @@ jobs:
           cd android
           ./gradlew assembleDebug --no-daemon
 
+      # Issue #14: Android 15+/16 devices may run a 16 KB page size. A native library whose
+      # ELF PT_LOAD segments or in-archive data sit below 16 KB cannot be mapped there. This
+      # measures the built APK rather than trusting Play's warning (which has named
+      # libandroidx.graphics.path.so — a library that measured clean — while the real offender
+      # was libmaplibre.so). The gate refuses to pass while any strict-ABI library is misaligned.
+      - name: 16 KB page-size alignment gate (issue #14)
+        run: |
+          APK="$(find android/app/build/outputs/apk -name '*.apk' | head -n 1)"
+          if [ -z "$APK" ]; then
+            echo "FAIL: no APK built"
+            exit 1
+          fi
+          python3 tools/test_check_16kb_alignment.py
+          python3 tools/check_16kb_alignment.py "$APK" --expect-clean
+
       - name: Collect APK artifacts
         run: |
           mkdir -p artifacts/android
@@ -324,3 +339,25 @@ jobs:
         run: |
           test -f tools/test_mbtiles_migrate.py || { echo "FAIL: tools/test_mbtiles_migrate.py missing"; exit 1; }
           python3 tools/test_mbtiles_migrate.py
+
+      - name: 16 KB alignment gate self-test
+        run: |
+          test -f tools/test_check_16kb_alignment.py || { echo "FAIL: tools/test_check_16kb_alignment.py missing"; exit 1; }
+          python3 tools/test_check_16kb_alignment.py
+
+      # Issue #7/#8: verify the vector-map verifier/crop helper are provably correct (a synthetic
+      # pbf archive must verify, a raster or uncompressed one must fail, and crop must bound it).
+      - name: vector-maps verifier/crop self-test
+        run: |
+          test -f tools/test_vector_mbtiles.py || { echo "FAIL: tools/test_vector_mbtiles.py missing"; exit 1; }
+          python3 tools/test_vector_mbtiles.py
+
+      # Issue #11: translation guards. Fails when a user-visible literal reappears in the
+      # UI layer, or when values/ and values-de/ drift apart.
+      - name: i18n — no hardcoded user-visible UI strings
+        run: python3 tools/check_i18n.py .
+
+      - name: i18n — generated string tables are current and locale-complete
+        run: |
+          python3 tools/i18n_strings.py android/app/src/main/res check
+          python3 tools/i18n_help.py android/app/src/main/res check

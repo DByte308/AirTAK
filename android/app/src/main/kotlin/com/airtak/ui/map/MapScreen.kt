@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -87,6 +88,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.airtak.R
+import com.airtak.data.geocoding.GeocodeFailure
+import com.airtak.ui.i18n.labelText
+import com.airtak.ui.i18n.priorityText
+import com.airtak.ui.i18n.uiLabel
 import com.airtak.config.constants.MAP_DEFAULT_ZOOM
 import com.airtak.config.constants.MAP_LOCATE_ZOOM
 import com.airtak.config.constants.MAP_MERCATOR_MAX_LAT
@@ -193,6 +199,7 @@ fun MapScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
+    val searchError by viewModel.searchError.collectAsState()
     val phoneGpsActive by viewModel.phoneGpsActive.collectAsState()
     val phoneGpsProvidersEnabled by viewModel.phoneGpsProvidersEnabled.collectAsState()
     val phoneGpsFix by viewModel.phoneGpsFix.collectAsState()
@@ -480,8 +487,19 @@ fun MapScreen(
         if (missionOverlayEditMode) updateOverlayCornerPoints()
     }
 
-    LaunchedEffect(map, bgColor, ui.tileTemplate, ui.localTileTemplate, ui.localTileMaxZoom, textColor, isDark) {
-        map?.setStyle(Style.Builder().fromJson(mapStyleJson(bgColor, ui.tileTemplate, ui.localTileTemplate, ui.localTileMaxZoom, isDark))) { style ->
+    LaunchedEffect(
+        map, bgColor, ui.tileTemplate, ui.localTileTemplate, ui.localTileMaxZoom,
+        ui.localVectorTileTemplate, ui.localVectorMaxZoom, textColor, isDark,
+    ) {
+        map?.setStyle(Style.Builder().fromJson(mapStyleJson(
+            bgColor,
+            ui.tileTemplate,
+            ui.localTileTemplate,
+            ui.localTileMaxZoom,
+            ui.localVectorTileTemplate,
+            ui.localVectorMaxZoom,
+            isDark,
+        ))) { style ->
             ensureLayers(style, textColor)
             updateMissionOverlay(style, ui.missionOverlay)
             updateMissionOverlayEditLayer(style, ui.missionOverlay, missionOverlayEditMode)
@@ -714,7 +732,7 @@ fun MapScreen(
                         color = MaterialTheme.colorScheme.error,
                     )
                     TextButton(onClick = { viewModel.clearRoute() }) {
-                        Text("Clear")
+                        Text(stringResource(R.string.action_clear))
                     }
                 }
             }
@@ -782,7 +800,7 @@ fun MapScreen(
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
         ) {
-            Icon(Icons.Outlined.MyLocation, contentDescription = "Recenter")
+            Icon(Icons.Outlined.MyLocation, contentDescription = stringResource(R.string.map_cd_recenter))
         }
 
         MarkerDrawingToolbar(
@@ -803,12 +821,12 @@ fun MapScreen(
     pendingWaypoint?.let { latLng ->
         AlertDialog(
             onDismissRequest = { pendingWaypoint = null },
-            title = { Text("Waypoint") },
+            title = { Text(stringResource(R.string.map_waypoint_dialog_title)) },
             text = {
                 OutlinedTextField(
                     value = waypointLabel,
                     onValueChange = { waypointLabel = it.take(24) },
-                    label = { Text("Label") },
+                    label = { Text(stringResource(R.string.common_label)) },
                     singleLine = true,
                 )
             },
@@ -816,10 +834,10 @@ fun MapScreen(
                 Button(onClick = {
                     viewModel.addWaypoint(latLng.latitude, latLng.longitude, waypointLabel)
                     pendingWaypoint = null
-                }) { Text("Save") }
+                }) { Text(stringResource(R.string.action_save)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingWaypoint = null }) { Text("Cancel") }
+                TextButton(onClick = { pendingWaypoint = null }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -888,7 +906,7 @@ fun MapScreen(
         val tooManyTiles = tileCount > MAP_MAX_TILES_PER_DOWNLOAD
         AlertDialog(
             onDismissRequest = { selectedTileBounds = null },
-            title = { Text("Tile Region") },
+            title = { Text(stringResource(R.string.map_tile_region_title)) },
             text = {
                 androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
@@ -914,8 +932,8 @@ fun MapScreen(
                     OutlinedTextField(
                         value = tileUrl,
                         onValueChange = { tileUrl = it.take(UI_TILE_URL_MAX_LEN) },
-                        label = { Text("Tile URL") },
-                        placeholder = { Text("https://server/{z}/{x}/{y}.png") },
+                        label = { Text(stringResource(R.string.map_tile_url_field)) },
+                        placeholder = { Text(stringResource(R.string.map_tile_url_placeholder)) },
                         singleLine = true,
                     )
                     if (!tileUrlValid) {
@@ -940,10 +958,10 @@ fun MapScreen(
                         viewModel.downloadVisible(bounds, minZoom, maxZoom, tileUrl.trim())
                         selectedTileBounds = null
                     },
-                ) { Text("Download") }
+                ) { Text(stringResource(R.string.action_download)) }
             },
             dismissButton = {
-                TextButton(onClick = { selectedTileBounds = null }) { Text("Cancel") }
+                TextButton(onClick = { selectedTileBounds = null }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -951,7 +969,7 @@ fun MapScreen(
     selectedSegmentBounds?.let { bounds ->
         AlertDialog(
             onDismissRequest = { selectedSegmentBounds = null },
-            title = { Text("Routing Data Region") },
+            title = { Text(stringResource(R.string.map_routing_region_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -974,10 +992,10 @@ fun MapScreen(
                 Button(onClick = {
                     viewModel.downloadSegments(bounds)
                     selectedSegmentBounds = null
-                }) { Text("Download") }
+                }) { Text(stringResource(R.string.action_download)) }
             },
             dismissButton = {
-                TextButton(onClick = { selectedSegmentBounds = null }) { Text("Cancel") }
+                TextButton(onClick = { selectedSegmentBounds = null }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -998,6 +1016,7 @@ fun MapScreen(
             query = searchQuery,
             results = searchResults,
             isSearching = isSearching,
+            error = searchError,
             onQueryChange = { viewModel.setSearchQuery(it) },
             onSearch = { viewModel.searchLocations(searchQuery) },
             onSelectResult = { result ->
@@ -1040,18 +1059,22 @@ private fun AlignmentPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Import alignment") },
+        title = { Text(stringResource(R.string.map_import_alignment_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (alignments.isEmpty()) {
-                    Text("No alignments received yet.", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.map_no_alignments), style = MaterialTheme.typography.bodyMedium)
                 } else {
-                    Text("Pick the alignment to import, then select the matching image file on your device.",
+                    Text(stringResource(R.string.map_import_alignment_hint),
                          style = MaterialTheme.typography.bodySmall,
                          color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     alignments.sortedByDescending { it.timestampUnix }.forEach { a ->
-                        val label = "Node ${a.sharerNodeId.toString(16).uppercase().take(8)} · ${a.imageFileName}"
+                        val label = stringResource(
+                            R.string.map_alignment_row,
+                            a.sharerNodeId.toString(16).uppercase().take(8),
+                            a.imageFileName,
+                        )
                         TextButton(onClick = { onSelect(a) }, modifier = Modifier.fillMaxWidth()) {
                             Text(label, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -1060,7 +1083,7 @@ private fun AlignmentPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }
@@ -1070,6 +1093,7 @@ private fun SearchDialog(
     query: String,
     results: List<GeocodingResult>,
     isSearching: Boolean,
+    error: GeocodeFailure?,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     onSelectResult: (GeocodingResult) -> Unit,
@@ -1077,7 +1101,7 @@ private fun SearchDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Search Location") },
+        title = { Text(stringResource(R.string.map_search_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
@@ -1087,12 +1111,12 @@ private fun SearchDialog(
                     OutlinedTextField(
                         value = query,
                         onValueChange = onQueryChange,
-                        label = { Text("Town, place, coordinates...") },
+                        label = { Text(stringResource(R.string.map_search_placeholder)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
                     Button(onClick = onSearch, enabled = query.isNotBlank() && !isSearching) {
-                        Text("Go")
+                        Text(stringResource(R.string.action_go))
                     }
                 }
                 if (isSearching) {
@@ -1123,10 +1147,19 @@ private fun SearchDialog(
                         }
                     }
                 }
+                // An outage is not "no places found". The repository used to return an empty
+                // list for both, which hid a dead geocoder behind an empty result panel.
+                error?.let { failure ->
+                    Text(
+                        failure.asText(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
         },
     )
 }
@@ -1139,7 +1172,7 @@ private fun StatusPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Player Status") },
+        title = { Text(stringResource(R.string.map_player_status_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -1181,7 +1214,7 @@ private fun StatusPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
         },
     )
 }
@@ -1231,7 +1264,7 @@ private fun MapToolbar(
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
-            ) { Icon(Icons.Outlined.Search, contentDescription = "Search location") }
+            ) { Icon(Icons.Outlined.Search, contentDescription = stringResource(R.string.map_cd_search)) }
             var markerMenuExpanded by remember { mutableStateOf(false) }
             Box {
                 IconButton(
@@ -1240,14 +1273,14 @@ private fun MapToolbar(
                     colors = IconButtonDefaults.iconButtonColors(
                         contentColor = if (drawingActive) AccentAmber else MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
-                ) { Icon(Icons.Outlined.AddLocationAlt, contentDescription = "Add marker") }
+                ) { Icon(Icons.Outlined.AddLocationAlt, contentDescription = stringResource(R.string.map_cd_add_marker)) }
                 DropdownMenu(
                     expanded = markerMenuExpanded,
                     onDismissRequest = { markerMenuExpanded = false },
                 ) {
                     MarkerTool.values().forEach { tool ->
                         DropdownMenuItem(
-                            text = { Text(tool.displayLabel) },
+                            text = { Text(tool.uiLabel()) },
                             onClick = {
                                 markerMenuExpanded = false
                                 onPickMarkerTool(tool)
@@ -1263,9 +1296,9 @@ private fun MapToolbar(
                 ),
             ) {
                 if (gameActive) {
-                    Icon(Icons.Outlined.Pause, contentDescription = "End game")
+                    Icon(Icons.Outlined.Pause, contentDescription = stringResource(R.string.map_cd_end_game))
                 } else {
-                    Icon(Icons.Outlined.PlayArrow, contentDescription = "Resume game")
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = stringResource(R.string.map_cd_resume_game))
                 }
             }
             Surface(
@@ -1285,26 +1318,26 @@ private fun MapToolbar(
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = if (showPlayers) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
-            ) { Icon(Icons.Outlined.Groups, contentDescription = "Players") }
+            ) { Icon(Icons.Outlined.Groups, contentDescription = stringResource(R.string.map_cd_players)) }
             IconButton(
                 onClick = onToggleWaypoints,
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = if (showWaypoints) AccentAmber else MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
-            ) { Icon(Icons.Outlined.Place, contentDescription = "Waypoints") }
+            ) { Icon(Icons.Outlined.Place, contentDescription = stringResource(R.string.map_cd_waypoints)) }
             IconButton(
                 onClick = onMissionOverlay,
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = if (editingMissionOverlay || hasMissionOverlay) AccentCyan else MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
-            ) { Icon(Icons.Outlined.Image, contentDescription = "Mission overlay") }
+            ) { Icon(Icons.Outlined.Image, contentDescription = stringResource(R.string.map_cd_mission_overlay)) }
             IconButton(
                 onClick = onDownload,
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = if (selectingTiles) AccentCyan else MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             ) {
-                Icon(Icons.Outlined.Download, contentDescription = "Download tiles")
+                Icon(Icons.Outlined.Download, contentDescription = stringResource(R.string.map_cd_download_tiles))
             }
             IconButton(
                 onClick = onSegmentDownload,
@@ -1312,7 +1345,7 @@ private fun MapToolbar(
                     contentColor = if (selectingSegments) AccentCyan else MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             ) {
-                Icon(Icons.Outlined.Layers, contentDescription = "Download routing data")
+                Icon(Icons.Outlined.Layers, contentDescription = stringResource(R.string.map_cd_download_routing))
             }
             IconButton(
                 onClick = onPlanRoute,
@@ -1320,7 +1353,7 @@ private fun MapToolbar(
                     contentColor = if (routePlanning) AccentCyan else MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             ) {
-                Icon(Icons.AutoMirrored.Outlined.AltRoute, contentDescription = "Plan route")
+                Icon(Icons.AutoMirrored.Outlined.AltRoute, contentDescription = stringResource(R.string.map_cd_plan_route))
             }
             Box {
                 var profileExpanded by remember { mutableStateOf(false) }
@@ -1383,13 +1416,13 @@ private fun MarkerDrawingToolbar(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                "${drawing.tool.displayLabel}: ${drawing.points.size} point${if (drawing.points.size == 1) "" else "s"} placed",
+                stringResource(R.string.map_points_placed, drawing.tool.uiLabel(), drawing.points.size),
                 style = MaterialTheme.typography.labelMedium,
             )
             val instructions = when (drawing.tool) {
-                MarkerTool.POINT, MarkerTool.NOTE, MarkerTool.OBJECTIVE -> "Tap on the map to place."
-                MarkerTool.ROUTE -> "Tap 2–${drawing.tool.maxPoints} points along the route, then Commit."
-                MarkerTool.AREA  -> "Tap 3–${drawing.tool.maxPoints} corners, then Commit (closes polygon)."
+                MarkerTool.POINT, MarkerTool.NOTE, MarkerTool.OBJECTIVE -> stringResource(R.string.map_draw_hint_single)
+                MarkerTool.ROUTE -> stringResource(R.string.map_draw_hint_route, drawing.tool.maxPoints)
+                MarkerTool.AREA  -> stringResource(R.string.map_draw_hint_area, drawing.tool.maxPoints)
             }
             Text(
                 instructions,
@@ -1397,14 +1430,14 @@ private fun MarkerDrawingToolbar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TextButton(onClick = onCancel) { Text("Cancel") }
+                TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
                 if (drawing.tool == MarkerTool.ROUTE || drawing.tool == MarkerTool.AREA) {
                     TextButton(
                         onClick = onUndo,
                         enabled = drawing.points.isNotEmpty(),
-                    ) { Text("Undo") }
+                    ) { Text(stringResource(R.string.action_undo)) }
                 }
-                Button(onClick = onCommit, enabled = canCommit) { Text("Commit") }
+                Button(onClick = onCommit, enabled = canCommit) { Text(stringResource(R.string.action_commit)) }
             }
         }
     }
@@ -1429,7 +1462,7 @@ private fun MarkerCommitDialog(
     var priority by remember { mutableStateOf(2) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New ${tool.displayLabel.lowercase()}") },
+        title = { Text(stringResource(R.string.map_new_marker_title, tool.uiLabel())) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -1440,17 +1473,17 @@ private fun MarkerCommitDialog(
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it.take(32) },
-                    label = { Text("Label") },
+                    label = { Text(stringResource(R.string.common_label)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it.take(UI_MARKER_DESC_MAX_LEN) },
-                    label = { Text("Description (optional)") },
+                    label = { Text(stringResource(R.string.common_description_optional)) },
                     minLines = 2,
                     maxLines = 4,
                 )
-                Text("Color", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.common_color), style = MaterialTheme.typography.labelSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MARKER_COLOR_PRESETS.forEach { c ->
                         val selected = (colorRgb and UI_RGB_MASK) == c
@@ -1469,29 +1502,29 @@ private fun MarkerCommitDialog(
                                         .clip(RoundedCornerShape(14.dp))
                                         .background(androidx.compose.ui.graphics.Color.Transparent),
                                 ) {
-                                    Text("✓", color = androidx.compose.ui.graphics.Color.Black, modifier = Modifier.align(Alignment.Center))
+                                    Text(stringResource(R.string.marker_check_glyph), color = androidx.compose.ui.graphics.Color.Black, modifier = Modifier.align(Alignment.Center))
                                 }
                             }
                         }
                     }
                 }
-                Text("Visible to", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.common_visible_to), style = MaterialTheme.typography.labelSmall)
                 ScopeDropdown(scope, onSelect = { scope = it })
                 if (tool == MarkerTool.OBJECTIVE) {
-                    Text("Controlling team", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(R.string.common_controlling_team), style = MaterialTheme.typography.labelSmall)
                     TeamDropdown(team, onSelect = { team = it })
-                    Text("Priority", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(R.string.common_priority), style = MaterialTheme.typography.labelSmall)
                     PriorityDropdown(priority, onSelect = { priority = it })
                 }
             }
         },
         confirmButton = {
             Button(onClick = { onCommit(label, description, colorRgb, scope, team, priority) }) {
-                Text("Send")
+                Text(stringResource(R.string.action_send))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }
@@ -1512,23 +1545,23 @@ private fun MarkerEditDialog(
     val isObjective = marker.type == MarkerType.MARKER_TYPE_OBJECTIVE
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit ${markerTypeLabel(marker.type).lowercase()}") },
+        title = { Text(stringResource(R.string.map_edit_marker_title, marker.type.labelText())) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it.take(32) },
-                    label = { Text("Label") },
+                    label = { Text(stringResource(R.string.common_label)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it.take(UI_MARKER_DESC_MAX_LEN) },
-                    label = { Text("Description (optional)") },
+                    label = { Text(stringResource(R.string.common_description_optional)) },
                     minLines = 2,
                     maxLines = 4,
                 )
-                Text("Color", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.common_color), style = MaterialTheme.typography.labelSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MARKER_COLOR_PRESETS.forEach { c ->
                         val selected = colorRgb == c
@@ -1547,31 +1580,31 @@ private fun MarkerEditDialog(
                                         .clip(RoundedCornerShape(14.dp))
                                         .background(androidx.compose.ui.graphics.Color.Transparent),
                                 ) {
-                                    Text("✓", color = androidx.compose.ui.graphics.Color.Black, modifier = Modifier.align(Alignment.Center))
+                                    Text(stringResource(R.string.marker_check_glyph), color = androidx.compose.ui.graphics.Color.Black, modifier = Modifier.align(Alignment.Center))
                                 }
                             }
                         }
                     }
                 }
-                Text("Visible to", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.common_visible_to), style = MaterialTheme.typography.labelSmall)
                 ScopeDropdown(scope, onSelect = { scope = it })
                 if (isObjective) {
-                    Text("Controlling team", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(R.string.common_controlling_team), style = MaterialTheme.typography.labelSmall)
                     TeamDropdown(team, onSelect = { team = it })
-                    Text("Priority", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(R.string.common_priority), style = MaterialTheme.typography.labelSmall)
                     PriorityDropdown(priority, onSelect = { priority = it })
                 }
             }
         },
         confirmButton = {
             Button(onClick = { onSave(label, description, colorRgb, scope, team, priority) }) {
-                Text("Save")
+                Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onDelete) { Text("Delete") }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDelete) { Text(stringResource(R.string.action_delete)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
             }
         },
     )
@@ -1581,29 +1614,20 @@ private fun MarkerEditDialog(
 private fun ScopeDropdown(selected: Scope, onSelect: (Scope) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { expanded = true }) { Text(scopeLabel(selected)) }
+        OutlinedButton(onClick = { expanded = true }) { Text(selected.labelText()) }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             listOf(Scope.SCOPE_ALL, Scope.SCOPE_COMPANY, Scope.SCOPE_PLATOON, Scope.SCOPE_SQUAD, Scope.SCOPE_FIRE_TEAM).forEach { s ->
-                DropdownMenuItem(text = { Text(scopeLabel(s)) }, onClick = { expanded = false; onSelect(s) })
+                DropdownMenuItem(text = { Text(s.labelText()) }, onClick = { expanded = false; onSelect(s) })
             }
         }
     }
-}
-
-private fun scopeLabel(scope: Scope): String = when (scope) {
-    Scope.SCOPE_ALL -> "All players"
-    Scope.SCOPE_COMPANY -> "Company"
-    Scope.SCOPE_PLATOON -> "Platoon"
-    Scope.SCOPE_SQUAD -> "Squad"
-    Scope.SCOPE_FIRE_TEAM -> "Fireteam"
-    else -> "All players"
 }
 
 @Composable
 private fun TeamDropdown(selected: TeamControl, onSelect: (TeamControl) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { expanded = true }) { Text(teamLabel(selected)) }
+        OutlinedButton(onClick = { expanded = true }) { Text(selected.labelText()) }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             listOf(
                 TeamControl.TEAM_CONTROL_OWN,
@@ -1611,40 +1635,23 @@ private fun TeamDropdown(selected: TeamControl, onSelect: (TeamControl) -> Unit)
                 TeamControl.TEAM_CONTROL_NEUTRAL,
                 TeamControl.TEAM_CONTROL_UNKNOWN,
             ).forEach { t ->
-                DropdownMenuItem(text = { Text(teamLabel(t)) }, onClick = { expanded = false; onSelect(t) })
+                DropdownMenuItem(text = { Text(t.labelText()) }, onClick = { expanded = false; onSelect(t) })
             }
         }
     }
-}
-
-private fun teamLabel(team: TeamControl): String = when (team) {
-    TeamControl.TEAM_CONTROL_OWN -> "Own"
-    TeamControl.TEAM_CONTROL_OPPOSING -> "Opposing"
-    TeamControl.TEAM_CONTROL_NEUTRAL -> "Neutral"
-    TeamControl.TEAM_CONTROL_UNKNOWN -> "Unknown"
-    else -> "Unknown"
 }
 
 @Composable
 private fun PriorityDropdown(selected: Int, onSelect: (Int) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { expanded = true }) { Text(priorityLabel(selected)) }
+        OutlinedButton(onClick = { expanded = true }) { Text(priorityText(selected)) }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             (0..4).forEach { p ->
-                DropdownMenuItem(text = { Text(priorityLabel(p)) }, onClick = { expanded = false; onSelect(p) })
+                DropdownMenuItem(text = { Text(priorityText(p)) }, onClick = { expanded = false; onSelect(p) })
             }
         }
     }
-}
-
-private fun priorityLabel(priority: Int): String = when (priority) {
-    0 -> "Info"
-    1 -> "Low"
-    2 -> "Medium"
-    3 -> "High"
-    4 -> "Critical"
-    else -> "Medium"
 }
 
 @Composable
@@ -1663,17 +1670,17 @@ private fun MarkerDetailDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(marker.label.ifBlank { "Marker" }) },
+        title = { Text(marker.label.ifBlank { stringResource(R.string.marker_type_unknown) }) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Type: ${markerTypeLabel(marker.type)}", style = MaterialTheme.typography.bodySmall)
-                Text("Scope: ${scopeLabel(marker.scope)}", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.map_detail_type, marker.type.labelText()), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.map_detail_scope, marker.scope.labelText()), style = MaterialTheme.typography.bodySmall)
                 if (marker.type == MarkerType.MARKER_TYPE_OBJECTIVE) {
-                    Text("Team: ${teamLabel(marker.controllingTeam)}", style = MaterialTheme.typography.bodySmall)
-                    Text("Priority: ${priorityLabel(marker.priority)}", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.map_detail_team, marker.controllingTeam.labelText()), style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.map_detail_priority, priorityText(marker.priority)), style = MaterialTheme.typography.bodySmall)
                 }
                 if (distance != null) {
-                    Text("Distance: ${formatDistance(distance)}", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.map_detail_distance, formatDistance(distance)), style = MaterialTheme.typography.bodySmall)
                 }
                 if (marker.description.isNotBlank()) {
                     Spacer(Modifier.height(4.dp))
@@ -1692,12 +1699,12 @@ private fun MarkerDetailDialog(
                     onNavigate()
                     onDismiss()
                 }) {
-                    Text("Navigate")
+                    Text(stringResource(R.string.map_navigate))
                 }
                 if (marker.ownedLocally) {
-                    TextButton(onClick = onDelete) { Text("Delete") }
+                    TextButton(onClick = onDelete) { Text(stringResource(R.string.action_delete)) }
                 }
-                TextButton(onClick = onDismiss) { Text("Close") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
             }
         },
     )
@@ -1712,19 +1719,14 @@ private fun haversineDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Do
     return R * c
 }
 
+/** Distance with a unit. The unit strings are resources, so this reads them. */
+@Composable
 private fun formatDistance(meters: Double): String = when {
-    meters < UI_DISTANCE_PRECISE_THRESHOLD_M -> "${meters.roundToInt()} m"
-    meters < UI_DISTANCE_KM_THRESHOLD_M -> "${(meters / 10).roundToInt() * 10} m"
-    else -> "%.1f km".format(meters / UI_METERS_TO_KM)
-}
-
-private fun markerTypeLabel(type: MarkerType): String = when (type) {
-    MarkerType.MARKER_TYPE_POINT -> "Point"
-    MarkerType.MARKER_TYPE_NOTE -> "Note"
-    MarkerType.MARKER_TYPE_OBJECTIVE -> "Objective"
-    MarkerType.MARKER_TYPE_ROUTE -> "Route"
-    MarkerType.MARKER_TYPE_AREA -> "Area"
-    else -> "Marker"
+    meters < UI_DISTANCE_PRECISE_THRESHOLD_M ->
+        stringResource(R.string.distance_meters, meters.roundToInt())
+    meters < UI_DISTANCE_KM_THRESHOLD_M ->
+        stringResource(R.string.distance_meters, (meters / 10).roundToInt() * 10)
+    else -> stringResource(R.string.distance_km, meters / UI_METERS_TO_KM)
 }
 
 @Composable
@@ -1753,59 +1755,59 @@ private fun MissionOverlayControls(
             modifier = Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Mission Overlay", style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.map_mission_overlay_title), style = MaterialTheme.typography.labelLarge)
             Row(
                 modifier = Modifier.width(220.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("Opacity", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.map_opacity), style = MaterialTheme.typography.labelSmall)
                 Slider(
                     value = opacity.coerceIn(0.1f, 1f),
                     onValueChange = onOpacityChange,
                     valueRange = 0.1f..1f,
                     modifier = Modifier.weight(1f),
                 )
-                Text("${(opacity * 100f).roundToInt()}%", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.percent_value, (opacity * 100f).roundToInt()), style = MaterialTheme.typography.labelSmall)
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Checkbox(checked = shareEnabled, onCheckedChange = onShareToggle)
-                Text("Share alignment", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.map_share_alignment), style = MaterialTheme.typography.labelSmall)
                 if (shareEnabled) {
                     IconButton(onClick = onRebroadcast) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = "Re-broadcast alignment")
+                        Icon(Icons.Outlined.Refresh, contentDescription = stringResource(R.string.map_cd_rebroadcast_alignment))
                     }
                 }
                 Spacer(Modifier.weight(1f))
                 if (hasAlignments) {
-                    TextButton(onClick = onImport) { Text("Import") }
+                    TextButton(onClick = onImport) { Text(stringResource(R.string.action_import)) }
                 }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text("Nudge ${selectedCorner.shortLabel()}", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.map_nudge_corner, selectedCorner.shortLabel()), style = MaterialTheme.typography.labelSmall)
                 IconButton(onClick = { onNudge(0f, -MAP_NUDGE_PX) }) {
-                    Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = "Nudge up")
+                    Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = stringResource(R.string.map_cd_nudge_up))
                 }
                 IconButton(onClick = { onNudge(-MAP_NUDGE_PX, 0f) }) {
-                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = "Nudge left")
+                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = stringResource(R.string.map_cd_nudge_left))
                 }
                 IconButton(onClick = { onNudge(MAP_NUDGE_PX, 0f) }) {
-                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = "Nudge right")
+                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = stringResource(R.string.map_cd_nudge_right))
                 }
                 IconButton(onClick = { onNudge(0f, MAP_NUDGE_PX) }) {
-                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Nudge down")
+                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = stringResource(R.string.map_cd_nudge_down))
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TextButton(onClick = onReplace) { Text("Replace") }
-                TextButton(onClick = onRemove) { Text("Remove") }
-                Button(onClick = onDone) { Text("Done") }
+                TextButton(onClick = onReplace) { Text(stringResource(R.string.action_replace)) }
+                TextButton(onClick = onRemove) { Text(stringResource(R.string.action_remove)) }
+                Button(onClick = onDone) { Text(stringResource(R.string.action_done)) }
             }
         }
     }
@@ -1877,12 +1879,15 @@ private fun MissionOverlayDragHandle(
     }
 }
 
-private fun MissionOverlayCornerId.shortLabel(): String = when (this) {
-    MissionOverlayCornerId.TOP_LEFT -> "TL"
-    MissionOverlayCornerId.TOP_RIGHT -> "TR"
-    MissionOverlayCornerId.BOTTOM_RIGHT -> "BR"
-    MissionOverlayCornerId.BOTTOM_LEFT -> "BL"
-}
+@Composable
+private fun MissionOverlayCornerId.shortLabel(): String = stringResource(
+    when (this) {
+        MissionOverlayCornerId.TOP_LEFT -> R.string.corner_top_left
+        MissionOverlayCornerId.TOP_RIGHT -> R.string.corner_top_right
+        MissionOverlayCornerId.BOTTOM_RIGHT -> R.string.corner_bottom_right
+        MissionOverlayCornerId.BOTTOM_LEFT -> R.string.corner_bottom_left
+    },
+)
 
 @Composable
 private fun TileStatus(
@@ -1917,7 +1922,7 @@ private fun TileStatus(
                         modifier = Modifier.width(120.dp),
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text("${state.completed}/${state.total}", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(R.string.counter_value, state.completed, state.total), style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
@@ -2510,11 +2515,22 @@ private data class TileXY(val x: Int, val y: Int)
 private fun emptyGeoJsonSource(id: String): GeoJsonSource = GeoJsonSource(id, emptyFeatureCollection())
 private fun emptyFeatureCollection(): FeatureCollection = FeatureCollection.fromFeatures(emptyList())
 
-private fun mapStyleJson(
+/**
+ * Self-authored MapLibre style for the AirTAK field map.
+ *
+ * The vector layers reference the `airtak-minimal-v1` schema that tilemaker emits from
+ * `tools/vector_maps/config.json` + `process.lua`. Layer ids are landuse, water, waterway,
+ * transportation, building, place, and the `class` attribute carries the OSM tag value. This is a
+ * deliberate contract: the style must match the layers the pipeline emits, not OpenMapTiles. The
+ * font stack pulls from the bundled Noto glyphs (assets/glyphs).
+ */
+internal fun mapStyleJson(
     @androidx.annotation.ColorInt bgArgb: Int,
     baseTileTemplate: String?,
     localTileTemplate: String?,
     localTileMaxZoom: Int?,
+    vectorTileTemplate: String?,
+    vectorTileMaxZoom: Int?,
     isDark: Boolean,
 ): String {
     val bgHex = "#%06X".format(bgArgb and UI_RGB_MASK)
@@ -2525,12 +2541,17 @@ private fun mapStyleJson(
         val maxZoom = localTileMaxZoom?.let { ", \"maxzoom\": $it" }.orEmpty()
         ",\n        \"local-tiles\": { \"type\": \"raster\", \"tiles\": [\"$url\"], \"tileSize\": $MAP_TILE_SIZE_PX$maxZoom }"
     }.orEmpty()
+    val vectorSource = vectorTileTemplate?.jsonEscaped()?.let { url ->
+        val maxZoom = vectorTileMaxZoom?.let { ", \"maxzoom\": $it" }.orEmpty()
+        ",\n        \"local-vector\": { \"type\": \"vector\", \"tiles\": [\"$url\"]$maxZoom }"
+    }.orEmpty()
     val baseLayer = if (baseTileTemplate != null) {
         ",\n        { \"id\": \"base-tiles\", \"type\": \"raster\", \"source\": \"base-tiles\" }"
     } else ""
     val localLayer = if (localTileTemplate != null) {
         ",\n        { \"id\": \"local-tiles\", \"type\": \"raster\", \"source\": \"local-tiles\" }"
     } else ""
+    val vectorLayers = if (vectorTileTemplate != null) vectorLayerJson(isDark, bgHex) else ""
     return """
     {
       "version": 8,
@@ -2540,13 +2561,50 @@ private fun mapStyleJson(
         "blank": { "type": "geojson", "data": { "type": "FeatureCollection", "features": [] } }
         $baseSource
         $localSource
+        $vectorSource
       },
       "layers": [
         { "id": "background", "type": "background", "paint": { "background-color": "$bgHex" } }
         $baseLayer
         $localLayer
+        $vectorLayers
       ]
     }
+    """.trimIndent()
+}
+
+/**
+ * Vector layers for the local `.pbf` source, in draw order: fill, then line, then label.
+ *
+ * Colors are chosen to read on the field background regardless of theme; `class` comes from the
+ * tilemaker `process.lua`, so the match arms must mirror the schema there.
+ */
+internal fun vectorLayerJson(isDark: Boolean, bgHex: String): String {
+    val water = if (isDark) "#4a7ea8" else "#8ab4d8"
+    val road = if (isDark) "#e0e0e0" else "#f0f0d8"
+    val roadCasing = if (isDark) "#8a8a8a" else "#b8b89a"
+    val building = if (isDark) "#6a6a7a" else "#c9c2b0"
+    val label = if (isDark) "#f0f0f0" else "#2a2a2a"
+    return """
+,
+        { "id": "local-landuse", "type": "fill", "source": "local-vector", "source-layer": "landuse",
+          "paint": { "fill-color": ["match", ["get","class"], "residential", "#c9c2b0", "commercial", "#cbc0b0", "industrial", "#c8c0b8", "retail", "#ccc5b5", "forest", "#a7c79a", "wood", "#a7c79a", "scrub", "#b0c7a8", "park", "#b8d0b8", "#cfcfc2"], "fill-opacity": 0.55 } },
+        { "id": "local-water", "type": "fill", "source": "local-vector", "source-layer": "water",
+          "paint": { "fill-color": "$water", "fill-opacity": 0.85 } },
+        { "id": "local-waterway", "type": "line", "source": "local-vector", "source-layer": "waterway",
+          "paint": { "line-color": "$water", "line-width": ["interpolate",["linear"],["zoom"],6,0.4,12,1.8] } },
+        { "id": "local-road-casing", "type": "line", "source": "local-vector", "source-layer": "transportation",
+          "paint": { "line-color": "$roadCasing",
+            "line-width": ["interpolate",["linear"],["zoom"],6,0.5,12,5],
+            "line-gap-width": ["interpolate",["linear"],["zoom"],6,1,12,5] } },
+        { "id": "local-road", "type": "line", "source": "local-vector", "source-layer": "transportation",
+          "paint": { "line-color": ["match", ["get","class"], "motorway", "#e08a5a", "trunk", "#e08a5a", "primary", "#e0a05a", "secondary", "#d0b060", "tertiary", "#d0c080", "rail", "#9a9a9a", "$road"],
+            "line-width": ["interpolate",["linear"],["zoom"],6,0.4,12,4] } },
+        { "id": "local-building", "type": "fill", "source": "local-vector", "source-layer": "building",
+          "minzoom": 11, "paint": { "fill-color": "$building", "fill-opacity": 0.75 } },
+        { "id": "local-place", "type": "symbol", "source": "local-vector", "source-layer": "place",
+          "layout": { "text-field": ["get","name"], "text-size": ["interpolate",["linear"],["zoom"],6,10,12,14], "text-font": ["Noto Sans Regular"] },
+          "paint": { "text-color": "$label", "text-halo-color": "$bgHex", "text-halo-width": 1.2 } }
     """.trimIndent()
 }
 

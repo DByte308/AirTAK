@@ -134,6 +134,7 @@ static void test_power_roundtrip() {
     out.gps_on_secs = defaults::POWER_GPS_ON_SECS;
     out.gps_off_secs = defaults::POWER_GPS_OFF_SECS;
     out.display_off_secs = defaults::POWER_DISPLAY_OFF_SECS;
+    out.adc_multiplier = 5.1205f;   // Issue #1: per-device ADC multiplier (0.0f = unset)
 
     size_t len = encodeMessage(airtak_PowerConfig_fields, out);
     airtak_PowerConfig in = airtak_PowerConfig_init_zero;
@@ -142,6 +143,23 @@ static void test_power_roundtrip() {
     TEST_ASSERT_FALSE(in.gps_duty_cycle);
     TEST_ASSERT_EQUAL(defaults::POWER_GPS_ON_SECS, in.gps_on_secs);
     TEST_ASSERT_EQUAL(defaults::POWER_GPS_OFF_SECS, in.gps_off_secs);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, out.adc_multiplier, in.adc_multiplier);
+}
+
+// Issue #1: a PowerConfig with adc_multiplier absent (0.0f) must round-trip as
+// 0.0f so the firmware can distinguish "unset" (→ board default) from a real value.
+static void test_power_default_multiplier_unset() {
+    airtak_PowerConfig out = airtak_PowerConfig_init_zero;
+    out.gps_duty_cycle = defaults::POWER_GPS_DUTY_CYCLE;
+    out.display_off_secs = defaults::POWER_DISPLAY_OFF_SECS;
+    out.brightness_pct = defaults::POWER_BRIGHTNESS_PCT;
+    // adc_multiplier left at 0.0f (init_zero) = absent/unset
+
+    size_t len = encodeMessage(airtak_PowerConfig_fields, out);
+    airtak_PowerConfig in = airtak_PowerConfig_init_zero;
+    decodeMessage(airtak_PowerConfig_fields, s_encoded, len, in);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, in.adc_multiplier);
 }
 
 static void test_game_roundtrip() {
@@ -236,6 +254,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_channels_roundtrip);
     RUN_TEST(test_position_roundtrip);
     RUN_TEST(test_power_roundtrip);
+    RUN_TEST(test_power_default_multiplier_unset);
     RUN_TEST(test_game_roundtrip);
     RUN_TEST(test_security_roundtrip);
     RUN_TEST(test_audio_roundtrip);

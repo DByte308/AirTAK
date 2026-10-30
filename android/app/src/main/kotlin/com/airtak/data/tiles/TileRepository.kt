@@ -110,6 +110,13 @@ class TileRepository @Inject constructor(
     private val _localTileMaxZoom = MutableStateFlow<Int?>(null)
     val localTileMaxZoom: StateFlow<Int?> = _localTileMaxZoom.asStateFlow()
 
+    private val _localVectorMaxZoom = MutableStateFlow<Int?>(null)
+    val localVectorMaxZoom: StateFlow<Int?> = _localVectorMaxZoom.asStateFlow()
+
+    /** `.pbf` template for locally-served vector archives (issue #7), or null when none are present. */
+    private val _localVectorTileTemplate = MutableStateFlow<String?>(null)
+    val localVectorTileTemplate: StateFlow<String?> = _localVectorTileTemplate.asStateFlow()
+
     private val _configuredTileTemplate = MutableStateFlow(configuredTileUrlOrNull() ?: "")
     val configuredTileTemplate: StateFlow<String> = _configuredTileTemplate.asStateFlow()
 
@@ -474,6 +481,11 @@ class TileRepository @Inject constructor(
         ensureServer()
         servingFiles = servingArchives()
         _localTileTemplate.value = localTileUrl()
+        // Vector archives (format=pbf) are a separate, additive set. Raster behaviour is untouched;
+        // when a pbf archive is present the map also gets a .pbf template and a vector source.
+        val vectorFiles = mbtilesFiles.filter { isVectorArchive(it) }
+        _localVectorMaxZoom.value = vectorFiles.mapNotNull { readMaxZoom(it) }.maxOrNull()
+        _localVectorTileTemplate.value = localVectorTileUrl()
         _tileTemplate.value = remoteProxyUrl()
     }
 
@@ -502,6 +514,29 @@ class TileRepository @Inject constructor(
             if (mbtilesFiles.isNotEmpty()) "http://127.0.0.1:$port/tiles/{z}/{x}/{y}.png?v=$mbtilesRevision" else null
         }
     }
+
+    /** `.pbf` template for a vector archive, mirroring [localTileUrl] with the vector extension. */
+    private fun localVectorTileUrl(): String? {
+        return tileServerLauncher.current?.port?.takeIf { it > 0 }?.let { port ->
+            if (mbtilesFiles.any { isVectorArchive(it) }) "http://127.0.0.1:$port/tiles/{z}/{x}/{y}.pbf?v=$mbtilesRevision" else null
+        }
+    }
+
+    /**
+     * True when an archive declares vector tiles (`format` = `pbf`). Raster archives are `png`/`jpg`
+     * or omit the field. Read lazily enough to keep refresh cheap: only archives that already exist
+     * are examined, and the metadata table is a single indexed row.
+     */
+    private fun isVectorArchive(file: File): Boolean = runCatching {
+        val db = SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+        try {
+            db.rawQuery("SELECT value FROM metadata WHERE name='format' LIMIT 1", emptyArray()).use { c ->
+                if (c.moveToFirst()) c.getString(0).equals("pbf", ignoreCase = true) else false
+            }
+        } finally {
+            db.close()
+        }
+    }.getOrDefault(false)
 
     /**
      * The user-configured provider, or null. There is deliberately no default: shipping a public

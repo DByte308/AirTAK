@@ -244,8 +244,20 @@ class TileServer(
                 is TileRoute.Reject -> writeStatus(socket, route.status)
 
                 is TileRoute.Local -> {
-                    val bytes = localTiles.read(route.z, route.x, route.y)
-                    if (bytes == null) writeStatus(socket, 404, route.headOnly) else writeTile(socket, bytes, route.headOnly, null)
+                    val raw = localTiles.read(route.z, route.x, route.y)
+                    if (raw == null) {
+                        writeStatus(socket, 404, route.headOnly)
+                    } else if (route.vector) {
+                        // An MVT tile is stored gzip-compressed protobuf (tilemaker's
+                        // "compress": "gzip"). MapLibre expects a raw protobuf stream, so decode on
+                        // the fly. Not-gzip bytes are served as-is rather than refused.
+                        val decoded = if (raw.size >= 2 && raw[0] == 0x1F.toByte() && raw[1] == 0x8B.toByte()) {
+                            runCatching { gunzip(raw) }.getOrDefault(raw)
+                        } else raw
+                        writeTile(socket, decoded, route.headOnly, null, VECTOR_CONTENT_TYPE)
+                    } else {
+                        writeTile(socket, raw, route.headOnly, null)
+                    }
                 }
 
                 is TileRoute.Remote -> {
@@ -354,16 +366,38 @@ class TileServer(
         return if (safe) "Cache-Control: $trimmed\r\n" else "Cache-Control: no-store\r\n"
     }
 
-    private fun writeTile(socket: Socket, bytes: ByteArray, headOnly: Boolean, cacheControl: String?) {
+    private fun writeTile(
+        socket: Socket,
+        bytes: ByteArray,
+        headOnly: Boolean,
+        cacheControl: String?,
+        contentTypeOverride: String? = null,
+    ) {
         val cc = cacheControlHeader(cacheControl).orEmpty()
-        val head = "HTTP/1.1 200 OK\r\nContent-Type: ${bytes.contentType()}\r\n$cc" +
-            "Content-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
+        val body = bytes
+        val contentType = contentTypeOverride ?: body.contentType()
+        val head = "HTTP/1.1 200 OK\r\nContent-Type: $contentType\r\n$cc" +
+            "Content-Length: ${body.size}\r\nConnection: close\r\n\r\n"
         runCatching {
             socket.getOutputStream().use { out ->
                 out.write(head.toByteArray())
-                if (!headOnly) out.write(bytes)
+                if (!headOnly) out.write(body)
                 out.flush()
             }
+        }
+    }
+
+    /** Inflate a gzip stream. Used for stored MVT tiles that the archive keeps compressed. */
+    private fun gunzip(bytes: ByteArray): ByteArray {
+        java.util.zip.GZIPInputStream(bytes.inputStream()).use { input ->
+            val out = ByteArrayOutputStream(bytes.size * 4)
+            val buf = ByteArray(8192)
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                out.write(buf, 0, n)
+            }
+            return out.toByteArray()
         }
     }
 
@@ -383,5 +417,8 @@ class TileServer(
         const val DEFAULT_SOCKET_TIMEOUT_MS = 5_000
         const val DEFAULT_MAX_HANDLERS = 8
         const val DEFAULT_DRAIN_WAIT_MS = 2_000L
+
+        /** MapLibre accepts this for a vector tile source (`application/x-protobuf` also works). */
+        const val VECTOR_CONTENT_TYPE = "application/vnd.mapbox-vector-tile"
     }
 }

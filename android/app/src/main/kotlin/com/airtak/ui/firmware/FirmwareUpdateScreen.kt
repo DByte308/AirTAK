@@ -51,6 +51,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.stringResource
+import com.airtak.R
 import com.airtak.config.constants.BYTES_PER_KB
 import com.airtak.data.ota.FirmwareUpdateManager.UpdateProgress
 import com.airtak.ui.theme.StatusActive
@@ -96,12 +98,12 @@ fun FirmwareUpdateScreen(
                     )
                     Spacer(Modifier.height(24.dp))
                     Text(
-                        "Firmware Update",
+                        stringResource(R.string.fw_title),
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Select a firmware file (.bin or .zip) to flash onto your AirTAK device.",
+                        stringResource(R.string.fw_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -111,18 +113,18 @@ fun FirmwareUpdateScreen(
                         transportMode = TransportMode.Ble
                         filePicker.launch("*/*")
                     }) {
-                        Text("Update via Bluetooth")
+                        Text(stringResource(R.string.fw_via_ble))
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = {
                         transportMode = TransportMode.Usb
                         filePicker.launch("*/*")
                     }) {
-                        Text("Update via USB cable")
+                        Text(stringResource(R.string.fw_via_usb))
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onDone) {
-                        Text("Back")
+                        Text(stringResource(R.string.action_back))
                     }
                 }
 
@@ -141,13 +143,13 @@ fun FirmwareUpdateScreen(
                     )
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "Firmware Updated",
+                        stringResource(R.string.fw_updated_title),
                         style = MaterialTheme.typography.headlineSmall,
                         color = StatusActive,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "The device will restart and reconnect shortly.",
+                        stringResource(R.string.fw_updated_body),
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -157,7 +159,7 @@ fun FirmwareUpdateScreen(
                         viewModel.reset()
                         onDone()
                     }) {
-                        Text("Done")
+                        Text(stringResource(R.string.action_done))
                     }
                 }
 
@@ -170,7 +172,7 @@ fun FirmwareUpdateScreen(
                     )
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "Update Failed",
+                        stringResource(R.string.fw_failed_title),
                         style = MaterialTheme.typography.headlineSmall,
                         color = StatusHit,
                     )
@@ -188,14 +190,14 @@ fun FirmwareUpdateScreen(
                         viewModel.reset()
                         selectedUri = null
                     }) {
-                        Text("Try Again")
+                        Text(stringResource(R.string.action_try_again))
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = {
                         viewModel.reset()
                         onDone()
                     }) {
-                        Text("Back to Settings")
+                        Text(stringResource(R.string.fw_back_to_settings))
                     }
                 }
             }
@@ -236,12 +238,12 @@ private fun FirmwareProgress(progress: UpdateProgress) {
                 else 0
 
                 Text(
-                    "Transferring firmware...",
+                    stringResource(R.string.fw_transferring),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "$pct%",
+                    stringResource(R.string.percent_value, pct),
                     style = MaterialTheme.typography.headlineLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -253,13 +255,17 @@ private fun FirmwareProgress(progress: UpdateProgress) {
                 Spacer(Modifier.height(8.dp))
                 if (progress.etaSeconds > 0) {
                     Text(
-                        "~${progress.etaSeconds}s remaining",
+                        stringResource(R.string.fw_eta_remaining, progress.etaSeconds),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Text(
-                    "${formatBytes(progress.bytesWritten)} / ${formatBytes(progress.totalBytes)}",
+                    stringResource(
+                        R.string.byte_pair,
+                        formatBytes(progress.bytesWritten),
+                        formatBytes(progress.totalBytes),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -267,7 +273,7 @@ private fun FirmwareProgress(progress: UpdateProgress) {
             is UpdateProgress.Verifying -> {
                 CircularProgressIndicator(modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(16.dp))
-                Text("Verifying firmware...", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.fw_verifying), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator(
                     progress = { progress.progress },
@@ -278,12 +284,12 @@ private fun FirmwareProgress(progress: UpdateProgress) {
                 CircularProgressIndicator(modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "Rebooting device...",
+                    stringResource(R.string.fw_rebooting),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "The device will reconnect in a few seconds.",
+                    stringResource(R.string.fw_reconnect_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -297,7 +303,7 @@ private fun FirmwareProgress(progress: UpdateProgress) {
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "Updated to ${progress.newVersion}",
+                    stringResource(R.string.fw_updated_to, progress.newVersion),
                     style = MaterialTheme.typography.titleMedium,
                     color = StatusActive,
                 )
@@ -327,10 +333,11 @@ private fun FirmwareProgress(progress: UpdateProgress) {
     }
 }
 
+@Composable
 private fun formatBytes(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
+    if (bytes < 1024) return stringResource(R.string.bytes_b, bytes)
     val kb = bytes / BYTES_PER_KB
-    return "$kb KB"
+    return stringResource(R.string.bytes_kb, kb)
 }
 
 @Composable
@@ -338,7 +345,7 @@ private fun DebugLogView(log: List<String>) {
     if (log.isEmpty()) return
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            "Debug Log",
+            stringResource(R.string.fw_debug_log),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

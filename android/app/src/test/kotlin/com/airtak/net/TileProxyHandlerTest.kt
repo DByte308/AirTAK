@@ -16,7 +16,32 @@ class TileProxyHandlerTest {
     @Test
     fun routesLocalTile() {
         val r = route("GET /tiles/3/4/5.png HTTP/1.1")
-        assertEquals(TileRoute.Local(3, 4, 5, headOnly = false), r)
+        assertEquals(TileRoute.Local(3, 4, 5, headOnly = false, vector = false), r)
+    }
+
+    @Test
+    fun routesVectorTileAsVectorAndRasterAsNot() {
+        // A `.pbf` request is the vector source; a `.png` request is the raster source. Same
+        // coordinates, different archive. The extension is what carries the distinction (issue #7).
+        assertEquals(
+            TileRoute.Local(3, 4, 5, headOnly = false, vector = true),
+            route("GET /tiles/3/4/5.pbf HTTP/1.1"),
+        )
+        assertEquals(
+            TileRoute.Local(3, 4, 5, headOnly = false, vector = false),
+            route("GET /tiles/3/4/5.png HTTP/1.1"),
+        )
+        assertEquals(
+            TileRoute.Local(3, 4, 5, headOnly = true, vector = true),
+            route("HEAD /tiles/3/4/5.pbf HTTP/1.1"),
+        )
+    }
+
+    @Test
+    fun rejectsUnknownLocalTileExtension() {
+        // Only .png and .pbf are recognised. A .jpg local request is not a supported source and
+        // must be refused rather than served as an ambiguous octet-stream.
+        assertTrue(route("GET /tiles/3/4/5.jpg HTTP/1.1") is TileRoute.Reject)
     }
 
     @Test
@@ -96,7 +121,7 @@ class TileProxyHandlerTest {
             "GET /tiles/-1/4/5.png HTTP/1.1",
             "GET /tiles//4/5.png HTTP/1.1",
             "GET /tiles/3/4 HTTP/1.1",
-            "GET /tiles/3/4/5.pbf HTTP/1.1",
+            "GET /tiles/3/4/5.pbf.evil HTTP/1.1",
             "GET /tiles/3/4/5.png.evil HTTP/1.1",
         ).forEach { line ->
             assertTrue(route(line) is TileRoute.Reject, "must refuse: $line")

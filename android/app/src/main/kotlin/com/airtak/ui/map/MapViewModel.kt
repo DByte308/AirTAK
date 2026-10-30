@@ -12,6 +12,8 @@ import com.airtak.data.db.RemoteNodeEntity
 import com.airtak.data.db.TacticalMarkerEntity
 import com.airtak.data.db.WaypointDao
 import com.airtak.data.db.WaypointEntity
+import com.airtak.data.geocoding.GeocodeException
+import com.airtak.data.geocoding.GeocodeFailure
 import com.airtak.data.geocoding.GeocodingRepository
 import com.airtak.data.geocoding.GeocodingResult
 import com.airtak.data.gps.GpsStartFailure
@@ -43,6 +45,7 @@ import com.airtak.proto.PlayerStatus
 import com.airtak.proto.Scope
 import com.airtak.proto.TeamControl
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -120,6 +123,8 @@ data class MapUiState(
     val tileTemplate: String? = null,
     val localTileTemplate: String? = null,
     val localTileMaxZoom: Int? = null,
+    val localVectorTileTemplate: String? = null,
+    val localVectorMaxZoom: Int? = null,
     val configuredTileTemplate: String = "",
     val tileDownload: TileDownloadState = TileDownloadState.Idle,
     val missionOverlay: MissionOverlay? = null,
@@ -159,10 +164,13 @@ class MapViewModel @Inject constructor(
     }
 
     private data class LayerState(val players: Boolean, val waypoints: Boolean)
+    private data class VectorState(val template: String?, val maxZoom: Int?)
     private data class TileState(
         val baseTemplate: String?,
         val localTemplate: String?,
         val localMaxZoom: Int?,
+        val localVectorTemplate: String?,
+        val localVectorMaxZoom: Int?,
         val configuredTemplate: String,
         val download: TileDownloadState,
     )
@@ -186,14 +194,26 @@ class MapViewModel @Inject constructor(
             ?: GameConfig.getDefaultInstance()
     }
 
-    private val tileState = combine(
+    private val rasterTileState = combine(
         tileRepository.tileTemplate,
         tileRepository.localTileTemplate,
         tileRepository.localTileMaxZoom,
         tileRepository.configuredTileTemplate,
         tileRepository.downloadState,
     ) { baseTemplate, localTemplate, localMaxZoom, configuredTemplate, download ->
-        TileState(baseTemplate, localTemplate, localMaxZoom, configuredTemplate, download)
+        TileState(baseTemplate, localTemplate, localMaxZoom, null, null, configuredTemplate, download)
+    }
+
+    private val localVectorTileState = combine(
+        tileRepository.localVectorTileTemplate,
+        tileRepository.localVectorMaxZoom,
+    ) { template, maxZoom -> VectorState(template, maxZoom) }
+
+    private val tileState = combine(rasterTileState, localVectorTileState) { raster, vector ->
+        raster.copy(
+            localVectorTemplate = vector.template,
+            localVectorMaxZoom = vector.maxZoom,
+        )
     }
 
     private val sourceState = combine(
@@ -236,6 +256,8 @@ class MapViewModel @Inject constructor(
             tileTemplate = tile.baseTemplate,
             localTileTemplate = tile.localTemplate,
             localTileMaxZoom = tile.localMaxZoom,
+            localVectorTileTemplate = tile.localVectorTemplate,
+            localVectorMaxZoom = tile.localVectorMaxZoom,
             configuredTileTemplate = tile.configuredTemplate,
             tileDownload = tile.download,
             missionOverlay = overlay,
@@ -464,6 +486,16 @@ class MapViewModel @Inject constructor(
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching
 
+    /**
+     * Why the last lookup failed, or null.
+     *
+     * Kept separate from the result list so an outage is not displayed as "no places found",
+     * and kept as the typed failure rather than a sentence so the wording can live in string
+     * resources. See [asText].
+     */
+    private val _searchError = MutableStateFlow<GeocodeFailure?>(null)
+    val searchError: StateFlow<GeocodeFailure?> = _searchError
+
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
         if (query.isBlank()) {
@@ -474,12 +506,24 @@ class MapViewModel @Inject constructor(
     fun searchLocations(query: String) {
         if (query.isBlank()) {
             _searchResults.value = emptyList()
+            _searchError.value = null
             return
         }
         viewModelScope.launch {
             _isSearching.value = true
-            _searchResults.value = geocodingRepository.search(query)
-            _isSearching.value = false
+            _searchError.value = null
+            try {
+                _searchResults.value = geocodingRepository.search(query)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (g: GeocodeException) {
+                // "No such place" and "could not ask the server" are different answers, and the
+                // repository used to collapse them into an empty list.
+                _searchResults.value = emptyList()
+                _searchError.value = g.failure
+            } finally {
+                _isSearching.value = false
+            }
         }
     }
 

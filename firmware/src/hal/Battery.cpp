@@ -4,6 +4,7 @@
 
 #include "hal/Battery.h"
 #include "hal/Display.h"
+#include "config/ConfigManager.h"
 #include "config/constants/Constants.h"
 #include "config.h"
 #include <Arduino.h>
@@ -54,7 +55,14 @@ void Battery::sample(EventGroupHandle_t system_event_group) {
         delay(BATTERY_ADC_DELAY_MS);
     }
     uint32_t raw_adc = raw_acc / BATTERY_ADC_OVERSAMPLE;
-    s_voltage_mv = (uint32_t)(raw_adc * BATTERY_ADC_REFERENCE_MV * BATTERY_VOLTAGE_DIVIDER_RATIO * AIRTAK_ADC_MULTIPLIER
+
+    // Per-device ADC multiplier: prefer the value configured over BLE (PowerConfig
+    // field 6). When absent/unset the accessor returns 0.0f, so fall back to the
+    // board's compile-time AIRTAK_ADC_MULTIPLIER calibration constant.
+    float adc_multiplier = config::ConfigManager::powerAdcMultiplier();
+    if (adc_multiplier <= 0.0f) adc_multiplier = AIRTAK_ADC_MULTIPLIER;
+
+    s_voltage_mv = (uint32_t)(raw_adc * BATTERY_ADC_REFERENCE_MV * BATTERY_VOLTAGE_DIVIDER_RATIO * adc_multiplier
                  / BATTERY_ADC_MAX_COUNTS);
 
     // Clamp and normalise

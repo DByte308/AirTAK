@@ -81,6 +81,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.airtak.ui.i18n.labelText
 import com.airtak.config.constants.MODERATION_BAN_TTL_SEC
 import com.airtak.config.constants.MODERATION_REQUIRED_VOTES
 import com.airtak.config.constants.MS_PER_SECOND
@@ -109,7 +110,7 @@ import com.airtak.R
 import com.airtak.ui.components.HudCard
 import com.airtak.ui.components.SectionLabel
 import com.airtak.ui.components.TacticalText
-import com.airtak.ui.help.HELP_TOPICS
+import com.airtak.ui.help.helpTopics
 import com.airtak.ui.i18n.AppLanguage
 import com.airtak.ui.theme.AccentAmber
 import com.airtak.ui.theme.StatusActive
@@ -200,7 +201,7 @@ private fun TopRow(title: String, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(vertical = 12.dp)
     ) {
-        OutlinedButton(onClick = onBack) { Text("Back") }
+        OutlinedButton(onClick = onBack) { Text(stringResource(R.string.action_back)) }
         Spacer(Modifier.size(12.dp))
         Text(
                 title.uppercase(),
@@ -290,7 +291,7 @@ private fun LanguageSection(vm: SettingsViewModel) {
 @Composable
 private fun HelpSection() {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-        HELP_TOPICS.forEach { topic ->
+        helpTopics().forEach { topic ->
             SectionLabel(topic.title)
             if (topic.intro.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))
@@ -348,10 +349,10 @@ private fun ApplyRow(onRead: () -> Unit, onApply: () -> Unit, busy: Boolean) {
             horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         OutlinedButton(onClick = onRead, modifier = Modifier.weight(1f), enabled = !busy) {
-            Text("Read")
+            Text(stringResource(R.string.settings_read))
         }
         Button(onClick = onApply, modifier = Modifier.weight(1f), enabled = !busy) {
-            Text(if (busy) "Applying…" else "Apply")
+            Text(if (busy) stringResource(R.string.settings_applying) else stringResource(R.string.action_apply))
         }
     }
 }
@@ -371,22 +372,22 @@ private fun PlayerSection(
     LaunchedEffect(Unit) { vm.readGame() }
     LaunchedEffect(Unit) { vm.readChannels() }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-        SectionLabel("Player identity")
+        SectionLabel(stringResource(R.string.settings_sec_player_identity))
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
                 value = game.callsign,
                 onValueChange = { vm.updateGame { copy(callsign = it.take(16)) } },
-                label = { Text("Callsign (max 16 B)") },
+                label = { Text(stringResource(R.string.settings_callsign_field)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
         )
         Spacer(Modifier.height(16.dp))
-        SectionLabel("Device identifiers")
+        SectionLabel(stringResource(R.string.settings_sec_device_ids))
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
                 value = device.longName,
                 onValueChange = { vm.updateDevice { copy(longName = it.take(39)) } },
-                label = { Text("Long name (max 39 B)") },
+                label = { Text(stringResource(R.string.settings_long_name_field)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
         )
@@ -394,18 +395,18 @@ private fun PlayerSection(
         OutlinedTextField(
                 value = device.shortName,
                 onValueChange = { vm.updateDevice { copy(shortName = it.take(4)) } },
-                label = { Text("Short name (max 4 B)") },
+                label = { Text(stringResource(R.string.settings_short_name_field)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
         )
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             OutlinedButton(onClick = { vm.generateRandomIdentity() }) {
-                Text("Generate random identity")
+                Text(stringResource(R.string.settings_generate_identity))
             }
         }
         Spacer(Modifier.height(16.dp))
-        SectionLabel("Unit hierarchy (optional, self-organized)")
+        SectionLabel(stringResource(R.string.settings_sec_unit_hierarchy))
         Spacer(Modifier.height(8.dp))
 
         val channelOptions: List<UnitChannelOption> =
@@ -444,7 +445,7 @@ private fun PlayerSection(
             OutlinedTextField(
                     value = game.companyId,
                     onValueChange = { vm.updateGame { copy(companyId = it.take(32)) } },
-                    label = { Text("Company (e.g. \"1st Company\")") },
+                    label = { Text(stringResource(R.string.settings_company_field)) },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
             )
@@ -474,7 +475,7 @@ private fun PlayerSection(
             OutlinedTextField(
                     value = game.platoonId,
                     onValueChange = { vm.updateGame { copy(platoonId = it.take(32)) } },
-                    label = { Text("Platoon (e.g. \"Red Platoon\")") },
+                    label = { Text(stringResource(R.string.settings_platoon_field)) },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
             )
@@ -504,7 +505,7 @@ private fun PlayerSection(
             OutlinedTextField(
                     value = game.squadId,
                     onValueChange = { vm.updateGame { copy(squadId = it.take(32)) } },
-                    label = { Text("Squad (e.g. \"1st Squad\")") },
+                    label = { Text(stringResource(R.string.settings_squad_field)) },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
             )
@@ -531,13 +532,13 @@ private fun PlayerSection(
             OutlinedTextField(
                     value = game.fireteamId,
                     onValueChange = { vm.updateGame { copy(fireteamId = it.take(32)) } },
-                    label = { Text("Fireteam (e.g. \"Alpha\")") },
+                    label = { Text(stringResource(R.string.settings_fireteam_field)) },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
             )
             UnitChannelDropdown(
                     level = "fireteam",
-                    unitLabel = game.fireteamId.ifBlank { "Fireteam" },
+                    unitLabel = game.fireteamId.ifBlank { stringResource(R.string.scope_fireteam) },
                     selectedSlot = game.fireteamChannelSlot,
                     channelOptions = channelOptions,
                     claimedSlots = claimedSlots,
@@ -560,13 +561,13 @@ private fun PlayerSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
-        SectionLabel("Appearance")
+        SectionLabel(stringResource(R.string.settings_sec_appearance))
         OutlinedTextField(
                 value = game.playerColorRgb.toString(16).uppercase().padStart(6, '0'),
                 onValueChange = { hex ->
                     hex.take(6).toIntOrNull(16)?.let { vm.updateGame { copy(playerColorRgb = it) } }
                 },
-                label = { Text("Player color (hex RRGGBB)") },
+                label = { Text(stringResource(R.string.settings_player_color_field)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
         )
@@ -597,7 +598,7 @@ private fun PlayerSection(
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !busy
-            ) { Text("Read") }
+            ) { Text(stringResource(R.string.settings_read)) }
             Button(
                     onClick = {
                         vm.applyDevice()
@@ -605,7 +606,7 @@ private fun PlayerSection(
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !busy
-            ) { Text(if (busy) "Applying…" else "Apply") }
+            ) { Text(if (busy) stringResource(R.string.settings_applying) else stringResource(R.string.action_apply)) }
         }
     }
 }
@@ -620,7 +621,7 @@ private fun LoraSection(vm: SettingsViewModel) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         RadioRestartBanner()
         Spacer(Modifier.height(16.dp))
-        SectionLabel("Region")
+        SectionLabel(stringResource(R.string.settings_sec_region))
         var expanded by remember { mutableStateOf(false) }
         Box {
             OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
@@ -639,7 +640,7 @@ private fun LoraSection(vm: SettingsViewModel) {
             }
         }
         Spacer(Modifier.height(12.dp))
-        SectionLabel("TX Power: ${state.txPower} dBm")
+        SectionLabel(stringResource(R.string.settings_tx_power, state.txPower))
         Slider(
                 value = state.txPower.toFloat(),
                 onValueChange = { vm.updateLora { copy(txPower = it.toInt()) } },
@@ -647,7 +648,7 @@ private fun LoraSection(vm: SettingsViewModel) {
                 steps = UI_TX_POWER_STEPS,
         )
         Spacer(Modifier.height(8.dp))
-        SectionLabel("PHY profiles (${state.profiles.size})")
+        SectionLabel(stringResource(R.string.settings_phy_profiles, state.profiles.size))
         state.profiles.forEachIndexed { i, p ->
             HudCard(Modifier.fillMaxWidth().padding(top = 6.dp)) {
                 ProfileEditor(
@@ -697,46 +698,46 @@ private fun ProfileEditor(
         OutlinedTextField(
                 value = profile.name,
                 onValueChange = onName,
-                label = { Text("Profile name") },
+                label = { Text(stringResource(R.string.settings_profile_name)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
         )
         // Range/speed tradeoff (Spreading Factor)
         NumberDropdown(
-                label = "Range",
+                label = stringResource(R.string.settings_profile_range),
                 value = profile.spreadingFactor,
                 options = (7..12).toList(),
                 onValue = onSf,
                 modifier = Modifier.fillMaxWidth(),
         ) { sf ->
             when (sf) {
-                7 -> "Fastest, short range (SF7)"
-                8 -> "Fast, short-medium (SF8)"
-                9 -> "Balanced (SF9)"
-                10 -> "Slower, long range (SF10)"
-                11 -> "Slow, very long range (SF11)"
-                12 -> "Slowest, maximum range (SF12)"
-                else -> "SF$sf"
+                7 -> stringResource(R.string.sf_desc_7)
+                8 -> stringResource(R.string.sf_desc_8)
+                9 -> stringResource(R.string.sf_desc_9)
+                10 -> stringResource(R.string.sf_desc_10)
+                11 -> stringResource(R.string.sf_desc_11)
+                12 -> stringResource(R.string.sf_desc_12)
+                else -> stringResource(R.string.sf_label, sf)
             }
         }
         // Channel width (Bandwidth)
         NumberDropdown(
-                label = "Channel width",
+                label = stringResource(R.string.settings_profile_bandwidth),
                 value = profile.bandwidthHz,
                 options = UI_BANDWIDTH_OPTIONS,
                 onValue = onBandwidth,
                 modifier = Modifier.fillMaxWidth(),
         ) { bw ->
             when (bw) {
-                125000 -> "125 kHz — narrow (extra range, less interference)"
-                250000 -> "250 kHz — standard"
-                500000 -> "500 kHz — wide (faster, more interference)"
-                else -> "${bw / UI_BANDWIDTH_HZ_TO_KHZ} kHz"
+                125000 -> stringResource(R.string.bw_desc_125)
+                250000 -> stringResource(R.string.bw_desc_250)
+                500000 -> stringResource(R.string.bw_desc_500)
+                else -> stringResource(R.string.bw_khz, bw / UI_BANDWIDTH_HZ_TO_KHZ)
             }
         }
         // Error correction (Coding Rate)
         NumberDropdown(
-                label = "Error correction",
+                label = stringResource(R.string.settings_profile_coding_rate),
                 value = profile.codingRate,
                 options = (5..8).toList(),
                 onValue = onCodingRate,
@@ -886,12 +887,16 @@ private fun ChannelSlotEditor(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                            "Slot ${slot.index}",
+                            stringResource(R.string.msg_slot_title, slot.index),
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                     )
                     TacticalText(
-                            "${if (isOpen) "Open" else "Encrypted"} · ${slot.role.roleLabel()}",
+                            stringResource(
+                            R.string.open_or_encrypted,
+                            if (isOpen) stringResource(R.string.msg_channel_open) else stringResource(R.string.msg_channel_encrypted),
+                            slot.role.roleLabel(),
+                        ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -906,7 +911,7 @@ private fun ChannelSlotEditor(
             OutlinedTextField(
                     value = slot.name,
                     onValueChange = onName,
-                    label = { Text("Channel name") },
+                    label = { Text(stringResource(R.string.settings_channel_name)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
             )
@@ -916,17 +921,17 @@ private fun ChannelSlotEditor(
             ) {
                 RoleDropdown(slot.role, onRole, Modifier.weight(1f))
                 NumberDropdown(
-                        label = "Radio profile",
+                        label = stringResource(R.string.settings_radio_profile),
                         value = slot.phyProfileIndex,
                         options = profileNames.indices.toList().ifEmpty { (0..4).toList() },
                         onValue = onProfile,
                         modifier = Modifier.weight(1f),
-                ) { value -> profileNames.getOrNull(value) ?: "Profile $value" }
+                ) { value -> profileNames.getOrNull(value) ?: stringResource(R.string.settings_profile_n, value) }
             }
             OutlinedTextField(
                     value = editor.pskText,
                     onValueChange = onPsk,
-                    label = { Text("Password (blank = open channel)") },
+                    label = { Text(stringResource(R.string.settings_channel_password)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     isError = editor.pskError != null,
@@ -961,7 +966,7 @@ private fun ChannelSlotEditor(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            SectionLabel("Location detail shared")
+            SectionLabel(stringResource(R.string.settings_location_detail_shared))
             Text(
                     when {
                         slot.positionPrecision == 0 ->
@@ -1011,12 +1016,12 @@ private fun NumberDropdown(
         options: List<Int>,
         onValue: (Int) -> Unit,
         modifier: Modifier = Modifier,
-        render: (Int) -> String = { it.toString() },
+        render: @Composable (Int) -> String = { it.toString() },
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
         OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("$label ${render(value)}")
+            Text(stringResource(R.string.settings_value_with_unit, label, render(value)))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
@@ -1066,52 +1071,56 @@ private fun RoleDropdown(
     }
 }
 
+@Composable
 private fun profilePreset(index: Int): String =
         when (index) {
-            0 -> "Long range / moderate speed"
-            1 -> "Short range / fast"
-            2 -> "Very long range / slow"
-            3 -> "Medium range / moderate"
-            4 -> "User Defined"
-            else -> "Custom"
+            0 -> stringResource(R.string.preset_long_range)
+            1 -> stringResource(R.string.preset_short_fast)
+            2 -> stringResource(R.string.preset_very_long_slow)
+            3 -> stringResource(R.string.preset_medium)
+            4 -> stringResource(R.string.preset_user_defined)
+            else -> stringResource(R.string.preset_custom)
         }
 
-/** Returns a plain-English summary of a LoRa PHY profile's real-world tradeoffs. */
+/** Plain-language summary of a LoRa PHY profile's real-world tradeoffs. */
+@Composable
 private fun phyDescription(sf: Int, bwHz: Int, cr: Int): String {
-    if (sf == 0 || bwHz == 0 || cr == 0) return "Not configured — set values below"
+    if (sf == 0 || bwHz == 0 || cr == 0) return stringResource(R.string.phy_not_configured)
     // Approximate on-air data rate (bps) = SF × BW / 2^SF × 4/CR
     val bitrateKbps = sf.toDouble() * bwHz / (1L shl sf) * (UI_LORA_RATE_CR_NUMERATOR / cr) / UI_LORA_BPS_TO_KBPS
     val rangeStr =
             when {
-                sf <= 7 -> "short range (~1–2 km)"
-                sf == 8 -> "medium range (~2–4 km)"
-                sf == 9 -> "medium range (~3–5 km)"
-                sf == 10 -> "long range (~3–8 km)"
-                sf == 11 -> "long range (~5–10 km)"
-                else -> "very long range (~8–15 km)"
+                sf <= 7 -> stringResource(R.string.phy_range_sf7)
+                sf == 8 -> stringResource(R.string.phy_range_sf8)
+                sf == 9 -> stringResource(R.string.phy_range_sf9)
+                sf == 10 -> stringResource(R.string.phy_range_sf10)
+                sf == 11 -> stringResource(R.string.phy_range_sf11)
+                else -> stringResource(R.string.phy_range_sf12)
             }
     val speedStr =
             when {
-                bitrateKbps >= 5.0 -> "fast (~%.0f kbps)".format(bitrateKbps)
-                bitrateKbps >= 1.0 -> "moderate (~%.1f kbps)".format(bitrateKbps)
-                else -> "slow (~%.2f kbps)".format(bitrateKbps)
+                bitrateKbps >= 5.0 -> stringResource(R.string.phy_speed_fast, "%.0f".format(bitrateKbps))
+                bitrateKbps >= 1.0 -> stringResource(R.string.phy_speed_moderate, "%.1f".format(bitrateKbps))
+                else -> stringResource(R.string.phy_speed_slow, "%.2f".format(bitrateKbps))
             }
-    return "$rangeStr · $speedStr"
+    return stringResource(R.string.phy_separator, rangeStr, speedStr)
 }
 
+@Composable
 private fun ChannelRole.roleLabel(): String =
         when (this) {
-            ChannelRole.PRIMARY -> "Primary"
-            ChannelRole.SECONDARY -> "Secondary"
-            ChannelRole.DISABLED -> "Disabled"
+            ChannelRole.PRIMARY -> stringResource(R.string.role_primary)
+            ChannelRole.SECONDARY -> stringResource(R.string.role_secondary)
+            ChannelRole.DISABLED -> stringResource(R.string.role_disabled)
             else -> name
         }
 
+@Composable
 private fun ChannelRole.roleDescription(): String =
         when (this) {
-            ChannelRole.PRIMARY -> "Main team channel — all mesh traffic flows here."
-            ChannelRole.SECONDARY -> "Extra channel (command net, cross-team link, etc)."
-            ChannelRole.DISABLED -> "Slot unused — no traffic sent or received."
+            ChannelRole.PRIMARY -> stringResource(R.string.role_primary_desc)
+            ChannelRole.SECONDARY -> stringResource(R.string.role_secondary_desc)
+            ChannelRole.DISABLED -> stringResource(R.string.role_disabled_desc)
             else -> ""
         }
 
@@ -1133,14 +1142,14 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
     LaunchedEffect(Unit) { vm.readPower() }
     LaunchedEffect(Unit) { vm.readChannels() }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-        SectionLabel("Position broadcast")
+        SectionLabel(stringResource(R.string.settings_position_broadcast))
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
                 value = position.broadcastIntervalSecs.toString(),
                 onValueChange = { v ->
                     v.toIntOrNull()?.let { vm.updatePosition { copy(broadcastIntervalSecs = it) } }
                 },
-                label = { Text("Broadcast interval (s)") },
+                label = { Text(stringResource(R.string.settings_broadcast_interval)) },
                 keyboardOptions =
                         androidx.compose.foundation.text.KeyboardOptions(
                                 keyboardType = KeyboardType.Number
@@ -1153,7 +1162,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                 onValueChange = { v ->
                     v.toIntOrNull()?.let { vm.updatePosition { copy(minTxIntervalSecs = it) } }
                 },
-                label = { Text("Min TX gap (s)") },
+                label = { Text(stringResource(R.string.settings_min_tx_gap)) },
                 keyboardOptions =
                         androidx.compose.foundation.text.KeyboardOptions(
                                 keyboardType = KeyboardType.Number
@@ -1174,7 +1183,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
             )
         }
         Spacer(Modifier.height(24.dp))
-        SectionLabel("GPS source")
+        SectionLabel(stringResource(R.string.settings_gps_source))
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -1193,7 +1202,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
             )
         }
         Spacer(Modifier.height(24.dp))
-        SectionLabel("Position broadcast channel")
+        SectionLabel(stringResource(R.string.settings_position_channel))
         Spacer(Modifier.height(8.dp))
         Text(
             "Select which channel carries your GPS position. Use an encrypted channel shared with your team — avoid unencrypted channels to prevent enemy tracking.",
@@ -1206,16 +1215,17 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
             .filter { it.slot.role != ChannelRole.DISABLED }
             .map { it.slot.index to it.slot.name }
         NumberDropdown(
-            label = "Channel",
+            label = stringResource(R.string.settings_channel),
             value = position.positionChannelIndex,
             options = activeSlotOptions.map { it.first },
             onValue = { vm.updatePosition { copy(positionChannelIndex = it) } },
             modifier = Modifier.fillMaxWidth(),
         ) { value ->
-            activeSlotOptions.firstOrNull { it.first == value }?.second ?: "Slot $value"
+            activeSlotOptions.firstOrNull { it.first == value }?.second
+                ?: stringResource(R.string.msg_slot_title, value)
         }
         Spacer(Modifier.height(24.dp))
-        SectionLabel("Power saving")
+        SectionLabel(stringResource(R.string.settings_power_saving))
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -1235,7 +1245,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                 onValueChange = { v ->
                     v.toIntOrNull()?.let { vm.updatePower { copy(displayOffSecs = it) } }
                 },
-                label = { Text("Display off after (s, 0 = never)") },
+                label = { Text(stringResource(R.string.settings_display_off_after)) },
                 keyboardOptions =
                         androidx.compose.foundation.text.KeyboardOptions(
                                 keyboardType = KeyboardType.Number
@@ -1243,7 +1253,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                 modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
-        Text("Brightness: ${power.brightnessPct}%")
+        Text(stringResource(R.string.settings_brightness, power.brightnessPct))
         Slider(
                 value = power.brightnessPct.toFloat(),
                 onValueChange = { v ->
@@ -1251,6 +1261,27 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                 },
                 valueRange = UI_BRIGHTNESS_MIN_PCT..UI_BRIGHTNESS_MAX_PCT,
                 steps = UI_BRIGHTNESS_STEPS,
+                modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        // Issue #1: per-device ADC battery-voltage multiplier, synced to the device
+        // via POWER config (adc_multiplier). Defaults from the device table when the
+        // board is known, else the sensible default; user-editable.
+        OutlinedTextField(
+                value = if (power.adcMultiplier == power.adcMultiplier.toInt().toFloat()) {
+                    power.adcMultiplier.toInt().toString()
+                } else {
+                    power.adcMultiplier.toString()
+                },
+                onValueChange = { v ->
+                    val parsed = v.replace(',', '.').toFloatOrNull()
+                    if (parsed != null) vm.setAdcMultiplier(parsed)
+                },
+                label = { Text(stringResource(R.string.settings_adc_multiplier)) },
+                keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal
+                        ),
                 modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))
@@ -1263,7 +1294,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !busy
-            ) { Text("Read") }
+            ) { Text(stringResource(R.string.settings_read)) }
             Button(
                     onClick = {
                         vm.applyPower()
@@ -1271,7 +1302,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !busy
-            ) { Text(if (busy) "Applying…" else "Apply") }
+            ) { Text(if (busy) stringResource(R.string.settings_applying) else stringResource(R.string.action_apply)) }
         }
     }
 }
@@ -1283,7 +1314,7 @@ private fun SecuritySection(vm: SettingsViewModel) {
     val state by vm.security.collectAsState()
     LaunchedEffect(Unit) { vm.readSecurity() }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-        SectionLabel("Bonded devices: ${state.maxBonds}")
+        SectionLabel(stringResource(R.string.settings_bonded_devices, state.maxBonds))
         Slider(
                 value = state.maxBonds.toFloat(),
                 onValueChange = {
@@ -1306,7 +1337,7 @@ private fun SecuritySection(vm: SettingsViewModel) {
 private fun ModerationSection(vm: SettingsViewModel) {
     val bans by vm.moderation.bans.collectAsState(initial = emptyList())
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-        SectionLabel("Active vote-kick bans")
+        SectionLabel(stringResource(R.string.settings_active_bans))
         Spacer(Modifier.height(4.dp))
         if (bans.isEmpty()) {
             Text(
@@ -1352,12 +1383,17 @@ private fun ModerationSection(vm: SettingsViewModel) {
                                         }
                                     }
                                     Text(
-                                            "Scope: ${scopeLabel(ban.scope)}",
+                                            stringResource(R.string.map_detail_scope, ban.scope.labelText()),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     Text(
-                                            "${ban.voteCount} / ${MODERATION_REQUIRED_VOTES} votes · ${ban.voters.size} distinct voters",
+                                            stringResource(
+                                            R.string.settings_moderation_votes,
+                                            ban.voteCount,
+                                            MODERATION_REQUIRED_VOTES,
+                                            ban.voters.size,
+                                        ),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -1377,7 +1413,7 @@ private fun ModerationSection(vm: SettingsViewModel) {
                                     OutlinedButton(
                                             onClick = { vm.unbanNode(ban.targetNodeId, ban.scope) },
                                             modifier = Modifier.fillMaxWidth(),
-                                    ) { Text("Unban") }
+                                    ) { Text(stringResource(R.string.settings_unban)) }
                                 }
                             }
                         }
@@ -1385,16 +1421,6 @@ private fun ModerationSection(vm: SettingsViewModel) {
         }
     }
 }
-
-private fun scopeLabel(scope: com.airtak.proto.Scope): String =
-        when (scope) {
-            com.airtak.proto.Scope.SCOPE_ALL -> "All players"
-            com.airtak.proto.Scope.SCOPE_COMPANY -> "Company"
-            com.airtak.proto.Scope.SCOPE_PLATOON -> "Platoon"
-            com.airtak.proto.Scope.SCOPE_SQUAD -> "Squad"
-            com.airtak.proto.Scope.SCOPE_FIRE_TEAM -> "Fireteam"
-            else -> "All players"
-        }
 
 // ── APP (local prefs) ─────────────────────────────────────────────────────────
 
@@ -1404,7 +1430,7 @@ private fun AppSection(vm: SettingsViewModel) {
     val tileUrl by vm.tileUrl.collectAsState()
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-        SectionLabel("Theme")
+        SectionLabel(stringResource(R.string.settings_theme))
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ThemeMode.entries.forEach { tm ->
@@ -1425,13 +1451,13 @@ private fun AppSection(vm: SettingsViewModel) {
         OutlinedTextField(
                 value = tileUrl,
                 onValueChange = vm::setTileUrl,
-                label = { Text("Map tile server URL (optional)") },
+                label = { Text(stringResource(R.string.settings_tile_server_url)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-                "Theme: ${mode.name}.",
+                stringResource(R.string.settings_theme_mode, mode.name),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1470,13 +1496,13 @@ private fun ShareSection(vm: SettingsViewModel) {
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         // ── Export ──────────────────────────────────────────────────────────
-        SectionLabel("Export config as QR code")
+        SectionLabel(stringResource(R.string.settings_export_qr))
         Spacer(Modifier.height(12.dp))
 
         qrBitmap?.let { bmp ->
             Image(
                 bitmap = bmp.asImageBitmap(),
-                contentDescription = "QR code with AirTAK config",
+                contentDescription = stringResource(R.string.settings_qr_content_description),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 32.dp)
@@ -1491,7 +1517,7 @@ private fun ShareSection(vm: SettingsViewModel) {
         Spacer(Modifier.height(16.dp))
 
         // ── Import ──────────────────────────────────────────────────────────
-        SectionLabel("Import config from QR code")
+        SectionLabel(stringResource(R.string.settings_import_qr))
 
         Spacer(Modifier.height(12.dp))
 
@@ -1506,7 +1532,7 @@ private fun ShareSection(vm: SettingsViewModel) {
                         scanLauncher.launch(options)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Scan QR code") }
+                ) { Text(stringResource(R.string.settings_scan_qr)) }
             }
             is ImportState.Error -> {
                 Text(
@@ -1520,19 +1546,19 @@ private fun ShareSection(vm: SettingsViewModel) {
                         importState = ImportState.Idle
                         val options = ScanOptions()
                             .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                            .setPrompt("Scan an AirTAK config QR code")
+                            .setPrompt(context.getString(R.string.settings_scan_prompt))
                             .setBeepEnabled(false)
                         scanLauncher.launch(options)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Try again") }
+                ) { Text(stringResource(R.string.action_try_again)) }
             }
             is ImportState.Ready -> {
                 val cfg = state.config
                 HudCard(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            "Import summary",
+                            stringResource(R.string.settings_import_summary),
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
@@ -1577,7 +1603,7 @@ private fun ShareSection(vm: SettingsViewModel) {
                     OutlinedButton(
                         onClick = { importState = ImportState.Idle },
                         modifier = Modifier.weight(1f),
-                    ) { Text("Cancel") }
+                    ) { Text(stringResource(R.string.action_cancel)) }
                     Button(
                         onClick = {
                             vm.importShareableConfig(cfg)
@@ -1585,7 +1611,7 @@ private fun ShareSection(vm: SettingsViewModel) {
                         },
                         modifier = Modifier.weight(1f),
                         enabled = !busy,
-                    ) { Text(if (busy) "Applying…" else "Apply to device") }
+                    ) { Text(if (busy) stringResource(R.string.settings_applying) else stringResource(R.string.settings_apply_to_device)) }
                 }
 
                 RadioRestartBanner()
@@ -1609,7 +1635,7 @@ private fun ShareSection(vm: SettingsViewModel) {
                 OutlinedButton(
                     onClick = { importState = ImportState.Idle },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Scan another") }
+                ) { Text(stringResource(R.string.settings_scan_another)) }
             }
         }
     }
@@ -1653,25 +1679,25 @@ private fun AboutSection(vm: SettingsViewModel, onFirmwareSelected: ((Uri) -> Un
         OutlinedButton(
                 onClick = { vm.sendAdmin(AdminCommand.RADIO_RESTART) },
                 modifier = Modifier.fillMaxWidth(),
-        ) { Text("Radio Restart") }
+        ) { Text(stringResource(R.string.settings_radio_restart)) }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
                 onClick = { vm.sendAdmin(AdminCommand.REBOOT) },
                 modifier = Modifier.fillMaxWidth(),
-        ) { Text("Reboot Device") }
+        ) { Text(stringResource(R.string.settings_reboot_device)) }
         Spacer(Modifier.height(8.dp))
         Button(
                 onClick = { filePicker.launch("*/*") },
                 modifier = Modifier.fillMaxWidth(),
-        ) { Text("Update Firmware") }
+        ) { Text(stringResource(R.string.settings_update_firmware)) }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
                 onClick = { openBatteryOptimizationSettings(context) },
                 modifier = Modifier.fillMaxWidth(),
-        ) { Text("Battery Optimization") }
+        ) { Text(stringResource(R.string.settings_battery_optimization)) }
         Spacer(Modifier.height(24.dp))
         Text(
-                "Factory reset requires a HMAC confirm-token and ships in Phase 6.",
+                stringResource(R.string.settings_factory_reset_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1786,7 +1812,7 @@ private fun UnitChannelDropdown(
 
             if (tactical.isNotEmpty()) {
                 HorizontalDivider()
-                DropdownSectionLabel("Configured channels")
+                DropdownSectionLabel(stringResource(R.string.settings_configured_channels))
                 tactical.forEach { option ->
                     val claimedBy = claimedSlots[option.index]
                     val claimedByOther = claimedBy != null && claimedBy != level
@@ -1878,7 +1904,7 @@ private fun UnitChannelDropdown(
 
             if (reserved.isNotEmpty()) {
                 HorizontalDivider()
-                DropdownSectionLabel("Reserved slots (not selectable)")
+                DropdownSectionLabel(stringResource(R.string.settings_reserved_slots))
                 reserved.forEach { option ->
                     val subtitle =
                             when (option.kind) {
