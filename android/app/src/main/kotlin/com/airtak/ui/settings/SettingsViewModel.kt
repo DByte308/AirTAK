@@ -414,8 +414,8 @@ class SettingsViewModel @Inject constructor(
 
     /**
      * Build a [ShareableConfig] from the current view state. The callsign is
-     * stripped — it must be unique per device and is regenerated on import via
-     * [generateRandomIdentity].
+     * excluded from sharing because it is unique per device. Import preserves
+     * the local callsign (including a deliberately generated identity).
      */
     fun buildShareableConfig(): ShareableConfig {
         val lora = _lora.value
@@ -454,7 +454,7 @@ class SettingsViewModel @Inject constructor(
             config.apply(ConfigGroup.CHANNELS, sc.channels.toByteArray())
         }
         if (sc.hasGame()) {
-            val gameMsg = sc.game.toBuilder().setCallsign("").build()
+            val gameMsg = sc.game.toBuilder().setCallsign(_game.value.callsign).build()
             config.apply(ConfigGroup.GAME, gameMsg.toByteArray())
         }
     }

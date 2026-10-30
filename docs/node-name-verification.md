@@ -35,9 +35,14 @@ the explicit-empty encoding fix. Original names were restored and verified in al
 three views. After force-stop/relaunch, the saved callsign appeared without entering
 Settings, confirming reconnect-time config reads.
 
-Android tests: **279/279**, discovery audit clean. This includes identity precedence,
+Android tests: **285/285**, discovery audit clean. This includes identity precedence,
 malformed config handling, reconnect/cache invalidation, ACK readback, explicit-empty
 staging/apply, full GAME numeric/bool preservation and unknown-wire preservation.
+A follow-up QR-import regression test verifies shared GAME settings keep the local
+callsign (including a deliberately generated draft identity), never apply DEVICE,
+and retain imported hierarchy/color/HIT settings. QR import formerly forced the
+callsign empty despite its documented preservation contract; that is now corrected.
+This QR path is unit-tested, not claimed as an additional on-device QR-camera test.
 Debug APK's strict-ABI native libraries pass the 16 KB ELF/archive alignment gate.
 
 ## Limits
