@@ -1,51 +1,72 @@
 #!/usr/bin/env bash
-# Render vector tiles (.pbf .mbtiles) from an OSM extract with tilemaker, in a local rootless
-# Podman image. No sudo, no host installs, no large toolchain. (issue #7 / #8)
-#
-# The image is built from the tilemaker 3.2.0 source at tag c7d1dbf and is local only. It is
-# never published. The command form is fixed: --input PBF, --output MBTILES, --config, --process.
+# AirTAK — tools/render_vector_maps.sh
+# Render an OpenStreetMap extract to an AirTAK offline vector MBTiles with the proven
+# podman tilemaker toolchain. See tools/vector_maps/README.md for the full picture.
 #
 # Usage:
-#   tools/render_vector_maps.sh <input.osm.pbf> <output.mbtiles> \
-#        [config.json] [process.lua]
+#   tools/render_vector_maps.sh INPUT.pbf OUTPUT.mbtiles [CONFIG.json] [PROCESS.lua]
 #
-# Defaults to tools/vector_maps/config.json + tools/vector_maps/process.lua when omitted.
+# Defaults: config.json and process.lua are taken from tools/vector_maps/ next to this script.
 #
-# The output tiles are gzip-compressed protobuf (config.json sets "compress": "gzip"), format
-# `pbf`, and the metadata carries attribution "© OpenStreetMap contributors, ODbL 1.0". The app
-# decodes the gzip and serves application/vnd.mapbox-vector-tile (see TileServer.kt).
+# The command run (image localhost/airtak-tilemaker:3.2.0-c7d1dbf is already built and proven):
+#   podman run --rm -v IN_DIR:/in -v OUT_DIR:/out -v CFG_DIR:/cfg -v PRC_DIR:/prc \
+#     localhost/airtak-tilemaker:3.2.0-c7d1dbf \
+#     --input /in/INPUT.pbf --output /out/OUTPUT.mbtiles \
+#     --config /cfg/CONFIG.json --process /prc/PROCESS.lua
+#
+# The input, output, config and process may live in different directories: each is bind-mounted
+# to its own container path, so nothing is copied and nothing in the host is overwritten.
+#
+# Notes:
+#   * The output .mbtiles stores gzip-compressed Mapbox Vector Tiles (metadata.format = "pbf").
+#   * tilemaker is fed the input as-is (it honours the extract's own bbox); circular clipping is
+#     applied afterward by tools/crop_vector_circle.py when a radius package is wanted.
 
-set -euo pipefail
+set -o errexit
+set -o pipefail
+set -o nounset
 
-IMAGE="${AIRTAK_TILEMAKER_IMAGE:-localhost/airtak-tilemaker:3.2.0-c7d1dbf}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IMAGE="localhost/airtak-tilemaker:3.2.0-c7d1dbf"
 
-INPUT="${1:?usage: render_vector_maps.sh <input.osm.pbf> <output.mbtiles> [config] [process]}"
-OUTPUT="${2:?usage: render_vector_maps.sh <input.osm.pbf> <output.mbtiles> [config] [process]}"
-CONFIG="${3:-$(dirname "$0")/vector_maps/config.json}"
-PROCESS="${4:-$(dirname "$0")/vector_maps/process.lua}"
+INPUT="${1:?usage: render_vector_maps.sh INPUT.pbf OUTPUT.mbtiles [CONFIG.json] [PROCESS.lua]}"
+OUTPUT="${2:?usage: render_vector_maps.sh INPUT.pbf OUTPUT.mbtiles [CONFIG.json] [PROCESS.lua]}"
+CONFIG="${3:-${SCRIPT_DIR}/vector_maps/config.json}"
+PROCESS="${4:-${SCRIPT_DIR}/vector_maps/process.lua}"
 
-INPUT="$(readlink -f "$INPUT")"
-OUTPUT="$(readlink -f "$OUTPUT")"
-CONFIG="$(readlink -f "$CONFIG")"
-PROCESS="$(readlink -f "$PROCESS")"
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+# Absolute paths so the bind mounts below are unambiguous.
+INPUT="$(readlink -f "${INPUT}")"
+OUTPUT="$(readlink -f "${OUTPUT}")"
+CONFIG="$(readlink -f "${CONFIG}")"
+PROCESS="$(readlink -f "${PROCESS}")"
 
-for path in "$INPUT" "$CONFIG" "$PROCESS"; do
-  [ -f "$path" ] || { echo "FAIL: missing $path" >&2; exit 1; }
+for f in "${INPUT}" "${CONFIG}" "${PROCESS}"; do
+  if [[ ! -f "${f}" ]]; then
+    echo "[render_vector_maps] ERROR: missing required file: ${f}" >&2
+    exit 1
+  fi
 done
+mkdir -p "$(dirname "${OUTPUT}")"
 
-cp "$CONFIG" "$WORK/config.json"
-cp "$PROCESS" "$WORK/process.lua"
-cp "$INPUT" "$WORK/input.osm.pbf"
-mkdir -p "$(dirname "$OUTPUT")"
+IN_DIR="$(dirname "${INPUT}")"; IN_NAME="$(basename "${INPUT}")"
+OUT_DIR="$(dirname "${OUTPUT}")"; OUT_NAME="$(basename "${OUTPUT}")"
+CFG_DIR="$(dirname "${CONFIG}")"; CFG_NAME="$(basename "${CONFIG}")"
+PRC_DIR="$(dirname "${PROCESS}")"; PRC_NAME="$(basename "${PROCESS}")"
 
-echo "Rendering $(basename "$INPUT") -> $(basename "$OUTPUT") with $IMAGE ..."
-podman run --rm -v "$WORK:/work" "$IMAGE" \
-  --input /work/input.osm.pbf \
-  --output /work/out.mbtiles \
-  --config /work/config.json \
-  --process /work/process.lua
+echo "[render_vector_maps] rendering ${INPUT} -> ${OUTPUT}"
+echo "[render_vector_maps]   config  : ${CONFIG}"
+echo "[render_vector_maps]   process : ${PROCESS}"
+echo "[render_vector_maps]   image   : ${IMAGE}"
 
-cp "$WORK/out.mbtiles" "$OUTPUT"
-echo "Wrote $OUTPUT ($(du -h "$OUTPUT" | cut -f1))"
+podman run --rm \
+  -v "${IN_DIR}:/in" \
+  -v "${OUT_DIR}:/out" \
+  -v "${CFG_DIR}:/cfg" \
+  -v "${PRC_DIR}:/prc" \
+  "${IMAGE}" \
+  --input "/in/${IN_NAME}" \
+  --output "/out/${OUT_NAME}" \
+  --config "/cfg/${CFG_NAME}" \
+  --process "/prc/${PRC_NAME}"
+
+echo "[render_vector_maps] done: ${OUTPUT}"

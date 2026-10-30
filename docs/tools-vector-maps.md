@@ -25,6 +25,9 @@ here and the style there are a single contract: change one and the other breaks 
 | `process.lua` | tilemaker Lua: which OSM tags become which layer/`class`, and the min zoom per feature |
 | `make_fixture.py` | writes a synthetic `OSMHeader`/`OSMData` PBF with dense nodes (for CI smoke tests) |
 | `render_vector_maps.sh` | runs the pinned tilemaker Podman image on a PBF to produce an `.mbtiles` |
+| `verify_vector_mbtiles.py` | read-only check: format pbf, gzip tile_data, vector_layers, attribution, per-zoom count/size |
+| `crop_vector_circle.py` | real RADIUS crop of an `.mbtiles` to a circle around a center (not a box) |
+| `test_vector_mbtiles.py` | self-test for the verifier + crop helper (gated in CI) |
 
 ## Render pipeline
 
@@ -60,6 +63,25 @@ nodes and features (the old synthetic `make_fixture.py` renders only the `place`
 | `transportation` | line | `motorway, trunk, primary, secondary, tertiary, ..., rail` | 6 (8/10/12 by class) |
 | `building` | polygon | `yes` etc. | 12 |
 | `place` | point/symbol | `city, town, village, hamlet, ...` | 6 (9/11 by class) |
+
+## Radius package (issue #8)
+
+A 50 km radius around Friedberg (50.3333 N, 8.75 E), zoom 6-12, is produced by rendering the
+permitted Geofabrik Hessen extract and then cropping to a circle:
+
+```bash
+tools/render_vector_maps.sh hessen-latest.osm.pbf hessen-full.mbtiles
+python3 tools/crop_vector_circle.py crop hessen-full.mbtiles friedberg-radius-50km.mbtiles \
+    --center 50.3333,8.75 --radius 50 --zoom 6-12
+python3 tools/verify_vector_mbtiles.py friedberg-radius-50km.mbtiles
+```
+
+The measured package is **330 tiles / ~67.2 MiB compressed** (135.3 MiB uncompressed, ratio
+2.01x). The issue's earlier estimate of "~379 tiles / ~17 MB" was wrong on both axes: a real
+radius crop drops the box's corner tiles (so the count is *lower*), while the per-tile z12
+buildings/ways data is far larger than estimated (so the size is ~4x higher). The package is well
+under the app's 15000-tile cap, so nothing was bypassed. The `radius_m` metadata and circle bounds
+are set on the archive so the app (and the verifier) know what it is.
 
 ## Licensing and attribution
 

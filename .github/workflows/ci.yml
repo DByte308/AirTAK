@@ -75,6 +75,16 @@ jobs:
           test -f tools/test_check_16kb_alignment.py || { echo "FAIL: tools/test_check_16kb_alignment.py missing"; exit 1; }
           python3 tools/test_check_16kb_alignment.py
 
+      # Issue #7/#8: the offline vector-map verifier and crop helper are the tools that certify
+      # the Friedberg package. They must be provably correct, so a self-test builds a synthetic
+      # vector MBTiles and asserts the verifier accepts a good pbf archive and rejects a raster
+      # or uncompressed one, and that the crop helper produces a bounded archive that verifies.
+      # stdlib-only, offline.
+      - name: vector-maps verifier/crop self-test
+        run: |
+          test -f tools/test_vector_mbtiles.py || { echo "FAIL: tools/test_vector_mbtiles.py missing"; exit 1; }
+          python3 tools/test_vector_mbtiles.py
+
       # Issue #11: the translation surface only stays translated if a new literal fails here.
       - name: i18n — no hardcoded user-visible UI strings
         run: python3 tools/check_i18n.py .

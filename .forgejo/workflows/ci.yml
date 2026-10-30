@@ -345,6 +345,13 @@ jobs:
           test -f tools/test_check_16kb_alignment.py || { echo "FAIL: tools/test_check_16kb_alignment.py missing"; exit 1; }
           python3 tools/test_check_16kb_alignment.py
 
+      # Issue #7/#8: verify the vector-map verifier/crop helper are provably correct (a synthetic
+      # pbf archive must verify, a raster or uncompressed one must fail, and crop must bound it).
+      - name: vector-maps verifier/crop self-test
+        run: |
+          test -f tools/test_vector_mbtiles.py || { echo "FAIL: tools/test_vector_mbtiles.py missing"; exit 1; }
+          python3 tools/test_vector_mbtiles.py
+
       # Issue #11: translation guards. Fails when a user-visible literal reappears in the
       # UI layer, or when values/ and values-de/ drift apart.
       - name: i18n — no hardcoded user-visible UI strings
