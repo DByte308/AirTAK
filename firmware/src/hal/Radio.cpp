@@ -156,6 +156,18 @@ void Radio::init() {
             s_radio_sx1262.setCurrentLimit(SX1262_CURRENT_LIMIT_MA);
             s_radio_sx1262.setRxBoostedGainMode(true);
             s_mod_sx1262.SPIsetRegValue(SX1262_REG_TX_CLAMP_CFG, SX1262_TX_CLAMP_VALUE, 0, 0);
+
+#if defined(AIRTAK_PIN_FEM_CSD)
+            // Heltec V4.3 KCT8103L RF FEM: power the FEM rail and chip-enable it;
+            // CTX Low = RX LNA mode. TX/RX path select is driven automatically by
+            // the SX1262 DIO2 (setDio2AsRfSwitch), which routes to the FEM CPS pin.
+            pinMode(AIRTAK_PIN_FEM_VFEM, OUTPUT);
+            pinMode(AIRTAK_PIN_FEM_CSD, OUTPUT);
+            pinMode(AIRTAK_PIN_FEM_CTX, OUTPUT);
+            digitalWrite(AIRTAK_PIN_FEM_CSD, HIGH);
+            digitalWrite(AIRTAK_PIN_FEM_VFEM, HIGH);
+            digitalWrite(AIRTAK_PIN_FEM_CTX, LOW);
+#endif
         }
     }
 

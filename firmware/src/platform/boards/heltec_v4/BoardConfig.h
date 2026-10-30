@@ -30,11 +30,13 @@
 #define AIRTAK_POWER_EN_ACTIVE_LOW
 #define AIRTAK_PIN_POWER_EN                36   // Vext, active LOW
 
-// ── ADC control — GPIO 37 must be driven LOW before reading VBAT ───────────
-// The voltage divider (VBAT → 100k → ADC pin → 100k → ADC_CTRL) is only
-// active when ADC_CTRL is LOW.  Drive LOW, sample, release to INPUT to save
-// power (consistent with heltec_unofficial library pattern).
+// ── ADC control — GPIO 37 must be driven HIGH to enable VBAT (V4.3) ─────────
+// On the V4 the voltage divider's MOSFET is enabled by ADC_CTRL HIGH
+// (Meshtastic heltec_v4: ADC_CTRL_ENABLED HIGH). This is the opposite of the V3
+// (V3 pulls ADC_CTRL LOW to enable). AirTAK's battery code drives the pin HIGH
+// when AIRTAK_ADC_CTRL_ACTIVE_HIGH is defined, otherwise LOW (V3 behaviour).
 #define AIRTAK_PIN_ADC_CTRL                37
+#define AIRTAK_ADC_CTRL_ACTIVE_HIGH        1
 
 // ── SX1262 sub-GHz LoRa radio ───────────────────────────────────────────────
 #define AIRTAK_PIN_SX1262_SCK              9
@@ -70,6 +72,14 @@
 // reference assumption in Battery.cpp and the actual ADC behaviour.
 #define AIRTAK_ADC_ATTENUATION            ADC_2_5db
 #define AIRTAK_ADC_MULTIPLIER              2.56f
+
+// ── KCT8103L RF FEM (V4.3) — external PA/LNA ──────────────────────────────
+// The V4.3 drives the SX1262 through a KCT8103L front-end (PA + LNA). Enable it,
+// power the FEM rail, and default CTX to RX-LNA mode; the SX1262 DIO2 pin drives
+// the FEM CPS pin so TX/RX path selection is automatic (setDio2AsRfSwitch).
+#define AIRTAK_PIN_FEM_VFEM                 7   // U3 LDO power enable (FEM rail)
+#define AIRTAK_PIN_FEM_CSD                  2   // chip enable (HIGH=on)
+#define AIRTAK_PIN_FEM_CTX                  5   // HIGH=RX bypass, LOW=RX LNA
 
 // ── User button ─────────────────────────────────────────────────────────────
 #define AIRTAK_PIN_USER_BUTTON              0   // BOOT button, active LOW
