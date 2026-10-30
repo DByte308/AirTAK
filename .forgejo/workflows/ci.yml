@@ -324,3 +324,13 @@ jobs:
         run: |
           test -f tools/test_mbtiles_migrate.py || { echo "FAIL: tools/test_mbtiles_migrate.py missing"; exit 1; }
           python3 tools/test_mbtiles_migrate.py
+
+      # Issue #11: translation guards. Fails when a user-visible literal reappears in the
+      # UI layer, or when values/ and values-de/ drift apart.
+      - name: i18n — no hardcoded user-visible UI strings
+        run: python3 tools/check_i18n.py .
+
+      - name: i18n — generated string tables are current and locale-complete
+        run: |
+          python3 tools/i18n_strings.py android/app/src/main/res check
+          python3 tools/i18n_help.py android/app/src/main/res check

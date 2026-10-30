@@ -47,6 +47,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.compose.ui.res.stringResource
+import com.airtak.R
 import com.airtak.data.ble.BleRepository
 import com.airtak.data.ble.DiscoveredDevice
 import com.airtak.data.ble.LinkState
@@ -91,7 +93,8 @@ fun PairingScreen(onDone: () -> Unit, viewModel: PairingViewModel = hiltViewMode
             .padding(16.dp),
     ) {
         Text(
-            if (bondedAddress != null) "DEVICE LINK" else "PAIR AIRTAK DEVICE",
+            if (bondedAddress != null) stringResource(R.string.pair_heading_link)
+            else stringResource(R.string.pair_heading),
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground,
         )
@@ -100,13 +103,13 @@ fun PairingScreen(onDone: () -> Unit, viewModel: PairingViewModel = hiltViewMode
         if (bondedAddress != null && !showScanner) {
             // ── Current device panel ─────────────────────────────────────────
             Text(
-                "Your AirTAK transponder is shown below. Disconnect temporarily drops the " +
-                    "link but keeps the device remembered. Forget unpairs completely.",
+                stringResource(R.string.pair_connected_body),
+                    
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(20.dp))
-            SectionLabel("Current device")
+            SectionLabel(stringResource(R.string.pair_current_device))
             Spacer(Modifier.height(8.dp))
 
             CurrentDeviceCard(link = link, address = bondedAddress)
@@ -127,7 +130,10 @@ fun PairingScreen(onDone: () -> Unit, viewModel: PairingViewModel = hiltViewMode
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.size(6.dp))
-                    Text(if (link is LinkState.Connected) "Disconnect" else "Reconnect")
+                    Text(
+                        if (link is LinkState.Connected) stringResource(R.string.action_disconnect)
+                        else stringResource(R.string.pair_reconnect),
+                    )
                 }
                 OutlinedButton(
                     onClick = { viewModel.forget(); showScanner = false },
@@ -137,7 +143,7 @@ fun PairingScreen(onDone: () -> Unit, viewModel: PairingViewModel = hiltViewMode
                     Icon(Icons.Outlined.BluetoothDisabled, contentDescription = null,
                          modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
-                    Text("Forget")
+                    Text(stringResource(R.string.pair_forget))
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -145,32 +151,32 @@ fun PairingScreen(onDone: () -> Unit, viewModel: PairingViewModel = hiltViewMode
                 onClick = { showScanner = true },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Pair different device")
+                Text(stringResource(R.string.pair_different_device))
             }
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = onDone,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-            ) { Text("Done") }
+            ) { Text(stringResource(R.string.action_done)) }
         } else {
             // ── Scanner panel ────────────────────────────────────────────────
             Text(
-                "Power on your T-Echo Plus and confirm the 6-digit numeric comparison " +
-                    "code shown on its e-ink display matches the prompt that appears on this phone.",
+                stringResource(R.string.pair_subtitle),
+                    
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(20.dp))
-            SectionLabel("Discovered")
+            SectionLabel(stringResource(R.string.pair_discovered))
             Spacer(Modifier.height(8.dp))
 
             if (devices.isEmpty()) {
                 HudCard {
                     Text(
                         when (link) {
-                            is LinkState.Scanning -> "Scanning for AirTAK transponders…"
-                            else -> "No devices yet. Bring your device within range and try again."
+                            is LinkState.Scanning -> stringResource(R.string.pair_scanning)
+                            else -> stringResource(R.string.pair_no_devices)
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -190,7 +196,7 @@ fun PairingScreen(onDone: () -> Unit, viewModel: PairingViewModel = hiltViewMode
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = { viewModel.startScan() }, modifier = Modifier.weight(1f)) {
-                    Text("Rescan")
+                    Text(stringResource(R.string.pair_rescan))
                 }
                 Button(
                     onClick = {
@@ -198,7 +204,7 @@ fun PairingScreen(onDone: () -> Unit, viewModel: PairingViewModel = hiltViewMode
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                ) { Text(if (bondedAddress != null) "Back" else "Done") }
+                ) { Text(if (bondedAddress != null) stringResource(R.string.action_back) else stringResource(R.string.action_done)) }
             }
         }
     }
@@ -207,10 +213,10 @@ fun PairingScreen(onDone: () -> Unit, viewModel: PairingViewModel = hiltViewMode
 @Composable
 private fun CurrentDeviceCard(link: LinkState, address: String) {
     val (statusColor, statusLabel) = when (link) {
-        is LinkState.Connected    -> StatusActive to "LINKED"
-        is LinkState.Connecting   -> MaterialTheme.colorScheme.primary to "LINKING…"
-        is LinkState.Reconnecting -> MaterialTheme.colorScheme.primary to "REACQUIRING…"
-        else                      -> MaterialTheme.colorScheme.onSurfaceVariant to "OFFLINE"
+        is LinkState.Connected    -> StatusActive to stringResource(R.string.pair_status_linked)
+        is LinkState.Connecting   -> MaterialTheme.colorScheme.primary to stringResource(R.string.pair_status_linking)
+        is LinkState.Reconnecting -> MaterialTheme.colorScheme.primary to stringResource(R.string.pair_status_reacquiring)
+        else                      -> MaterialTheme.colorScheme.onSurfaceVariant to stringResource(R.string.pair_status_offline)
     }
     HudCard(modifier = Modifier.fillMaxWidth(), accent = statusColor) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -223,7 +229,7 @@ private fun CurrentDeviceCard(link: LinkState, address: String) {
             Spacer(Modifier.size(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    "AirTAK Transponder",
+                    stringResource(R.string.pair_transponder),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -251,7 +257,7 @@ private fun DeviceRow(device: DiscoveredDevice, onSelect: () -> Unit) {
             Spacer(Modifier.size(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    device.name?.takeIf { it.isNotBlank() } ?: "AirTAK device",
+                    device.name?.takeIf { it.isNotBlank() } ?: stringResource(R.string.pair_airtak_device),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -260,7 +266,7 @@ private fun DeviceRow(device: DiscoveredDevice, onSelect: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TacticalText("${device.rssi} dBm", color = MaterialTheme.colorScheme.primary)
+            TacticalText(stringResource(R.string.rssi_dbm, device.rssi), color = MaterialTheme.colorScheme.primary)
         }
     }
 }

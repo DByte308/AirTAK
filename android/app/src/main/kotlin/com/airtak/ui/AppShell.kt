@@ -57,6 +57,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import androidx.compose.ui.res.stringResource
 import com.airtak.R
 import com.airtak.proto.DcLevel
 import com.airtak.ui.components.LinkChip
@@ -236,18 +237,18 @@ private fun DcLevel.displayColor(): Color = when (this) {
     DcLevel.UNRECOGNIZED -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
+@Composable
 private fun DcLevel.shortName(): String = when (this) {
-    DcLevel.DC_OK -> "OK"
-    DcLevel.DC_CAUTION -> "CAUT"
-    DcLevel.DC_WARNING -> "WARN"
-    DcLevel.DC_CRITICAL -> "CRIT"
-    DcLevel.UNRECOGNIZED -> "?"
+    DcLevel.DC_OK -> stringResource(R.string.dc_ok)
+    DcLevel.DC_CAUTION -> stringResource(R.string.dc_caution)
+    DcLevel.DC_WARNING -> stringResource(R.string.dc_warning)
+    DcLevel.DC_CRITICAL -> stringResource(R.string.dc_critical)
+    DcLevel.UNRECOGNIZED -> stringResource(R.string.metric_placeholder)
 }
 
-private fun formatDcPercent(hundredths: Int): String {
-    val pct = hundredths / 100.0
-    return "%.1f%%".format(pct)
-}
+@Composable
+private fun formatDcPercent(hundredths: Int): String =
+    stringResource(R.string.percent_value_f, hundredths / 100.0)
 
 @Composable
 private fun HudBar(
@@ -345,28 +346,33 @@ private fun HudBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 MetricTile(
-                    label = "BAT",
-                    value = batteryPercent?.let { "$it%" } ?: "—",
+                    label = stringResource(R.string.hud_bat),
+                    value = batteryPercent?.let { stringResource(R.string.percent_value, it) }
+                        ?: stringResource(R.string.metric_placeholder),
                     modifier = Modifier.weight(1f),
                 )
                 MetricTile(
-                    label = "GPS",
-                    value = if (satellites != null && satellites > 0) "$satellites sat"
+                    label = stringResource(R.string.hud_gps),
+                    value = if (satellites != null && satellites > 0) stringResource(R.string.hud_satellites, satellites)
                         else if (phoneGpsActive) {
-                            if (phoneGpsFix) "Fix" else "..."
-                        } else "—",
+                            if (phoneGpsFix) stringResource(R.string.hud_fix) else stringResource(R.string.metric_placeholder)
+                        } else stringResource(R.string.metric_placeholder),
                     modifier = Modifier.weight(1f),
                 )
                 MetricTile(
-                    label = "RSSI",
-                    value = rssi?.let { "${it.toInt()} dBm" } ?: "—",
+                    label = stringResource(R.string.hud_rssi),
+                    value = rssi?.let { stringResource(R.string.rssi_dbm, it.toInt()) }
+                        ?: stringResource(R.string.metric_placeholder),
                     modifier = Modifier.weight(1f),
                 )
                 MetricTile(
-                    label = "DC",
-                    value = if (hasDeviceStatus) "${dcLevel.shortName()} ${formatDcPercent(dcPercentage)}" else "—",
+                    label = stringResource(R.string.hud_dc),
+                    value = if (hasDeviceStatus) "${dcLevel.shortName()} ${formatDcPercent(dcPercentage)}"
+                        else stringResource(R.string.metric_placeholder),
                     accent = dcLevel.displayColor(),
-                    secondary = if (hasDeviceStatus && dcRelaysDropped > 0) "drp:$dcRelaysDropped" else null,
+                    secondary = if (hasDeviceStatus && dcRelaysDropped > 0)
+                        stringResource(R.string.hud_dropped_relays, dcRelaysDropped)
+                    else null,
                     modifier = Modifier.weight(1f),
                 )
             }

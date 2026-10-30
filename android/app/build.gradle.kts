@@ -64,6 +64,14 @@ android {
             java.srcDirs("src/main/kotlin")
         }
     }
+
+    // Issue #11: a key added to values/ and forgotten in values-de/ used to be a warning
+    // nobody read, which is how the untranslated-string backlog grew in the first place.
+    // Missing or extra translations now fail the build instead.
+    lint {
+        error += setOf("MissingTranslation", "ExtraTranslation")
+        warningsAsErrors = false
+    }
 }
 
 dependencies {

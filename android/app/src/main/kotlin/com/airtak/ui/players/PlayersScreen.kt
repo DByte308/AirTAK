@@ -50,6 +50,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.stringResource
+import com.airtak.R
 import com.airtak.proto.PlayerStatus
 import com.airtak.config.constants.MS_PER_SECOND
 import com.airtak.config.constants.UI_SECONDS_PER_HOUR
@@ -111,10 +113,15 @@ fun PlayersScreen(
     ) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MetricTile("ONLINE", "${ui.onlineCount}/${ui.totalCount}", Modifier.weight(1f))
                 MetricTile(
-                        "FILTER",
-                        if (ui.showOnlineOnly) "ONLINE" else "ALL",
+                    stringResource(R.string.players_online_heading),
+                    stringResource(R.string.counter_value, ui.onlineCount, ui.totalCount),
+                    Modifier.weight(1f),
+                )
+                MetricTile(
+                        stringResource(R.string.players_filter),
+                        if (ui.showOnlineOnly) stringResource(R.string.players_online_heading)
+                        else stringResource(R.string.players_all),
                         Modifier.weight(1f)
                 )
             }
@@ -126,7 +133,7 @@ fun PlayersScreen(
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = {
                         Text(
-                                "Search callsign or unit…",
+                                stringResource(R.string.players_search_hint),
                                 style = MaterialTheme.typography.bodyMedium
                         )
                     },
@@ -189,7 +196,7 @@ fun PlayersScreen(
             item {
                 HudCard(Modifier.fillMaxWidth()) {
                     Text(
-                            "No mesh players heard yet.",
+                            stringResource(R.string.players_empty),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -218,20 +225,20 @@ private fun VoteKickDialog(
 ) {
     val scopes =
             listOf(
-                    com.airtak.proto.Scope.SCOPE_FIRE_TEAM to "Fireteam",
-                    com.airtak.proto.Scope.SCOPE_SQUAD to "Squad",
-                    com.airtak.proto.Scope.SCOPE_PLATOON to "Platoon",
-                    com.airtak.proto.Scope.SCOPE_COMPANY to "Company",
-                    com.airtak.proto.Scope.SCOPE_ALL to "All players",
+                    com.airtak.proto.Scope.SCOPE_FIRE_TEAM to stringResource(R.string.scope_fireteam),
+                    com.airtak.proto.Scope.SCOPE_SQUAD to stringResource(R.string.scope_squad),
+                    com.airtak.proto.Scope.SCOPE_PLATOON to stringResource(R.string.scope_platoon),
+                    com.airtak.proto.Scope.SCOPE_COMPANY to stringResource(R.string.scope_company),
+                    com.airtak.proto.Scope.SCOPE_ALL to stringResource(R.string.scope_all),
             )
     var selected by remember { mutableStateOf(com.airtak.proto.Scope.SCOPE_FIRE_TEAM) }
     androidx.compose.material3.AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Vote-kick ${target.callsign}?") },
+            title = { Text(stringResource(R.string.players_vote_kick_title, target.callsign)) },
             text = {
                 Column {
                     Text(
-                            "When 3 distinct players cast a vote-kick at the same scope, the target is hidden from your local UI for 24 h. This affects display only — the mesh keeps relaying their packets.",
+                            stringResource(R.string.players_vote_kick_body),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -252,11 +259,11 @@ private fun VoteKickDialog(
             },
             confirmButton = {
                 androidx.compose.material3.Button(onClick = { onConfirm(selected) }) {
-                    Text("Vote kick")
+                    Text(stringResource(R.string.players_vote_kick_confirm))
                 }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
+                androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
             },
     )
 }
@@ -271,7 +278,7 @@ private fun OwnStatusPanel(
 ) {
     HudCard(Modifier.fillMaxWidth(), accent = statusColor(selected)) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionLabel("Own status")
+            SectionLabel(stringResource(R.string.players_own_status))
             Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -310,19 +317,19 @@ private fun OwnStatusPanel(
                         onClick = onRefresh,
                         modifier = Modifier.weight(1f).height(40.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                ) { ButtonLabel("Broadcast") }
+                ) { ButtonLabel(stringResource(R.string.players_broadcast)) }
                 if (onlineOnly) {
                     Button(
                             onClick = { onOnlineOnly(false) },
                             modifier = Modifier.weight(1f).height(40.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                    ) { ButtonLabel("Show all") }
+                    ) { ButtonLabel(stringResource(R.string.players_show_all)) }
                 } else {
                     OutlinedButton(
                             onClick = { onOnlineOnly(true) },
                             modifier = Modifier.weight(1f).height(40.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                    ) { ButtonLabel("Online only") }
+                    ) { ButtonLabel(stringResource(R.string.players_online_only)) }
                 }
             }
         }
@@ -484,7 +491,7 @@ private fun PlayerCard(
                                 modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text("Message")
+                        Text(stringResource(R.string.players_message))
                     }
                     OutlinedButton(onClick = onLocate, modifier = Modifier.weight(1f)) {
                         Icon(
@@ -493,7 +500,7 @@ private fun PlayerCard(
                                 modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text("Locate")
+                        Text(stringResource(R.string.players_locate))
                     }
                     if (!player.isSelf) {
                         OutlinedButton(
@@ -506,7 +513,7 @@ private fun PlayerCard(
                                     modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.width(6.dp))
-                            Text("Ping")
+                            Text(stringResource(R.string.players_ping))
                         }
                     }
                     if (!player.isSelf) {
@@ -517,7 +524,7 @@ private fun PlayerCard(
                                     modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.width(6.dp))
-                            Text("Get markers")
+                            Text(stringResource(R.string.players_get_markers))
                         }
                     }
                 }
@@ -526,7 +533,7 @@ private fun PlayerCard(
                     androidx.compose.material3.TextButton(
                             onClick = onVoteKick,
                             modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Vote-kick…", color = MaterialTheme.colorScheme.error) }
+                    ) { Text(stringResource(R.string.players_vote_kick_menu), color = MaterialTheme.colorScheme.error) }
                 }
             }
         }
@@ -554,7 +561,7 @@ private fun StatusChip(status: PlayerStatus) {
 private fun BatteryIndicator(percent: Int?) {
     if (percent == null) {
         Text(
-                "BAT —",
+                stringResource(R.string.players_bat_unknown),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -571,49 +578,53 @@ private fun BatteryIndicator(percent: Int?) {
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
         )
         Text(
-                "$percent%",
+                stringResource(R.string.percent_value, percent),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
+@Composable
 private fun hierarchyLabel(player: PlayerRow): String {
     val parts = mutableListOf<String>()
     if (player.companyId.isNotBlank()) parts.add(player.companyId)
     if (player.platoonId.isNotBlank()) parts.add(player.platoonId)
     if (player.squadId.isNotBlank()) parts.add(player.squadId)
     if (player.fireteamId.isNotBlank()) parts.add(player.fireteamId)
-    return parts.joinToString(" / ").ifBlank { "No unit" }
+    return parts.joinToString(" / ").ifBlank { stringResource(R.string.players_no_unit) }
 }
 
+@Composable
 private fun ageText(timestampMs: Long?): String {
-    if (timestampMs == null) return "—"
+    if (timestampMs == null) return stringResource(R.string.metric_placeholder)
     val ageSec = ((System.currentTimeMillis() - timestampMs) / MS_PER_SECOND).coerceAtLeast(0)
     return when {
-        ageSec < UI_SECONDS_PER_MINUTE -> "${ageSec}s"
-        ageSec < UI_SECONDS_PER_HOUR -> "${ageSec / UI_SECONDS_PER_MINUTE}m"
-        else -> "${ageSec / UI_SECONDS_PER_HOUR}h"
+        ageSec < UI_SECONDS_PER_MINUTE -> stringResource(R.string.age_seconds, ageSec)
+        ageSec < UI_SECONDS_PER_HOUR -> stringResource(R.string.age_minutes, ageSec / UI_SECONDS_PER_MINUTE)
+        else -> stringResource(R.string.age_hours, ageSec / UI_SECONDS_PER_HOUR)
     }
 }
 
+@Composable
 private fun PlayerStatus.shortLabel(): String =
         when (this) {
-            PlayerStatus.PLAYER_STATUS_ACTIVE -> "ACTIVE"
-            PlayerStatus.PLAYER_STATUS_INACTIVE -> "INACT"
-            PlayerStatus.PLAYER_STATUS_HIT -> "HIT"
-            PlayerStatus.PLAYER_STATUS_RESPAWNING -> "RESPAWN"
-            PlayerStatus.PLAYER_STATUS_ELIMINATED -> "ELIM"
-            else -> "OFFLINE"
+            PlayerStatus.PLAYER_STATUS_ACTIVE -> stringResource(R.string.status_active_badge)
+            PlayerStatus.PLAYER_STATUS_INACTIVE -> stringResource(R.string.status_inactive_badge)
+            PlayerStatus.PLAYER_STATUS_HIT -> stringResource(R.string.status_hit_badge)
+            PlayerStatus.PLAYER_STATUS_RESPAWNING -> stringResource(R.string.status_respawning_badge)
+            PlayerStatus.PLAYER_STATUS_ELIMINATED -> stringResource(R.string.status_eliminated_badge)
+            else -> stringResource(R.string.status_offline_badge)
         }
 
+@Composable
 private fun PlayerStatus.shortButtonLabel(): String =
         when (this) {
-            PlayerStatus.PLAYER_STATUS_ACTIVE -> "Active"
-            PlayerStatus.PLAYER_STATUS_INACTIVE -> "Inact"
-            PlayerStatus.PLAYER_STATUS_HIT -> "Hit"
-            PlayerStatus.PLAYER_STATUS_RESPAWNING -> "Resp"
-            PlayerStatus.PLAYER_STATUS_ELIMINATED -> "Elim"
+            PlayerStatus.PLAYER_STATUS_ACTIVE -> stringResource(R.string.status_active_button)
+            PlayerStatus.PLAYER_STATUS_INACTIVE -> stringResource(R.string.status_inactive_button)
+            PlayerStatus.PLAYER_STATUS_HIT -> stringResource(R.string.status_hit_button)
+            PlayerStatus.PLAYER_STATUS_RESPAWNING -> stringResource(R.string.status_respawning_button)
+            PlayerStatus.PLAYER_STATUS_ELIMINATED -> stringResource(R.string.status_eliminated_button)
             else -> shortLabel()
         }
 

@@ -70,6 +70,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.stringResource
+import com.airtak.R
+import com.airtak.ui.i18n.badgeCode
+import com.airtak.ui.i18n.labelText
 import com.airtak.config.constants.MS_PER_SECOND
 import com.airtak.config.constants.UI_SECONDS_PER_DAY
 import com.airtak.config.constants.UI_SECONDS_PER_HOUR
@@ -99,18 +103,18 @@ fun MarkersScreen(
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SectionLabel("Markers")
+            SectionLabel(stringResource(R.string.markers_title))
             Spacer(Modifier.weight(1f))
             Box {
                 IconButton(onClick = { showSnapshotPicker = true }) {
-                    Icon(Icons.Outlined.AddLocationAlt, contentDescription = "Request marker snapshot")
+                    Icon(Icons.Outlined.AddLocationAlt, contentDescription = stringResource(R.string.markers_cd_request_snapshot))
                 }
                 DropdownMenu(
                     expanded = showSnapshotPicker,
                     onDismissRequest = { showSnapshotPicker = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("All players (broadcast)") },
+                        text = { Text(stringResource(R.string.markers_broadcast_target)) },
                         onClick = {
                             showSnapshotPicker = false
                             viewModel.syncNow()
@@ -118,7 +122,7 @@ fun MarkersScreen(
                     )
                     remoteNodes.forEach { node ->
                         DropdownMenuItem(
-                            text = { Text("Request from ${node.callsign.ifBlank { node.shortName }}") },
+                            text = { Text(stringResource(R.string.markers_request_from, node.callsign.ifBlank { node.shortName })) },
                             onClick = {
                                 showSnapshotPicker = false
                                 viewModel.requestMarkerSnapshot(node.nodeId)
@@ -128,7 +132,7 @@ fun MarkersScreen(
                 }
             }
             IconButton(onClick = { viewModel.syncNow() }) {
-                Icon(Icons.Outlined.Refresh, contentDescription = "Sync markers and messages")
+                Icon(Icons.Outlined.Refresh, contentDescription = stringResource(R.string.markers_cd_sync))
             }
         }
 
@@ -139,12 +143,12 @@ fun MarkersScreen(
                 value = filter.query,
                 onValueChange = { viewModel.setQuery(it) },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Search markers…", style = MaterialTheme.typography.bodyMedium) },
+                placeholder = { Text(stringResource(R.string.markers_search_hint), style = MaterialTheme.typography.bodyMedium) },
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 trailingIcon = {
                     if (filter.query.isNotBlank()) {
                         IconButton(onClick = { viewModel.setQuery("") }) {
-                            Icon(Icons.Outlined.Cancel, contentDescription = "Clear")
+                            Icon(Icons.Outlined.Cancel, contentDescription = stringResource(R.string.action_clear))
                         }
                     }
                 },
@@ -154,7 +158,7 @@ fun MarkersScreen(
                 IconButton(onClick = { showFilterMenu = true }) {
                     Icon(
                         Icons.Outlined.FilterList,
-                        contentDescription = "Filter",
+                        contentDescription = stringResource(R.string.markers_filter),
                         tint = if (filter.typeFilter != null || filter.scopeFilter != null)
                             MaterialTheme.colorScheme.primary
                         else
@@ -166,7 +170,7 @@ fun MarkersScreen(
                     onDismissRequest = { showFilterMenu = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Clear all filters") },
+                        text = { Text(stringResource(R.string.markers_clear_filters)) },
                         leadingIcon = { Icon(Icons.Outlined.Cancel, contentDescription = null) },
                         onClick = {
                             viewModel.clearFilters()
@@ -187,14 +191,14 @@ fun MarkersScreen(
                     FilterChip(
                         selected = true,
                         onClick = { viewModel.setTypeFilter(null) },
-                        label = { Text("Type: ${typeLabel(activeType)}") },
+                        label = { Text(stringResource(R.string.map_detail_type, activeType.labelText())) },
                     )
                 }
                 if (activeScope != null) {
                     FilterChip(
                         selected = true,
                         onClick = { viewModel.setScopeFilter(null) },
-                        label = { Text("Scope: ${scopeLabel(activeScope)}") },
+                        label = { Text(stringResource(R.string.map_detail_scope, activeScope.labelText())) },
                     )
                 }
             }
@@ -207,7 +211,7 @@ fun MarkersScreen(
                 FilterChip(
                     selected = filter.typeFilter == type,
                     onClick = { viewModel.setTypeFilter(if (filter.typeFilter == type) null else type) },
-                    label = { Text(typeLabel(type), style = MaterialTheme.typography.labelSmall) },
+                    label = { Text(type.labelText(), style = MaterialTheme.typography.labelSmall) },
                     leadingIcon = {
                         Icon(
                             typeIcon(type),
@@ -226,13 +230,13 @@ fun MarkersScreen(
                 FilterChip(
                     selected = filter.scopeFilter == scope,
                     onClick = { viewModel.setScopeFilter(if (filter.scopeFilter == scope) null else scope) },
-                    label = { Text(scopeLabel(scope), style = MaterialTheme.typography.labelSmall) },
+                    label = { Text(scope.labelText(), style = MaterialTheme.typography.labelSmall) },
                 )
             }
         }
 
         Text(
-            "${markers.size} visible",
+            stringResource(R.string.markers_visible_count, markers.size),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
@@ -240,9 +244,9 @@ fun MarkersScreen(
         if (markers.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 val msg = if (filter.query.isNotBlank() || activeType != null || activeScope != null)
-                    "No markers match your filters."
+                    stringResource(R.string.markers_no_match)
                 else
-                    "No tactical markers in your channels yet.\nUse the Map tab to drop a point, route, or area."
+                    stringResource(R.string.markers_empty)
                 Text(
                     msg,
                     style = MaterialTheme.typography.bodyMedium,
@@ -277,18 +281,23 @@ fun MarkersScreen(
     pendingDelete?.let { marker ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("Delete marker?") },
+            title = { Text(stringResource(R.string.markers_delete_title)) },
             text = {
-                Text("Broadcasts a tombstone so other players will also remove \"${marker.label.ifBlank { "(unnamed)" }}\".")
+                Text(
+                    stringResource(
+                        R.string.markers_delete_body,
+                        marker.label.ifBlank { stringResource(R.string.markers_unnamed) },
+                    ),
+                )
             },
             confirmButton = {
                 Button(onClick = {
                     viewModel.deleteMarker(marker.markerId)
                     pendingDelete = null
-                }) { Text("Delete") }
+                }) { Text(stringResource(R.string.action_delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -325,7 +334,7 @@ private fun SwipeableMarkerRow(
                     .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error)
             }
         },
         enableDismissFromStartToEnd = false,
@@ -373,13 +382,13 @@ private fun MarkerRow(
         ) {
             Icon(
                 imageVector = typeIcon(type),
-                contentDescription = typeLabel(type),
+                contentDescription = type.labelText(),
                 modifier = Modifier.size(20.dp),
                 tint = iconColor,
             )
             Column(Modifier.weight(1f)) {
                 Text(
-                    marker.label.ifBlank { "(unnamed)" },
+                    marker.label.ifBlank { stringResource(R.string.markers_unnamed) },
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
@@ -387,13 +396,13 @@ private fun MarkerRow(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        typeLabel(type),
+                        type.labelText(),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     ScopeBadge(scope)
                     Text(
-                        "${marker.points().size} pt",
+                        stringResource(R.string.markers_point_count, marker.points().size),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -414,14 +423,15 @@ private fun MarkerRow(
                     if (marker.ownedLocally) {
                         Icon(
                             imageVector = if (marker.delivered) Icons.Outlined.Done else Icons.Outlined.Schedule,
-                            contentDescription = if (marker.delivered) "Delivered" else "Pending mesh delivery",
+                            contentDescription = if (marker.delivered) stringResource(R.string.markers_cd_delivered)
+                            else stringResource(R.string.markers_cd_pending),
                             modifier = Modifier.size(13.dp),
                             tint = if (marker.delivered) StatusActive else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
                         Icon(
                             Icons.Outlined.Router,
-                            contentDescription = "Received via mesh",
+                            contentDescription = stringResource(R.string.markers_cd_received),
                             modifier = Modifier.size(13.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -449,7 +459,7 @@ private fun MarkerRow(
                         shape = RoundedCornerShape(4.dp),
                     ) {
                         Text(
-                            teamLabel(team),
+                            team.labelText(),
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
                             color = teamColor(team),
@@ -469,7 +479,7 @@ private fun ScopeBadge(scope: Scope?) {
         shape = RoundedCornerShape(4.dp),
     ) {
         Text(
-            scopeLabel(scope).take(3).uppercase(),
+            scope.badgeCode(),
             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
@@ -486,24 +496,6 @@ private fun typeIcon(type: MarkerType?): ImageVector = when (type) {
     else -> Icons.Outlined.MyLocation
 }
 
-private fun typeLabel(type: MarkerType?): String = when (type) {
-    MarkerType.MARKER_TYPE_POINT -> "Point"
-    MarkerType.MARKER_TYPE_NOTE -> "Note"
-    MarkerType.MARKER_TYPE_OBJECTIVE -> "Objective"
-    MarkerType.MARKER_TYPE_ROUTE -> "Route"
-    MarkerType.MARKER_TYPE_AREA -> "Area"
-    else -> "Marker"
-}
-
-private fun scopeLabel(scope: Scope?): String = when (scope) {
-    Scope.SCOPE_ALL -> "All players"
-    Scope.SCOPE_COMPANY -> "Company"
-    Scope.SCOPE_PLATOON -> "Platoon"
-    Scope.SCOPE_SQUAD -> "Squad"
-    Scope.SCOPE_FIRE_TEAM -> "Fireteam"
-    else -> "All players"
-}
-
 private fun teamColor(team: TeamControl): Color = when (team) {
     TeamControl.TEAM_CONTROL_OWN -> Color(0xFF00E676)
     TeamControl.TEAM_CONTROL_OPPOSING -> Color(0xFFFF4D5E)
@@ -511,21 +503,15 @@ private fun teamColor(team: TeamControl): Color = when (team) {
     else -> Color(0xFF6E7681)
 }
 
-private fun teamLabel(team: TeamControl): String = when (team) {
-    TeamControl.TEAM_CONTROL_OWN -> "Own"
-    TeamControl.TEAM_CONTROL_OPPOSING -> "Opposing"
-    TeamControl.TEAM_CONTROL_NEUTRAL -> "Neutral"
-    else -> "Unknown"
-}
-
+@Composable
 private fun formatTimestamp(unixSeconds: Long): String {
-    if (unixSeconds <= 0L) return "—"
+    if (unixSeconds <= 0L) return stringResource(R.string.markers_never)
     val now = System.currentTimeMillis() / MS_PER_SECOND
     val age = (now - unixSeconds).coerceAtLeast(0)
     return when {
-        age < UI_SECONDS_PER_MINUTE -> "${age}s ago"
-        age < UI_SECONDS_PER_HOUR -> "${age / UI_SECONDS_PER_MINUTE}m ago"
-        age < UI_SECONDS_PER_DAY -> "${age / UI_SECONDS_PER_HOUR}h ago"
+        age < UI_SECONDS_PER_MINUTE -> stringResource(R.string.markers_age_seconds, age)
+        age < UI_SECONDS_PER_HOUR -> stringResource(R.string.markers_age_minutes, age / UI_SECONDS_PER_MINUTE)
+        age < UI_SECONDS_PER_DAY -> stringResource(R.string.markers_age_hours, age / UI_SECONDS_PER_HOUR)
         else -> SimpleDateFormat("MMM d", Locale.US).format(Date(unixSeconds * MS_PER_SECOND))
     }
 }

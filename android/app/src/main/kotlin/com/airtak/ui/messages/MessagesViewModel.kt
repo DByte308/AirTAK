@@ -62,8 +62,15 @@ class MessagesViewModel @Inject constructor(
     private val _draft = MutableStateFlow("")
     val draft: StateFlow<String> = _draft.asStateFlow()
 
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
+    /**
+     * Pending user-visible error as a string resource id plus the byte count that triggered it.
+     *
+     * It used to hold a finished English sentence. A ViewModel cannot call `stringResource`, so
+     * building display text here meant the message could never be translated; publishing the
+     * resource id keeps the wording in the string resources.
+     */
+    private val _error = MutableStateFlow<MessageError?>(null)
+    val error: StateFlow<MessageError?> = _error.asStateFlow()
 
     private val _scope = MutableStateFlow(Scope.SCOPE_ALL)
     val scope: StateFlow<Scope> = _scope.asStateFlow()
@@ -91,7 +98,7 @@ class MessagesViewModel @Inject constructor(
                 _error.value = null
             }
             is MeshRepository.SendResult.TooLong -> {
-                _error.value = "Too long: ${r.attemptedBytes} B exceeds 237 B LoRa limit."
+                _error.value = MessageError.TooLong(r.attemptedBytes)
             }
         }
     }
