@@ -12,7 +12,6 @@ import androidx.lifecycle.viewModelScope
 import com.airtak.config.constants.ADC_MULTIPLIER_DEFAULT
 import com.airtak.config.constants.ADC_MULTIPLIER_MAX
 import com.airtak.config.constants.ADC_MULTIPLIER_MIN
-import com.airtak.config.constants.AdcMultiplierDefaults
 import com.airtak.config.constants.DEVICE_BROADCAST_INTERVAL_SECS
 import com.airtak.config.constants.DEVICE_MIN_TX_INTERVAL_SECS
 import com.airtak.config.constants.QR_SCHEME
@@ -135,19 +134,13 @@ class SettingsViewModel @Inject constructor(
 
         // Issue #1: when the device reports its board id, prefill the ADC multiplier
         // with the device table value if the user has not yet set one (still at the
-        // neutral default). This is the "default from the device table" behavior.
-        viewModelScope.launch {
-            deviceStatus.collect { status ->
-                val boardId = status?.boardId
-                if (boardId.isNullOrBlank()) return@collect
-                val wanted = AdcMultiplierDefaults.defaultFor(boardId)
-                val current = _power.value.adcMultiplier
-                if (current <= 0f || current == ADC_MULTIPLIER_DEFAULT) {
-                    _power.value = _power.value.copy(adcMultiplier = wanted)
-                    prefs.setAdcMultiplier(wanted)
-                }
-            }
-        }
+        // Historically the app auto-prefilled and auto-applied a value from the per-device table
+        // (AdcMultiplierDefaults) whenever a DeviceStatus board id arrived. That was wrong: the
+        // issue's table holds the TARGET TOTAL multiplier, while the firmware separates that into
+        // DIVIDER(2.0) * MULTIPLIER, so pushing the total double-counted the divider and read ~2x
+        // too high. The field now defaults to 0 = "use the device's own board default" and is only
+        // a deliberate user override, so firmware keeps its correct calibration unless the user
+        // explicitly sets another value. AdcMultiplierDefaults is kept as a reference table.
         viewModelScope.launch {
             config.groupBytes.collect { map ->
                 map[ConfigGroup.DEVICE]?.let { b -> tryDecode { DeviceConfig.parseFrom(b) } }?.let {

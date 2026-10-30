@@ -58,10 +58,18 @@ class TileServerProbeTest {
     private fun start(
         reader: LocalTileReader,
         remote: RemoteTileSource? = null,
+        vectorReader: LocalTileReader? = null,
         maxHandlers: Int = TileServer.DEFAULT_MAX_HANDLERS,
         timeoutMs: Int = TileServer.DEFAULT_SOCKET_TIMEOUT_MS,
     ): TileServer {
-        val server = TileServer(scope, reader, remote, timeoutMs, maxHandlers)
+        // Named args: the localVectorTiles param sits between localTiles and remoteTiles now.
+        val server = TileServer(
+            scope, reader,
+            localVectorTiles = vectorReader,
+            remoteTiles = remote,
+            socketTimeoutMs = timeoutMs,
+            maxConcurrentHandlers = maxHandlers,
+        )
         server.start()
         servers += server
         return server
@@ -156,6 +164,47 @@ class TileServerProbeTest {
         assertEquals(200, got.status)
         assertEquals(vector.size, got.body.size)
         assertTrue(got.body.contentEquals(vector))
+    }
+
+    @Test
+    fun vectorAndRasterRoutesUseTheirOwnReaderNotEachOthers() {
+        // The cross-archive latency: readTile used to walk every archive and return the first hit
+        // at z/x/y regardless of route kind, so a .png route could be served a vector archive's
+        // gzipped MVT and a .pbf route a raster PNG. With separate readers the same coordinates
+        // resolve to the correct kind. Both readers claim the SAME z/x/y here, so a single shared
+        // reader would serve whichever archive was first in the list for both routes.
+        val raster = png()
+        val vector = mvt()
+        val server = start(
+            LocalTileReader { _, _, _ -> raster },
+            vectorReader = LocalTileReader { _, _, _ -> gzip(vector) },
+        )
+
+        val png = exchange(server.port, get("/tiles/7/1/1.png"))
+        assertEquals(200, png.status)
+        assertTrue(
+            png.lower.contains("content-type: image/png") && png.body.contentEquals(raster),
+            "a .png route must be served the raster bytes, head=${png.head}",
+        )
+
+        val pbf = exchange(server.port, get("/tiles/7/1/1.pbf"))
+        assertEquals(200, pbf.status)
+        assertTrue(
+            pbf.lower.contains("content-type: application/vnd.mapbox-vector-tile") &&
+                pbf.body.contentEquals(vector),
+            "a .pbf route must be served the (decompressed) vector bytes, head=${pbf.head}",
+        )
+    }
+
+    @Test
+    fun vectorRouteFallsBackToRasterReaderWhenNoVectorReaderConfigured() {
+        // Backwards compatibility: a TileServer constructed without a vector reader still serves a
+        // .pbf route out of the single localTiles reader (un-gzipping as before).
+        val vector = mvt()
+        val server = start(LocalTileReader { _, _, _ -> gzip(vector) })
+        val got = exchange(server.port, get("/tiles/7/1/1.pbf"))
+        assertEquals(200, got.status)
+        assertTrue(got.body.contentEquals(vector), "fallback reader must still serve the vector tile")
     }
 
     @Test
