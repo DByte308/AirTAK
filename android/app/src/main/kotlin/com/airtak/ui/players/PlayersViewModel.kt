@@ -10,6 +10,7 @@ import com.airtak.data.config.ConfigRepository
 import com.airtak.data.db.RemoteNodeEntity
 import com.airtak.data.game.GameRepository
 import com.airtak.data.mesh.MeshRepository
+import com.airtak.data.mesh.applyNamePresence
 import com.airtak.data.mesh.RemoteNodeRepository
 import com.airtak.data.moderation.ModerationRepository
 import com.airtak.data.status.DeviceStatusRepository
@@ -265,14 +266,10 @@ constructor(
         val packet =
                 PlayerStatePacket.newBuilder()
                         .setNodeId(currentStatus.nodeId)
-                        .setCallsign(callsign)
                         .setStatus(statusValue)
                         .setColorRgb(game.playerColorRgb.takeIf { it != 0 } ?: 0xFFFFFF)
                         .setIsStateTransition(transition)
-                        .setFireteamId(game.fireteamId)
-                        .setSquadId(game.squadId)
-                        .setPlatoonId(game.platoonId)
-                        .setCompanyId(game.companyId)
+                        .applyNamePresence(callsign, game.fireteamId, game.squadId, game.platoonId, game.companyId)
                         .build()
         mesh.sendPlayerState(packet)
     }

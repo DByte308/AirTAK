@@ -20,6 +20,7 @@ import com.airtak.data.gps.GpsStartFailure
 import com.airtak.data.gps.PhoneGpsProvider
 import com.airtak.data.marker.TacticalMarkerRepository
 import com.airtak.data.mesh.MeshRepository
+import com.airtak.data.mesh.applyNamePresence
 import com.airtak.data.mesh.RemoteNodeRepository
 import com.airtak.data.overlays.MissionOverlay
 import com.airtak.data.overlays.MissionOverlayCornerId
@@ -284,14 +285,10 @@ class MapViewModel @Inject constructor(
         val gameConfig = identity.game
         val packet = PlayerStatePacket.newBuilder()
             .setNodeId(device.nodeId)
-            .setCallsign(callsign)
             .setStatus(statusValue)
             .setColorRgb(gameConfig.playerColorRgb.takeIf { it != 0 } ?: 0xFFFFFF)
             .setIsStateTransition(transition)
-            .setFireteamId(gameConfig.fireteamId)
-            .setSquadId(gameConfig.squadId)
-            .setPlatoonId(gameConfig.platoonId)
-            .setCompanyId(gameConfig.companyId)
+            .applyNamePresence(callsign, gameConfig.fireteamId, gameConfig.squadId, gameConfig.platoonId, gameConfig.companyId)
             .build()
         mesh.sendPlayerState(packet)
     }

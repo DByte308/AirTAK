@@ -63,33 +63,14 @@ class RemoteNodeRepository @Inject constructor(
     private suspend fun handleNodeInfo(packet: MeshRxPacket) {
         val payload = packet.payload ?: return
         val user = MeshWire.decodeNodeInfo(payload) ?: return
-        update(packet.srcNodeId) { existing, now ->
-            existing.copy(
-                shortName = user.shortName.orEmpty().ifBlank { existing.shortName },
-                longName = user.longName.orEmpty().ifBlank { existing.longName },
-                lastNodeInfoMs = now,
-                lastSeenMs = now,
-            )
-        }
+        update(packet.srcNodeId) { existing, now -> mergeNodeInfo(existing, user, now) }
     }
 
     private suspend fun handlePlayer(packet: MeshRxPacket) {
         val payload = packet.payload ?: return
         val player = runCatching { PlayerStatePacket.parseFrom(payload) }.getOrNull() ?: return
         val nodeId = (if (player.nodeId != 0) player.nodeId.toLong() else packet.srcNodeId) and UINT32_MASK
-        update(nodeId) { existing, now ->
-            existing.copy(
-                callsign = player.callsign.ifBlank { existing.callsign },
-                fireteamId = player.fireteamId.takeIf { it.isNotBlank() } ?: existing.fireteamId,
-                squadId = player.squadId.takeIf { it.isNotBlank() } ?: existing.squadId,
-                platoonId = player.platoonId.takeIf { it.isNotBlank() } ?: existing.platoonId,
-                companyId = player.companyId.takeIf { it.isNotBlank() } ?: existing.companyId,
-                statusValue = player.statusValue,
-                colorRgb = player.colorRgb,
-                lastPlayerMs = now,
-                lastSeenMs = now,
-            )
-        }
+        update(nodeId) { existing, now -> mergePlayerState(existing, player, payload, now) }
     }
 
     private suspend fun handleTelemetry(packet: MeshRxPacket) {

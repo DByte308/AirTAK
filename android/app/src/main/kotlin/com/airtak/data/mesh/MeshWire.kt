@@ -247,6 +247,35 @@ object MeshWire {
     }
 
     /**
+     * Returns true if the protobuf [wantField] is PRESENT on the wire in
+     * [payload], even when its value is empty/zero. proto3 implicit-presence
+     * scalars collapse an omitted field and an explicitly present-but-empty one
+     * to the same default after decode; this raw scan preserves the distinction
+     * that the generated parser cannot.
+     */
+    fun wireHasField(payload: ByteArray, wantField: Int): Boolean {
+        var i = 0
+        while (i < payload.size) {
+            val (tag, ni) = readVarint(payload, i) ?: return false
+            i = ni
+            val field = (tag shr PROTO_FIELD_NUM_SHIFT).toInt()
+            val wire = (tag and PROTO_WIRE_TYPE_MASK).toInt()
+            if (field == wantField) return true
+            i = when (wire) {
+                PROTO_WIRE_VARINT -> { val (_, n2) = readVarint(payload, i) ?: return false; n2 }
+                PROTO_WIRE_FIXED32 -> i + PROTO_FIXED32_BYTES
+                PROTO_WIRE_FIXED64 -> i + PROTO_FIXED64_BYTES
+                PROTO_WIRE_LEN -> {
+                    val (len, n2) = readVarint(payload, i) ?: return false
+                    n2 + len.toInt()
+                }
+                else -> return false
+            }
+        }
+        return false
+    }
+
+    /**
      * Decode battery_level from a Meshtastic Telemetry protobuf.
      * Navigates: Telemetry.device_metrics (field 2, LEN) → DeviceMetrics.battery_level (field 2, VARINT).
      * Returns battery percentage 0-100, or null if the field is absent or unparseable.

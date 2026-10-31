@@ -33,14 +33,19 @@ enum PlayerStatus {
 // Unit hierarchy fields are free-text, self-assigned, all optional.
 message PlayerStatePacket {
   uint32       node_id             = 1;
-  string       callsign            = 2;
+  // #24: explicit presence. proto3 `optional` lets a sender distinguish an
+  // OMITTED callsign (absent -> receiver keeps its stored name) from an
+  // EXPLICITLY EMPTY one (present -> receiver clears to the NODEINFO
+  // short/long-name fallback). Old senders that omit the field keep working.
+  optional string callsign         = 2;
   PlayerStatus status              = 3;
   uint32       color_rgb           = 4;
   bool         is_state_transition = 5;   // true = status changed; false = heartbeat
-  string       fireteam_id         = 6;   // e.g., "Alpha"; free-text, optional
-  string       squad_id            = 7;   // e.g., "1st Squad"; free-text, optional
-  string       platoon_id          = 8;   // e.g., "Red Platoon"; free-text, optional
-  string       company_id          = 9;   // e.g., "1st Company"; free-text, optional
+  // #24: same explicit-presence rule for unit-membership strings.
+  optional string fireteam_id      = 6;   // e.g., "Alpha"; free-text, optional
+  optional string squad_id         = 7;   // e.g., "1st Squad"; free-text, optional
+  optional string platoon_id       = 8;   // e.g., "Red Platoon"; free-text, optional
+  optional string company_id       = 9;   // e.g., "1st Company"; free-text, optional
 }
 
 // ── Tactical Markers (portnum 257) ─────────────────────────────────────────
