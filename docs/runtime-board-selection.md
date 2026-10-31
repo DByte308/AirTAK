@@ -119,10 +119,12 @@ the routing predicates, and the actual runtime Battery consumer.
 
 ## Runtime HAL compile checkpoint
 
-`runtime_hal_check` builds the runtime power, button, battery, radio, GPS, touch,
-recovery and sleep paths against the real ESP32 framework. Its display is a no-op
-link fixture, so upload is explicitly disabled. An attempted upload was checked
-and rejected; do not bypass that guard or treat its factory binary as deployable.
+`runtime_s3_shared` builds the runtime power, button, battery, radio, GPS, touch,
+recovery and sleep paths against the real ESP32 framework together with the real
+display dispatcher and both backends. It is a compile/link feasibility image with
+upload explicitly disabled; do not bypass that guard or treat its factory binary
+as deployable. (The earlier `runtime_hal_check` no-op-display fixture was removed
+as redundant once the real backends linked.)
 
 Radio Module objects capture the selected pins lazily, after the profile is
 sealed. SX1276 has explicit DIO/RF-switch metadata and uses its own receive/RSSI

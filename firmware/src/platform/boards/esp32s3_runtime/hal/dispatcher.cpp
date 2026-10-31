@@ -15,15 +15,13 @@
 // Safety: actual render / brightness / sleep / wake are gated on the backend's
 // ready(), so a failed begin() (null OLED buffer) is never dereferenced.
 //
-// Guard: compiled ONLY under AIRTAK_RUNTIME_BOARD and NOT under the legacy
-// compile fixture AIRTAK_RUNTIME_HAL_COMPILE_TEST, so the existing per-board
-// compile fixture still works. The per-board Display.cpp (chosen by src_filter)
-// must be excluded for the runtime image, else there are two definitions of
-// airtak::Display.
+// Guard: compiled ONLY under AIRTAK_RUNTIME_BOARD. The per-board Display.cpp
+// (chosen by src_filter) must be excluded for the runtime image, else there are
+// two definitions of airtak::Display.
 
 #include "hal/Display.h"
 
-#if defined(AIRTAK_RUNTIME_BOARD) && !defined(AIRTAK_RUNTIME_HAL_COMPILE_TEST)
+#ifdef AIRTAK_RUNTIME_BOARD
 
 #include "platform/RuntimeDisplayRoute.h"
 #include "platform/esp32/system/BoardProvisioning.h"
@@ -230,4 +228,4 @@ void Display::showShutdownWarning() {
 
 } // namespace airtak
 
-#endif // AIRTAK_RUNTIME_BOARD && !AIRTAK_RUNTIME_HAL_COMPILE_TEST
+#endif // AIRTAK_RUNTIME_BOARD
