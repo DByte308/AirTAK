@@ -74,7 +74,7 @@ private fun now() = 1234L
 class RemoteNodeMergeTest {
 
     @Test
-    fun `present value sets callsign`() {
+    fun presentValueSetsCallsign() {
         val payload = encPlayerPayload(callsign = F.VALUE, callsignValue = "CHK")
         val player = PlayerStatePacket.parseFrom(payload)
         val merged = mergePlayerState(entity(callsign = "OLD"), player, payload, now())
@@ -82,7 +82,7 @@ class RemoteNodeMergeTest {
     }
 
     @Test
-    fun `old packet absent keeps prior callsign`() {
+    fun oldPacketAbsentKeepsPriorCallsign() {
         val payload = encPlayerPayload(callsign = F.ABSENT)
         val player = PlayerStatePacket.parseFrom(payload)
         val merged = mergePlayerState(entity(callsign = "OLD"), player, payload, now())
@@ -90,7 +90,7 @@ class RemoteNodeMergeTest {
     }
 
     @Test
-    fun `present empty clears to short-long fallback`() {
+    fun presentEmptyClearsToShortLongFallback() {
         val payload = encPlayerPayload(callsign = F.EMPTY)
         val player = PlayerStatePacket.parseFrom(payload)
         val merged = mergePlayerState(entity(callsign = "OLD"), player, payload, now())
@@ -98,7 +98,7 @@ class RemoteNodeMergeTest {
     }
 
     @Test
-    fun `rename updates to new value`() {
+    fun renameUpdatesToNewValue() {
         val payload = encPlayerPayload(callsign = F.VALUE, callsignValue = "NEW")
         val player = PlayerStatePacket.parseFrom(payload)
         val merged = mergePlayerState(entity(callsign = "OLD"), player, payload, now())
@@ -106,7 +106,7 @@ class RemoteNodeMergeTest {
     }
 
     @Test
-    fun `unit membership set clear and absent`() {
+    fun unitMembershipSetClearAndAbsent() {
         // set unit
         var payload = encPlayerPayload(fireteam = F.VALUE, fireteamValue = "Alpha")
         var merged = mergePlayerState(entity(unit = "OLD"), PlayerStatePacket.parseFrom(payload), payload, now())
@@ -122,19 +122,19 @@ class RemoteNodeMergeTest {
     }
 
     @Test
-    fun `wireHasField true when present-empty`() {
+    fun wireHasFieldTrueWhenPresentEmpty() {
         val payload = encPlayerPayload(callsign = F.EMPTY)
         assertEquals(true, MeshWire.wireHasField(payload, 2))
     }
 
     @Test
-    fun `wireHasField false when absent`() {
+    fun wireHasFieldFalseWhenAbsent() {
         val payload = encPlayerPayload(callsign = F.ABSENT)
         assertEquals(false, MeshWire.wireHasField(payload, 2))
     }
 
     @Test
-    fun `mergeNodeInfo null absent keeps present empty clears value sets`() {
+    fun mergeNodeInfoNullAbsentKeepsPresentEmptyClearsValueSets() {
         val existing = entity()
         // null (absent) -> keep stored short name
         assertEquals("KEEP", mergeNodeInfo(existing.copy(shortName = "KEEP"), MeshtasticUser(null, null, null), now()).shortName)
