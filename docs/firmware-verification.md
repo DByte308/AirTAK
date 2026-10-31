@@ -41,14 +41,36 @@ not by hand-reasoning.
 
 ## Native tests (`pio test -e native`)
 
-All suites pass:
+All suites pass (147 cases):
 
 ```
-native  test_config   PASSED
-native  test_crypto   PASSED
-native  test_framing  PASSED
-native  test_router   PASSED
+native  test_config                 PASSED
+native  test_crypto                 PASSED
+native  test_framing                PASSED
+native  test_router                 PASSED
+native  test_board_identity         PASSED
+native  test_boards                 PASSED
+native  test_board_selection        PASSED
+native  test_runtime_battery        PASSED
+native  test_runtime_display_route  PASSED
 ```
+
+## Runtime multi-board images (#22)
+
+- `runtime_s3_shared` — compile/link feasibility image: descriptor-driven HAL +
+  the real OLED/TFT display dispatcher + both backends. Upload disabled; not
+  deployable.
+- `runtime_s3_v4` — deployable universal image (extends production `heltec_v4`:
+  16 MB layout, qio_qspi, BLE sdkconfig, esptool upload; `AIRTAK_RUNTIME_BOARD`
+  + both display backends). App-only upload writes only `0x0/0x8000/0xe000/0x10000`,
+  preserving NVS identity and LittleFS config. **Physically verified on a Heltec
+  V4.3** (after a full 16 MB backup): seals `heltec_v4`, loads LittleFS config +
+  callsign, renders the OLED HUD, BLE LINKED (MTU 517), LoRa TX `err=0`, reboot
+  persistence, safe unknown-boot, and `BOARD SET`/`BOARD CLEAR` provisioning.
+
+See `docs/runtime-board-selection.md` for the full verification record. Other
+ESP32-S3 boards (`t3s3`/`t_deck`/`heltec_v3`) are build-verified only — no
+hardware here for runtime proof.
 
 ## Newer-framework regression verification
 
