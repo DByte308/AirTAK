@@ -30,7 +30,7 @@
 #include "hal/Battery.h"
 #include "hal/Button.h"
 #include "hal/Touch.h"
-#ifdef AIRTAK_BOARD_SELECTION_TEST
+#if defined(AIRTAK_BOARD_SELECTION_TEST) || defined(AIRTAK_RUNTIME_BOARD)
 #include "platform/esp32/system/BoardProvisioning.h"
 #endif
 #include "ble/BLEServer.h"
@@ -104,31 +104,43 @@ static inline void wdtFeed() {}
 #endif
 
 static inline void ledOn() {
-#ifdef LED_BUILTIN
+#ifdef AIRTAK_RUNTIME_BOARD
+    const int pin = airtak::platform::selectedBoard().ledPin;
+    if (pin >= 0) { pinMode(pin, OUTPUT); digitalWrite(pin, HIGH); }
+#elif defined(LED_BUILTIN)
     if (LED_BUILTIN >= 0) { pinMode(LED_BUILTIN, OUTPUT); digitalWrite(LED_BUILTIN, LED_STATE_ON); }
 #endif
 }
 static inline void ledOff() {
-#ifdef LED_BUILTIN
+#ifdef AIRTAK_RUNTIME_BOARD
+    const int pin = airtak::platform::selectedBoard().ledPin;
+    if (pin >= 0) { pinMode(pin, OUTPUT); digitalWrite(pin, LOW); }
+#elif defined(LED_BUILTIN)
     if (LED_BUILTIN >= 0) { pinMode(LED_BUILTIN, OUTPUT); digitalWrite(LED_BUILTIN, !LED_STATE_ON); }
 #endif
 }
 
 // ── setup() ──────────────────────────────────────────────────────────────────
 void setup() {
-#ifdef AIRTAK_BOARD_SELECTION_TEST
+#if defined(AIRTAK_BOARD_SELECTION_TEST) || defined(AIRTAK_RUNTIME_BOARD)
     // This gate must precede even the status LED and recovery-button setup.
-    // The intermediate image accepts ONLY its compiled board; HAL conversion
-    // is a separate step before any unconstrained runtime image can be safe.
+    // Constrained test images accept only their compiled board. The runtime
+    // family path requires descriptor-driven HAL and display implementations.
     Serial.begin(airtak::SERIAL_BAUD_RATE);
     delay(airtak::BOOT_SERIAL_SENTINEL_MS);
+#ifdef AIRTAK_RUNTIME_BOARD
+    airtak::platform::prepareBoardSelection(nullptr);
+    // Release sleep-held RTC pads before LED, recovery or SPI initialization.
+    airtak::sleep::initDeepSleep();
+#else
     airtak::platform::prepareBoardSelection(AIRTAK_BOARD_ID);
+#endif
 #endif
     ledOn();
 
     wdtInit();
 
-#ifndef AIRTAK_BOARD_SELECTION_TEST
+#if !defined(AIRTAK_BOARD_SELECTION_TEST) && !defined(AIRTAK_RUNTIME_BOARD)
     Serial.begin(airtak::SERIAL_BAUD_RATE);
     delay(airtak::BOOT_SERIAL_SENTINEL_MS);
 #endif
@@ -150,7 +162,9 @@ void setup() {
     delay(airtak::BOOT_BOARD_INIT_SETTLE_MS);
 
 #ifdef AIRTAK_PLATFORM_ESP32
+#ifndef AIRTAK_RUNTIME_BOARD
     airtak::sleep::initDeepSleep();
+#endif
     if (airtak::sleep::wakeCause() == airtak::sleep::WakeCause::BUTTON) {
         Serial.println("[BOOT] Woke from deep sleep (button press)");
     }
@@ -168,7 +182,13 @@ void setup() {
     Serial.flush();
     if (!airtak::config::FlashStore::init()) {
         Serial.println("[BOOT] FlashStore init FAILED - config changes won't persist!");
+#ifdef AIRTAK_RUNTIME_BOARD
+        Serial.println("[BOOT] Runtime startup halted: preserve config; check partition/layout compatibility");
+        Serial.flush();
+        for (;;) delay(airtak::BOOT_FLASH_ERROR_DELAY_MS);
+#else
         delay(airtak::BOOT_FLASH_ERROR_DELAY_MS);
+#endif
     } else {
         Serial.println("[BOOT] FlashStore init OK");
     }

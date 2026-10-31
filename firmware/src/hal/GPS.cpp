@@ -11,6 +11,10 @@
 #if AIRTAK_BOARD_HAS_GPS
 #include <TinyGPS++.h>  // TinyGPS++ ≥ 1.0.3 (platformio.ini dependency)
 #endif
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+// Runtime: board identity comes from the descriptor, not the compiled board macros.
+#include "platform/esp32/system/BoardProvisioning.h"
+#endif
 #include <cstring>
 
 namespace airtak {
@@ -52,15 +56,29 @@ static uint8_t     s_debug_sentence_prints = 0;
 #endif // AIRTAK_BOARD_HAS_GPS
 
 #if AIRTAK_BOARD_HAS_GPS
-// Board-selected UART used for the GNSS module.
+// Board-selected UART used for the GNSS module. Under runtime the UART is the
+// ESP32 hardware UART1 (Serial1) bound to the descriptor's gpsTx/gpsRx pins;
+// the compiled-board macro applies only to the legacy build.
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+static HardwareSerial& GPS_SERIAL = Serial1;
+#else
 static HardwareSerial& GPS_SERIAL = AIRTAK_GPS_SERIAL;
+#endif
 
 static void begin_gps_serial(uint32_t baud) {
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+    // Runtime: bind the descriptor's RX/TX pins on UART1. Guarded by gpsActive()
+    // at the call site; only Serial1 is touched when hasGps and both pins present.
+    Serial1.begin(baud, SERIAL_8N1,
+                  airtak::platform::selectedBoard().gpsRx,
+                  airtak::platform::selectedBoard().gpsTx);
+#else
 #if defined(AIRTAK_GPS_SERIAL_RX_PIN) && AIRTAK_GPS_SERIAL_RX_PIN >= 0
     GPS_SERIAL.begin(baud, SERIAL_8N1,
                      AIRTAK_GPS_SERIAL_RX_PIN, AIRTAK_GPS_SERIAL_TX_PIN);
 #else
     GPS_SERIAL.begin(baud, SERIAL_8N1);
+#endif
 #endif
     s_current_baud = baud;
 
@@ -137,12 +155,26 @@ static void send_pmtk(const char* cmd) {
 }
 #endif
 
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+// Runtime: GPS is only ever brought up when the selected board reports hasGps
+// with valid gpsTx/gpsRx pins. Otherwise GPS stays a no-op (phone/external fix
+// is the only position source) — no fake GPS on other boards.
+static bool gpsActive() {
+    const auto& bd = airtak::platform::selectedBoard();
+    return bd.hasGps && bd.gpsTx >= 0 && bd.gpsRx >= 0;
+}
+#endif
+
 // ── GPS::init() ───────────────────────────────────────────────────────────────
 void GPS::init() {
     // If the device is configured to use phone GPS, don't power up the L76K.
     s_using_external = (config::ConfigManager::positionGpsSource() == 1);
 
 #if AIRTAK_BOARD_HAS_GPS
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+    // No hardware GPS on the selected board: keep phone fix only, no UART/pins.
+    if (!gpsActive()) return;
+#endif
     // Enable GPS power via dedicated GPIO (T-Echo Plus only; -1 = no pin).
 #if defined(AIRTAK_PIN_GPS_ENABLE) && AIRTAK_PIN_GPS_ENABLE >= 0
     pinMode(AIRTAK_PIN_GPS_ENABLE, OUTPUT);
@@ -166,6 +198,9 @@ void GPS::init() {
 // ── GPS::process() ───────────────────────────────────────────────────────────
 void GPS::process(EventGroupHandle_t system_event_group) {
 #if AIRTAK_BOARD_HAS_GPS
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+    if (!gpsActive()) { (void)system_event_group; return; }
+#endif
     // Feed all available UART bytes to TinyGPS++
     while (GPS_SERIAL.available()) {
         char c = GPS_SERIAL.read();
@@ -277,10 +312,15 @@ bool GPS::hasFix() {
 // ── GPS::setPower() ──────────────────────────────────────────────────────────
 void GPS::setPower(bool on) {
     // Phase 6.2: GPS duty cycling via ENABLE pin (§9.5)
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+    // No GPS-ENABLE pin in the descriptor; power control is a no-op.
+    (void)on;
+#else
 #if defined(AIRTAK_PIN_GPS_ENABLE) && AIRTAK_PIN_GPS_ENABLE >= 0
     digitalWrite(AIRTAK_PIN_GPS_ENABLE, on ? HIGH : LOW);
 #else
     (void)on;
+#endif
 #endif
 }
 

@@ -44,6 +44,21 @@ const char* mcuFamilyName() {
 
 void initBoard() {
 #if !defined(AIRTAK_NATIVE_TEST)
+#ifdef AIRTAK_RUNTIME_BOARD
+    const auto& profile = selectedBoard();
+    if (&profile == &unknownBoard()) return;
+    if (profile.powerEnablePin >= 0) {
+        pinMode(profile.powerEnablePin, OUTPUT);
+        digitalWrite(profile.powerEnablePin, profile.powerEnableActiveLow ? LOW : HIGH);
+        delay(BOOT_PERIPH_SETTLE_MS);
+    }
+    // SPI.begin(-1, ...) may select Arduino defaults, which is not pin-safe.
+    if (profile.radioSck >= 0 && profile.radioMiso >= 0 &&
+        profile.radioMosi >= 0 && profile.radioNss >= 0)
+        SPI.begin(profile.radioSck, profile.radioMiso, profile.radioMosi, profile.radioNss);
+    if (profile.i2cSda >= 0 && profile.i2cScl >= 0)
+        Wire.begin(profile.i2cSda, profile.i2cScl);
+#else
 #if defined(AIRTAK_PIN_POWER_EN) && AIRTAK_PIN_POWER_EN >= 0
     pinMode(AIRTAK_PIN_POWER_EN, OUTPUT);
     // Drive to the active state.  Most boards use active HIGH (T-Echo, T114,
@@ -71,6 +86,7 @@ void initBoard() {
     Wire.begin(AIRTAK_PIN_I2C_SDA, AIRTAK_PIN_I2C_SCL);
 #endif
 #endif
+#endif // AIRTAK_RUNTIME_BOARD
 #endif
 }
 
@@ -117,7 +133,10 @@ void macAddress(uint8_t out[6]) {
 // the rest are commented out and serve as documentation.
 uint8_t meshtasticHwModel() {
     // ── currently supported ──────────────────────────────────────────────
-#if   defined(AIRTAK_BOARD_T_DECK)          //  50 T_DECK
+#if defined(AIRTAK_RUNTIME_BOARD)
+    const int model = selectedBoard().hwModel;
+    return model >= 0 ? static_cast<uint8_t>(model) : 0;
+#elif defined(AIRTAK_BOARD_T_DECK)          //  50 T_DECK
     return 50;
 #elif defined(AIRTAK_BOARD_T_ECHO_PLUS)      //  33 T_ECHO_PLUS
     return 33;

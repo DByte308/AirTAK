@@ -26,8 +26,38 @@
 #include <NimBLEDevice.h>
 #include <esp_system.h>
 
+#if defined(AIRTAK_RUNTIME_BOARD)
+#include "platform/esp32/system/BoardProvisioning.h"
+#endif
+
 namespace airtak {
 
+#if defined(AIRTAK_RUNTIME_BOARD)
+// Runtime path: button and peripheral-rail polarity come from the selected
+// board descriptor. An unknown board (buttonPin < 0) never triggers recovery.
+using airtak::platform::selectedBoard;
+
+static bool userButtonPressed() {
+    const auto& bd = selectedBoard();
+    if (bd.buttonPin < 0) return false;
+    return digitalRead(bd.buttonPin) == LOW;
+}
+
+bool RecoveryMode::requestedAtBoot() {
+    const auto& bd = selectedBoard();
+    // No trusted boot button on an unknown board: do not manufacture recovery.
+    if (bd.buttonPin < 0) return false;
+    pinMode(bd.buttonPin, INPUT_PULLUP);
+    if (!userButtonPressed()) return false;
+
+    uint32_t started = millis();
+    while ((millis() - started) < RECOVERY_BUTTON_HOLD_MS) {
+        if (!userButtonPressed()) return false;
+        delay(RECOVERY_POLL_MS);
+    }
+    return true;
+}
+#else
 static bool userButtonPressed() {
     return digitalRead(AIRTAK_PIN_USER_BUTTON) == LOW;
 }
@@ -43,10 +73,20 @@ bool RecoveryMode::requestedAtBoot() {
     }
     return true;
 }
+#endif
 
 [[noreturn]] void RecoveryMode::run() {
     Serial.println("AirTAK recovery mode (ESP32): BLE advertising; config kept");
 
+#if defined(AIRTAK_RUNTIME_BOARD)
+    // Power on peripherals (Display needs the power rail) — descriptor polarity.
+    const auto& bd = selectedBoard();
+    if (bd.powerEnablePin >= 0) {
+        pinMode(bd.powerEnablePin, OUTPUT);
+        digitalWrite(bd.powerEnablePin, bd.powerEnableActiveLow ? LOW : HIGH); // enable
+        delay(RECOVERY_PERIPH_SETTLE_MS);
+    }
+#else
     // Power on peripherals (Display needs the power rail)
 #if defined(AIRTAK_PIN_POWER_EN) && AIRTAK_PIN_POWER_EN >= 0
     pinMode(AIRTAK_PIN_POWER_EN, OUTPUT);
@@ -56,6 +96,7 @@ bool RecoveryMode::requestedAtBoot() {
     digitalWrite(AIRTAK_PIN_POWER_EN, HIGH);
 #endif
     delay(RECOVERY_PERIPH_SETTLE_MS);
+#endif
 #endif
 
     Display::init();

@@ -22,6 +22,24 @@ static uint32_t s_voltage_mv   = 0;
 #define AIRTAK_ADC_MULTIPLIER AIRTAK_ADC_MULTIPLIER_DEFAULT
 #endif
 void Battery::init() {
+#ifdef AIRTAK_RUNTIME_BOARD
+    const auto& profile = platform::selectedBoard();
+    if (profile.vbatPin < 0) return;
+    analogReadResolution(BATTERY_ADC_RESOLUTION_BITS);
+    // Portable metadata values are NOT Arduino enum values. Never cast them.
+    switch (profile.adcAttenuation) {
+        case AdcAttenuationDb::Db0: analogSetAttenuation(ADC_0db); break;
+        case AdcAttenuationDb::Db2_5: analogSetAttenuation(ADC_2_5db); break;
+        case AdcAttenuationDb::Db6: analogSetAttenuation(ADC_6db); break;
+        case AdcAttenuationDb::None:
+        case AdcAttenuationDb::Db11: analogSetAttenuation(ADC_11db); break;
+    }
+    pinMode(profile.vbatPin, INPUT);
+    if (profile.adcCtrlPin >= 0) {
+        pinMode(profile.adcCtrlPin, OUTPUT);
+        digitalWrite(profile.adcCtrlPin, profile.adcCtrlActiveHigh ? HIGH : LOW);
+    }
+#else
    analogReadResolution(BATTERY_ADC_RESOLUTION_BITS);
 #if defined(AIRTAK_PLATFORM_ESP32)
 #if defined(AIRTAK_ADC_ATTENUATION)
@@ -49,9 +67,13 @@ void Battery::init() {
     digitalWrite(AIRTAK_PIN_ADC_CTRL, HIGH);
 #endif
 #endif
+#endif // AIRTAK_RUNTIME_BOARD
 }
 
 void Battery::sample(EventGroupHandle_t system_event_group) {
+#ifdef AIRTAK_RUNTIME_BOARD
+    if (platform::selectedBoard().vbatPin < 0) return;
+#endif
     // Oversample 8× to suppress ESP32 ADC noise (~3 bits).
     uint32_t raw_acc = 0;
     for (int i = 0; i < BATTERY_ADC_OVERSAMPLE; i++) {
@@ -62,7 +84,7 @@ void Battery::sample(EventGroupHandle_t system_event_group) {
 
     // Per-device ADC multiplier: prefer the value configured over BLE (PowerConfig
     // field 6). When absent/unset the accessor returns 0.0f, so fall back to the
-    // board's compile-time AIRTAK_ADC_MULTIPLIER calibration constant.
+    // board's selected (or legacy compile-time) calibration multiplier.
     float adc_multiplier = config::ConfigManager::powerAdcMultiplier();
     if (adc_multiplier <= 0.0f) adc_multiplier = AIRTAK_ADC_MULTIPLIER;
 

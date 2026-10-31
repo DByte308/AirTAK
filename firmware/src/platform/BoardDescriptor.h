@@ -56,6 +56,13 @@ enum class AdcAttenuationDb : uint8_t {
     Db11 = 4,
 };
 
+// ⚠️ WARNING — AdcAttenuationDb is NOT cast-compatible with the Arduino-ESP32 SDK.
+// Its integer values deliberately differ from the SDK's adc_attenuation_t
+// (0db=0, 2_5db=1, 6db=2, 11db=3). Specifically: Db2_5 == 2 (SDK ADC_2_5db == 1)
+// and Db11 == 4 (SDK ADC_11db == 3). NEVER static_cast<adc_attenuation_t>(value):
+// it silently selects the wrong attenuation. Map explicitly (if/switch) in the
+// runtime HAL instead.
+
 // Fixed hardware characteristics of one board.
 //
 // Pin fields use -1 as a sentinel: "this pin/feature does not exist." Booleans
@@ -95,6 +102,17 @@ struct BoardDescriptor {
     float radioTcxoVoltage = 0.0f;         // V; 0 = no TCXO / not applicable
     bool  multiRadio = false;              // true: retain the existing SX1276 fallback (t3s3)
 
+    // ── SX1276 sub-GHz LoRa (multi-radio boards, e.g. T3 S3) ───────────────
+    // Meaningful only when multiRadio is true. Shares the SX1262 SPI pins
+    // (radioSck/miso/mosi/nss/rst); these are the SX1276-only DIO and RF-switch
+    // (RXEN/TXEN) pins. -1 = this variant is not installed / not wired.
+    // SX1280 and LR1121 are intentionally NOT modelled (no driver in the HAL).
+    int sx1276Dio0 = -1;
+    int sx1276Dio1 = -1;
+    int sx1276Dio2 = -1;
+    int sx1276Rxen = -1;
+    int sx1276Txen = -1;
+
     // ── SSD1306 OLED (only meaningful when display == Oled) ──────────────
     int oledSda = -1;
     int oledScl = -1;
@@ -113,6 +131,13 @@ struct BoardDescriptor {
     int tftBl = -1;
     int tftWidth = -1;
     int tftHeight = -1;
+
+    // ── Shared I2C bus + touchscreen input (only when wired) ─────────────
+    // T-Deck: external I2C (keyboard/trackpad, SDA 18 / SCL 8) and touch
+    // interrupt (GPIO 16). -1 = not present on this board.
+    int i2cSda   = -1;
+    int i2cScl   = -1;
+    int touchInt = -1;
 
     // ── GPS (only when hasGps) ───────────────────────────────────────────
     bool hasGps = false;

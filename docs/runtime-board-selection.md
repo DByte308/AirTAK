@@ -4,8 +4,9 @@
 
 The descriptor registry, identity-record codec, startup selection state machine
 and opt-in V4 NVS/USB provisioning test are implemented. Normal firmware targets
-still use compile-time BoardConfig selection. There is not yet a shared runtime
-HAL, universal image, or runtime OLED/TFT dispatcher.
+still use compile-time BoardConfig selection. Descriptor-driven HAL paths now
+compile in a link-only fixture, but there is not yet a deployable universal image
+or runtime OLED/TFT dispatcher.
 
 Do not flash a generic partition layout over an existing board on the strength
 of this foundation. The tested V4 firmware remains the known-good baseline.
@@ -53,13 +54,40 @@ matches the record. Explicit trusted selection is still required.
 ./tools/pio_firmware.sh test -e native
 ```
 
-The native suite passes 125 tests, including registry/header parity, all-board
+The native suite passes 132 tests, including registry/header parity, all-board
 record round-trips, CRC reference data, every single-bit record corruption,
 truncation, invalid versions/families and unknown identifiers. Both portable
 translation units also pass strict C++17 compilation with pedantic errors enabled.
 The legacy V4 target and selection-test image build and retain the BLE startup
 constructor. The physical selection test below is V4-only, not evidence that the
 other boards or a universal runtime image have been hardware-verified.
+
+## Runtime HAL compile checkpoint
+
+`runtime_hal_check` builds the runtime power, button, battery, radio, GPS, touch,
+recovery and sleep paths against the real ESP32 framework. Its display is a no-op
+link fixture, so upload is explicitly disabled. An attempted upload was checked
+and rejected; do not bypass that guard or treat its factory binary as deployable.
+
+Radio Module objects capture the selected pins lazily, after the profile is
+sealed. SX1276 has explicit DIO/RF-switch metadata and uses its own receive/RSSI
+path rather than unconditional SX1262 calls. Runtime SX1276 intentionally binds
+Module's fourth slot to DIO1: RadioLib's setDio1Action uses that GPIO, whereas the
+legacy constructor used DIO2. Explicit header mode is set on initialization and
+restart. The V4 and T3S3 legacy targets build;
+SX1276 over-the-air operation has not been hardware-verified.
+
+The actual runtime battery implementation is exercised by native tests with
+recording GPIO/ADC functions, including no-I/O on unknown profiles. Scrambled
+ADC enum stand-ins verify semantic mapping instead of an unsafe integer cast.
+The HAL-facing descriptor remains unknown even for a ready metadata record until
+the selection is sealed.
+
+Runtime sleep paths release isolated RTC pads before LED/recovery/SPI startup.
+Runtime storage mounts without automatic formatting and halts application startup
+on mount failure, so a partition mismatch cannot silently erase config and start
+radio tasks with substituted settings. First-install formatting and flash-layout
+migration still need an explicit deployment procedure.
 
 ## Constrained physical provisioning test
 
@@ -99,9 +127,9 @@ with external equipment and do not prove LoRa peer reception or calibration.
 
 ## Next stages
 
-1. Lazy radio construction, runtime power/ADC/GPS/recovery/sleep paths and isolated
-   OLED/TFT backends. Only after conversion may a shared image remove the compiled
-   board constraint. Keep legacy targets until the replacement is verified.
+1. Replace the link-only display fixture with isolated OLED/TFT backends and
+   complete the shared runtime application image. Keep legacy targets until the
+   replacement is verified. The unconstrained compile fixture must not be deployed.
 2. Compatible image/partition strategy for 8 MB and 16 MB boards, preserving
    existing LittleFS configuration and OTA layouts. Back up the V4 before changes.
 3. Build/guard and physical regression checks on the runtime image. Other hardware

@@ -135,6 +135,16 @@ constexpr BoardDescriptor makeT3S3() {
     // Preserve the existing SX1276 fallback in the runtime wiring.
     d.multiRadio = true;
 
+    // SX1276 variant: AIRTAK_PIN_SX1276_DIO0 9 / DIO1 33 / DIO2 34 / RXEN 21 / TXEN 10.
+    // Shares the SX1262 SPI pins above; SX1276 DIO1/DIO2 coincide with
+    // radioDio1/radioBusy, so only the variant-unique pins are recorded here.
+    // SX1280 / LR1121 are NOT modelled (no driver in the current radio HAL).
+    d.sx1276Dio0 = 9;
+    d.sx1276Dio1 = 33;
+    d.sx1276Dio2 = 34;
+    d.sx1276Rxen = 21;
+    d.sx1276Txen = 10;
+
     // AIRTAK_PIN_OLED_SDA 18 / SCL 17 (SWAPPED vs V3/V4); no OLED_RST defined -> -1
     d.oledSda = 18; d.oledScl = 17; d.oledRst = -1;
     d.oledWidth = 128; d.oledHeight = 64; d.oledI2cAddr = 0x3C;
@@ -185,6 +195,11 @@ constexpr BoardDescriptor makeTDeck() {
     d.hasGps = true;
     d.gpsTx  = 43;
     d.gpsRx  = 44;
+
+    // AIRTAK_PIN_I2C_SDA 18 / SCL 8 (keyboard/trackpad I2C), AIRTAK_PIN_TOUCH_INT 16
+    d.i2cSda   = 18;
+    d.i2cScl   = 8;
+    d.touchInt = 16;
 
     // No OLED / FEM (defaults)
     return d;

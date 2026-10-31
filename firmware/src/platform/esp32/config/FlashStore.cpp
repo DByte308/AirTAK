@@ -32,8 +32,14 @@ static void tmpPath(const char* group_path, char* out, size_t out_len) {
 bool FlashStore::init() {
     if (s_initialized) return true;
 
-    // Format if the filesystem cannot be mounted (first boot or corruption).
-    if (!LittleFS.begin(/*formatOnFail=*/true)) {
+    // A runtime-family image may encounter a different existing partition
+    // layout. Never erase the user's config merely because mounting failed.
+#ifdef AIRTAK_RUNTIME_BOARD
+    constexpr bool formatOnFail = false;
+#else
+    constexpr bool formatOnFail = true;
+#endif
+    if (!LittleFS.begin(formatOnFail)) {
         return false;
     }
 

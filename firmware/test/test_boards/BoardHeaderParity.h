@@ -110,8 +110,32 @@ static void assertLegacyBoardHeaderParity() {
 #endif
 #ifdef AIRTAK_PIN_SX1276_DIO0
     TEST_ASSERT_TRUE(d.multiRadio);
+    // SX1276 variant pins must mirror the header macros exactly.
+    CHECK_PIN(sx1276Dio0, AIRTAK_PIN_SX1276_DIO0);
+    CHECK_PIN(sx1276Dio1, AIRTAK_PIN_SX1276_DIO1);
+    CHECK_PIN(sx1276Dio2, AIRTAK_PIN_SX1276_DIO2);
+    CHECK_PIN(sx1276Rxen, AIRTAK_PIN_SX1276_RXEN);
+    CHECK_PIN(sx1276Txen, AIRTAK_PIN_SX1276_TXEN);
 #else
     TEST_ASSERT_FALSE(d.multiRadio);
+    // No SX1276 variant: every SX1276 pin must be the -1 sentinel.
+    CHECK_PIN(sx1276Dio0, -1);
+    CHECK_PIN(sx1276Dio1, -1);
+    CHECK_PIN(sx1276Dio2, -1);
+    CHECK_PIN(sx1276Rxen, -1);
+    CHECK_PIN(sx1276Txen, -1);
+#endif
+#ifdef AIRTAK_PIN_I2C_SDA
+    CHECK_PIN(i2cSda, AIRTAK_PIN_I2C_SDA);
+    CHECK_PIN(i2cScl, AIRTAK_PIN_I2C_SCL);
+#else
+    CHECK_PIN(i2cSda, -1);
+    CHECK_PIN(i2cScl, -1);
+#endif
+#ifdef AIRTAK_PIN_TOUCH_INT
+    CHECK_PIN(touchInt, AIRTAK_PIN_TOUCH_INT);
+#else
+    CHECK_PIN(touchInt, -1);
 #endif
 #undef CHECK_PIN
 }

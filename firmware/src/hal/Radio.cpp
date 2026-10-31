@@ -34,16 +34,41 @@ namespace airtak {
 // ── SX1262 state ───────────────────────────────────────────────────────────────
 // Module and radio objects for the SX1262 variant.  These are used when the probe
 // detects an SX1262 (or when the board only defines SX1262 pins).
+#ifdef AIRTAK_RUNTIME_BOARD
+// Capture pins only after the startup selection has been sealed. No global
+// Module/radio constructor may bind to the initial unknown descriptor.
+static Module& runtimeSx1262Module() {
+    const auto& p = platform::selectedBoard();
+    static Module module(p.radioNss, p.radioDio1, p.radioRst, p.radioBusy);
+    return module;
+}
+static SX1262& runtimeSx1262() {
+    static SX1262 radio(&runtimeSx1262Module());
+    return radio;
+}
+static Module& runtimeSx1276Module() {
+    const auto& p = platform::selectedBoard();
+    // RadioLib SX127x::setDio1Action uses Module::getGpio() (fourth slot).
+    // Bind the actual DIO1, rather than the legacy constructor's DIO2 value.
+    static Module module(p.radioNss, p.sx1276Dio0, p.radioRst, p.sx1276Dio1);
+    return module;
+}
+static SX1276& runtimeSx1276() {
+    static SX1276 radio(&runtimeSx1276Module());
+    return radio;
+}
+#define s_mod_sx1262 runtimeSx1262Module()
+#define s_radio_sx1262 runtimeSx1262()
+#define s_radio_sx1276 runtimeSx1276()
+#else
 static Module        s_mod_sx1262(AIRTAK_PIN_SX1262_NSS, AIRTAK_PIN_SX1262_DIO1,
                                   AIRTAK_PIN_SX1262_RESET, AIRTAK_PIN_SX1262_BUSY);
 static SX1262        s_radio_sx1262(&s_mod_sx1262);
-
-// ── SX1276 state (T3 S3 multi-radio board) ────────────────────────────────────
-// Only compiled when SX1276 pins are defined (e.g. T3 S3 BoardConfig.h).
 #if defined(AIRTAK_PIN_SX1276_DIO0)
 static Module        s_mod_sx1276(AIRTAK_PIN_LORA_CS, AIRTAK_PIN_SX1276_DIO0,
                                   AIRTAK_PIN_LORA_RESET, AIRTAK_PIN_SX1276_DIO2);
 static SX1276        s_radio_sx1276(&s_mod_sx1276);
+#endif
 #endif
 
 // ── Runtime-selected active radio ──────────────────────────────────────────────
@@ -117,7 +142,33 @@ static bool resolvePhyProfile(uint8_t& profile_idx,
 }
 
 // ── Radio::init() ─────────────────────────────────────────────────────────────
+static void restartReceive() {
+    if (!s_active_radio) return;
+    if (s_radio_type == RadioType::SX1262) {
+        s_radio_sx1262.standby();
+        s_radio_sx1262.setDio1Action(on_packet_received);
+        s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
+        s_radio_sx1262.setDio1Action(on_packet_received);
+    }
+#if defined(AIRTAK_PIN_SX1276_DIO0)
+    else if (s_radio_type == RadioType::SX1276) {
+        s_radio_sx1276.standby();
+        s_radio_sx1276.setPacketReceivedAction(on_packet_received);
+        s_radio_sx1276.startReceive();
+        s_radio_sx1276.setPacketReceivedAction(on_packet_received);
+    }
+#endif
+}
+
 void Radio::init() {
+#ifdef AIRTAK_RUNTIME_BOARD
+    const auto& profile = platform::selectedBoard();
+    if (profile.radioSck < 0 || profile.radioMiso < 0 || profile.radioMosi < 0 ||
+        profile.radioNss < 0 || profile.radioRst < 0 || profile.radioDio1 < 0 || profile.radioBusy < 0) {
+        s_radio_failed = true;
+        return;
+    }
+#endif
     // Phase 1.2: Configure the radio with global PHY parameters from §8.1.
     // Default to profile 0 (Long/Mesh); overridden from config if available.
     //
@@ -164,19 +215,29 @@ void Radio::init() {
             // the PA transmit path needs CTX=H + CPS=1, so drive CTX HIGH. (Kept HIGH
             // so TX reaches the PA; RX then uses bypass rather than the LNA — a known
             // trade-off pending a TX/RX-aware CTX toggle via RadioLib's RF-switch hook.)
-            pinMode(AIRTAK_PIN_FEM_VFEM, OUTPUT);
-            pinMode(AIRTAK_PIN_FEM_CSD, OUTPUT);
-            pinMode(AIRTAK_PIN_FEM_CTX, OUTPUT);
-            digitalWrite(AIRTAK_PIN_FEM_CSD, HIGH);
-            digitalWrite(AIRTAK_PIN_FEM_VFEM, HIGH);
-            digitalWrite(AIRTAK_PIN_FEM_CTX, HIGH);
+            if (
+#ifdef AIRTAK_RUNTIME_BOARD
+                profile.hasFem &&
+#endif
+                AIRTAK_PIN_FEM_VFEM >= 0 && AIRTAK_PIN_FEM_CSD >= 0 && AIRTAK_PIN_FEM_CTX >= 0) {
+                pinMode(AIRTAK_PIN_FEM_VFEM, OUTPUT);
+                pinMode(AIRTAK_PIN_FEM_CSD, OUTPUT);
+                pinMode(AIRTAK_PIN_FEM_CTX, OUTPUT);
+                digitalWrite(AIRTAK_PIN_FEM_CSD, HIGH);
+                digitalWrite(AIRTAK_PIN_FEM_VFEM, HIGH);
+                digitalWrite(AIRTAK_PIN_FEM_CTX, HIGH);
+            }
 #endif
         }
     }
 
     // ── Probe SX1276 (fallback for T3 S3 multi-radio boards) ──────────────────
 #if defined(AIRTAK_PIN_SX1276_DIO0)
-    if (s_radio_type == RadioType::NONE) {
+    if (s_radio_type == RadioType::NONE
+#ifdef AIRTAK_RUNTIME_BOARD
+        && profile.multiRadio && profile.sx1276Dio0 >= 0 && profile.sx1276Dio1 >= 0
+#endif
+    ) {
         int16_t result = s_radio_sx1276.begin(
             freq_mhz, bw_hz / HZ_TO_KHZ, sf, cr,
             LORA_SYNC_WORD, tx_power, LORA_PREAMBLE_LENGTH);
@@ -184,11 +245,13 @@ void Radio::init() {
         if (result == RADIOLIB_ERR_NONE) {
             s_radio_type   = RadioType::SX1276;
             s_active_radio = &s_radio_sx1276;
-            // SX1276 uses implicit header by default; explicit is set in begin().
-            // No DIO2-as-rf-switch — TX/RX switching is done via TXEN/RXEN pins
-            // (defined in BoardConfig.h as AIRTAK_PIN_SX1276_RXEN/TXEN but
-            //  RadioLib's SX1276 module handles this automatically when those
-            //  pins are wired to DIO1/DIO2 as defined in the Module constructor).
+            s_radio_sx1276.explicitHeader();
+#ifdef AIRTAK_RUNTIME_BOARD
+            if (profile.sx1276Rxen >= 0 && profile.sx1276Txen >= 0)
+                s_radio_sx1276.setRfSwitchPins(profile.sx1276Rxen, profile.sx1276Txen);
+#endif
+            // SX1276 has no SX1262 DIO2 RF-switch control. The runtime path
+            // explicitly supplies the PCB's RXEN/TXEN pins above.
         }
     }
 #endif
@@ -201,10 +264,8 @@ void Radio::init() {
     // Register interrupt callbacks and enter continuous receive.
     s_active_radio->setPacketReceivedAction(on_packet_received);
     s_active_radio->setPacketSentAction(on_packet_sent);
-    s_radio_sx1262.standby();
-    s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
-    s_radio_sx1262.setDio1Action(on_packet_received);
+    s_radio_failed = false;
+    restartReceive();
     if (s_radio_type != RadioType::NONE) {
         Serial.println("[RADIO] init OK");
         Serial.flush();
@@ -218,10 +279,13 @@ void Radio::reinit() {
     // Reinitialises whichever radio type was detected at init().
 
     // Reset the radio hardware via RESET pin.
-    digitalWrite(AIRTAK_PIN_SX1262_RESET, LOW);
-    delay(RADIO_RESET_LOW_MS);
-    digitalWrite(AIRTAK_PIN_SX1262_RESET, HIGH);
-    delay(RADIO_RESET_RECOVERY_MS);
+    if (!s_active_radio) return;
+    if (AIRTAK_PIN_SX1262_RESET >= 0) {
+        digitalWrite(AIRTAK_PIN_SX1262_RESET, LOW);
+        delay(RADIO_RESET_LOW_MS);
+        digitalWrite(AIRTAK_PIN_SX1262_RESET, HIGH);
+        delay(RADIO_RESET_RECOVERY_MS);
+    }
 
     uint8_t  new_phy = config::ConfigManager::primarySlotPhyProfileIndex();
     if (new_phy >= PHY_PROFILE_COUNT) new_phy = PHY_PROFILE_DEFAULT;
@@ -259,6 +323,7 @@ void Radio::reinit() {
         result = s_radio_sx1276.begin(
             freq_mhz, bw_hz / HZ_TO_KHZ, sf, cr,
             LORA_SYNC_WORD, tx_power, LORA_PREAMBLE_LENGTH);
+        if (result == RADIOLIB_ERR_NONE) result = s_radio_sx1276.explicitHeader();
     }
 #endif
 
@@ -271,10 +336,7 @@ void Radio::reinit() {
     s_radio_failed = false;
     s_active_radio->setPacketReceivedAction(on_packet_received);
     s_active_radio->setPacketSentAction(on_packet_sent);
-    s_radio_sx1262.standby();
-    s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
-    s_radio_sx1262.setDio1Action(on_packet_received);
+    restartReceive();
 }
 
 // ── Radio::pause() / Radio::resume() ─────────────────────────────────────────
@@ -299,7 +361,7 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
     // If the radio hardware failed to initialize or reinitialize, do not
     // attempt any SX1262 operations — the module is in an unknown state
     // and register reads may hang the SPI bus indefinitely (A3 fix).
-    if (s_radio_failed) {
+    if (s_radio_failed || !s_active_radio) {
         // Still drain the TX queue (discard silently) so callers don't stall.
         PooledPacket* pkt = nullptr;
         while (xQueueReceive(tx_queue, &pkt, 0) == pdTRUE && pkt) {
@@ -346,10 +408,7 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
 
             size_t pkt_len = s_active_radio->getPacketLength();
             if (pkt_len == 0 || pkt_len > LORA_MAX_PAYLOAD_BYTES) {
-                s_radio_sx1262.standby();
-    s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
-    s_radio_sx1262.setDio1Action(on_packet_received);
+                restartReceive();
             } else {
                 PooledPacket* pkt = PacketPool::alloc();
                 if (pkt) {
@@ -369,17 +428,11 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
                         PacketPool::free(pkt);
                     }
                 }
-                s_radio_sx1262.standby();
-    s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
-    s_radio_sx1262.setDio1Action(on_packet_received);
+                restartReceive();
             }
         } else {
-            s_radio_sx1262.standby();
-    s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
-    s_radio_sx1262.setDio1Action(on_packet_received);
-}
+            restartReceive();
+        }
     }
 
     // ── TX queue has a packet ready ───────────────────────────────────────────
@@ -395,6 +448,7 @@ void Radio::process(QueueHandle_t rx_queue, QueueHandle_t tx_queue,
 
 // ── Radio::transmit() ────────────────────────────────────────────────────────
 bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_idx) {
+    if (!s_active_radio || s_radio_failed || !data || length == 0) return false;
     // Phase 7 multi-PHY: if the requested profile differs from the active one,
     // reconfigure the radio. This is only expected during Phase 7 audio bursts.
     if (phy_profile_idx != s_active_phy) {
@@ -435,10 +489,7 @@ bool Radio::transmit(const uint8_t* data, uint8_t length, uint8_t phy_profile_id
     Serial.flush();
 #endif
 
-    s_radio_sx1262.standby();
-    s_radio_sx1262.setDio1Action(on_packet_received);
-    s_radio_sx1262.startReceiveDutyCycleAuto(LORA_PREAMBLE_LENGTH, LORA_RX_DUTY_CYCLE_PERIOD);
-    s_radio_sx1262.setDio1Action(on_packet_received);
+    restartReceive();
 
     if (err == RADIOLIB_ERR_NONE) {
         s_packets_tx++;
@@ -454,8 +505,12 @@ uint32_t Radio::packetsRx()  { return s_packets_rx; }
 uint32_t Radio::packetsTx()  { return s_packets_tx; }
 uint32_t Radio::dio1IsrCount() { return s_dio1_isr_count; }
 float    Radio::instantRssi() {
-    if (!s_active_radio) return 0.0f;
-    return s_radio_sx1262.getRSSI(true);
+    if (!s_active_radio || s_radio_failed) return 0.0f;
+    if (s_radio_type == RadioType::SX1262) return s_radio_sx1262.getRSSI(true);
+#if defined(AIRTAK_PIN_SX1276_DIO0)
+    if (s_radio_type == RadioType::SX1276) return s_radio_sx1276.getRSSI(false);
+#endif
+    return 0.0f;
 }
 
 } // namespace airtak

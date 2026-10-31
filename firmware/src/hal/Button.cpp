@@ -16,10 +16,11 @@ static uint8_t  s_press_count     = 0;
 static bool     s_long_long_fired = false;
 
 void Button::init() {
-    pinMode(AIRTAK_PIN_USER_BUTTON, INPUT_PULLUP);
+    if (AIRTAK_PIN_USER_BUTTON >= 0) pinMode(AIRTAK_PIN_USER_BUTTON, INPUT_PULLUP);
 }
 
 ButtonGesture Button::poll() {
+    if (AIRTAK_PIN_USER_BUTTON < 0) return ButtonGesture::NONE;
     bool pressed = (digitalRead(AIRTAK_PIN_USER_BUTTON) == LOW);
     uint32_t now = millis();
 

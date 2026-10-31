@@ -67,6 +67,17 @@ static void test_unknown_lookup_returns_safe_descriptor() {
     TEST_ASSERT_EQUAL(-1, u.femVfem);
     TEST_ASSERT_EQUAL(-1, u.femCsd);
     TEST_ASSERT_EQUAL(-1, u.femCtx);
+
+    // SX1276 variant (absent on the safe-unknown board)
+    TEST_ASSERT_EQUAL(-1, u.sx1276Dio0);
+    TEST_ASSERT_EQUAL(-1, u.sx1276Dio1);
+    TEST_ASSERT_EQUAL(-1, u.sx1276Dio2);
+    TEST_ASSERT_EQUAL(-1, u.sx1276Rxen);
+    TEST_ASSERT_EQUAL(-1, u.sx1276Txen);
+    // Shared I2C bus + touch interrupt (absent on the safe-unknown board)
+    TEST_ASSERT_EQUAL(-1, u.i2cSda);
+    TEST_ASSERT_EQUAL(-1, u.i2cScl);
+    TEST_ASSERT_EQUAL(-1, u.touchInt);
 }
 
 static void test_null_and_empty_id_resolve_to_unknown() {
@@ -121,6 +132,13 @@ static void test_heltec_v3_known_id() {
     TEST_ASSERT_EQUAL(-1, b.tftCs);
     TEST_ASSERT_FALSE(b.hasGps);
     TEST_ASSERT_FALSE(b.hasFem);
+
+    // V3 is SX1262-only and carries no shared I2C bus / touch gating.
+    TEST_ASSERT_EQUAL(-1, b.sx1276Dio0);
+    TEST_ASSERT_EQUAL(-1, b.sx1276Rxen);
+    TEST_ASSERT_EQUAL(-1, b.i2cSda);
+    TEST_ASSERT_EQUAL(-1, b.i2cScl);
+    TEST_ASSERT_EQUAL(-1, b.touchInt);
 }
 
 // ── heltec_v4 ──────────────────────────────────────────────────────────────
@@ -163,8 +181,15 @@ static void test_t3s3_sentinels_and_pins() {
     // Default multiplier (no calibration defined) + default attenuation
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.0f, b.adcMultiplier);
     TEST_ASSERT_EQUAL(AdcAttenuationDb::None, b.adcAttenuation);
-    // multi-radio: SX1276/SX1280/LR1121 must still be probed by the runtime wiring
+    // Retain the existing SX1276 fallback; other variants lack HAL drivers.
     TEST_ASSERT_TRUE(b.multiRadio);
+
+    // SX1276 variant pins (only SX1276 is modelled; SX1280/LR1121 are NOT)
+    TEST_ASSERT_EQUAL(9, b.sx1276Dio0);
+    TEST_ASSERT_EQUAL(33, b.sx1276Dio1);
+    TEST_ASSERT_EQUAL(34, b.sx1276Dio2);
+    TEST_ASSERT_EQUAL(21, b.sx1276Rxen);
+    TEST_ASSERT_EQUAL(10, b.sx1276Txen);
 
     // SX1262-compatible SPI (from LORA_* pins) + different I2C pin order
     TEST_ASSERT_EQUAL(5, b.radioSck);
@@ -183,6 +208,10 @@ static void test_t3s3_sentinels_and_pins() {
     TEST_ASSERT_EQUAL(37, b.ledPin);
     TEST_ASSERT_FALSE(b.hasGps);
     TEST_ASSERT_FALSE(b.hasFem);
+    // No shared I2C bus / touchscreen on T3 S3
+    TEST_ASSERT_EQUAL(-1, b.i2cSda);
+    TEST_ASSERT_EQUAL(-1, b.i2cScl);
+    TEST_ASSERT_EQUAL(-1, b.touchInt);
 }
 
 // ── t_deck ─────────────────────────────────────────────────────────────────
@@ -224,6 +253,14 @@ static void test_t_deck_tft_gps_polarity() {
     TEST_ASSERT_TRUE(b.hasGps);
     TEST_ASSERT_EQUAL(43, b.gpsTx);
     TEST_ASSERT_EQUAL(44, b.gpsRx);
+
+    // Shared I2C bus (keyboard/trackpad) + touch interrupt
+    TEST_ASSERT_EQUAL(18, b.i2cSda);
+    TEST_ASSERT_EQUAL(8, b.i2cScl);
+    TEST_ASSERT_EQUAL(16, b.touchInt);
+    // No SX1276 variant on T-Deck
+    TEST_ASSERT_EQUAL(-1, b.sx1276Dio0);
+    TEST_ASSERT_EQUAL(-1, b.sx1276Rxen);
 }
 
 // ── registry enumeration ───────────────────────────────────────────────────

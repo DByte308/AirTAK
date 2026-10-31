@@ -62,7 +62,7 @@ void printState(const BoardSelection& state, const char* imageId) {
 } // namespace
 
 const BoardDescriptor& selectedBoard() {
-    return selection ? selection->current() : unknownBoard();
+    return selection ? selection->hardware() : unknownBoard();
 }
 
 void prepareBoardSelection(const char* imageBoardId) {

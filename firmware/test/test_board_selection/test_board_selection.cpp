@@ -148,6 +148,18 @@ static void test_sealed_selection_is_immutable() {
     TEST_ASSERT_EQUAL_PTR(&board("heltec_v4"), &selection.current());
     TEST_ASSERT_EQUAL_UINT(1, store.writes);
 }
+static void test_ready_metadata_never_exposes_hardware_before_seal() {
+    Store store;
+    store.existing("heltec_v4");
+    BoardSelection selection(store);
+    TEST_ASSERT_TRUE(selection.load());
+    TEST_ASSERT_EQUAL_PTR(&board("heltec_v4"), &selection.current());
+    TEST_ASSERT_EQUAL_PTR(&unknownBoard(), &selection.hardware());
+    TEST_ASSERT_TRUE(selection.provision("t_deck"));
+    TEST_ASSERT_EQUAL_PTR(&unknownBoard(), &selection.hardware());
+    TEST_ASSERT_TRUE(selection.seal());
+    TEST_ASSERT_EQUAL_PTR(&board("t_deck"), &selection.hardware());
+}
 static void test_unknown_image_constraint_fails_closed() {
     Store store;
     store.existing("heltec_v4");
@@ -171,5 +183,6 @@ int main(int, char**) {
     RUN_TEST(test_corrupt_readback_cannot_activate_board);
     RUN_TEST(test_sealed_selection_is_immutable);
     RUN_TEST(test_unknown_image_constraint_fails_closed);
+    RUN_TEST(test_ready_metadata_never_exposes_hardware_before_seal);
     return UNITY_END();
 }

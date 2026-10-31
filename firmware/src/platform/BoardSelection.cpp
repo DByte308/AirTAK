@@ -11,6 +11,9 @@ bool BoardSelection::compatible(const BoardDescriptor& candidate) const {
 const BoardDescriptor& BoardSelection::current() const {
     return current_ ? *current_ : unknownBoard();
 }
+const BoardDescriptor& BoardSelection::hardware() const {
+    return state_ == BoardSelectionState::Sealed ? current() : unknownBoard();
+}
 bool BoardSelection::load() {
     if (state_ == BoardSelectionState::Sealed) return false;
     current_ = nullptr;

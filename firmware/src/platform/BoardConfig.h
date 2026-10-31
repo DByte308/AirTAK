@@ -3,7 +3,9 @@
 
 #pragma once
 
-#if defined(AIRTAK_BOARD_T_ECHO)
+#if defined(AIRTAK_RUNTIME_BOARD)
+#include "platform/boards/esp32s3_runtime/BoardConfig.h"
+#elif defined(AIRTAK_BOARD_T_ECHO)
 #include "platform/boards/t_echo/BoardConfig.h"
 #elif defined(AIRTAK_BOARD_T_ECHO_PLUS)
 #include "platform/boards/t_echo_plus/BoardConfig.h"
@@ -20,5 +22,5 @@
 #elif defined(AIRTAK_NATIVE_TEST)
 #include "platform/boards/native/BoardConfig.h"
 #else
-#error "No AirTAK board selected. Define AIRTAK_BOARD_T_ECHO, AIRTAK_BOARD_T_ECHO_PLUS, AIRTAK_BOARD_T_DECK, AIRTAK_BOARD_HELTEC_T114, AIRTAK_BOARD_HELTEC_V3, AIRTAK_BOARD_HELTEC_V4, AIRTAK_BOARD_T3S3, or add a platform/boards/<board>/BoardConfig.h selector."
+#error "No AirTAK board selected. Define AIRTAK_RUNTIME_BOARD, AIRTAK_BOARD_T_ECHO, AIRTAK_BOARD_T_ECHO_PLUS, AIRTAK_BOARD_T_DECK, AIRTAK_BOARD_HELTEC_T114, AIRTAK_BOARD_HELTEC_V3, AIRTAK_BOARD_HELTEC_V4, AIRTAK_BOARD_T3S3, or add a platform/boards/<board>/BoardConfig.h selector."
 #endif

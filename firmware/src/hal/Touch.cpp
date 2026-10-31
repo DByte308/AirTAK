@@ -5,11 +5,25 @@
 #include "config/constants/Constants.h"
 #include "config.h"
 
-#ifdef AIRTAK_PIN_TOUCH_INT
+#if (defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)) || defined(AIRTAK_PIN_TOUCH_INT)
 #include <Arduino.h>
 #include <Wire.h>
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+#include "platform/esp32/system/BoardProvisioning.h"
+#endif
 
 namespace airtak {
+
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+// Runtime: touchscreen is only active when the descriptor reports a touch
+// interrupt and a valid shared I2C bus (i2cSda/i2cScl). Otherwise Touch is a
+// no-op (TouchGesture::NONE) and no I2C pins are driven.
+static bool touchActive() {
+    const auto& bd = airtak::platform::selectedBoard();
+    return bd.touchInt >= 0 && bd.i2cSda >= 0 && bd.i2cScl >= 0 &&
+           bd.display == DisplayKind::Tft && bd.tftWidth > 0 && bd.tftHeight > 0;
+}
+#endif
 
 TouchPoint  Touch::s_points[TOUCH_MAX_POINTS];
 uint8_t     Touch::s_count          = 0;
@@ -51,7 +65,16 @@ static uint8_t gt911ReadBuf(uint8_t addr, uint16_t reg, uint8_t* buf, uint8_t le
 
 void Touch::init() {
     if (s_initialized) return;
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+    // Runtime: only bring up the touch controller on the descriptor's shared I2C
+    // bus and interrupt. No touch -> no I2C pins driven.
+    if (!touchActive()) return;
+    const auto& bd = airtak::platform::selectedBoard();
+    Wire.begin(bd.i2cSda, bd.i2cScl);
+    pinMode(bd.touchInt, INPUT_PULLUP);
+#else
     pinMode(AIRTAK_PIN_TOUCH_INT, INPUT_PULLUP);
+#endif
 
     // GT911 can appear at 0x5D or 0x14 depending on INT pin state at boot
     const uint8_t gt911_addrs[] = {GT911_ADDR_PRIMARY, GT911_ADDR_SECONDARY};
@@ -98,6 +121,10 @@ void Touch::init() {
 }
 
 TouchGesture Touch::poll() {
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+    // Runtime: no touch on this board -> NONE, no I2C access.
+    if (!touchActive()) return TouchGesture::NONE;
+#endif
     if (!s_initialized) {
         init();
         if (!s_initialized) return TouchGesture::NONE;
@@ -109,6 +136,13 @@ TouchGesture Touch::poll() {
 
     bool now_pressed = false;
     uint16_t x = 0, y = 0;
+#ifdef AIRTAK_RUNTIME_BOARD
+    const uint16_t displayWidth = platform::selectedBoard().tftWidth;
+    const uint16_t displayHeight = platform::selectedBoard().tftHeight;
+#else
+    const uint16_t displayWidth = DISP_WIDTH;
+    const uint16_t displayHeight = DISP_HEIGHT;
+#endif
 
     if (s_i2c_addr == GT911_ADDR_PRIMARY || s_i2c_addr == GT911_ADDR_SECONDARY) {
         uint8_t buf[GT911_TOUCH_INFO_SIZE] = {0};
@@ -123,20 +157,24 @@ TouchGesture Touch::poll() {
             uint16_t ry = (uint16_t)buf[4] | ((uint16_t)buf[5] << 8);
             s_touch_raw_x = rx;
             s_touch_raw_y = ry;
-            x = (uint32_t)rx * DISP_WIDTH / GT911_RAW_X_MAX;
-            y = (uint32_t)ry * DISP_HEIGHT / GT911_RAW_Y_MAX;
+            x = (uint32_t)rx * displayWidth / GT911_RAW_X_MAX;
+            y = (uint32_t)ry * displayHeight / GT911_RAW_Y_MAX;
             // Swap XY and mirror Y per LilyGo factory calibration
             uint16_t swp = x;
             x = y;
             y = swp;
-            y = DISP_HEIGHT - y;
+            y = displayHeight - y;
             s_points[0] = {x, y, true};
             now_pressed = true;
         } else {
             s_points[0] = {0, 0, false};
         }
     } else {
+#if defined(AIRTAK_RUNTIME_BOARD) && defined(AIRTAK_PLATFORM_ESP32)
+        if (digitalRead(airtak::platform::selectedBoard().touchInt) == HIGH && !was_pressed) {
+#else
         if (digitalRead(AIRTAK_PIN_TOUCH_INT) == HIGH && !was_pressed) {
+#endif
             return TouchGesture::NONE;
         }
         uint8_t buf[GT911_CONFIG_SIZE] = {0};

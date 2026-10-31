@@ -20,7 +20,8 @@ public:
     bool load();
     bool provision(const char* boardId); // persist + exact readback before accepting
     bool seal();                       // prohibit further load/provision changes
-    const BoardDescriptor& current() const;
+    const BoardDescriptor& current() const; // metadata for provisioning/status
+    const BoardDescriptor& hardware() const; // unknown until selection is sealed
     BoardSelectionState state() const { return state_; }
 private:
     bool compatible(const BoardDescriptor& candidate) const;
