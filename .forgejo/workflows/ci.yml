@@ -364,3 +364,96 @@ jobs:
         run: |
           python3 tools/i18n_strings.py android/app/src/main/res check
           python3 tools/i18n_help.py android/app/src/main/res check
+
+  # ── Firmware: fast native unit-test canary (Unity, no ESP32 SDK) ─────────────
+  # Cheap gate that runs the host-targeted Unity suite (platformio `native`) against
+  # the pinned PlatformIO 6.2.0 venv. No JDK, no SDK, no ESP32 toolchain. Fails the
+  # job on any failing test (pio test returns non-zero). "Only" the native tests here
+  # (not the legacy monolithic `firmware` job, which still builds the nRF52 targets,
+  # UF2 images and collects artifacts — kept intact so this job stays fast).
+  firmware-native-tests:
+    name: Firmware native unit tests (fast)
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Cache the venv + the global PlatformIO package/toolchain cache (the pioarduino
+      # ESP32 platform and Xtensa toolchains live under ~/.platformio and are the slow
+      # part). libdeps are NOT cached here — the native env's are small, and caching the
+      # shared .pio/libdeps across the ESP32 matrix would thrash the same cache key.
+      - name: Cache firmware venv + packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            firmware/.venv
+            ~/.platformio
+          key: firmware-tools-v2-${{ hashFiles('firmware/requirements-dev.txt', 'firmware/platformio.ini') }}
+          restore-keys: |
+            firmware-tools-
+
+      - name: Install Python venv tooling
+        run: apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip
+
+      - name: Setup firmware environment
+        run: |
+          bash ./tools/setup_firmware_env.sh
+          echo "$(pwd)/firmware/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run native firmware unit tests (Unity)
+        run: |
+          test -f tools/pio_firmware.sh || { echo "FAIL: tools/pio_firmware.sh missing"; exit 1; }
+          bash ./tools/pio_firmware.sh test -e native
+
+  # ── Firmware: ESP32-S3 compile/link build matrix + BLE memory gate ───────────
+  # Builds every ESP32-S3 env (compile/link only; upload is disabled or must not run)
+  # and runs the BLE memory-retention guard on each produced ELF. Matrix legs run in
+  # parallel and share the ~/.platformio + venv cache. `native` is excluded: it is the
+  # unit-test env covered above and has no ESP32 ELF.
+  firmware-esp32:
+    name: Firmware ESP32 build (${{ matrix.env }})
+    runs-on: docker
+    strategy:
+      fail-fast: false
+      matrix:
+        env:
+          - heltec_v4
+          - t3s3
+          - t_deck
+          - heltec_v3
+          - runtime_s3_shared
+          - runtime_s3_v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache firmware venv + packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            firmware/.venv
+            ~/.platformio
+          key: firmware-tools-v2-${{ hashFiles('firmware/requirements-dev.txt', 'firmware/platformio.ini') }}
+          restore-keys: |
+            firmware-tools-
+
+      - name: Install Python venv tooling
+        run: apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip
+
+      - name: Setup firmware environment
+        run: |
+          bash ./tools/setup_firmware_env.sh
+          echo "$(pwd)/firmware/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build ${{ matrix.env }} (compile/link, no upload)
+        run: |
+          test -f tools/pio_firmware.sh || { echo "FAIL: tools/pio_firmware.sh missing"; exit 1; }
+          bash ./tools/pio_firmware.sh run -e ${{ matrix.env }}
+
+      - name: BLE memory-retention guard on ${{ matrix.env }} ELF
+        run: |
+          ELF="firmware/.pio/build/${{ matrix.env }}/firmware.elf"
+          if [ ! -f "$ELF" ]; then
+            echo "FAIL: $ELF was not produced by the build"; exit 1;
+          fi
+          python3 tools/check_ble_memory.py "$ELF"
