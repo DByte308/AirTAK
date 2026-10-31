@@ -1,22 +1,13 @@
-// AirTAK — Airsoft Team Awareness Kit
-// platform/RuntimeDisplayRoute.h — portable runtime display routing predicates
-//
-// Pure C++17, Arduino/FreeRTOS-free. Decides whether the selected board
-// descriptor is compatible with a given display backend, so a shared ESP32-S3
-// image can route to OLED vs TFT at runtime instead of at compile time
-// (mirrors the per-board Display.cpp split, but driven by the descriptor).
-//
-// The two predicates are the single source of truth for "which backend does
-// this board need?" — the runtime dispatcher and the native tests both use them.
+// Portable display-backend compatibility checks shared by the dispatcher and tests.
+// Unknown or incompatible descriptors must not drive display pins.
 
 #pragma once
 #include "platform/BoardDescriptor.h"
 
 namespace airtak {
 
-// Fixed configuration of a TFT panel as actually compiled into the backend
-// (from the TFT_eSPI build flags + the LOGICAL geometry after rotation 1).
-// A pin of -1 means "not wired / optional" (e.g. TFT_RST tied to system reset).
+// Compiled TFT_eSPI wiring and logical geometry after rotation 1.
+// Optional/unwired pins use -1.
 struct RuntimeTftWiring {
     int sck   = -1;
     int miso  = -1;
@@ -29,14 +20,10 @@ struct RuntimeTftWiring {
     int height = -1;  // LOGICAL height (post rotation-1)
 };
 
-// True when [bd] describes the supported SSD1306 128x64 OLED: a valid I2C bus
-// (Sda/Scl >= 0) and a sensible address (>= 0). The reset pin is optional (-1).
-// Unknown / missing-data / wrong-size descriptors return false.
+// SSD1306 128x64 with non-negative I2C pins/address; reset is optional.
 bool runtimeOledDisplayCompatible(const BoardDescriptor& bd);
 
-// True when [bd] is a TFT board whose wiring exactly matches the compiled
-// [wiring] tuple: pin-for-pin (including optional -1 pins) and geometry >= 0 on
-// both sides. Mismatched / incomplete / unknown descriptors return false.
+// Exact TFT pin/geometry match, including optional -1 pins; geometry must be >= 0.
 bool runtimeTftDisplayCompatible(const BoardDescriptor& bd, const RuntimeTftWiring& wiring);
 
 } // namespace airtak

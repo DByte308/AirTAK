@@ -415,10 +415,7 @@ jobs:
     runs-on: docker
     strategy:
       fail-fast: false
-      # Cap concurrency: each leg is a cold pioarduino build that compiles the whole
-      # ESP-IDF framework. Running all six at once exhausts runner resources and
-      # triggers SCons signature-DB write failures (.sconsign*.tmp) at the end of the
-      # build. Three at a time stays within the runner's disk/CPU budget.
+      # Limit concurrent full ESP-IDF builds.
       max-parallel: 3
       matrix:
         env:
@@ -453,11 +450,8 @@ jobs:
       - name: Build ${{ matrix.env }} (compile/link, no upload)
         run: |
           test -f tools/pio_firmware.sh || { echo "FAIL: tools/pio_firmware.sh missing"; exit 1; }
-          # A cold pioarduino build compiles the ESP-IDF framework in a first pass and
-          # occasionally fails writing SCons' signature DB (.sconsign*.tmp) at the very
-          # end, after firmware.elf has already linked and been size-checked. The
-          # failure is in build bookkeeping, not the image. A second run is warm (the
-          # framework libs are already built) and completes cleanly, so retry once.
+          # Cold pioarduino builds can fail during the IDF-to-Arduino handoff
+          # (.sconsign*.tmp). Retry once; the build and BLE guard must still pass.
           if ! bash ./tools/pio_firmware.sh run -e ${{ matrix.env }}; then
             echo "::warning::first build attempt for ${{ matrix.env }} failed (likely a cold-build SCons signature-DB flake); retrying warm"
             bash ./tools/pio_firmware.sh run -e ${{ matrix.env }}

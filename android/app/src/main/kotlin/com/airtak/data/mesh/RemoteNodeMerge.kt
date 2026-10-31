@@ -1,23 +1,3 @@
-// AirTAK Android — data/mesh/RemoteNodeMerge.kt
-// Pure, unit-testable merge logic for remote-node identity fields (#24).
-//
-// proto3 scalar fields have IMPLICIT presence: an OMITTED value and an
-// EXPLICITLY EMPTY value are indistinguishable after parse (both decode to the
-// default ""). PlayerStatePacket.callsign + the unit-membership strings are in
-// this category, so RemoteNodeRepository was keeping the previously stored value
-// on empty input — hiding the NODEINFO short/long-name fallback after an owner
-// cleared their callsign.
-//
-// Contract (#24): the sender uses proto3 `optional` so that setting a field to
-// an empty string is encoded on the wire as "present with empty value". This
-// receiver reads the presence bit from the RAW wire bytes (robust to old and new
-// senders alike):
-//   - field ABSENT            -> keep the existing stored value;
-//   - field PRESENT, empty    -> clear to "" (name resolution then falls back);
-//   - field PRESENT, non-empty-> set the value.
-// Short/long name (NODEINFO) already carry presence through the nullable decode
-// (null = absent), so they are merged with a null-coalescing rule.
-
 package com.airtak.data.mesh
 
 import com.airtak.data.db.RemoteNodeEntity
@@ -31,10 +11,9 @@ internal const val PLAYER_FIELD_PLATOON  = 8
 internal const val PLAYER_FIELD_COMPANY  = 9
 
 /**
- * Merge an incoming [PlayerStatePacket] into [existing], honouring the #24
- * explicit-presence rule for name/unit fields. Non-name non-presence fields
- * (status, color) are always overwritten. [payload] is the raw packet wire bytes
- * used to detect field presence.
+ * Merge identity fields by wire presence in [payload]: absent keeps, empty clears,
+ * non-empty replaces. This also accepts legacy senders that omit empty strings.
+ * Status and color always replace the stored values.
  */
 internal fun mergePlayerState(
     existing: RemoteNodeEntity,
@@ -54,9 +33,7 @@ internal fun mergePlayerState(
 )
 
 /**
- * Merge NODEINFO [user] identity into [existing]. `MeshtasticUser.shortName/
- * longName` are nullable: null = field absent (keep stored), "" = present-empty
- * (clear), non-empty = set.
+ * Merge NODEINFO names: null keeps the stored value; empty clears it.
  */
 internal fun mergeNodeInfo(
     existing: RemoteNodeEntity,
