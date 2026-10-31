@@ -2,14 +2,16 @@
 
 ## Current implementation stage
 
-The descriptor registry, identity-record codec, startup selection state machine
-and opt-in V4 NVS/USB provisioning test are implemented. Normal firmware targets
-still use compile-time BoardConfig selection. Descriptor-driven HAL paths now
-compile in a link-only fixture, but there is not yet a deployable universal image
-or runtime display dispatcher that selects OLED or TFT from the sealed descriptor.
+The descriptor registry, identity-record codec, startup selection state machine,
+V4 NVS/USB provisioning, descriptor-driven HAL, and a runtime OLED/TFT display
+dispatcher are implemented. A deployable universal image (`runtime_s3_v4`) boots
+and runs on a physical Heltec V4 (see Physical V4 verification below).
 
-Do not flash a generic partition layout over an existing board on the strength
-of this foundation. The tested V4 firmware remains the known-good baseline.
+Normal firmware targets still use compile-time BoardConfig selection and remain
+the shipping baseline. The universal image is bench-verified on the V4 only; the
+other ESP32-S3 boards are build-verified but have no hardware here, so they are
+not yet runtime-proven. Do not flash a generic partition layout over an existing
+board without a full-flash backup and a matching partition table.
 
 ## Registry
 
@@ -61,6 +63,36 @@ translation units also pass strict C++17 compilation with pedantic errors enable
 The legacy V4 target and selection-test image build and retain the BLE startup
 constructor. The physical selection test below is V4-only, not evidence that the
 other boards or a universal runtime image have been hardware-verified.
+
+## Physical V4 verification (universal image)
+
+A full 16 MB flash backup was taken first (sha256 recorded, mode 0600). The live
+partition table was parsed from the backup and confirmed byte-for-byte equal to
+`default_16MB.csv` (nvs@0x9000, otadata@0xe000, app0@0x10000, app1@0x650000,
+spiffs/LittleFS@0xc90000, coredump@0xff0000). `runtime_s3_v4` extends the
+production `heltec_v4` env, so `pio run -t upload` (no erase) writes only
+0x0/0x8000/0xe000/0x10000 and leaves NVS and LittleFS untouched.
+
+With a persisted `heltec_v4` identity already in NVS, the universal image was
+flashed app-only and verified on hardware:
+
+- Startup gate reads and seals the stored id: `[BOARD] state=ready image=runtime
+  profile=heltec_v4` then `state=sealed`, then `AirTAK boot`.
+- LittleFS survived: `FlashStore init OK`, config groups and channel slots load
+  from flash; the restored callsign renders on the OLED.
+- Runtime HAL radio: `[RADIO] init OK` and a real over-the-air LoRa transmit
+  (`[TXRAW] ... err=0 toa=...`).
+- BLE: `[BLE] controller memory retained`; the Android client connects
+  (`connected=true`, MTU 517 negotiated, AirTAK service notifications enabled)
+  and shows LINKED with live battery/GPS/DC telemetry.
+- Runtime OLED dispatch: the HUD renders normally on the physical SSD1306.
+- Reboot persistence: repeated resets re-read `heltec_v4` from NVS and auto-boot
+  with no re-provisioning.
+
+The unknown/fresh-board safe-boot path (no identity → hold in USB provisioning,
+no GPIO, then `BOARD SET` to provision) is exercised by the shared selection
+gate and was hardware-verified on the constrained selection-test image; the
+universal image uses the same gate code.
 
 ## Runtime display dispatch
 
