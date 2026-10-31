@@ -30,6 +30,9 @@
 #include "hal/Battery.h"
 #include "hal/Button.h"
 #include "hal/Touch.h"
+#ifdef AIRTAK_BOARD_SELECTION_TEST
+#include "platform/esp32/system/BoardProvisioning.h"
+#endif
 #include "ble/BLEServer.h"
 #include "ble/AirTAKService.h"
 #include "mesh/MeshNode.h"
@@ -113,12 +116,22 @@ static inline void ledOff() {
 
 // ── setup() ──────────────────────────────────────────────────────────────────
 void setup() {
+#ifdef AIRTAK_BOARD_SELECTION_TEST
+    // This gate must precede even the status LED and recovery-button setup.
+    // The intermediate image accepts ONLY its compiled board; HAL conversion
+    // is a separate step before any unconstrained runtime image can be safe.
+    Serial.begin(airtak::SERIAL_BAUD_RATE);
+    delay(airtak::BOOT_SERIAL_SENTINEL_MS);
+    airtak::platform::prepareBoardSelection(AIRTAK_BOARD_ID);
+#endif
     ledOn();
 
     wdtInit();
 
+#ifndef AIRTAK_BOARD_SELECTION_TEST
     Serial.begin(airtak::SERIAL_BAUD_RATE);
     delay(airtak::BOOT_SERIAL_SENTINEL_MS);
+#endif
 #ifdef AIRTAK_FLASH_TEST
     Serial.println("FLASH TEST boot");
 #else

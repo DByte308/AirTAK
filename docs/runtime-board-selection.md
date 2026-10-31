@@ -2,10 +2,10 @@
 
 ## Current implementation stage
 
-The portable foundation is implemented: an ESP32-S3 descriptor registry and a
-versioned identity-record codec. Existing firmware targets still use their
-compile-time BoardConfig selection. There is not yet a unified runtime image,
-NVS provisioning flow, or runtime OLED/TFT dispatcher.
+The descriptor registry, identity-record codec, startup selection state machine
+and opt-in V4 NVS/USB provisioning test are implemented. Normal firmware targets
+still use compile-time BoardConfig selection. There is not yet a shared runtime
+HAL, universal image, or runtime OLED/TFT dispatcher.
 
 Do not flash a generic partition layout over an existing board on the strength
 of this foundation. The tested V4 firmware remains the known-good baseline.
@@ -53,21 +53,56 @@ matches the record. Explicit trusted selection is still required.
 ./tools/pio_firmware.sh test -e native
 ```
 
-The native suite passes 113 tests, including registry/header parity, all-board
+The native suite passes 125 tests, including registry/header parity, all-board
 record round-trips, CRC reference data, every single-bit record corruption,
 truncation, invalid versions/families and unknown identifiers. Both portable
 translation units also pass strict C++17 compilation with pedantic errors enabled.
-The legacy V4 target builds and retains its BLE startup constructor in the ELF.
-These are software/build checks, not runtime multi-board hardware verification.
+The legacy V4 target and selection-test image build and retain the BLE startup
+constructor. The physical selection test below is V4-only, not evidence that the
+other boards or a universal runtime image have been hardware-verified.
+
+## Constrained physical provisioning test
+
+`heltec_v4_selection_test` inherits the existing V4 HAL and 16 MB layout. Before
+LED, recovery-button or peripheral setup it calls the provisioning gate. Only a
+persisted `heltec_v4` record can start this image; another valid registry id is
+rejected. This constraint is mandatory until the HAL is actually runtime-bound.
+The normal `heltec_v4` target remains available and does not require provisioning.
+
+The byte store uses NVS namespace `airtak_board`, blob `identity`. A write must
+commit and read back exactly before the profile is accepted. Missing/invalid
+records and storage errors stay in the USB-only application startup gate; the
+adapter never erases NVS on failure. The selection is sealed before startup and
+cannot subsequently be loaded or provisioned through that state machine.
+
+At boot, send newline-terminated ASCII commands over native USB serial:
+
+- `BOARD GET`: print current selection state and image constraint.
+- `BOARD LIST`: list only ids allowed by this image.
+- `BOARD SET heltec_v4`: persist, verify and reboot.
+- `BOARD BOOT`: leave the startup console only if a valid profile is ready.
+
+A valid stored profile starts automatically after a two-second grace period if
+no console input arrives. Input pauses automatic startup until an explicit BOOT
+or successful SET/reboot. Commands are boot-only, not a live pin-remapping API.
+Malformed/oversized lines are discarded. An unknown board stays at the console
+indefinitely. The record checksum is not authentication; use a trusted USB host.
+
+Physical V4 checks: full 16 MB flash backup made before testing, with private
+permissions because it may contain bonds/keys; new partition bytes matched the
+actual backup. Unprovisioned boot held application startup, LIST showed only V4,
+and SET t_deck was rejected. SET heltec_v4 committed/read back, rebooted, loaded
+and sealed the profile, then reached normal AirTAK boot, LoRa init and successful
+TX completions. Device/game config loaded from flash and the phone returned to
+LINKED with its saved callsign. These startup checks do not measure every GPIO
+with external equipment and do not prove LoRa peer reception or calibration.
 
 ## Next stages
 
-1. Persistent selection and bounded USB provisioning before any board-specific
-   GPIO, LED, recovery-button, radio or display initialization. Storage errors
-   must not trigger automatic erasure of existing NVS/bonds.
-2. Lazy radio construction, runtime power/ADC/GPS/recovery/sleep paths and isolated
-   OLED/TFT backends. Keep legacy targets until the replacement is verified.
-3. Compatible image/partition strategy for 8 MB and 16 MB boards, preserving
+1. Lazy radio construction, runtime power/ADC/GPS/recovery/sleep paths and isolated
+   OLED/TFT backends. Only after conversion may a shared image remove the compiled
+   board constraint. Keep legacy targets until the replacement is verified.
+2. Compatible image/partition strategy for 8 MB and 16 MB boards, preserving
    existing LittleFS configuration and OTA layouts. Back up the V4 before changes.
-4. Builds, guards and physical unknown/provisioned/reboot/BLE/OLED tests on the
-   V4. Other hardware and nRF runtime support remain unverified.
+3. Build/guard and physical regression checks on the runtime image. Other hardware
+   and nRF runtime support remain unverified.
