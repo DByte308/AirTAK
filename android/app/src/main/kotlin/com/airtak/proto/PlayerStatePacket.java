@@ -28,6 +28,7 @@ public  final class PlayerStatePacket extends
     platoonId_ = "";
     companyId_ = "";
   }
+  private int bitField0_;
   public static final int NODE_ID_FIELD_NUMBER = 1;
   private int nodeId_;
   /**
@@ -57,7 +58,29 @@ public  final class PlayerStatePacket extends
   public static final int CALLSIGN_FIELD_NUMBER = 2;
   private java.lang.String callsign_;
   /**
-   * <code>string callsign = 2;</code>
+   * <pre>
+   * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+   * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+   * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+   * short/long-name fallback). Old senders that omit the field keep working.
+   * </pre>
+   *
+   * <code>optional string callsign = 2;</code>
+   * @return Whether the callsign field is set.
+   */
+  @java.lang.Override
+  public boolean hasCallsign() {
+    return ((bitField0_ & 0x00000001) != 0);
+  }
+  /**
+   * <pre>
+   * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+   * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+   * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+   * short/long-name fallback). Old senders that omit the field keep working.
+   * </pre>
+   *
+   * <code>optional string callsign = 2;</code>
    * @return The callsign.
    */
   @java.lang.Override
@@ -65,7 +88,14 @@ public  final class PlayerStatePacket extends
     return callsign_;
   }
   /**
-   * <code>string callsign = 2;</code>
+   * <pre>
+   * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+   * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+   * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+   * short/long-name fallback). Old senders that omit the field keep working.
+   * </pre>
+   *
+   * <code>optional string callsign = 2;</code>
    * @return The bytes for callsign.
    */
   @java.lang.Override
@@ -74,32 +104,53 @@ public  final class PlayerStatePacket extends
     return com.google.protobuf.ByteString.copyFromUtf8(callsign_);
   }
   /**
-   * <code>string callsign = 2;</code>
+   * <pre>
+   * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+   * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+   * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+   * short/long-name fallback). Old senders that omit the field keep working.
+   * </pre>
+   *
+   * <code>optional string callsign = 2;</code>
    * @param value The callsign to set.
    */
   @java.lang.SuppressWarnings("ReturnValueIgnored")
   private void setCallsign(
       java.lang.String value) {
     value.getClass();  // minimal bytecode null check
-
+    bitField0_ |= 0x00000001;
     callsign_ = value;
   }
   /**
-   * <code>string callsign = 2;</code>
+   * <pre>
+   * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+   * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+   * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+   * short/long-name fallback). Old senders that omit the field keep working.
+   * </pre>
+   *
+   * <code>optional string callsign = 2;</code>
    */
   private void clearCallsign() {
-
+    bitField0_ = (bitField0_ & ~0x00000001);
     callsign_ = getDefaultInstance().getCallsign();
   }
   /**
-   * <code>string callsign = 2;</code>
+   * <pre>
+   * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+   * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+   * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+   * short/long-name fallback). Old senders that omit the field keep working.
+   * </pre>
+   *
+   * <code>optional string callsign = 2;</code>
    * @param value The bytes for callsign to set.
    */
   private void setCallsignBytes(
       com.google.protobuf.ByteString value) {
     checkByteStringIsUtf8(value);
     callsign_ = value.toStringUtf8();
-
+    bitField0_ |= 0x00000001;
   }
 
   public static final int STATUS_FIELD_NUMBER = 3;
@@ -212,10 +263,22 @@ public  final class PlayerStatePacket extends
   private java.lang.String fireteamId_;
   /**
    * <pre>
-   * e.g., "Alpha"; free-text, optional
+   * #24: same explicit-presence rule for unit-membership strings.
    * </pre>
    *
-   * <code>string fireteam_id = 6;</code>
+   * <code>optional string fireteam_id = 6;</code>
+   * @return Whether the fireteamId field is set.
+   */
+  @java.lang.Override
+  public boolean hasFireteamId() {
+    return ((bitField0_ & 0x00000002) != 0);
+  }
+  /**
+   * <pre>
+   * #24: same explicit-presence rule for unit-membership strings.
+   * </pre>
+   *
+   * <code>optional string fireteam_id = 6;</code>
    * @return The fireteamId.
    */
   @java.lang.Override
@@ -224,10 +287,10 @@ public  final class PlayerStatePacket extends
   }
   /**
    * <pre>
-   * e.g., "Alpha"; free-text, optional
+   * #24: same explicit-presence rule for unit-membership strings.
    * </pre>
    *
-   * <code>string fireteam_id = 6;</code>
+   * <code>optional string fireteam_id = 6;</code>
    * @return The bytes for fireteamId.
    */
   @java.lang.Override
@@ -237,43 +300,43 @@ public  final class PlayerStatePacket extends
   }
   /**
    * <pre>
-   * e.g., "Alpha"; free-text, optional
+   * #24: same explicit-presence rule for unit-membership strings.
    * </pre>
    *
-   * <code>string fireteam_id = 6;</code>
+   * <code>optional string fireteam_id = 6;</code>
    * @param value The fireteamId to set.
    */
   @java.lang.SuppressWarnings("ReturnValueIgnored")
   private void setFireteamId(
       java.lang.String value) {
     value.getClass();  // minimal bytecode null check
-
+    bitField0_ |= 0x00000002;
     fireteamId_ = value;
   }
   /**
    * <pre>
-   * e.g., "Alpha"; free-text, optional
+   * #24: same explicit-presence rule for unit-membership strings.
    * </pre>
    *
-   * <code>string fireteam_id = 6;</code>
+   * <code>optional string fireteam_id = 6;</code>
    */
   private void clearFireteamId() {
-
+    bitField0_ = (bitField0_ & ~0x00000002);
     fireteamId_ = getDefaultInstance().getFireteamId();
   }
   /**
    * <pre>
-   * e.g., "Alpha"; free-text, optional
+   * #24: same explicit-presence rule for unit-membership strings.
    * </pre>
    *
-   * <code>string fireteam_id = 6;</code>
+   * <code>optional string fireteam_id = 6;</code>
    * @param value The bytes for fireteamId to set.
    */
   private void setFireteamIdBytes(
       com.google.protobuf.ByteString value) {
     checkByteStringIsUtf8(value);
     fireteamId_ = value.toStringUtf8();
-
+    bitField0_ |= 0x00000002;
   }
 
   public static final int SQUAD_ID_FIELD_NUMBER = 7;
@@ -283,7 +346,19 @@ public  final class PlayerStatePacket extends
    * e.g., "1st Squad"; free-text, optional
    * </pre>
    *
-   * <code>string squad_id = 7;</code>
+   * <code>optional string squad_id = 7;</code>
+   * @return Whether the squadId field is set.
+   */
+  @java.lang.Override
+  public boolean hasSquadId() {
+    return ((bitField0_ & 0x00000004) != 0);
+  }
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>optional string squad_id = 7;</code>
    * @return The squadId.
    */
   @java.lang.Override
@@ -295,7 +370,7 @@ public  final class PlayerStatePacket extends
    * e.g., "1st Squad"; free-text, optional
    * </pre>
    *
-   * <code>string squad_id = 7;</code>
+   * <code>optional string squad_id = 7;</code>
    * @return The bytes for squadId.
    */
   @java.lang.Override
@@ -308,14 +383,14 @@ public  final class PlayerStatePacket extends
    * e.g., "1st Squad"; free-text, optional
    * </pre>
    *
-   * <code>string squad_id = 7;</code>
+   * <code>optional string squad_id = 7;</code>
    * @param value The squadId to set.
    */
   @java.lang.SuppressWarnings("ReturnValueIgnored")
   private void setSquadId(
       java.lang.String value) {
     value.getClass();  // minimal bytecode null check
-
+    bitField0_ |= 0x00000004;
     squadId_ = value;
   }
   /**
@@ -323,10 +398,10 @@ public  final class PlayerStatePacket extends
    * e.g., "1st Squad"; free-text, optional
    * </pre>
    *
-   * <code>string squad_id = 7;</code>
+   * <code>optional string squad_id = 7;</code>
    */
   private void clearSquadId() {
-
+    bitField0_ = (bitField0_ & ~0x00000004);
     squadId_ = getDefaultInstance().getSquadId();
   }
   /**
@@ -334,14 +409,14 @@ public  final class PlayerStatePacket extends
    * e.g., "1st Squad"; free-text, optional
    * </pre>
    *
-   * <code>string squad_id = 7;</code>
+   * <code>optional string squad_id = 7;</code>
    * @param value The bytes for squadId to set.
    */
   private void setSquadIdBytes(
       com.google.protobuf.ByteString value) {
     checkByteStringIsUtf8(value);
     squadId_ = value.toStringUtf8();
-
+    bitField0_ |= 0x00000004;
   }
 
   public static final int PLATOON_ID_FIELD_NUMBER = 8;
@@ -351,7 +426,19 @@ public  final class PlayerStatePacket extends
    * e.g., "Red Platoon"; free-text, optional
    * </pre>
    *
-   * <code>string platoon_id = 8;</code>
+   * <code>optional string platoon_id = 8;</code>
+   * @return Whether the platoonId field is set.
+   */
+  @java.lang.Override
+  public boolean hasPlatoonId() {
+    return ((bitField0_ & 0x00000008) != 0);
+  }
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>optional string platoon_id = 8;</code>
    * @return The platoonId.
    */
   @java.lang.Override
@@ -363,7 +450,7 @@ public  final class PlayerStatePacket extends
    * e.g., "Red Platoon"; free-text, optional
    * </pre>
    *
-   * <code>string platoon_id = 8;</code>
+   * <code>optional string platoon_id = 8;</code>
    * @return The bytes for platoonId.
    */
   @java.lang.Override
@@ -376,14 +463,14 @@ public  final class PlayerStatePacket extends
    * e.g., "Red Platoon"; free-text, optional
    * </pre>
    *
-   * <code>string platoon_id = 8;</code>
+   * <code>optional string platoon_id = 8;</code>
    * @param value The platoonId to set.
    */
   @java.lang.SuppressWarnings("ReturnValueIgnored")
   private void setPlatoonId(
       java.lang.String value) {
     value.getClass();  // minimal bytecode null check
-
+    bitField0_ |= 0x00000008;
     platoonId_ = value;
   }
   /**
@@ -391,10 +478,10 @@ public  final class PlayerStatePacket extends
    * e.g., "Red Platoon"; free-text, optional
    * </pre>
    *
-   * <code>string platoon_id = 8;</code>
+   * <code>optional string platoon_id = 8;</code>
    */
   private void clearPlatoonId() {
-
+    bitField0_ = (bitField0_ & ~0x00000008);
     platoonId_ = getDefaultInstance().getPlatoonId();
   }
   /**
@@ -402,14 +489,14 @@ public  final class PlayerStatePacket extends
    * e.g., "Red Platoon"; free-text, optional
    * </pre>
    *
-   * <code>string platoon_id = 8;</code>
+   * <code>optional string platoon_id = 8;</code>
    * @param value The bytes for platoonId to set.
    */
   private void setPlatoonIdBytes(
       com.google.protobuf.ByteString value) {
     checkByteStringIsUtf8(value);
     platoonId_ = value.toStringUtf8();
-
+    bitField0_ |= 0x00000008;
   }
 
   public static final int COMPANY_ID_FIELD_NUMBER = 9;
@@ -419,7 +506,19 @@ public  final class PlayerStatePacket extends
    * e.g., "1st Company"; free-text, optional
    * </pre>
    *
-   * <code>string company_id = 9;</code>
+   * <code>optional string company_id = 9;</code>
+   * @return Whether the companyId field is set.
+   */
+  @java.lang.Override
+  public boolean hasCompanyId() {
+    return ((bitField0_ & 0x00000010) != 0);
+  }
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>optional string company_id = 9;</code>
    * @return The companyId.
    */
   @java.lang.Override
@@ -431,7 +530,7 @@ public  final class PlayerStatePacket extends
    * e.g., "1st Company"; free-text, optional
    * </pre>
    *
-   * <code>string company_id = 9;</code>
+   * <code>optional string company_id = 9;</code>
    * @return The bytes for companyId.
    */
   @java.lang.Override
@@ -444,14 +543,14 @@ public  final class PlayerStatePacket extends
    * e.g., "1st Company"; free-text, optional
    * </pre>
    *
-   * <code>string company_id = 9;</code>
+   * <code>optional string company_id = 9;</code>
    * @param value The companyId to set.
    */
   @java.lang.SuppressWarnings("ReturnValueIgnored")
   private void setCompanyId(
       java.lang.String value) {
     value.getClass();  // minimal bytecode null check
-
+    bitField0_ |= 0x00000010;
     companyId_ = value;
   }
   /**
@@ -459,10 +558,10 @@ public  final class PlayerStatePacket extends
    * e.g., "1st Company"; free-text, optional
    * </pre>
    *
-   * <code>string company_id = 9;</code>
+   * <code>optional string company_id = 9;</code>
    */
   private void clearCompanyId() {
-
+    bitField0_ = (bitField0_ & ~0x00000010);
     companyId_ = getDefaultInstance().getCompanyId();
   }
   /**
@@ -470,14 +569,14 @@ public  final class PlayerStatePacket extends
    * e.g., "1st Company"; free-text, optional
    * </pre>
    *
-   * <code>string company_id = 9;</code>
+   * <code>optional string company_id = 9;</code>
    * @param value The bytes for companyId to set.
    */
   private void setCompanyIdBytes(
       com.google.protobuf.ByteString value) {
     checkByteStringIsUtf8(value);
     companyId_ = value.toStringUtf8();
-
+    bitField0_ |= 0x00000010;
   }
 
   public static com.airtak.proto.PlayerStatePacket parseFrom(
@@ -614,7 +713,29 @@ public  final class PlayerStatePacket extends
     }
 
     /**
-     * <code>string callsign = 2;</code>
+     * <pre>
+     * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+     * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+     * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+     * short/long-name fallback). Old senders that omit the field keep working.
+     * </pre>
+     *
+     * <code>optional string callsign = 2;</code>
+     * @return Whether the callsign field is set.
+     */
+    @java.lang.Override
+    public boolean hasCallsign() {
+      return instance.hasCallsign();
+    }
+    /**
+     * <pre>
+     * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+     * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+     * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+     * short/long-name fallback). Old senders that omit the field keep working.
+     * </pre>
+     *
+     * <code>optional string callsign = 2;</code>
      * @return The callsign.
      */
     @java.lang.Override
@@ -622,7 +743,14 @@ public  final class PlayerStatePacket extends
       return instance.getCallsign();
     }
     /**
-     * <code>string callsign = 2;</code>
+     * <pre>
+     * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+     * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+     * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+     * short/long-name fallback). Old senders that omit the field keep working.
+     * </pre>
+     *
+     * <code>optional string callsign = 2;</code>
      * @return The bytes for callsign.
      */
     @java.lang.Override
@@ -631,7 +759,14 @@ public  final class PlayerStatePacket extends
       return instance.getCallsignBytes();
     }
     /**
-     * <code>string callsign = 2;</code>
+     * <pre>
+     * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+     * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+     * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+     * short/long-name fallback). Old senders that omit the field keep working.
+     * </pre>
+     *
+     * <code>optional string callsign = 2;</code>
      * @param value The callsign to set.
      * @return This builder for chaining.
      */
@@ -642,7 +777,14 @@ public  final class PlayerStatePacket extends
       return this;
     }
     /**
-     * <code>string callsign = 2;</code>
+     * <pre>
+     * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+     * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+     * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+     * short/long-name fallback). Old senders that omit the field keep working.
+     * </pre>
+     *
+     * <code>optional string callsign = 2;</code>
      * @return This builder for chaining.
      */
     public Builder clearCallsign() {
@@ -651,7 +793,14 @@ public  final class PlayerStatePacket extends
       return this;
     }
     /**
-     * <code>string callsign = 2;</code>
+     * <pre>
+     * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+     * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+     * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+     * short/long-name fallback). Old senders that omit the field keep working.
+     * </pre>
+     *
+     * <code>optional string callsign = 2;</code>
      * @param value The bytes for callsign to set.
      * @return This builder for chaining.
      */
@@ -778,10 +927,22 @@ public  final class PlayerStatePacket extends
 
     /**
      * <pre>
-     * e.g., "Alpha"; free-text, optional
+     * #24: same explicit-presence rule for unit-membership strings.
      * </pre>
      *
-     * <code>string fireteam_id = 6;</code>
+     * <code>optional string fireteam_id = 6;</code>
+     * @return Whether the fireteamId field is set.
+     */
+    @java.lang.Override
+    public boolean hasFireteamId() {
+      return instance.hasFireteamId();
+    }
+    /**
+     * <pre>
+     * #24: same explicit-presence rule for unit-membership strings.
+     * </pre>
+     *
+     * <code>optional string fireteam_id = 6;</code>
      * @return The fireteamId.
      */
     @java.lang.Override
@@ -790,10 +951,10 @@ public  final class PlayerStatePacket extends
     }
     /**
      * <pre>
-     * e.g., "Alpha"; free-text, optional
+     * #24: same explicit-presence rule for unit-membership strings.
      * </pre>
      *
-     * <code>string fireteam_id = 6;</code>
+     * <code>optional string fireteam_id = 6;</code>
      * @return The bytes for fireteamId.
      */
     @java.lang.Override
@@ -803,10 +964,10 @@ public  final class PlayerStatePacket extends
     }
     /**
      * <pre>
-     * e.g., "Alpha"; free-text, optional
+     * #24: same explicit-presence rule for unit-membership strings.
      * </pre>
      *
-     * <code>string fireteam_id = 6;</code>
+     * <code>optional string fireteam_id = 6;</code>
      * @param value The fireteamId to set.
      * @return This builder for chaining.
      */
@@ -818,10 +979,10 @@ public  final class PlayerStatePacket extends
     }
     /**
      * <pre>
-     * e.g., "Alpha"; free-text, optional
+     * #24: same explicit-presence rule for unit-membership strings.
      * </pre>
      *
-     * <code>string fireteam_id = 6;</code>
+     * <code>optional string fireteam_id = 6;</code>
      * @return This builder for chaining.
      */
     public Builder clearFireteamId() {
@@ -831,10 +992,10 @@ public  final class PlayerStatePacket extends
     }
     /**
      * <pre>
-     * e.g., "Alpha"; free-text, optional
+     * #24: same explicit-presence rule for unit-membership strings.
      * </pre>
      *
-     * <code>string fireteam_id = 6;</code>
+     * <code>optional string fireteam_id = 6;</code>
      * @param value The bytes for fireteamId to set.
      * @return This builder for chaining.
      */
@@ -850,7 +1011,19 @@ public  final class PlayerStatePacket extends
      * e.g., "1st Squad"; free-text, optional
      * </pre>
      *
-     * <code>string squad_id = 7;</code>
+     * <code>optional string squad_id = 7;</code>
+     * @return Whether the squadId field is set.
+     */
+    @java.lang.Override
+    public boolean hasSquadId() {
+      return instance.hasSquadId();
+    }
+    /**
+     * <pre>
+     * e.g., "1st Squad"; free-text, optional
+     * </pre>
+     *
+     * <code>optional string squad_id = 7;</code>
      * @return The squadId.
      */
     @java.lang.Override
@@ -862,7 +1035,7 @@ public  final class PlayerStatePacket extends
      * e.g., "1st Squad"; free-text, optional
      * </pre>
      *
-     * <code>string squad_id = 7;</code>
+     * <code>optional string squad_id = 7;</code>
      * @return The bytes for squadId.
      */
     @java.lang.Override
@@ -875,7 +1048,7 @@ public  final class PlayerStatePacket extends
      * e.g., "1st Squad"; free-text, optional
      * </pre>
      *
-     * <code>string squad_id = 7;</code>
+     * <code>optional string squad_id = 7;</code>
      * @param value The squadId to set.
      * @return This builder for chaining.
      */
@@ -890,7 +1063,7 @@ public  final class PlayerStatePacket extends
      * e.g., "1st Squad"; free-text, optional
      * </pre>
      *
-     * <code>string squad_id = 7;</code>
+     * <code>optional string squad_id = 7;</code>
      * @return This builder for chaining.
      */
     public Builder clearSquadId() {
@@ -903,7 +1076,7 @@ public  final class PlayerStatePacket extends
      * e.g., "1st Squad"; free-text, optional
      * </pre>
      *
-     * <code>string squad_id = 7;</code>
+     * <code>optional string squad_id = 7;</code>
      * @param value The bytes for squadId to set.
      * @return This builder for chaining.
      */
@@ -919,7 +1092,19 @@ public  final class PlayerStatePacket extends
      * e.g., "Red Platoon"; free-text, optional
      * </pre>
      *
-     * <code>string platoon_id = 8;</code>
+     * <code>optional string platoon_id = 8;</code>
+     * @return Whether the platoonId field is set.
+     */
+    @java.lang.Override
+    public boolean hasPlatoonId() {
+      return instance.hasPlatoonId();
+    }
+    /**
+     * <pre>
+     * e.g., "Red Platoon"; free-text, optional
+     * </pre>
+     *
+     * <code>optional string platoon_id = 8;</code>
      * @return The platoonId.
      */
     @java.lang.Override
@@ -931,7 +1116,7 @@ public  final class PlayerStatePacket extends
      * e.g., "Red Platoon"; free-text, optional
      * </pre>
      *
-     * <code>string platoon_id = 8;</code>
+     * <code>optional string platoon_id = 8;</code>
      * @return The bytes for platoonId.
      */
     @java.lang.Override
@@ -944,7 +1129,7 @@ public  final class PlayerStatePacket extends
      * e.g., "Red Platoon"; free-text, optional
      * </pre>
      *
-     * <code>string platoon_id = 8;</code>
+     * <code>optional string platoon_id = 8;</code>
      * @param value The platoonId to set.
      * @return This builder for chaining.
      */
@@ -959,7 +1144,7 @@ public  final class PlayerStatePacket extends
      * e.g., "Red Platoon"; free-text, optional
      * </pre>
      *
-     * <code>string platoon_id = 8;</code>
+     * <code>optional string platoon_id = 8;</code>
      * @return This builder for chaining.
      */
     public Builder clearPlatoonId() {
@@ -972,7 +1157,7 @@ public  final class PlayerStatePacket extends
      * e.g., "Red Platoon"; free-text, optional
      * </pre>
      *
-     * <code>string platoon_id = 8;</code>
+     * <code>optional string platoon_id = 8;</code>
      * @param value The bytes for platoonId to set.
      * @return This builder for chaining.
      */
@@ -988,7 +1173,19 @@ public  final class PlayerStatePacket extends
      * e.g., "1st Company"; free-text, optional
      * </pre>
      *
-     * <code>string company_id = 9;</code>
+     * <code>optional string company_id = 9;</code>
+     * @return Whether the companyId field is set.
+     */
+    @java.lang.Override
+    public boolean hasCompanyId() {
+      return instance.hasCompanyId();
+    }
+    /**
+     * <pre>
+     * e.g., "1st Company"; free-text, optional
+     * </pre>
+     *
+     * <code>optional string company_id = 9;</code>
      * @return The companyId.
      */
     @java.lang.Override
@@ -1000,7 +1197,7 @@ public  final class PlayerStatePacket extends
      * e.g., "1st Company"; free-text, optional
      * </pre>
      *
-     * <code>string company_id = 9;</code>
+     * <code>optional string company_id = 9;</code>
      * @return The bytes for companyId.
      */
     @java.lang.Override
@@ -1013,7 +1210,7 @@ public  final class PlayerStatePacket extends
      * e.g., "1st Company"; free-text, optional
      * </pre>
      *
-     * <code>string company_id = 9;</code>
+     * <code>optional string company_id = 9;</code>
      * @param value The companyId to set.
      * @return This builder for chaining.
      */
@@ -1028,7 +1225,7 @@ public  final class PlayerStatePacket extends
      * e.g., "1st Company"; free-text, optional
      * </pre>
      *
-     * <code>string company_id = 9;</code>
+     * <code>optional string company_id = 9;</code>
      * @return This builder for chaining.
      */
     public Builder clearCompanyId() {
@@ -1041,7 +1238,7 @@ public  final class PlayerStatePacket extends
      * e.g., "1st Company"; free-text, optional
      * </pre>
      *
-     * <code>string company_id = 9;</code>
+     * <code>optional string company_id = 9;</code>
      * @param value The bytes for companyId to set.
      * @return This builder for chaining.
      */
@@ -1068,6 +1265,7 @@ public  final class PlayerStatePacket extends
       }
       case BUILD_MESSAGE_INFO: {
           java.lang.Object[] objects = new java.lang.Object[] {
+            "bitField0_",
             "nodeId_",
             "callsign_",
             "status_",
@@ -1079,8 +1277,9 @@ public  final class PlayerStatePacket extends
             "companyId_",
           };
           java.lang.String info =
-              "\u0000\t\u0000\u0000\u0001\t\t\u0000\u0000\u0000\u0001\u000b\u0002\u0208\u0003\f" +
-              "\u0004\u000b\u0005\u0007\u0006\u0208\u0007\u0208\b\u0208\t\u0208";
+              "\u0000\t\u0000\u0001\u0001\t\t\u0000\u0000\u0000\u0001\u000b\u0002\u1208\u0000\u0003" +
+              "\f\u0004\u000b\u0005\u0007\u0006\u1208\u0001\u0007\u1208\u0002\b\u1208\u0003\t\u1208" +
+              "\u0004";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       case GET_DEFAULT_INSTANCE: {

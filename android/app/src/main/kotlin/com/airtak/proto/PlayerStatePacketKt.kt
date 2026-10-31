@@ -54,7 +54,14 @@ public object PlayerStatePacketKt {
     }
 
     /**
-     * `string callsign = 2;`
+     * ```
+     * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+     * OMITTED callsign (absent -> receiver keeps its stored name) from an
+     * EXPLICITLY EMPTY one (present -> receiver clears to the NODEINFO
+     * short/long-name fallback). Old senders that omit the field keep working.
+     * ```
+     *
+     * `optional string callsign = 2;`
      */
     public var callsign: kotlin.String
       @kotlin.jvm.JvmName("getCallsign")
@@ -64,10 +71,31 @@ public object PlayerStatePacketKt {
         _builder.callsign = value
       }
     /**
-     * `string callsign = 2;`
+     * ```
+     * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+     * OMITTED callsign (absent -> receiver keeps its stored name) from an
+     * EXPLICITLY EMPTY one (present -> receiver clears to the NODEINFO
+     * short/long-name fallback). Old senders that omit the field keep working.
+     * ```
+     *
+     * `optional string callsign = 2;`
      */
     public fun clearCallsign() {
       _builder.clearCallsign()
+    }
+    /**
+     * ```
+     * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+     * OMITTED callsign (absent -> receiver keeps its stored name) from an
+     * EXPLICITLY EMPTY one (present -> receiver clears to the NODEINFO
+     * short/long-name fallback). Old senders that omit the field keep working.
+     * ```
+     *
+     * `optional string callsign = 2;`
+     * @return Whether the callsign field is set.
+     */
+    public fun hasCallsign(): kotlin.Boolean {
+      return _builder.hasCallsign()
     }
 
     /**
@@ -138,10 +166,10 @@ public object PlayerStatePacketKt {
 
     /**
      * ```
-     * e.g., "Alpha"; free-text, optional
+     * #24: same explicit-presence rule for unit-membership strings.
      * ```
      *
-     * `string fireteam_id = 6;`
+     * `optional string fireteam_id = 6;`
      */
     public var fireteamId: kotlin.String
       @kotlin.jvm.JvmName("getFireteamId")
@@ -152,13 +180,24 @@ public object PlayerStatePacketKt {
       }
     /**
      * ```
-     * e.g., "Alpha"; free-text, optional
+     * #24: same explicit-presence rule for unit-membership strings.
      * ```
      *
-     * `string fireteam_id = 6;`
+     * `optional string fireteam_id = 6;`
      */
     public fun clearFireteamId() {
       _builder.clearFireteamId()
+    }
+    /**
+     * ```
+     * #24: same explicit-presence rule for unit-membership strings.
+     * ```
+     *
+     * `optional string fireteam_id = 6;`
+     * @return Whether the fireteamId field is set.
+     */
+    public fun hasFireteamId(): kotlin.Boolean {
+      return _builder.hasFireteamId()
     }
 
     /**
@@ -166,7 +205,7 @@ public object PlayerStatePacketKt {
      * e.g., "1st Squad"; free-text, optional
      * ```
      *
-     * `string squad_id = 7;`
+     * `optional string squad_id = 7;`
      */
     public var squadId: kotlin.String
       @kotlin.jvm.JvmName("getSquadId")
@@ -180,10 +219,21 @@ public object PlayerStatePacketKt {
      * e.g., "1st Squad"; free-text, optional
      * ```
      *
-     * `string squad_id = 7;`
+     * `optional string squad_id = 7;`
      */
     public fun clearSquadId() {
       _builder.clearSquadId()
+    }
+    /**
+     * ```
+     * e.g., "1st Squad"; free-text, optional
+     * ```
+     *
+     * `optional string squad_id = 7;`
+     * @return Whether the squadId field is set.
+     */
+    public fun hasSquadId(): kotlin.Boolean {
+      return _builder.hasSquadId()
     }
 
     /**
@@ -191,7 +241,7 @@ public object PlayerStatePacketKt {
      * e.g., "Red Platoon"; free-text, optional
      * ```
      *
-     * `string platoon_id = 8;`
+     * `optional string platoon_id = 8;`
      */
     public var platoonId: kotlin.String
       @kotlin.jvm.JvmName("getPlatoonId")
@@ -205,10 +255,21 @@ public object PlayerStatePacketKt {
      * e.g., "Red Platoon"; free-text, optional
      * ```
      *
-     * `string platoon_id = 8;`
+     * `optional string platoon_id = 8;`
      */
     public fun clearPlatoonId() {
       _builder.clearPlatoonId()
+    }
+    /**
+     * ```
+     * e.g., "Red Platoon"; free-text, optional
+     * ```
+     *
+     * `optional string platoon_id = 8;`
+     * @return Whether the platoonId field is set.
+     */
+    public fun hasPlatoonId(): kotlin.Boolean {
+      return _builder.hasPlatoonId()
     }
 
     /**
@@ -216,7 +277,7 @@ public object PlayerStatePacketKt {
      * e.g., "1st Company"; free-text, optional
      * ```
      *
-     * `string company_id = 9;`
+     * `optional string company_id = 9;`
      */
     public var companyId: kotlin.String
       @kotlin.jvm.JvmName("getCompanyId")
@@ -230,10 +291,21 @@ public object PlayerStatePacketKt {
      * e.g., "1st Company"; free-text, optional
      * ```
      *
-     * `string company_id = 9;`
+     * `optional string company_id = 9;`
      */
     public fun clearCompanyId() {
       _builder.clearCompanyId()
+    }
+    /**
+     * ```
+     * e.g., "1st Company"; free-text, optional
+     * ```
+     *
+     * `optional string company_id = 9;`
+     * @return Whether the companyId field is set.
+     */
+    public fun hasCompanyId(): kotlin.Boolean {
+      return _builder.hasCompanyId()
     }
   }
 }

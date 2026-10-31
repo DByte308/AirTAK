@@ -16,12 +16,38 @@ public interface PlayerStatePacketOrBuilder extends
   int getNodeId();
 
   /**
-   * <code>string callsign = 2;</code>
+   * <pre>
+   * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+   * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+   * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+   * short/long-name fallback). Old senders that omit the field keep working.
+   * </pre>
+   *
+   * <code>optional string callsign = 2;</code>
+   * @return Whether the callsign field is set.
+   */
+  boolean hasCallsign();
+  /**
+   * <pre>
+   * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+   * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+   * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+   * short/long-name fallback). Old senders that omit the field keep working.
+   * </pre>
+   *
+   * <code>optional string callsign = 2;</code>
    * @return The callsign.
    */
   java.lang.String getCallsign();
   /**
-   * <code>string callsign = 2;</code>
+   * <pre>
+   * #24: explicit presence. proto3 `optional` lets a sender distinguish an
+   * OMITTED callsign (absent -&gt; receiver keeps its stored name) from an
+   * EXPLICITLY EMPTY one (present -&gt; receiver clears to the NODEINFO
+   * short/long-name fallback). Old senders that omit the field keep working.
+   * </pre>
+   *
+   * <code>optional string callsign = 2;</code>
    * @return The bytes for callsign.
    */
   com.google.protobuf.ByteString
@@ -56,19 +82,28 @@ public interface PlayerStatePacketOrBuilder extends
 
   /**
    * <pre>
-   * e.g., "Alpha"; free-text, optional
+   * #24: same explicit-presence rule for unit-membership strings.
    * </pre>
    *
-   * <code>string fireteam_id = 6;</code>
+   * <code>optional string fireteam_id = 6;</code>
+   * @return Whether the fireteamId field is set.
+   */
+  boolean hasFireteamId();
+  /**
+   * <pre>
+   * #24: same explicit-presence rule for unit-membership strings.
+   * </pre>
+   *
+   * <code>optional string fireteam_id = 6;</code>
    * @return The fireteamId.
    */
   java.lang.String getFireteamId();
   /**
    * <pre>
-   * e.g., "Alpha"; free-text, optional
+   * #24: same explicit-presence rule for unit-membership strings.
    * </pre>
    *
-   * <code>string fireteam_id = 6;</code>
+   * <code>optional string fireteam_id = 6;</code>
    * @return The bytes for fireteamId.
    */
   com.google.protobuf.ByteString
@@ -79,7 +114,16 @@ public interface PlayerStatePacketOrBuilder extends
    * e.g., "1st Squad"; free-text, optional
    * </pre>
    *
-   * <code>string squad_id = 7;</code>
+   * <code>optional string squad_id = 7;</code>
+   * @return Whether the squadId field is set.
+   */
+  boolean hasSquadId();
+  /**
+   * <pre>
+   * e.g., "1st Squad"; free-text, optional
+   * </pre>
+   *
+   * <code>optional string squad_id = 7;</code>
    * @return The squadId.
    */
   java.lang.String getSquadId();
@@ -88,7 +132,7 @@ public interface PlayerStatePacketOrBuilder extends
    * e.g., "1st Squad"; free-text, optional
    * </pre>
    *
-   * <code>string squad_id = 7;</code>
+   * <code>optional string squad_id = 7;</code>
    * @return The bytes for squadId.
    */
   com.google.protobuf.ByteString
@@ -99,7 +143,16 @@ public interface PlayerStatePacketOrBuilder extends
    * e.g., "Red Platoon"; free-text, optional
    * </pre>
    *
-   * <code>string platoon_id = 8;</code>
+   * <code>optional string platoon_id = 8;</code>
+   * @return Whether the platoonId field is set.
+   */
+  boolean hasPlatoonId();
+  /**
+   * <pre>
+   * e.g., "Red Platoon"; free-text, optional
+   * </pre>
+   *
+   * <code>optional string platoon_id = 8;</code>
    * @return The platoonId.
    */
   java.lang.String getPlatoonId();
@@ -108,7 +161,7 @@ public interface PlayerStatePacketOrBuilder extends
    * e.g., "Red Platoon"; free-text, optional
    * </pre>
    *
-   * <code>string platoon_id = 8;</code>
+   * <code>optional string platoon_id = 8;</code>
    * @return The bytes for platoonId.
    */
   com.google.protobuf.ByteString
@@ -119,7 +172,16 @@ public interface PlayerStatePacketOrBuilder extends
    * e.g., "1st Company"; free-text, optional
    * </pre>
    *
-   * <code>string company_id = 9;</code>
+   * <code>optional string company_id = 9;</code>
+   * @return Whether the companyId field is set.
+   */
+  boolean hasCompanyId();
+  /**
+   * <pre>
+   * e.g., "1st Company"; free-text, optional
+   * </pre>
+   *
+   * <code>optional string company_id = 9;</code>
    * @return The companyId.
    */
   java.lang.String getCompanyId();
@@ -128,7 +190,7 @@ public interface PlayerStatePacketOrBuilder extends
    * e.g., "1st Company"; free-text, optional
    * </pre>
    *
-   * <code>string company_id = 9;</code>
+   * <code>optional string company_id = 9;</code>
    * @return The bytes for companyId.
    */
   com.google.protobuf.ByteString
