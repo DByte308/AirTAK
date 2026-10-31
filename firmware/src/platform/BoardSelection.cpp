@@ -55,4 +55,12 @@ bool BoardSelection::seal() {
     state_ = BoardSelectionState::Sealed;
     return true;
 }
+bool BoardSelection::clear() {
+    // A sealed selection is immutable: never allow clearing after boot.
+    if (state_ == BoardSelectionState::Sealed) return false;
+    if (!store_.clear()) return false;   // fail-closed: leave state unchanged on error
+    current_ = nullptr;
+    state_ = BoardSelectionState::Missing;
+    return true;
+}
 } // namespace airtak

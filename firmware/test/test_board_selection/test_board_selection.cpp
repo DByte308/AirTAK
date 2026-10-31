@@ -11,7 +11,9 @@ public:
     std::vector<uint8_t> data;
     BoardStoreRead readResult = BoardStoreRead::Missing;
     bool failWrite = false, failReadback = false, corruptReadback = false;
+    bool failClear = false;
     unsigned writes = 0;
+    unsigned clears = 0;
     BoardStoreRead read(uint8_t* out, size_t capacity, size_t& size) override {
         size = data.size();
         if (writes && failReadback) return BoardStoreRead::Error;
@@ -33,6 +35,13 @@ public:
         data.resize(BOARD_IDENTITY_RECORD_SIZE);
         TEST_ASSERT_TRUE(encodeBoardIdentity(id, data.data(), data.size()));
         readResult = BoardStoreRead::Ok;
+    }
+    bool clear() override {
+        ++clears;
+        if (failClear) return false;
+        data.clear();
+        readResult = BoardStoreRead::Missing;
+        return true;   // idempotent: an already-empty store still clears
     }
 };
 static void assertPinSafe(BoardSelection& selection) {
@@ -169,6 +178,62 @@ static void test_unknown_image_constraint_fails_closed() {
     assertPinSafe(selection);
     TEST_ASSERT_EQUAL_UINT(0, store.writes);
 }
+static void test_clear_from_ready_becomes_missing() {
+    Store store;
+    BoardSelection selection(store);
+    TEST_ASSERT_TRUE(selection.provision("heltec_v4"));
+    TEST_ASSERT_EQUAL(BoardSelectionState::Ready, selection.state());
+
+    TEST_ASSERT_TRUE(selection.clear());
+    TEST_ASSERT_EQUAL(BoardSelectionState::Missing, selection.state());
+    TEST_ASSERT_EQUAL_PTR(&unknownBoard(), &selection.current());
+    TEST_ASSERT_EQUAL_UINT(1, store.clears);
+}
+static void test_clear_then_load_reports_missing() {
+    Store store;
+    BoardSelection selection(store);
+    TEST_ASSERT_TRUE(selection.provision("heltec_v4"));
+    TEST_ASSERT_TRUE(selection.clear());
+
+    // After clearing, the backing store reports Missing -> load() returns false.
+    TEST_ASSERT_FALSE(selection.load());
+    TEST_ASSERT_EQUAL(BoardSelectionState::Missing, selection.state());
+    assertPinSafe(selection);
+}
+static void test_clear_empty_store_is_idempotent_true() {
+    Store store;   // readResult = Missing (empty)
+    BoardSelection selection(store);
+    TEST_ASSERT_TRUE(selection.clear());
+    TEST_ASSERT_EQUAL(BoardSelectionState::Missing, selection.state());
+    // Clearing an already-empty store is safe and idempotent.
+    TEST_ASSERT_TRUE(selection.clear());
+    TEST_ASSERT_EQUAL(BoardSelectionState::Missing, selection.state());
+    TEST_ASSERT_EQUAL_UINT(2, store.clears);
+}
+static void test_clear_store_failure_fail_closed() {
+    Store store;
+    BoardSelection selection(store);
+    TEST_ASSERT_TRUE(selection.provision("heltec_v4"));
+    store.failClear = true;
+
+    // A failed store clear leaves the selection unchanged (fail-closed).
+    TEST_ASSERT_FALSE(selection.clear());
+    TEST_ASSERT_EQUAL(BoardSelectionState::Ready, selection.state());
+    TEST_ASSERT_EQUAL_PTR(&board("heltec_v4"), &selection.current());
+}
+static void test_clear_rejected_when_sealed() {
+    Store store;
+    BoardSelection selection(store);
+    TEST_ASSERT_TRUE(selection.provision("heltec_v4"));
+    TEST_ASSERT_TRUE(selection.seal());
+
+    // A sealed selection is immutable: clear() must be rejected and never
+    // touch the store.
+    TEST_ASSERT_FALSE(selection.clear());
+    TEST_ASSERT_EQUAL(BoardSelectionState::Sealed, selection.state());
+    TEST_ASSERT_EQUAL_PTR(&board("heltec_v4"), &selection.current());
+    TEST_ASSERT_EQUAL_UINT(0, store.clears);
+}
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_missing_record_cannot_start_hardware);
@@ -184,5 +249,10 @@ int main(int, char**) {
     RUN_TEST(test_sealed_selection_is_immutable);
     RUN_TEST(test_unknown_image_constraint_fails_closed);
     RUN_TEST(test_ready_metadata_never_exposes_hardware_before_seal);
+    RUN_TEST(test_clear_from_ready_becomes_missing);
+    RUN_TEST(test_clear_then_load_reports_missing);
+    RUN_TEST(test_clear_empty_store_is_idempotent_true);
+    RUN_TEST(test_clear_store_failure_fail_closed);
+    RUN_TEST(test_clear_rejected_when_sealed);
     return UNITY_END();
 }

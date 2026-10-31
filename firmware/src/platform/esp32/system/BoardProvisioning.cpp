@@ -39,6 +39,14 @@ public:
         return opened_ && nvs_set_blob(handle_, "identity", data, size) == ESP_OK &&
                nvs_commit(handle_) == ESP_OK;
     }
+    // Erase ONLY the identity key, never the NVS flash (it holds BLE bonds).
+    // Idempotent: a missing key (already cleared) is still a success.
+    bool clear() override {
+        if (!opened_) return false;
+        const esp_err_t err = nvs_erase_key(handle_, "identity");
+        if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) return false;
+        return nvs_commit(handle_) == ESP_OK;
+    }
 private:
     nvs_handle_t handle_ = 0;
     bool opened_ = false;
@@ -73,7 +81,7 @@ void prepareBoardSelection(const char* imageBoardId) {
     store.open();
     bool autoBoot = state.load();
     printState(state, imageBoardId);
-    Serial.println("[BOARD] commands: BOARD GET | BOARD LIST | BOARD SET <id> | BOARD BOOT");
+    Serial.println("[BOARD] commands: BOARD GET | BOARD LIST | BOARD SET <id> | BOARD CLEAR | BOARD BOOT");
     Serial.println("[BOARD] select the physical board explicitly; chip identity is not a board id");
     const uint32_t started = millis();
     char line[kCommandCapacity] = {};
@@ -108,6 +116,16 @@ void prepareBoardSelection(const char* imageBoardId) {
                     ESP.restart();
                 } else {
                     Serial.println("[BOARD] error=provision-rejected (id, image constraint, or storage)");
+                    printState(state, imageBoardId);
+                }
+            } else if (std::strcmp(line, "BOARD CLEAR") == 0) {
+                if (state.clear()) {
+                    Serial.printf("[BOARD] cleared rebooting\n");
+                    Serial.flush();
+                    delay(kRebootSettleMs);
+                    ESP.restart();
+                } else {
+                    Serial.println("[BOARD] error=clear-failed");
                     printState(state, imageBoardId);
                 }
             } else if (std::strcmp(line, "BOARD BOOT") == 0) {
