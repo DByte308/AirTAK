@@ -9,6 +9,16 @@
 // Vext (GPIO 36, active LOW) must be enabled before the OLED is usable.
 // ADC_CTRL (GPIO 37) enables the battery voltage divider. The V4 needs it HIGH;
 // the V3 needs it LOW. Honour AIRTAK_ADC_CTRL_ACTIVE_HIGH.
+//
+// ── Runtime backend (AIRTAK_RUNTIME_BOARD) ─────────────────────────────────────
+// When built for the shared ESP32-S3 runtime image this TU provides the OLED
+// *backend* (RuntimeOledDisplay) rather than the compile-time Display class.
+// All pin/geometry/address come from the sealed startup descriptor; nothing is
+// captured at static-init time. The runtime layout selector MUST appear before
+// any include so DisplayConstants.h picks the OLED geometry.
+#ifdef AIRTAK_RUNTIME_BOARD
+#define AIRTAK_DISPLAY_LAYOUT_OLED
+#endif
 
 #include "hal/Display.h"
 #include "ui/Screens.h"
@@ -27,13 +37,37 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+#ifdef AIRTAK_RUNTIME_BOARD
+// Runtime backend class + wiring wrapper + compatible()/ready() helpers are
+// declared here (written by the display-backend worker). We alias the runtime
+// backend class in place of the compile-time Display so every method body below
+// defines a RuntimeOledDisplay member — no class collision with the legacy board.
+#include "platform/esp32/system/BoardProvisioning.h"
+#include "platform/RuntimeDisplayRoute.h"
+#include "platform/boards/esp32s3_runtime/hal/RuntimeDisplayBackends.h"
+#define Display RuntimeOledDisplay
+#endif
+
 namespace airtak {
 
 using namespace ui;
 
 // ── OLED framebuffer ──────────────────────────────────────────────────────────
+#ifdef AIRTAK_RUNTIME_BOARD
+// Lazy driver handle. No GPIO or descriptor pin is captured at static-init time;
+// the SSD1306 is constructed only on first use, after the startup selection is
+// sealed. The descriptor's oledWidth/oledHeight/oledRst drive the geometry.
+static Adafruit_SSD1306& runtimeOled() {
+    const auto& p = platform::selectedBoard();
+    static Adafruit_SSD1306 d(p.oledWidth, p.oledHeight, &Wire, p.oledRst);
+    return d;
+}
+#define s_display runtimeOled()
+static bool s_ready = false;
+#else
 static Adafruit_SSD1306 s_display(AIRTAK_OLED_WIDTH, AIRTAK_OLED_HEIGHT, &Wire,
                                   AIRTAK_PIN_OLED_RST);
+#endif
 
 static ScreenId  s_current_screen  = ScreenId::MAIN;
 static uint16_t  s_dirty_mask      = DISPLAY_DIRTY_ALL;
@@ -191,6 +225,44 @@ static void renderRadioScreen() {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 void Display::init() {
+#ifdef AIRTAK_RUNTIME_BOARD
+    // Runtime path: all pins/polarity/geometry/address come from the sealed
+    // startup descriptor. Every optional rail is driven only when present, so
+    // boards without a power rail or a battery ADC_CTRL (e.g. T3 S3, whose
+    // oledRst/powerEnablePin are -1) never write a non-existent pin.
+    const auto& p = platform::selectedBoard();
+    if (!compatible(p)) {
+        s_ready = false;
+        s_last_refresh_ms = 0;
+        s_dirty_mask = 0;
+        return;
+    }
+
+    if (p.powerEnablePin >= 0) {
+        pinMode(p.powerEnablePin, OUTPUT);
+        digitalWrite(p.powerEnablePin, p.powerEnableActiveLow ? LOW : HIGH);
+        delay(PERIPH_POWER_SETTLE_MS); // allow OLED and LoRa boost to stabilise
+    }
+    if (p.adcCtrlPin >= 0) {
+        // Mirror Battery.cpp so the display init cannot disable the divider.
+        pinMode(p.adcCtrlPin, OUTPUT);
+        digitalWrite(p.adcCtrlPin, p.adcCtrlActiveHigh ? HIGH : LOW);
+    }
+    if (p.oledSda >= 0 && p.oledScl >= 0) {
+        Wire.begin(p.oledSda, p.oledScl);
+    }
+
+    if (!s_display.begin(SSD1306_SWITCHCAPVCC, p.oledI2cAddr)) {
+        // Display init failed; firmware continues without display and never
+        // renders a null framebuffer. ready() stays false.
+        s_ready = false;
+        s_last_refresh_ms = 0;
+        s_dirty_mask = 0;
+        return;
+    }
+
+    s_ready = true;
+#else
     // Enable peripheral power rail (Vext, active LOW).
     pinMode(AIRTAK_PIN_POWER_EN, OUTPUT);
     digitalWrite(AIRTAK_PIN_POWER_EN, LOW);
@@ -215,6 +287,7 @@ void Display::init() {
         s_dirty_mask      = 0;
         return;
     }
+#endif
 
     s_display.clearDisplay();
     s_display.setTextWrap(false);
@@ -321,5 +394,15 @@ void Display::forceRefresh()             { s_dirty_mask = DISPLAY_DIRTY_ALL; s_l
 void Display::setBrightness(uint8_t)      {}   // OLED: contrast fixed
 void Display::sleep()                     {}   // OLED: auto-off handled by task
 void Display::wake()                      {}
+
+#ifdef AIRTAK_RUNTIME_BOARD
+// ── Runtime backend contract (coordination API) ───────────────────────────────
+// Match the route predicate used by the dispatcher (RuntimeDisplayRoute.cpp),
+// which is the single source of truth for compatibility.
+bool RuntimeOledDisplay::compatible(const BoardDescriptor& profile) {
+    return runtimeOledDisplayCompatible(profile);
+}
+bool RuntimeOledDisplay::ready() { return s_ready; }
+#endif
 
 } // namespace airtak

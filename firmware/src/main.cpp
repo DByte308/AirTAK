@@ -212,6 +212,12 @@ void setup() {
     airtak::ChannelManager::init();
     airtak::PlayerState::init();
     airtak::Button::init();
+#ifdef AIRTAK_RUNTIME_BOARD
+    // Initialize the renderer and its lock before BLE can request a passcode
+    // or the display task can refresh concurrently. Runtime init is idempotent.
+    airtak::Display::init();
+    airtak::Display::setBrightness(airtak::config::ConfigManager::powerBrightnessPct());
+#endif
 
     // Create inter-task communication primitives.
     g_radio_tx_queue      = xQueueCreate(airtak::QUEUE_SIZE_RADIO_TX,  sizeof(void*));

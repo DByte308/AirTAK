@@ -12,6 +12,19 @@
 // (SCK=40, MOSI=41, MISO=38).  Concurrent access from display (priority 1) and
 // radio (priority 4) tasks is avoided in practice by the task-priority scheme;
 // see BoardConfig.h for the full rationale.
+//
+// ── Runtime backend (AIRTAK_RUNTIME_BOARD) ─────────────────────────────────────
+// When built for the shared ESP32-S3 runtime image this TU provides the TFT
+// *backend* (RuntimeTftDisplay) rather than the compile-time Display class.
+// The actual TFT_eSPI driver pins remain the isolated fixed compile-time config
+// (TFT_* build flags); compatible() verifies that compiled config against the
+// sealed descriptor BEFORE the lazy TFT object is constructed. The layout
+// selector MUST appear before any include so DisplayConstants.h selects the TFT
+// geometry/color namespace. ready() means "init attempt done", NOT physical
+// display proof.
+#ifdef AIRTAK_RUNTIME_BOARD
+#define AIRTAK_DISPLAY_LAYOUT_TDECK
+#endif
 
 #include "hal/Display.h"
 #include "ui/Screens.h"
@@ -29,11 +42,42 @@
 #include <SPI.h>
 #include <TFT_eSPI.h>
 
+#ifdef AIRTAK_RUNTIME_BOARD
+// Runtime backend class + RuntimeTftWiring + compatible()/ready() helpers are
+// declared here (written by the display-backend worker). Alias the runtime
+// backend class in place of the compile-time Display so every method body below
+// defines a RuntimeTftDisplay member — no class collision with the legacy board.
+#include "platform/esp32/system/BoardProvisioning.h"
+#include "platform/RuntimeDisplayRoute.h"
+#include "platform/boards/esp32s3_runtime/hal/RuntimeDisplayBackends.h"
+#define Display RuntimeTftDisplay
+// The runtime BoardConfig.h defines no AIRTAK_PIN_TFT_BL; supply the descriptor
+// getter so applyBacklight/init compile unchanged, and guard the writes on a
+// present pin. Legacy builds keep the compile-time macro.
+static int airflowTftBlPin() { return airtak::platform::selectedBoard().tftBl; }
+#define AIRTAK_PIN_TFT_BL airflowTftBlPin()
+#endif
+
 namespace airtak {
 
 using namespace ui;
 
+#ifdef AIRTAK_RUNTIME_BOARD
+// Lazy driver handle. The TFT_eSPI object binds to the COMPILED TFT_* config.
+// It is constructed only after compatible() confirms that compiled config matches
+// the sealed descriptor, so a mismatched config is never instantiated.
+static TFT_eSPI& runtimeTft() {
+    static TFT_eSPI t;
+    return t;
+}
+#define s_tft runtimeTft()
+// "ready" = this backend's init() was attempted and (if compatible) reached the
+// driver. It is NOT physical-display proof (TFT_eSPI init can succeed on a panel
+// that is absent or wired differently).
+static bool s_tft_ready = false;
+#else
 static TFT_eSPI s_tft;
+#endif
 
 static ScreenId  s_current_screen  = ScreenId::MAIN;
 static uint16_t  s_dirty_mask      = DISPLAY_DIRTY_ALL;
@@ -234,6 +278,9 @@ static uint8_t  s_bl_level = 0;
 // Each edge increments an internal counter; the brightness is the counter value.
 // 0 = off, 16 = max.  To turn off, hold the pin LOW.
 static void applyBacklight(uint8_t target) {
+#if defined(AIRTAK_RUNTIME_BOARD)
+    if (airflowTftBlPin() < 0) return;          // no backlight rail on this board
+#endif
     if (target > BL_STEPS) target = BL_STEPS;
     if (target == 0) {
         digitalWrite(AIRTAK_PIN_TFT_BL, LOW);
@@ -257,6 +304,37 @@ static void applyBacklight(uint8_t target) {
 }
 
 void Display::init() {
+#ifdef AIRTAK_RUNTIME_BOARD
+    // Runtime path. The TFT_eSPI pins stay the isolated fixed compile-time
+    // config; compatible() has already verified that compiled config matches the
+    // sealed descriptor BEFORE the lazy TFT object is constructed. The descriptor
+    // supplies only the optional rail + backlight polarity, driven only when >0.
+    const auto& p = platform::selectedBoard();
+    if (!compatible(p)) {
+        s_tft_ready = false;
+        s_last_refresh_ms = 0;
+        s_dirty_mask = 0;
+        return;
+    }
+
+    if (p.powerEnablePin >= 0) {
+        pinMode(p.powerEnablePin, OUTPUT);
+        digitalWrite(p.powerEnablePin, p.powerEnableActiveLow ? LOW : HIGH);
+        delay(PERIPH_POWER_SETTLE_MS);
+    }
+    if (p.tftBl >= 0) {
+        pinMode(p.tftBl, OUTPUT);
+        digitalWrite(p.tftBl, HIGH);
+        delayMicroseconds(30);
+        s_bl_level = BL_STEPS;
+    }
+
+    s_tft.init();
+    s_tft.setRotation(1);   // landscape: 320 wide, 240 tall
+    s_tft.fillScreen(COL_BG);
+    s_tft.setTextWrap(false);
+    s_tft_ready = true;     // init ATTEMPT done — NOT physical panel proof
+#else
     pinMode(AIRTAK_PIN_TFT_BL, OUTPUT);
     digitalWrite(AIRTAK_PIN_TFT_BL, HIGH);
     delayMicroseconds(30);
@@ -266,6 +344,7 @@ void Display::init() {
     s_tft.setRotation(1);   // landscape: 320 wide, 240 tall
     s_tft.fillScreen(COL_BG);
     s_tft.setTextWrap(false);
+#endif
 
     s_last_refresh_ms = 0;
     s_dirty_mask      = DISPLAY_DIRTY_ALL;
@@ -373,12 +452,18 @@ void Display::setBrightness(uint8_t pct) {
 }
 
 void Display::sleep() {
+#ifdef AIRTAK_RUNTIME_BOARD
+    if (!s_tft_ready) return;
+#endif
     s_bl_asleep = true;
     applyBacklight(0);
     s_tft.writecommand(0x10);
 }
 
 void Display::wake() {
+#ifdef AIRTAK_RUNTIME_BOARD
+    if (!s_tft_ready) return;
+#endif
     s_bl_asleep = false;
     s_tft.writecommand(0x11);
     delay(TFT_WAKE_DELAY_MS);
@@ -387,5 +472,55 @@ void Display::wake() {
     if (level == 0) level = 1;
     applyBacklight(level);
 }
+
+#ifdef AIRTAK_RUNTIME_BOARD
+// ── Runtime backend contract (coordination API) ───────────────────────────────
+// A RuntimeTftWiring mirrors the compiled TFT_eSPI config (TFT_* build flags).
+// For rotation 1 the logical display is TFT_HEIGHT wide × TFT_WIDTH tall, so the
+// descriptor's tftWidth/tftHeight must equal logicalWidth/logicalHeight.
+static bool tftWiringMatches(const BoardDescriptor& p, const RuntimeTftWiring& w) {
+    if (p.display != DisplayKind::Tft) return false;
+    if (p.tftSck  != w.sck)  return false;
+    if (p.tftMiso != w.miso) return false;
+    if (p.tftMosi != w.mosi) return false;
+    if (p.tftCs   != w.cs)   return false;
+    if (p.tftDc   != w.dc)   return false;
+    if (p.tftRst  != w.rst)  return false;
+    if (p.tftBl   != w.bl)   return false;
+    if (p.tftWidth  != w.width)  return false;
+    if (p.tftHeight != w.height) return false;
+    return true;
+}
+
+// Build a RuntimeTftWiring from the COMPILED TFT_eSPI config (TFT_* build flags).
+// For rotation 1 the logical display is TFT_HEIGHT wide × TFT_WIDTH tall.
+#ifdef TFT_SCLK
+static RuntimeTftWiring compiledTftWiring() {
+    return RuntimeTftWiring{
+        /*Sck*/ static_cast<int>(TFT_SCLK),
+        /*Miso*/ static_cast<int>(TFT_MISO),
+        /*Mosi*/ static_cast<int>(TFT_MOSI),
+        /*Cs*/ static_cast<int>(TFT_CS),
+        /*Dc*/ static_cast<int>(TFT_DC),
+        /*Rst*/ static_cast<int>(TFT_RST),
+        /*Bl*/ static_cast<int>(TFT_BL),
+        /*width*/ static_cast<int>(TFT_HEIGHT),   // rotation 1 → logical width
+        /*height*/ static_cast<int>(TFT_WIDTH)    // rotation 1 → logical height
+    };
+}
+#endif
+
+bool RuntimeTftDisplay::compatible(const BoardDescriptor& p) {
+#ifdef TFT_SCLK
+    const RuntimeTftWiring w = compiledTftWiring();
+    return tftWiringMatches(p, w);
+#else
+    // No compiled TFT_eSPI config is present in this build.
+    (void)p;
+    return false;
+#endif
+}
+bool RuntimeTftDisplay::ready() { return s_tft_ready; }
+#endif
 
 } // namespace airtak

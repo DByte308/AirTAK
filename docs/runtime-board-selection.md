@@ -6,7 +6,7 @@ The descriptor registry, identity-record codec, startup selection state machine
 and opt-in V4 NVS/USB provisioning test are implemented. Normal firmware targets
 still use compile-time BoardConfig selection. Descriptor-driven HAL paths now
 compile in a link-only fixture, but there is not yet a deployable universal image
-or runtime OLED/TFT dispatcher.
+or runtime display dispatcher that selects OLED or TFT from the sealed descriptor.
 
 Do not flash a generic partition layout over an existing board on the strength
 of this foundation. The tested V4 firmware remains the known-good baseline.
@@ -54,13 +54,36 @@ matches the record. Explicit trusted selection is still required.
 ./tools/pio_firmware.sh test -e native
 ```
 
-The native suite passes 132 tests, including registry/header parity, all-board
+The native suite passes 142 tests, including registry/header parity, all-board
 record round-trips, CRC reference data, every single-bit record corruption,
 truncation, invalid versions/families and unknown identifiers. Both portable
 translation units also pass strict C++17 compilation with pedantic errors enabled.
 The legacy V4 target and selection-test image build and retain the BLE startup
 constructor. The physical selection test below is V4-only, not evidence that the
 other boards or a universal runtime image have been hardware-verified.
+
+## Runtime display dispatch
+
+`runtime_s3_shared` is a compile/link-only shared image containing the runtime
+Display dispatcher plus both backends (RuntimeOledDisplay, RuntimeTftDisplay).
+Its upload is explicitly blocked because it is not a deployable image and this
+is a dispatch feasibility result, not hardware evidence.
+
+The dispatcher picks exactly one compatible backend via the portable route
+predicates. An unknown board has no backend: every Display call is a no-op and
+currentScreen() returns MAIN with no GPIO/I2C/SPI access. A recursive FreeRTOS
+mutex serializes backend calls (created on first init, which main calls before
+BLE/display trust). Rendering, passcode, recovery, brightness, sleep and wake
+are gated on the backend's ready(), so a failed OLED begin() never dereferences
+a null framebuffer.
+
+The OLED backend lazily constructs its SSD1306 from descriptor geometry and only
+on first use after the selection is sealed. It drives power and ADC control only
+to present pins. The TFT backend builds its wiring from the compiled TFT_eSPI
+flags and only instantiates the TFT driver if that wiring matches the descriptor,
+then guards backlight writes on a present pin. Runtime startup deasserts radio
+and TFT chip selects before starting a shared SPI bus. The native suite covers
+the routing predicates, and the actual runtime Battery consumer.
 
 ## Runtime HAL compile checkpoint
 

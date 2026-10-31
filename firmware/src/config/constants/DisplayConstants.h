@@ -55,7 +55,29 @@ constexpr uint32_t DISPLAY_BRIGHTNESS_PCT_DEF  = 100;
 
 // ── Per-Board Display Dimensions ────────────────────────────────────────────
 
-#if defined(AIRTAK_BOARD_T_ECHO) || defined(AIRTAK_BOARD_T_ECHO_PLUS)
+#if defined(AIRTAK_DISPLAY_LAYOUT_TDECK)
+    // ST7789 TFT — T-Deck layout, 320×240 landscape (rotation 1), 16-bit color.
+    // Selected at runtime by the TFT display backend; does NOT imply any
+    // AIRTAK_BOARD_* hardware flag (the layout drives geometry only).
+    constexpr uint16_t DISP_WIDTH           = 320;
+    constexpr uint16_t DISP_HEIGHT          = 240;
+    constexpr uint16_t DISP_HEADER_HEIGHT    = 24;
+    constexpr uint16_t DISP_FOOTER_HEIGHT    = 22;
+    constexpr uint16_t DISP_CONTENT_Y       = 26;
+    constexpr uint16_t DISP_FOOTER_Y       = 218;
+    constexpr int16_t  DISP_LINE_HEIGHT       = 18;
+#elif defined(AIRTAK_DISPLAY_LAYOUT_OLED)
+    // SSD1306 OLED — Heltec V3/V4 / T3S3 layout, 128×64 monochrome.
+    // Selected at runtime by the OLED display backend; does NOT imply any
+    // AIRTAK_BOARD_* hardware flag (the layout drives geometry only).
+    constexpr uint16_t DISP_WIDTH           = 128;
+    constexpr uint16_t DISP_HEIGHT          = 64;
+    constexpr uint16_t DISP_HEADER_HEIGHT    = 11;
+    constexpr uint16_t DISP_FOOTER_HEIGHT    = 10;
+    constexpr uint16_t DISP_CONTENT_Y       = 13;
+    constexpr uint16_t DISP_FOOTER_Y       = 54;
+    constexpr int16_t  DISP_LINE_HEIGHT       = 9;
+#elif defined(AIRTAK_BOARD_T_ECHO) || defined(AIRTAK_BOARD_T_ECHO_PLUS)
     // SSD1681 E-Ink — 200×200 pixels, 1-bit monochrome
     /// Display width in pixels
     constexpr uint16_t DISP_WIDTH           = 200;
@@ -151,7 +173,19 @@ constexpr uint8_t  BL_STEPS                  = 16;
 
 // ── Per-Board Color Palettes ────────────────────────────────────────────────
 
-#if defined(AIRTAK_BOARD_HELTEC_T114)
+#if defined(AIRTAK_DISPLAY_LAYOUT_TDECK)
+    // ST7789 TFT 16-bit colors — T-Deck layout (320×240). Same palette as
+    // AIRTAK_BOARD_T_DECK but driven by the runtime layout selector; does NOT
+    // imply any AIRTAK_BOARD_* hardware flag.
+    constexpr uint16_t COL_BG        = 0x0000;
+    constexpr uint16_t COL_HDR_BG    = 0x1082;
+    constexpr uint16_t COL_TEXT      = 0xFFFF;
+    constexpr uint16_t COL_ACCENT    = 0x07FF;
+    constexpr uint16_t COL_OK        = 0x07E0;
+    constexpr uint16_t COL_WARN      = 0xFFE0;
+    constexpr uint16_t COL_ERR       = 0xF800;
+    constexpr uint16_t COL_DIM       = 0x7BEF;
+#elif defined(AIRTAK_BOARD_HELTEC_T114)
     // ST7789 TFT 16-bit colors (240×135)
     /// Background color
     constexpr uint16_t COL_BG        = 0x0000;

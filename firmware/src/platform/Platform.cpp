@@ -52,6 +52,15 @@ void initBoard() {
         digitalWrite(profile.powerEnablePin, profile.powerEnableActiveLow ? LOW : HIGH);
         delay(BOOT_PERIPH_SETTLE_MS);
     }
+    // Deassert both devices before starting a potentially shared SPI bus.
+    if (profile.radioNss >= 0) {
+        pinMode(profile.radioNss, OUTPUT);
+        digitalWrite(profile.radioNss, HIGH);
+    }
+    if (profile.display == DisplayKind::Tft && profile.tftCs >= 0) {
+        pinMode(profile.tftCs, OUTPUT);
+        digitalWrite(profile.tftCs, HIGH);
+    }
     // SPI.begin(-1, ...) may select Arduino defaults, which is not pin-safe.
     if (profile.radioSck >= 0 && profile.radioMiso >= 0 &&
         profile.radioMosi >= 0 && profile.radioNss >= 0)
