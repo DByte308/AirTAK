@@ -179,7 +179,7 @@ class NrfSerialDfuEngine(
         onProgress: (UpdateProgress) -> Unit
     ): Result<Unit> {
         // ---- 1. Parse the .zip distribution ------------------------------
-        onProgress(UpdateProgress.Initializing("Parsing DFU package..."))
+        onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_parse))
         val pkg = runCatching { parseDfuZip(firmware) }
             .getOrElse {
                 return Result.failure(Exception(
@@ -189,7 +189,7 @@ class NrfSerialDfuEngine(
             }
 
         // ---- 2. Upload the init / command object -------------------------
-        onProgress(UpdateProgress.Initializing("Uploading init packet..."))
+        onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_init))
         val initSel = selectObject(NRF_OBJ_TYPE_COMMAND.toByte())
             ?: return Result.failure(Exception("SELECT(command) failed"))
         val initMax = initSel.maxSize

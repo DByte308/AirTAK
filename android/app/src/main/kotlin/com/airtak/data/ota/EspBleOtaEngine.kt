@@ -117,7 +117,7 @@ class EspBleOtaEngine(
         //  SharedFlow.first() consumes only what arrives after subscription.)
 
         // 1. OtaStart
-        onProgress(UpdateProgress.Initializing("Starting OTA…"))
+        onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_start_ota))
         val startCmd = buildOtaStart(firmware.size, crc)
         ble.send(BleRepository.OutboundChannel.OtaCommand, startCmd)
 
@@ -210,7 +210,7 @@ class EspBleOtaEngine(
 
         // 3. OtaFinish — firmware verifies CRC, sends OtaStatus(COMPLETE),
         //    then reboots (~250 ms later).
-        onProgress(UpdateProgress.Initializing("Finalizing OTA…"))
+        onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_finalize_ota))
 
         // Drain the tx queue so the status request below isn't sitting behind
         // hundreds of pending OTA_DATA writes.

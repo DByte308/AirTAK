@@ -55,7 +55,7 @@ class FirmwareUpdateViewModel @Inject constructor(
 
     private val manager = FirmwareUpdateManager(appContext)
 
-    private val _progress = MutableStateFlow<UpdateProgress>(UpdateProgress.Initializing("Not started"))
+    private val _progress = MutableStateFlow<UpdateProgress>(UpdateProgress.Initializing(com.airtak.R.string.fw_step_idle))
     val progress: StateFlow<UpdateProgress> = _progress.asStateFlow()
 
     private val _state = MutableStateFlow<FwUpdateState>(FwUpdateState.Idle)
@@ -252,7 +252,7 @@ class FirmwareUpdateViewModel @Inject constructor(
         }
 
     fun reset() {
-        _progress.value = UpdateProgress.Initializing("Not started")
+        _progress.value = UpdateProgress.Initializing(com.airtak.R.string.fw_step_idle)
         _state.value = FwUpdateState.Idle
         _debugLog.value = emptyList()
     }

@@ -199,7 +199,7 @@ class PhoneGpsLocationPolicyTest {
             hasFix = false,
             failure = GpsStartFailure.PermissionMissing,
         )
-        assertTrue(reason.contains("permission", ignoreCase = true), reason)
+        assertEquals(com.airtak.R.string.gps_permission_missing, reason)
     }
 
     @Test fun waitingForFixIsNamedAsFixAndNotAsPermission() {
@@ -209,8 +209,7 @@ class PhoneGpsLocationPolicyTest {
             hasFix = false,
             failure = GpsStartFailure.None,
         )
-        assertTrue(reason.contains("fix", ignoreCase = true), reason)
-        assertFalse(reason.contains("permission", ignoreCase = true), reason)
+        assertEquals(com.airtak.R.string.gps_waiting_fix, reason)
     }
 
     @Test fun missingProviderIsNamedAsProvider() {
@@ -220,7 +219,7 @@ class PhoneGpsLocationPolicyTest {
             hasFix = false,
             failure = GpsStartFailure.NoProvider,
         )
-        assertTrue(reason.contains("provider", ignoreCase = true), reason)
+        assertEquals(com.airtak.R.string.gps_provider_missing, reason)
     }
 
     @Test fun registeredButLocationOffIsNamedAsLocationOff() {
@@ -232,8 +231,7 @@ class PhoneGpsLocationPolicyTest {
             hasFix = false,
             failure = GpsStartFailure.None,
         )
-        assertTrue(reason.contains("off", ignoreCase = true) || reason.contains("turn", ignoreCase = true), reason)
-        assertFalse(reason.contains("permission", ignoreCase = true), reason)
+        assertEquals(com.airtak.R.string.gps_location_off, reason)
     }
 
     @Test fun notRegisteredAndLocationOffPrefersLocationOffOverProviderAbsence() {
@@ -243,7 +241,7 @@ class PhoneGpsLocationPolicyTest {
             hasFix = false,
             failure = GpsStartFailure.NoProvider,
         )
-        assertTrue(reason.contains("turn", ignoreCase = true), reason)
+        assertEquals(com.airtak.R.string.gps_location_off_connect, reason)
     }
 
     @Test fun everyNoPositionStateProducesNonEmptyText() {
@@ -254,7 +252,7 @@ class PhoneGpsLocationPolicyTest {
                     for (hasFix in listOf(true, false)) {
                         val reason = noPositionReason(registered, enabled, hasFix, failure)
                         assertTrue(
-                            reason.isNotBlank(),
+                            reason != 0,
                             "$registered/$enabled/$hasFix/$failure produced '$reason'",
                         )
                     }

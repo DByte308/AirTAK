@@ -293,14 +293,14 @@ private fun HudBar(
             }
             satellites?.takeIf { it > 0 }?.let {
                 Text(
-                    "$it sat",
+                    stringResource(R.string.hud_satellites, it),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (deviceGpsFix) MaterialTheme.colorScheme.primary
                            else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } ?: if (phoneGpsActive) {
                 Text(
-                    if (phoneGpsFix) "GPS fix" else "GPS...",
+                    stringResource(if (phoneGpsFix) R.string.hud_gps_fix else R.string.hud_gps_waiting),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (phoneGpsFix) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant,

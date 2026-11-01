@@ -59,7 +59,7 @@ class NrfBleDfuEngine(
         onProgress: (UpdateProgress) -> Unit
     ): Result<Unit> {
         // ---- 1. Trigger bootloader entry on the device ----------------------
-        onProgress(UpdateProgress.Initializing("Requesting bootloader entry..."))
+        onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_request_bootloader))
         // DFU_ENTER on nRF52 maps to Bluefruit `enterOTADfu()` (sets GPREGRET
         // to 0xA8 and soft-resets into the Nordic SoftDevice bootloader).
         // OTA_ENTER is reserved for the ESP32 in-app OTA path and would be
@@ -81,7 +81,7 @@ class NrfBleDfuEngine(
         delay(NRF_BOOTLOADER_WAKE_MS)
 
         // ---- 3. Persist firmware bytes to a cache zip -----------------------
-        onProgress(UpdateProgress.Initializing("Preparing DFU package..."))
+        onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_prepare))
         val pkgFile = try {
             writeCachePackage(firmware)
         } catch (e: Exception) {
@@ -90,17 +90,17 @@ class NrfBleDfuEngine(
         }
 
         // ---- 4. Run the Nordic DFU library ---------------------------------
-        onProgress(UpdateProgress.Initializing("Connecting to bootloader..."))
+        onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_connect))
         val outcome = CompletableDeferred<Result<Unit>>()
         val listener = object : DfuProgressListenerAdapter() {
             override fun onDeviceConnecting(deviceAddress: String) {
-                onProgress(UpdateProgress.Initializing("Connecting to bootloader..."))
+                onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_connect))
             }
             override fun onEnablingDfuMode(deviceAddress: String) {
-                onProgress(UpdateProgress.Initializing("Enabling DFU mode..."))
+                onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_enable))
             }
             override fun onDfuProcessStarted(deviceAddress: String) {
-                onProgress(UpdateProgress.Initializing("Uploading init packet..."))
+                onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_init))
             }
             override fun onProgressChanged(
                 deviceAddress: String,

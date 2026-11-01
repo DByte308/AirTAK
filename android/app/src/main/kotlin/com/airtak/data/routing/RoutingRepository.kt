@@ -2,6 +2,8 @@
 
 package com.airtak.data.routing
 
+import com.airtak.ui.i18n.withAppLanguage
+
 import android.content.Context
 import android.util.Log
 import com.airtak.data.tiles.TileBounds
@@ -122,22 +124,26 @@ class RoutingRepository @Inject constructor(
         _routeState.value = RouteCalcState.Calculating
         scope.launch {
             runCatching {
-                val (points, brouterError) = withContext(Dispatchers.Default) {
+                val (points, _) = withContext(Dispatchers.Default) {
                     computeBrouterRoute(fromLat, fromLon, toLat, toLon, profile)
                 }
                 if (points.isEmpty()) {
                     _routeState.value = RouteCalcState.Failed(
-                        brouterError ?: if (_isDataReady.value) "No route found between points" else "No routing data downloaded"
+                        text(if (_isDataReady.value) com.airtak.R.string.routing_no_route else com.airtak.R.string.routing_no_data)
                     )
                 } else {
                     val distance = calculatePathDistance(points)
                     _routeState.value = RouteCalcState.Complete(points, distance)
                 }
             }.onFailure { e ->
-                _routeState.value = RouteCalcState.Failed(e.message ?: "Routing failed")
+                Log.w("RoutingRepo", "Routing failed", e)
+                _routeState.value = RouteCalcState.Failed(text(com.airtak.R.string.routing_failed))
             }
         }
     }
+
+    private fun text(@androidx.annotation.StringRes id: Int, vararg args: Any): String =
+        context.withAppLanguage().getString(id, *args)
 
     fun clearRoute() {
         _routeState.value = RouteCalcState.Idle
@@ -226,7 +232,7 @@ class RoutingRepository @Inject constructor(
             refreshSegments()
             if (downloaded == 0 && errors > 0) {
                 _downloadState.value = SegmentDownloadState.Failed(
-                    "Downloaded 0 of ${names.size} segments — check network"
+                    text(com.airtak.R.string.routing_download_failed, names.size)
                 )
             } else {
                 _downloadState.value = SegmentDownloadState.Complete(downloaded, skipped)

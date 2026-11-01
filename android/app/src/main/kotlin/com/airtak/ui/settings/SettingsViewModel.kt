@@ -82,11 +82,11 @@ class SettingsViewModel @Inject constructor(
         val slot: ChannelSlot = ChannelSlot.getDefaultInstance(),
         val pskText: String = "",
         val pskRevealed: Boolean = false,
-        val pskError: String? = null,
+        @androidx.annotation.StringRes val pskError: Int? = null,
     )
     data class EditableChannelsState(
         val slots: List<ChannelSlotEditor> = emptyList(),
-        val validationError: String? = null,
+        @androidx.annotation.StringRes val validationError: Int? = null,
     )
     data class PositionState(
         val broadcastIntervalSecs: Int = DEVICE_BROADCAST_INTERVAL_SECS,
@@ -542,22 +542,22 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    private data class PskParseResult(val bytes: ByteArray, val error: String?)
+    private data class PskParseResult(val bytes: ByteArray, @androidx.annotation.StringRes val error: Int?)
 
     private fun parsePsk(text: String): PskParseResult {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return PskParseResult(ByteArray(0), null)
         val bytes = if (trimmed.startsWith("0x", ignoreCase = true)) {
             val hex = trimmed.drop(2).filterNot { it.isWhitespace() || it == ':' || it == '-' }
-            if (hex.length % 2 != 0) return PskParseResult(ByteArray(0), "Hex PSK must have an even number of digits.")
+            if (hex.length % 2 != 0) return PskParseResult(ByteArray(0), com.airtak.R.string.settings_psk_even)
             if (!hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
-                return PskParseResult(ByteArray(0), "Hex PSK contains a non-hex character.")
+                return PskParseResult(ByteArray(0), com.airtak.R.string.settings_psk_hex)
             }
             ByteArray(hex.length / 2) { i -> hex.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
         } else if (isBase64(trimmed)) {
             try {
                 val decoded = Base64.decode(trimmed, Base64.DEFAULT)
-                if (decoded.size > UI_PSK_MAX_BYTES) return PskParseResult(decoded, "PSK must be 32 bytes or fewer.")
+                if (decoded.size > UI_PSK_MAX_BYTES) return PskParseResult(decoded, com.airtak.R.string.settings_psk_size)
                 decoded
             } catch (_: IllegalArgumentException) {
                 trimmed.toByteArray(Charsets.UTF_8)
@@ -565,7 +565,7 @@ class SettingsViewModel @Inject constructor(
         } else {
             trimmed.toByteArray(Charsets.UTF_8)
         }
-        if (bytes.size > UI_PSK_MAX_BYTES) return PskParseResult(bytes, "PSK must be 32 bytes or fewer.")
+        if (bytes.size > UI_PSK_MAX_BYTES) return PskParseResult(bytes, com.airtak.R.string.settings_psk_size)
         return PskParseResult(bytes, null)
     }
 

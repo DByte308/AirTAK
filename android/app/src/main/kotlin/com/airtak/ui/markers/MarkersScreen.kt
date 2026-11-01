@@ -256,10 +256,15 @@ fun MarkersScreen(
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(markers, key = { it.markerId }) { marker ->
+                    val creator = if (marker.ownedLocally) stringResource(R.string.markers_creator_you)
+                        else viewModel.creatorName(marker) ?: stringResource(
+                            R.string.settings_node_number,
+                            marker.creatorNodeId.toString(16).uppercase().take(8),
+                        )
                     if (marker.ownedLocally) {
                         SwipeableMarkerRow(
                             marker = marker,
-                            creatorName = viewModel.creatorName(marker),
+                            creatorName = creator,
                             onClick = { onLocateMarker(marker.markerId) },
                             onLongClick = { if (marker.ownedLocally) pendingDelete = marker },
                             onSwipeDelete = {
@@ -269,7 +274,7 @@ fun MarkersScreen(
                     } else {
                         MarkerRow(
                             marker = marker,
-                            creatorName = viewModel.creatorName(marker),
+                            creatorName = creator,
                             onClick = { onLocateMarker(marker.markerId) },
                         )
                     }
@@ -512,6 +517,9 @@ private fun formatTimestamp(unixSeconds: Long): String {
         age < UI_SECONDS_PER_MINUTE -> stringResource(R.string.markers_age_seconds, age)
         age < UI_SECONDS_PER_HOUR -> stringResource(R.string.markers_age_minutes, age / UI_SECONDS_PER_MINUTE)
         age < UI_SECONDS_PER_DAY -> stringResource(R.string.markers_age_hours, age / UI_SECONDS_PER_HOUR)
-        else -> SimpleDateFormat("MMM d", Locale.US).format(Date(unixSeconds * MS_PER_SECOND))
+        else -> java.text.DateFormat.getDateInstance(
+            java.text.DateFormat.SHORT,
+            androidx.compose.ui.platform.LocalConfiguration.current.locales[0],
+        ).format(Date(unixSeconds * MS_PER_SECOND))
     }
 }

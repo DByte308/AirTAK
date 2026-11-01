@@ -257,26 +257,20 @@ internal fun isLastKnownUsable(ageMs: Long, accuracyM: Float?): Boolean {
  * registered, having a provider switched on, and having a fix are different states and the user
  * needs the one that matches what to do about it.
  */
+@androidx.annotation.StringRes
 internal fun noPositionReason(
     registered: Boolean,
     providersEnabled: Boolean,
     hasFix: Boolean,
     failure: GpsStartFailure,
-): String = when {
-    !registered && failure == GpsStartFailure.PermissionMissing ->
-        "Location permission not granted — allow location to see your position"
-    !registered && !providersEnabled ->
-        "Device location is off — turn it on, or connect a device"
-    !registered && failure == GpsStartFailure.NoProvider ->
-        "No location provider available — no GPS or network location on this device"
-    !registered ->
-        "Location updates not running — reopen the map or connect a device"
-    registered && !providersEnabled ->
-        "Device location is off — turn it on to update your position"
-    !hasFix ->
-        "No position yet — waiting for a GPS fix"
-    else ->
-        "No position yet — waiting for a location or a connected device"
+): Int = when {
+    !registered && failure == GpsStartFailure.PermissionMissing -> com.airtak.R.string.gps_permission_missing
+    !registered && !providersEnabled -> com.airtak.R.string.gps_location_off_connect
+    !registered && failure == GpsStartFailure.NoProvider -> com.airtak.R.string.gps_provider_missing
+    !registered -> com.airtak.R.string.gps_updates_stopped
+    registered && !providersEnabled -> com.airtak.R.string.gps_location_off
+    !hasFix -> com.airtak.R.string.gps_waiting_fix
+    else -> com.airtak.R.string.gps_waiting_position
 }
 
 @Singleton

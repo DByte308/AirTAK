@@ -51,7 +51,7 @@ class FirmwareUpdateManager(
     }
 
     sealed class UpdateProgress {
-        data class Initializing(val step: String) : UpdateProgress()
+        data class Initializing(@androidx.annotation.StringRes val step: Int) : UpdateProgress()
         data class Transferring(
             val bytesWritten: Long,
             val totalBytes: Long,
@@ -99,7 +99,7 @@ class FirmwareUpdateManager(
         ): Result<String> {
             engine.onDebug = onDebug
             engine.onDebug?.invoke("=== Firmware update starting ===")
-            onProgress(UpdateProgress.Initializing("Detecting device..."))
+            onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_detect))
             engine.onDebug?.invoke("Step 1: initialize() — SYNC + SPI_ATTACH + stub upload")
             val initResult = engine.initialize()
             if (initResult.isFailure) {
@@ -112,7 +112,7 @@ class FirmwareUpdateManager(
             }
             engine.onDebug?.invoke("initialize() OK: ${initResult.getOrNull()}")
 
-            onProgress(UpdateProgress.Initializing("Transferring firmware..."))
+            onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_transfer))
             engine.onDebug?.invoke("Step 2: transfer() — erase otadata + write app0/app1")
 
             val transferResult = engine.transfer(firmware, onProgress)
@@ -126,7 +126,7 @@ class FirmwareUpdateManager(
             }
             engine.onDebug?.invoke("transfer() OK")
 
-            onProgress(UpdateProgress.Initializing("Finalizing..."))
+            onProgress(UpdateProgress.Initializing(com.airtak.R.string.fw_step_finalize))
             engine.onDebug?.invoke("Step 3: finalize() — FLASH_END + reboot")
             val finalizeResult = engine.finalize()
             if (finalizeResult.isFailure) {

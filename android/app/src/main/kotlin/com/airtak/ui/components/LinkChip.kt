@@ -46,19 +46,19 @@ fun LinkChip(state: LinkState, onClick: () -> Unit, modifier: Modifier = Modifie
     ) {
         StatusDot(dot, Modifier.size(10.dp))
         Text(
-            label,
+            androidx.compose.ui.res.stringResource(label),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
 
-private fun describe(state: LinkState): Pair<Color, String> = when (state) {
-    is LinkState.Connected     -> StatusActive to "LINKED"
-    is LinkState.Connecting    -> AccentCyan   to "LINKING"
-    is LinkState.Reconnecting  -> AccentAmber  to "REACQUIRE"
-    is LinkState.Scanning      -> AccentCyan   to "SCANNING"
-    is LinkState.Pairing       -> AccentAmber  to "PAIR"
-    is LinkState.Failed        -> StatusHit    to "LINK FAIL"
-    LinkState.Disconnected     -> StatusOffline to "NO LINK"
+private fun describe(state: LinkState): Pair<Color, Int> = when (state) {
+    is LinkState.Connected     -> StatusActive to com.airtak.R.string.link_connected
+    is LinkState.Connecting    -> AccentCyan to com.airtak.R.string.link_connecting
+    is LinkState.Reconnecting  -> AccentAmber to com.airtak.R.string.link_reconnecting
+    is LinkState.Scanning      -> AccentCyan to com.airtak.R.string.link_scanning
+    is LinkState.Pairing       -> AccentAmber to com.airtak.R.string.link_pairing
+    is LinkState.Failed        -> StatusHit to com.airtak.R.string.link_failed
+    LinkState.Disconnected     -> StatusOffline to com.airtak.R.string.link_disconnected
 }

@@ -178,13 +178,13 @@ fun FirmwareUpdateScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        s.message,
+                        stringResource(R.string.fw_failed_explanation),
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(24.dp))
-                    DebugLogView(debugLog)
+                    DebugLogView(debugLog + s.message)
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = {
                         viewModel.reset()
@@ -227,7 +227,7 @@ private fun FirmwareProgress(progress: UpdateProgress) {
                 CircularProgressIndicator(modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    progress.step,
+                    stringResource(progress.step),
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
                 )
@@ -317,7 +317,7 @@ private fun FirmwareProgress(progress: UpdateProgress) {
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    progress.message,
+                    stringResource(R.string.fw_failed_explanation),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = StatusHit,

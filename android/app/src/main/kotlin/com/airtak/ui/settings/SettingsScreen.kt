@@ -338,7 +338,7 @@ private fun RadioRestartBanner() {
         Icon(Icons.Outlined.Warning, contentDescription = null, tint = AccentAmber)
         Spacer(Modifier.size(10.dp))
         Text(
-                "Applying this group restarts the LoRa radio for ~300 ms. The BLE link is preserved.",
+                stringResource(R.string.settings_restart_explanation),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface,
         )
@@ -369,6 +369,10 @@ private fun PlayerSection(
         onNavigateToChannelSlot: (Int) -> Unit = { onNavigateToChannels() },
 ) {
     val device by vm.device.collectAsState()
+    val companyLabel = stringResource(R.string.scope_company)
+    val platoonLabel = stringResource(R.string.scope_platoon)
+    val squadLabel = stringResource(R.string.scope_squad)
+    val fireteamLabel = stringResource(R.string.scope_fireteam)
     val game by vm.game.collectAsState()
     val channels by vm.channels.collectAsState()
     LaunchedEffect(Unit) { vm.readDevice() }
@@ -454,7 +458,7 @@ private fun PlayerSection(
             )
             UnitChannelDropdown(
                     level = "company",
-                    unitLabel = game.companyId.ifBlank { "Company" },
+                    unitLabel = game.companyId.ifBlank { companyLabel },
                     selectedSlot = game.companyChannelSlot,
                     channelOptions = channelOptions,
                     claimedSlots = claimedSlots,
@@ -463,7 +467,7 @@ private fun PlayerSection(
                         val newSlot =
                                 vm.prepareUnitChannel(
                                         "company",
-                                        game.companyId.ifBlank { "Company" }
+                                        game.companyId.ifBlank { companyLabel }
                                 )
                         if (newSlot != null) onNavigateToChannelSlot(newSlot)
                         else onNavigateToChannels()
@@ -484,7 +488,7 @@ private fun PlayerSection(
             )
             UnitChannelDropdown(
                     level = "platoon",
-                    unitLabel = game.platoonId.ifBlank { "Platoon" },
+                    unitLabel = game.platoonId.ifBlank { platoonLabel },
                     selectedSlot = game.platoonChannelSlot,
                     channelOptions = channelOptions,
                     claimedSlots = claimedSlots,
@@ -493,7 +497,7 @@ private fun PlayerSection(
                         val newSlot =
                                 vm.prepareUnitChannel(
                                         "platoon",
-                                        game.platoonId.ifBlank { "Platoon" }
+                                        game.platoonId.ifBlank { platoonLabel }
                                 )
                         if (newSlot != null) onNavigateToChannelSlot(newSlot)
                         else onNavigateToChannels()
@@ -514,14 +518,14 @@ private fun PlayerSection(
             )
             UnitChannelDropdown(
                     level = "squad",
-                    unitLabel = game.squadId.ifBlank { "Squad" },
+                    unitLabel = game.squadId.ifBlank { squadLabel },
                     selectedSlot = game.squadChannelSlot,
                     channelOptions = channelOptions,
                     claimedSlots = claimedSlots,
                     onSelect = { slot -> vm.updateGame { copy(squadChannelSlot = slot) } },
                     onSetupNewChannel = {
                         val newSlot =
-                                vm.prepareUnitChannel("squad", game.squadId.ifBlank { "Squad" })
+                                vm.prepareUnitChannel("squad", game.squadId.ifBlank { squadLabel })
                         if (newSlot != null) onNavigateToChannelSlot(newSlot)
                         else onNavigateToChannels()
                     },
@@ -550,7 +554,7 @@ private fun PlayerSection(
                         val newSlot =
                                 vm.prepareUnitChannel(
                                         "fireteam",
-                                        game.fireteamId.ifBlank { "Fireteam" }
+                                        game.fireteamId.ifBlank { fireteamLabel }
                                 )
                         if (newSlot != null) onNavigateToChannelSlot(newSlot)
                         else onNavigateToChannels()
@@ -560,7 +564,7 @@ private fun PlayerSection(
         }
         Spacer(Modifier.height(8.dp))
         TacticalText(
-                "All fields are optional and self-assigned. Each unit can be linked to a dedicated channel for scoped communications.",
+                stringResource(R.string.settings_units_explanation),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
@@ -577,7 +581,7 @@ private fun PlayerSection(
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                    "Device button = HIT toggle",
+                    stringResource(R.string.settings_hit_toggle),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.onBackground
@@ -588,7 +592,7 @@ private fun PlayerSection(
             )
         }
         TacticalText(
-                "When enabled, long-press the device button to toggle HIT status.",
+                stringResource(R.string.settings_hit_toggle_hint),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
@@ -685,7 +689,7 @@ private fun ProfileEditor(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                        "Profile $index",
+                        stringResource(R.string.settings_profile_number, index),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -747,10 +751,10 @@ private fun ProfileEditor(
                 modifier = Modifier.fillMaxWidth(),
         ) { cr ->
             when (cr) {
-                5 -> "Light — faster (4/5)"
-                6 -> "Moderate (4/6)"
-                7 -> "Heavy (4/7)"
-                8 -> "Maximum — slowest, most reliable (4/8)"
+                5 -> stringResource(R.string.settings_cr_light)
+                6 -> stringResource(R.string.settings_cr_moderate)
+                7 -> stringResource(R.string.settings_cr_heavy)
+                8 -> stringResource(R.string.settings_cr_maximum)
                 else -> "4/$cr"
             }
         }
@@ -773,32 +777,27 @@ private fun ChannelsSection(vm: SettingsViewModel, initialFocusSlot: Int? = null
         HudCard(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                        "Setting up group channels",
+                        stringResource(R.string.settings_channel_setup_title),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                        "Slots 0–2 are fixed by AirTAK; slots 3–7 are free for unit-scoped traffic (squad, fireteam, platoon, company). " +
-                                "Pick a recognisable name and a shared password — every device in that unit must use the same slot index, name, and password. " +
-                                "Link a slot to a unit level from Settings → Player.",
+                        stringResource(R.string.settings_channel_setup_help),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                        "Slot layout:",
+                        stringResource(R.string.settings_slot_layout),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                        "Slot 0 — AirTAK (primary, Meshtastic-compatible) — all players\n" +
-                                "Slot 1 — Tactical (AirTAK-wide secondary) — all players\n" +
-                                "Slot 2 — Audio (reserved for PTT in a future phase)\n" +
-                                "Slot 3+ — Unit channels (e.g. \"Squad 1\", \"Platoon A\", \"Company Red\")",
+                        stringResource(R.string.settings_slot_layout_help),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                        "Slots appear as tabs in the Messages screen once enabled.",
+                        stringResource(R.string.settings_channel_tabs_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                 )
@@ -814,7 +813,7 @@ private fun ChannelsSection(vm: SettingsViewModel, initialFocusSlot: Int? = null
                         .size > 1
         if (mixedActiveProfiles) {
             Text(
-                    "Active slots use multiple PHY profiles. Keep teammates on the same profile unless intentionally isolating traffic.",
+                    stringResource(R.string.settings_multiple_phy_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = AccentAmber,
                     modifier = Modifier.padding(bottom = 8.dp),
@@ -822,7 +821,7 @@ private fun ChannelsSection(vm: SettingsViewModel, initialFocusSlot: Int? = null
         }
         state.validationError?.let { error ->
             Text(
-                    error,
+                    stringResource(error),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(bottom = 8.dp),
@@ -832,7 +831,7 @@ private fun ChannelsSection(vm: SettingsViewModel, initialFocusSlot: Int? = null
             val highlighted = initialFocusSlot != null && initialFocusSlot == editor.slot.index
             if (highlighted) {
                 Text(
-                        "↓ New channel for your unit — set a password below and tap Apply.",
+                        stringResource(R.string.settings_new_channel_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
@@ -948,23 +947,22 @@ private fun ChannelSlotEditor(
                                             if (editor.pskRevealed) Icons.Outlined.VisibilityOff
                                             else Icons.Outlined.Visibility,
                                     contentDescription =
-                                            if (editor.pskRevealed) "Hide password"
-                                            else "Reveal password",
+                                            if (editor.pskRevealed) stringResource(R.string.settings_hide_password)
+                                            else stringResource(R.string.settings_reveal_password),
                             )
                         }
                     },
             )
             if (editor.pskError != null) {
                 Text(
-                        editor.pskError,
-                        style = MaterialTheme.typography.bodySmall,
+                        stringResource(editor.pskError),                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                 )
             } else {
                 Text(
                         if (editor.pskText.isBlank())
-                                "Open channel — anyone on the same frequency can send and receive."
-                        else "Encrypted — only devices sharing this password can communicate here.",
+                                stringResource(R.string.settings_open_channel_hint)
+                        else stringResource(R.string.settings_encrypted_channel_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -973,16 +971,16 @@ private fun ChannelSlotEditor(
             Text(
                     when {
                         slot.positionPrecision == 0 ->
-                                "Hidden — your position is not shared on this channel"
+                                stringResource(R.string.settings_precision_hidden)
                         slot.positionPrecision <= 11 ->
-                                "City level (~100 km) · ${slot.positionPrecision} bits"
+                                stringResource(R.string.settings_precision_city, slot.positionPrecision)
                         slot.positionPrecision <= 16 ->
-                                "Neighbourhood (~5 km) · ${slot.positionPrecision} bits"
+                                stringResource(R.string.settings_precision_neighbourhood, slot.positionPrecision)
                         slot.positionPrecision <= 21 ->
-                                "Street level (~500 m) · ${slot.positionPrecision} bits"
+                                stringResource(R.string.settings_precision_street, slot.positionPrecision)
                         slot.positionPrecision <= 28 ->
-                                "Building level (~50 m) · ${slot.positionPrecision} bits"
-                        else -> "Full precision (~1 m) · ${slot.positionPrecision} bits"
+                                stringResource(R.string.settings_precision_building, slot.positionPrecision)
+                        else -> stringResource(R.string.settings_precision_full, slot.positionPrecision)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -995,14 +993,14 @@ private fun ChannelSlotEditor(
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                        "Send on this channel",
+                        stringResource(R.string.settings_channel_send),
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.onSurface
                 )
                 Switch(checked = slot.uplinkEnabled, onCheckedChange = onUplink)
                 Spacer(Modifier.size(16.dp))
                 Text(
-                        "Receive on this channel",
+                        stringResource(R.string.settings_channel_receive),
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.onSurface
                 )
@@ -1175,7 +1173,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                    "Smart beaconing",
+                    stringResource(R.string.settings_smart_beaconing),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.onBackground
@@ -1190,7 +1188,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                    if (position.gpsSource == GpsSource.PHONE_GPS) "Phone GPS" else "Device GPS (L76K)",
+                    if (position.gpsSource == GpsSource.PHONE_GPS) stringResource(R.string.settings_phone_gps) else stringResource(R.string.settings_device_gps),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.onBackground
@@ -1208,7 +1206,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
         SectionLabel(stringResource(R.string.settings_position_channel))
         Spacer(Modifier.height(8.dp))
         Text(
-            "Select which channel carries your GPS position. Use an encrypted channel shared with your team — avoid unencrypted channels to prevent enemy tracking.",
+            stringResource(R.string.settings_position_channel_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1232,7 +1230,7 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                    "GPS duty cycle (Phase 6+)",
+                    stringResource(R.string.settings_gps_duty_cycle),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.onBackground
@@ -1344,7 +1342,7 @@ private fun ModerationSection(vm: SettingsViewModel) {
         Spacer(Modifier.height(4.dp))
         if (bans.isEmpty()) {
             Text(
-                    "No active bans. When 3 distinct players vote to kick someone, they appear here.",
+                    stringResource(R.string.settings_no_bans),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 12.dp),
@@ -1359,7 +1357,7 @@ private fun ModerationSection(vm: SettingsViewModel) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                                "Node ${ban.targetNodeId.toString(16).uppercase().take(8)}",
+                                                stringResource(R.string.settings_node_number, ban.targetNodeId.toString(16).uppercase().take(8)),
                                                 style = MaterialTheme.typography.titleSmall,
                                                 color = MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.weight(1f),
@@ -1373,7 +1371,7 @@ private fun ModerationSection(vm: SettingsViewModel) {
                                                     shape = RoundedCornerShape(4.dp),
                                             ) {
                                                 Text(
-                                                        "BANNED",
+                                                        stringResource(R.string.settings_banned),
                                                         modifier =
                                                                 Modifier.padding(
                                                                         horizontal = 8.dp,
@@ -1405,7 +1403,7 @@ private fun ModerationSection(vm: SettingsViewModel) {
                                                     (System.currentTimeMillis() / MS_PER_SECOND)
                                     if (banTtl > 0) {
                                         Text(
-                                                "Expires in ${banTtl / SECONDS_PER_HOUR}h ${(banTtl % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE}m",
+                                                stringResource(R.string.settings_ban_expires, banTtl / SECONDS_PER_HOUR, (banTtl % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color =
                                                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -1497,13 +1495,13 @@ private fun AppSection(vm: SettingsViewModel) {
                 val selected = mode == tm
                 if (selected) {
                     Button(onClick = { vm.setThemeMode(tm) }, modifier = Modifier.weight(1f)) {
-                        Text(tm.name)
+                        Text(themeLabel(tm))
                     }
                 } else {
                     OutlinedButton(
                             onClick = { vm.setThemeMode(tm) },
                             modifier = Modifier.weight(1f)
-                    ) { Text(tm.name) }
+                    ) { Text(themeLabel(tm)) }
                 }
             }
         }
@@ -1517,7 +1515,7 @@ private fun AppSection(vm: SettingsViewModel) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-                stringResource(R.string.settings_theme_mode, mode.name),
+                stringResource(R.string.settings_theme_mode, themeLabel(mode)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1548,7 +1546,7 @@ private fun ShareSection(vm: SettingsViewModel) {
             if (decoded != null) {
                 importState = ImportState.Ready(decoded)
             } else {
-                importState = ImportState.Error("The scanned QR code does not contain a valid AirTAK config.")
+                importState = ImportState.Error(context.getString(R.string.settings_invalid_qr))
             }
         }
         // result.contents == null means the user cancelled
@@ -1587,7 +1585,7 @@ private fun ShareSection(vm: SettingsViewModel) {
                     onClick = {
                         val options = ScanOptions()
                             .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                            .setPrompt("Scan an AirTAK config QR code")
+                            .setPrompt(context.getString(R.string.settings_scan_prompt))
                             .setBeepEnabled(false)
                         scanLauncher.launch(options)
                     },
@@ -1625,7 +1623,7 @@ private fun ShareSection(vm: SettingsViewModel) {
                         if (cfg.hasLora()) {
                             val lora = cfg.lora
                             Text(
-                                "LoRa: ${lora.region.name}, TX ${lora.txPowerDbm} dBm, ${lora.profilesCount} PHY profiles",
+                                stringResource(R.string.settings_import_lora_summary, lora.region.name, lora.txPowerDbm, lora.profilesCount),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1635,7 +1633,7 @@ private fun ShareSection(vm: SettingsViewModel) {
                             val activeCount = ch.slotsList.count { it.role != ChannelRole.DISABLED }
                             val encryptedCount = ch.slotsList.count { it.psk.size() > 0 }
                             Text(
-                                "Channels: $activeCount active, $encryptedCount with PSK",
+                                stringResource(R.string.settings_import_channels_summary, activeCount, encryptedCount),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1643,10 +1641,10 @@ private fun ShareSection(vm: SettingsViewModel) {
                         if (cfg.hasGame()) {
                             val game = cfg.game
                             val unitParts = listOfNotNull(
-                                game.companyId.takeIf { it.isNotBlank() }?.let { "Company: $it" },
-                                game.platoonId.takeIf { it.isNotBlank() }?.let { "Platoon: $it" },
-                                game.squadId.takeIf { it.isNotBlank() }?.let { "Squad: $it" },
-                                game.fireteamId.takeIf { it.isNotBlank() }?.let { "Fireteam: $it" },
+                                game.companyId.takeIf { it.isNotBlank() }?.let { stringResource(R.string.settings_import_company, it) },
+                                game.platoonId.takeIf { it.isNotBlank() }?.let { stringResource(R.string.settings_import_platoon, it) },
+                                game.squadId.takeIf { it.isNotBlank() }?.let { stringResource(R.string.settings_import_squad, it) },
+                                game.fireteamId.takeIf { it.isNotBlank() }?.let { stringResource(R.string.settings_import_fireteam, it) },
                             )
                             if (unitParts.isNotEmpty()) {
                                 Text(
@@ -1686,7 +1684,7 @@ private fun ShareSection(vm: SettingsViewModel) {
                     )
                     Spacer(Modifier.size(8.dp))
                     Text(
-                        "Config applied! LoRa and channel settings have been pushed to the device. A radio restart may be in progress.",
+                        stringResource(R.string.settings_import_done),
                         style = MaterialTheme.typography.bodyMedium,
                         color = StatusActive,
                     )
@@ -1722,15 +1720,15 @@ private fun AboutSection(vm: SettingsViewModel, onFirmwareSelected: ((Uri) -> Un
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         HudCard(Modifier.fillMaxWidth()) {
             Column {
-                LabelValue("Firmware", status?.firmwareVersion ?: "—")
-                LabelValue("Board", status?.boardId ?: "—")
+                LabelValue(stringResource(R.string.settings_info_firmware), status?.firmwareVersion ?: "—")
+                LabelValue(stringResource(R.string.settings_info_board), status?.boardId ?: "—")
                 LabelValue(
-                        "Node ID",
+                        stringResource(R.string.settings_info_node_id),
                         status?.nodeId?.toString(16)?.uppercase()?.padStart(8, '0') ?: "—"
                 )
-                LabelValue("BT MAC", status?.bluetoothAddress ?: "—")
-                LabelValue("Uptime", status?.uptimeSeconds?.let { "$it s" } ?: "—")
-                LabelValue("Mesh nodes", status?.meshNodeCount?.toString() ?: "—")
+                LabelValue(stringResource(R.string.settings_info_bt_mac), status?.bluetoothAddress ?: "—")
+                LabelValue(stringResource(R.string.settings_info_uptime), status?.uptimeSeconds?.let { "$it s" } ?: "—")
+                LabelValue(stringResource(R.string.settings_info_mesh_nodes), status?.meshNodeCount?.toString() ?: "—")
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -1824,12 +1822,12 @@ private fun UnitChannelDropdown(
     val selectedOption = channelOptions.firstOrNull { it.index == selectedSlot }
     val buttonLabel =
             when {
-                selectedSlot < 0 -> "Channel: none"
-                selectedOption == null -> "Slot $selectedSlot"
+                selectedSlot < 0 -> stringResource(R.string.settings_channel_none)
+                selectedOption == null -> stringResource(R.string.msg_slot_title, selectedSlot)
                 selectedOption.kind == UnitChannelKind.Available ->
-                        "Slot ${selectedOption.index} — not yet set up"
+                        stringResource(R.string.settings_slot_unconfigured, selectedOption.index)
                 else ->
-                        "${selectedOption.name.ifBlank { "Ch ${selectedOption.index}" }} (slot ${selectedOption.index})"
+                        stringResource(R.string.settings_channel_slot_name, selectedOption.name.ifBlank { stringResource(R.string.msg_slot_title, selectedOption.index) }, selectedOption.index)
             }
 
     val tactical = channelOptions.filter { it.kind == UnitChannelKind.UnitScoped }
@@ -1851,14 +1849,14 @@ private fun UnitChannelDropdown(
                     text = {
                         Column {
                             Text(
-                                    "None",
+                                    stringResource(R.string.settings_none),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color =
                                             if (selectedSlot < 0) MaterialTheme.colorScheme.primary
                                             else MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
-                                    "Use global channels for this unit level.",
+                                    stringResource(R.string.settings_global_channels_hint),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1880,21 +1878,17 @@ private fun UnitChannelDropdown(
                             text = {
                                 Column {
                                     Text(
-                                            "${option.name.ifBlank { "Ch ${option.index}" }} · slot ${option.index}",
+                                            stringResource(R.string.settings_channel_slot_name, option.name.ifBlank { stringResource(R.string.msg_slot_title, option.index) }, option.index),
                                             style = MaterialTheme.typography.bodyMedium,
                                             color =
                                                     if (option.index == selectedSlot)
                                                             MaterialTheme.colorScheme.primary
                                                     else MaterialTheme.colorScheme.onSurface,
                                     )
-                                    val subtitle = buildString {
-                                        append(
-                                                if (option.encrypted) "Encrypted"
-                                                else "Open (no PSK)"
-                                        )
-                                        if (claimedByOther)
-                                                append(" · already linked to ${claimedBy}")
-                                    }
+                                    val encryption = stringResource(if (option.encrypted) R.string.settings_encrypted else R.string.settings_open)
+                                    val subtitle = if (claimedByOther)
+                                        stringResource(R.string.settings_channel_claimed, encryption, unitLevelLabel(claimedBy))
+                                    else encryption
                                     Text(
                                             subtitle,
                                             style = MaterialTheme.typography.bodySmall,
@@ -1918,12 +1912,12 @@ private fun UnitChannelDropdown(
                         text = {
                             Column {
                                 Text(
-                                        "Set up a new channel for $unitLabel…",
+                                        stringResource(R.string.settings_setup_unit_channel, unitLabel),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
-                                        "Uses slot ${available.first().index}. You'll set the password next.",
+                                        stringResource(R.string.settings_setup_slot_hint, available.first().index),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -1939,7 +1933,7 @@ private fun UnitChannelDropdown(
                 DropdownMenuItem(
                         text = {
                             Text(
-                                    "No free slots — open Channels…",
+                                    stringResource(R.string.settings_no_free_slots),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1951,7 +1945,7 @@ private fun UnitChannelDropdown(
             DropdownMenuItem(
                     text = {
                         Text(
-                                "Manage channels…",
+                                stringResource(R.string.settings_manage_channels),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary,
                         )
@@ -1969,17 +1963,17 @@ private fun UnitChannelDropdown(
                     val subtitle =
                             when (option.kind) {
                                 UnitChannelKind.GlobalMesh ->
-                                        "Mesh-wide / Meshtastic interop. All players share this channel."
+                                        stringResource(R.string.settings_mesh_channel_hint)
                                 UnitChannelKind.GlobalTactical ->
-                                        "AirTAK-wide tactical traffic. All players share this channel."
-                                UnitChannelKind.AudioReserved -> "Reserved for PTT audio (Phase 7)."
+                                        stringResource(R.string.settings_tactical_channel_hint)
+                                UnitChannelKind.AudioReserved -> stringResource(R.string.settings_audio_reserved_hint)
                                 else -> ""
                             }
                     DropdownMenuItem(
                             text = {
                                 Column {
                                     Text(
-                                            "${option.name.ifBlank { "Ch ${option.index}" }} · slot ${option.index}",
+                                            stringResource(R.string.settings_channel_slot_name, option.name.ifBlank { stringResource(R.string.msg_slot_title, option.index) }, option.index),
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -1998,6 +1992,21 @@ private fun UnitChannelDropdown(
         }
     }
 }
+
+@Composable
+private fun themeLabel(mode: ThemeMode): String = stringResource(when (mode) {
+    ThemeMode.System -> R.string.settings_theme_system
+    ThemeMode.Dark -> R.string.settings_theme_dark
+    ThemeMode.Light -> R.string.settings_theme_light
+})
+
+@Composable
+private fun unitLevelLabel(level: String?): String = stringResource(when (level) {
+    "company" -> R.string.scope_company
+    "platoon" -> R.string.scope_platoon
+    "squad" -> R.string.scope_squad
+    else -> R.string.scope_fireteam
+})
 
 @Composable
 private fun DropdownSectionLabel(text: String) {

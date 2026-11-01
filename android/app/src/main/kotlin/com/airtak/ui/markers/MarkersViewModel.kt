@@ -62,14 +62,10 @@ class MarkersViewModel @Inject constructor(
         .map { nodes -> nodes.map { NodeInfo(it.nodeId, it.callsign, it.shortName) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun creatorName(marker: TacticalMarkerEntity): String {
-        if (marker.ownedLocally) return "You"
-        return remoteNodeIds.value
-            .firstOrNull { it.nodeId == marker.creatorNodeId }
-            ?.callsign
-            ?.takeIf { it.isNotBlank() }
-            ?: "Node ${marker.creatorNodeId.toString(16).uppercase().take(8)}"
-    }
+    fun creatorName(marker: TacticalMarkerEntity): String? = remoteNodeIds.value
+        .firstOrNull { it.nodeId == marker.creatorNodeId }
+        ?.callsign
+        ?.takeIf { it.isNotBlank() }
 
     fun deleteMarker(markerId: Long) {
         viewModelScope.launch { repo.deleteMarker(markerId) }

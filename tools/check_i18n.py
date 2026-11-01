@@ -1,81 +1,80 @@
 #!/usr/bin/env python3
-"""Issue #11 guard: fail when a user-visible string goes back into Kotlin.
+"""Check UI text arguments, including multiline calls and custom text composables.
 
-Externalising the UI strings is only durable if the next literal is caught. This scans the
-UI layer for string literals passed to a composable that renders text, and fails when it
-finds one that is not a resource reference.
-
-It is deliberately narrow. It looks at the argument position of composables and
-parameters that put text on screen (Text, labels, placeholders, titles, content
-descriptions, hints), so it does not complain about log tags, channel ids, MIME types,
-date patterns or test tags. Those are not language content, and a guard that cries about
-them gets switched off.
-
-Usage:
-    python3 tools/check_i18n.py [repo-root]
+This is a lexical guard, not a Kotlin compiler: dynamic text returned from models
+still requires review. Technical formats, protocol values and user data are not
+translations. Run tests with: python3 -m unittest discover -s tools/tests -p 'test_check_i18n.py'
 """
 import pathlib
 import re
 import sys
 
-# Composable calls and named parameters whose argument is shown to the user.
-CALL_SITE = re.compile(
-    r'\b(Text|SectionLabel|DropdownSectionLabel|ButtonLabel|MetricTile|TooltipBox|'
-    r'TextButton|Button|OutlinedButton|OutlinedTextField|TextField|AlertDialog|'
-    r'DropdownMenuItem|AssistChip|FilterChip|Chip|Checkbox|Switch|RadioButton|Tab)\s*\('
-    r'|\b(label|placeholder|title|contentDescription|text|hint|secondary|prompt|'
-    r'labelText|summary)\s*=\s*"'
-)
-STRING_LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
-
-# Files under the UI layer only. Data, domain and tooling layers legitimately hold
-# protocol strings, file names and format patterns.
 UI_ROOT = "android/app/src/main/kotlin/com/airtak/ui"
-
-# Lines that are exempt, with the reason. Anything here is a decision, not an oversight:
-# a Compose animation label is a developer-facing debug name, never rendered.
-EXEMPT = (
-    # animateColorAsState(label = ...) is a Compose debug name for the animation, not UI text.
-    ('ui/markers/MarkersScreen.kt', 'label = "swipe-delete-color"'),
-)
+CALLS = set("Text TacticalText SectionLabel DropdownSectionLabel ButtonLabel MetricTile StatusPill LabelValue".split())
+PARAMS = set("label placeholder title contentDescription text hint secondary prompt labelText summary".split())
+TOKEN = re.compile(r'//[^\n]*|/\*[\s\S]*?\*/|"""[\s\S]*?"""|"(?:[^"\\]|\\.)*"|[A-Za-z_][A-Za-z_0-9]*|[^\s]')
+# Exact technical/developer strings; never use a blanket exemption for a screen.
+TECHNICAL = {"swipe-delete-color", "Noto Sans Regular", "${it.toInt()} dBm", "DC ${formatDcPercent(dcPercentage)}"}
 
 
-def main() -> int:
+def tokens(source):
+    return [(m.group(), m.start()) for m in TOKEN.finditer(source)
+            if not m.group().startswith(("//", "/*"))]
+
+
+def first_expression(items, start):
+    depth = 0
+    result = []
+    for token, pos in items[start:]:
+        if depth == 0 and token in (",", ")", "}"):
+            break
+        if token in ("(", "{", "["):
+            depth += 1
+        elif token in (")", "}", "]"):
+            depth -= 1
+        result.append((token, pos))
+    return result
+
+
+def is_language_literal(token):
+    if not token.startswith('"'):
+        return False
+    value = token.strip('"')
+    if value in TECHNICAL:
+        return False
+    # Interpolation, numeric format strings and units are not English prose.
+    value = re.sub(r'\$\{[^}]*\}|\$[A-Za-z_][A-Za-z_0-9]*|%[0-9.$+-]*[A-Za-z]', '', value)
+    return bool(re.search(r'[A-Za-z]{2,}', value))
+
+
+def scan(source):
+    items = tokens(source)
+    candidates = set()
+    for index, (token, _) in enumerate(items[:-1]):
+        following = items[index + 1][0]
+        previous = items[index - 1][0] if index else None
+        if (token in CALLS and following == "(") or (token in PARAMS and following == "=" and previous not in ("val", "var")):
+            for literal, pos in first_expression(items, index + 2):
+                if is_language_literal(literal):
+                    candidates.add((source.count('\n', 0, pos) + 1, literal))
+    return sorted(candidates)
+
+
+def main():
     root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".")
     ui = root / UI_ROOT
     if not ui.is_dir():
         raise SystemExit(f"not an AirTAK checkout: {ui} does not exist")
-
     findings = []
     for path in sorted(ui.rglob("*.kt")):
-        rel = str(path.relative_to(root))
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
-            stripped = line.strip()
-            if stripped.startswith(("//", "*", "/*")):
-                continue
-            if "stringResource" in line or "R.string" in line or "asText()" in line:
-                continue
-            if not CALL_SITE.search(line):
-                continue
-            for match in STRING_LITERAL.finditer(line):
-                value = match.group(1)
-                if not value.strip():
-                    continue
-                if any(rel.endswith(prefix) and needle in line for prefix, needle in EXEMPT):
-                    continue
-                findings.append(f"{rel}:{lineno}: {value!r}")
-
+        for line, literal in scan(path.read_text(encoding="utf-8")):
+            findings.append(f"{path.relative_to(root)}:{line}: {literal}")
     if findings:
-        print(f"{len(findings)} hardcoded user-visible string(s) in the UI layer:")
-        for f in findings:
-            print(f"  {f}")
-        print(
-            "\nMove each one into res/values/strings.xml and res/values-de/strings.xml "
-            "(see tools/i18n_strings.py) and use stringResource at the call site. "
-            "If a literal is genuinely not language content, add it to EXEMPT with a reason."
-        )
+        print(f"{len(findings)} hardcoded UI text literal(s):")
+        print('\n'.join(f"  {finding}" for finding in findings))
+        print("Move UI text into tools/i18n_strings.py and use stringResource/getString.")
         return 1
-    print("no hardcoded user-visible UI strings found")
+    print("no hardcoded UI text literals found (dynamic model text still requires review)")
     return 0
 
 

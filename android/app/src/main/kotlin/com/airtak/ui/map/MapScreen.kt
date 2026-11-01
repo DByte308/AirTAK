@@ -662,7 +662,7 @@ fun MapScreen(
 
         if (segmentSelectMode) {
             StatusPill(
-                text = if (segmentFirstCorner != null) "Routing region: second corner" else "Routing region: first corner",
+                text = stringResource(if (segmentFirstCorner != null) R.string.map_routing_second_corner else R.string.map_routing_first_corner),
                 color = AccentCyan,
                 modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp),
             )
@@ -673,7 +673,7 @@ fun MapScreen(
             SegmentDownloadState.Idle -> {}
             is SegmentDownloadState.Running -> {
                 StatusPill(
-                    "Segments ${segVal.completed}/${segVal.total}",
+                    stringResource(R.string.map_segments_progress, segVal.completed, segVal.total),
                     AccentCyan,
                     Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp),
                 )
@@ -681,9 +681,9 @@ fun MapScreen(
             is SegmentDownloadState.Complete -> {
                 val total = segVal.downloaded + segVal.skipped
                 if (total == 0) {
-                    StatusPill("No segments downloaded", AccentAmber, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp))
+                    StatusPill(stringResource(R.string.map_no_segments), AccentAmber, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp))
                 } else {
-                    StatusPill("Routing data ready ($total segments)", AccentCyan, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp))
+                    StatusPill(stringResource(R.string.map_segments_ready, total), AccentCyan, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 56.dp))
                 }
             }
             is SegmentDownloadState.Failed -> {
@@ -693,14 +693,14 @@ fun MapScreen(
 
         if (routePlanMode) {
             StatusPill(
-                text = if (routePlanStart == null) "Route: tap start point" else "Route: tap end point",
+                text = stringResource(if (routePlanStart == null) R.string.map_route_start else R.string.map_route_end),
                 color = AccentCyan,
                 modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 96.dp),
             )
         }
         val routeCalc = routeState
         if (routeCalc is RouteCalcState.Calculating) {
-            StatusPill("Calculating route...", AccentCyan, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 96.dp))
+            StatusPill(stringResource(R.string.map_route_calculating), AccentCyan, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 96.dp))
         }
         if (routeCalc is RouteCalcState.Failed) {
             StatusPill(
@@ -781,12 +781,12 @@ fun MapScreen(
                     // camera; say which of the two it is.
                     Toast.makeText(
                         context,
-                        noPositionReason(
+                        context.getString(noPositionReason(
                             registered = phoneGpsActive,
                             providersEnabled = phoneGpsProvidersEnabled,
                             hasFix = phoneGpsFix,
                             failure = gpsStartFailure,
-                        ),
+                        )),
                         Toast.LENGTH_SHORT,
                     ).show()
                     return@FloatingActionButton
@@ -915,7 +915,7 @@ fun MapScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        "Zoom $minZoom-$maxZoom · $tileCount tiles",
+                        stringResource(R.string.map_tiles_count, minZoom, maxZoom, tileCount),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -938,13 +938,13 @@ fun MapScreen(
                     )
                     if (!tileUrlValid) {
                         Text(
-                            "URL must include {z}, {x}, and {y}.",
+                            stringResource(R.string.map_tile_url_invalid),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
                     } else if (tooManyTiles) {
                         Text(
-                            "Selected area is too large; narrow the region or zoom range.",
+                            stringResource(R.string.map_region_too_large),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -978,11 +978,11 @@ fun MapScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        "Download BRouter .rd5 segment files for this area to enable on-road/trail route calculation.",
+                        stringResource(R.string.map_routing_download_hint),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
-                        "Without segments → fallback to straight-line route.",
+                        stringResource(R.string.map_routing_fallback_hint),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1176,7 +1176,7 @@ private fun StatusPickerDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Changes are broadcast to the mesh and visible to other players.",
+                    stringResource(R.string.map_changes_broadcast_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1363,7 +1363,7 @@ private fun MapToolbar(
                     color = AccentCyan.copy(alpha = 0.12f),
                 ) {
                     Text(
-                        selectedProfile.replace("-", " "),
+                        routeProfileLabel(selectedProfile),
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = AccentCyan,
@@ -1377,7 +1377,7 @@ private fun MapToolbar(
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    name.replace("-", " "),
+                                    routeProfileLabel(name),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             },
@@ -1466,7 +1466,7 @@ private fun MarkerCommitDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "$pointCount point${if (pointCount == 1) "" else "s"} captured.",
+                    stringResource(R.string.map_points_captured, pointCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1687,7 +1687,7 @@ private fun MarkerDetailDialog(
                     Text(marker.description, style = MaterialTheme.typography.bodyMedium)
                 }
                 Text(
-                    "Creator: ${if (marker.ownedLocally) "you" else "%08X".format(marker.creatorNodeId)}",
+                    stringResource(R.string.map_marker_creator, if (marker.ownedLocally) stringResource(R.string.map_creator_you) else "%08X".format(marker.creatorNodeId)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1900,7 +1900,7 @@ private fun TileStatus(
 ) {
     if (selectingTiles) {
         StatusPill(
-            text = if (firstCorner) "Tile region: second corner" else "Tile region: first corner",
+            text = stringResource(if (firstCorner) R.string.map_tile_second_corner else R.string.map_tile_first_corner),
             color = AccentCyan,
             modifier = modifier,
         )
@@ -1908,7 +1908,7 @@ private fun TileStatus(
     }
     when (state) {
         TileDownloadState.Idle -> if (tileTemplate != null) {
-            StatusPill(localTileMaxZoom?.let { "Field tiles to z$it" } ?: "Offline overview", AccentCyan, modifier)
+            StatusPill(localTileMaxZoom?.let { stringResource(R.string.map_field_tiles_zoom, it) } ?: stringResource(R.string.map_offline_overview), AccentCyan, modifier)
         } else Unit
         is TileDownloadState.Running -> {
             Surface(
@@ -1926,7 +1926,7 @@ private fun TileStatus(
                 }
             }
         }
-        is TileDownloadState.Complete -> StatusPill("Tiles ready", AccentCyan, modifier)
+        is TileDownloadState.Complete -> StatusPill(stringResource(R.string.map_tiles_ready), AccentCyan, modifier)
         is TileDownloadState.Failed -> StatusPill(state.message, AccentAmber, modifier)
     }
 }
@@ -2647,14 +2647,15 @@ private const val NAV_ROUTE_SOURCE = "nav-route-source"
 private const val NAV_ROUTE_LINE_LAYER = "nav-route-line-layer"
 
 
-private fun statusShortLabel(status: PlayerStatus): String = when (status) {
-    PlayerStatus.PLAYER_STATUS_ACTIVE -> "ACTIVE"
-    PlayerStatus.PLAYER_STATUS_INACTIVE -> "INACT"
-    PlayerStatus.PLAYER_STATUS_HIT -> "HIT"
-    PlayerStatus.PLAYER_STATUS_RESPAWNING -> "RESPAWN"
-    PlayerStatus.PLAYER_STATUS_ELIMINATED -> "ELIM"
-    else -> "UNKNOWN"
-}
+@Composable
+private fun statusShortLabel(status: PlayerStatus): String = stringResource(when (status) {
+    PlayerStatus.PLAYER_STATUS_ACTIVE -> R.string.status_active_badge
+    PlayerStatus.PLAYER_STATUS_INACTIVE -> R.string.status_inactive_badge
+    PlayerStatus.PLAYER_STATUS_HIT -> R.string.status_hit_badge
+    PlayerStatus.PLAYER_STATUS_RESPAWNING -> R.string.status_respawning_badge
+    PlayerStatus.PLAYER_STATUS_ELIMINATED -> R.string.status_eliminated_badge
+    else -> R.string.team_unknown
+})
 
 // TODO: centralize to Color.kt
 private fun statusColor(status: PlayerStatus): Color = when (status) {
@@ -2666,12 +2667,39 @@ private fun statusColor(status: PlayerStatus): Color = when (status) {
     else -> Color(0xFF6E7681)
 }
 
+@Composable
+private fun routeProfileLabel(name: String): String {
+    val resource = when (name) {
+        "all" -> R.string.route_profile_all
+        "car-vario-nocost" -> R.string.route_profile_car_free
+        "car-vario" -> R.string.route_profile_car
+        "dummy" -> R.string.route_profile_dummy
+        "fastbike-verylowtraffic" -> R.string.route_profile_bike_quiet
+        "fastbike" -> R.string.route_profile_bike
+        "gravel" -> R.string.route_profile_gravel
+        "hiking-mountain" -> R.string.route_profile_hiking
+        "moped" -> R.string.route_profile_moped
+        "mtb" -> R.string.route_profile_mtb
+        "rail" -> R.string.route_profile_rail
+        "river" -> R.string.route_profile_river
+        "shortest" -> R.string.route_profile_shortest
+        "skating" -> R.string.route_profile_skating
+        "softaccess" -> R.string.route_profile_softaccess
+        "trekking" -> R.string.route_profile_trekking
+        "vm-forum-liegerad-schnell" -> R.string.route_profile_recumbent
+        "vm-forum-velomobil-schnell" -> R.string.route_profile_velomobile
+        else -> return name.replace("-", " ") // user-supplied BRouter profile name
+    }
+    return stringResource(resource)
+}
+
+@Composable
 private fun statusDescription(status: PlayerStatus): String = when (status) {
-    PlayerStatus.PLAYER_STATUS_ACTIVE -> "In play, full position broadcasting"
-    PlayerStatus.PLAYER_STATUS_INACTIVE -> "Paused, reduced broadcasting"
-    PlayerStatus.PLAYER_STATUS_HIT -> "Hit — waiting to respawn"
-    PlayerStatus.PLAYER_STATUS_RESPAWNING -> "Returning to play"
-    PlayerStatus.PLAYER_STATUS_ELIMINATED -> "Out for the remainder"
+    PlayerStatus.PLAYER_STATUS_ACTIVE -> stringResource(R.string.map_status_active_description)
+    PlayerStatus.PLAYER_STATUS_INACTIVE -> stringResource(R.string.map_status_inactive_description)
+    PlayerStatus.PLAYER_STATUS_HIT -> stringResource(R.string.map_status_hit_description)
+    PlayerStatus.PLAYER_STATUS_RESPAWNING -> stringResource(R.string.map_status_respawning_description)
+    PlayerStatus.PLAYER_STATUS_ELIMINATED -> stringResource(R.string.map_status_eliminated_description)
     else -> ""
 }
 private const val MISSION_OVERLAY_IMAGE_MIME = "image/*"

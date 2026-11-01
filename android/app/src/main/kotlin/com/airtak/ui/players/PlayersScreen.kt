@@ -451,7 +451,10 @@ private fun PlayerCard(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                            player.callsign.uppercase(),
+                            player.callsign.ifBlank {
+                                if (player.isSelf) stringResource(R.string.markers_creator_you)
+                                else stringResource(R.string.settings_node_number, player.nodeId.toString(16).uppercase())
+                            }.uppercase(),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.SemiBold,

@@ -134,7 +134,7 @@ constructor(
                                                     deviceStatus.nodeId.toLong() and 0xFFFF_FFFFL
                                             PlayerRow(
                                                     nodeId = selfNodeId,
-                                                    callsign = source.identity.displayName(deviceStatus, fallback = "You"),
+                                                    callsign = source.identity.displayName(deviceStatus, fallback = ""),
                                                     fireteamId = source.identity.game.fireteamId,
                                                     squadId = source.identity.game.squadId,
                                                     platoonId = source.identity.game.platoonId,

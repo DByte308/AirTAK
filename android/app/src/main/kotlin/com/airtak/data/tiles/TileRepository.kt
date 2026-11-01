@@ -2,6 +2,8 @@
 
 package com.airtak.data.tiles
 
+import com.airtak.ui.i18n.withAppLanguage
+
 import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
@@ -236,11 +238,14 @@ class TileRepository @Inject constructor(
         }
     }
 
+    private fun text(@androidx.annotation.StringRes id: Int, vararg args: Any): String =
+        context.withAppLanguage().getString(id, *args)
+
     /** Cancels an in-flight download. Already-stored tiles are left valid, never truncated. */
     fun cancelDownload() {
         downloadJob?.cancel()
         downloadJob = null
-        _downloadState.value = TileDownloadState.Failed("Download cancelled.")
+        _downloadState.value = TileDownloadState.Failed(text(com.airtak.R.string.tiles_download_cancelled))
     }
 
     fun isDownloading(): Boolean = downloadJob?.isActive == true
@@ -249,24 +254,23 @@ class TileRepository @Inject constructor(
         val urlTemplate = (urlTemplateOverride?.trim()?.ifBlank { null } ?: configuredTileUrlOrNull()).orEmpty()
         if (urlTemplate.isBlank()) {
             _downloadState.value = TileDownloadState.Failed(
-                "No tile server configured. Set one in Settings > App. AirTAK ships no default " +
-                    "provider so that bulk downloading is always a deliberate choice.",
+                text(com.airtak.R.string.tiles_server_missing),
             )
             return
         }
         when (val verdict = TileProviderPolicy.verdictForBulkDownload(urlTemplate)) {
             is BulkDownloadVerdict.Allowed -> Unit
             is BulkDownloadVerdict.Prohibited -> {
-                _downloadState.value = TileDownloadState.Failed(verdict.reason)
+                _downloadState.value = TileDownloadState.Failed(text(com.airtak.R.string.tiles_bulk_prohibited, verdict.host))
                 return
             }
             is BulkDownloadVerdict.Invalid -> {
-                _downloadState.value = TileDownloadState.Failed(verdict.reason)
+                _downloadState.value = TileDownloadState.Failed(text(com.airtak.R.string.tiles_server_invalid))
                 return
             }
         }
         if (!urlTemplate.contains("{z}") || !urlTemplate.contains("{x}") || !urlTemplate.contains("{y}")) {
-            _downloadState.value = TileDownloadState.Failed("Set a tile URL with {z}, {x}, and {y}.")
+            _downloadState.value = TileDownloadState.Failed(text(com.airtak.R.string.map_tile_url_invalid))
             return
         }
         if (urlTemplate != prefs.tileServerUrl()?.trim().orEmpty()) {
@@ -283,7 +287,11 @@ class TileRepository @Inject constructor(
                 runCatching { downloadInternal(bounds.normalized(), zMin, zMax, urlTemplate) }
                     .onFailure {
                         if (it is CancellationException) throw it
-                        _downloadState.value = TileDownloadState.Failed(it.message ?: "Tile download failed")
+                        android.util.Log.w("TileRepository", "Tile download failed", it)
+                        _downloadState.value = TileDownloadState.Failed(
+                            if (it is TileDownloadAborted) it.message.orEmpty()
+                            else text(com.airtak.R.string.tiles_download_failed),
+                        )
                     }
             }
         }
@@ -351,8 +359,7 @@ class TileRepository @Inject constructor(
         val total = (minZoom..maxZoom).sumOf { countTiles(bounds, it) }
         if (total > MAP_MAX_TILES_PER_DOWNLOAD) {
             _downloadState.value = TileDownloadState.Failed(
-                "Selected area is $total tiles; the limit is $MAP_MAX_TILES_PER_DOWNLOAD. " +
-                    "Narrow the map or the zoom range.",
+                text(com.airtak.R.string.tiles_download_limit, total, MAP_MAX_TILES_PER_DOWNLOAD),
             )
             return
         }
@@ -382,10 +389,9 @@ class TileRepository @Inject constructor(
             outcome = fillDatabase(db, bounds, minZoom, maxZoom, urlTemplate)
             outcome.aborted?.let { reason ->
                 val message = if (reason == "no-store") {
-                    "Provider sent Cache-Control: no-store. Offline persistence is not permitted by " +
-                        "this provider, so the download stopped. Tiles stored so far are untouched."
+                    text(com.airtak.R.string.tiles_no_store)
                 } else {
-                    "Download stopped: $reason"
+                    text(com.airtak.R.string.tiles_download_stopped, reason)
                 }
                 throw TileDownloadAborted(message)
             }
@@ -404,8 +410,7 @@ class TileRepository @Inject constructor(
             // Reporting Complete here claimed an offline area that had holes in it, which is the
             // worst possible lie for a tool used offline. Stored tiles remain valid and usable.
             _downloadState.value = TileDownloadState.Failed(
-                "Incomplete: $missing tiles absent, $failed failed, $outcome.stored stored and " +
-                    "${outcome.skipped} already present. Partial area is usable offline.",
+                text(com.airtak.R.string.tiles_incomplete, missing, failed, outcome.stored, outcome.skipped),
             )
         } else {
             _downloadState.value = TileDownloadState.Complete(file.name, outcome.stored, outcome.skipped)
