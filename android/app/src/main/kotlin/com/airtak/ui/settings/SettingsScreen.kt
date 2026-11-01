@@ -1157,6 +1157,7 @@ private fun ChannelRole.roleColor(): Color =
 private fun PositionPowerSection(vm: SettingsViewModel) {
     val position by vm.position.collectAsState()
     val power by vm.power.collectAsState()
+    val adcInput by vm.adcMultiplierInput.collectAsState()
     LaunchedEffect(Unit) { vm.readPosition() }
     LaunchedEffect(Unit) { vm.readPower() }
     LaunchedEffect(Unit) { vm.readChannels() }
@@ -1277,24 +1278,29 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
                 modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
-        // Issue #1: per-device ADC battery-voltage multiplier, synced to the device
-        // via POWER config (adc_multiplier). Defaults from the device table when the
-        // board is known, else the sensible default; user-editable.
+        // Keep the edit buffer intact: parsing/reformatting after each key loses commas and zeros.
         OutlinedTextField(
-                value = if (power.adcMultiplier == power.adcMultiplier.toInt().toFloat()) {
-                    power.adcMultiplier.toInt().toString()
-                } else {
-                    power.adcMultiplier.toString()
-                },
-                onValueChange = { v ->
-                    val parsed = v.replace(',', '.').toFloatOrNull()
-                    if (parsed != null) vm.setAdcMultiplier(parsed)
-                },
+                value = adcInput.text,
+                onValueChange = vm::setAdcMultiplierText,
                 label = { Text(stringResource(R.string.settings_adc_multiplier)) },
+                isError = !adcInput.isValid,
+                supportingText = {
+                    Text(when (adcInput.error) {
+                        AdcInputError.Empty -> stringResource(R.string.settings_adc_required)
+                        AdcInputError.InvalidNumber -> stringResource(R.string.settings_adc_invalid)
+                        AdcInputError.OutOfRange -> stringResource(
+                            R.string.settings_adc_range,
+                            com.airtak.config.constants.ADC_MULTIPLIER_MIN.toInt(),
+                            com.airtak.config.constants.ADC_MULTIPLIER_MAX.toInt(),
+                        )
+                        null -> stringResource(R.string.settings_adc_hint)
+                    })
+                },
                 keyboardOptions =
                         androidx.compose.foundation.text.KeyboardOptions(
                                 keyboardType = KeyboardType.Decimal
                         ),
+                singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))
@@ -1310,11 +1316,10 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
             ) { Text(stringResource(R.string.settings_read)) }
             Button(
                     onClick = {
-                        vm.applyPower()
-                        vm.applyPosition()
+                        if (vm.applyPower()) vm.applyPosition()
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = !busy
+                    enabled = !busy && adcInput.isValid
             ) { Text(if (busy) stringResource(R.string.settings_applying) else stringResource(R.string.action_apply)) }
         }
     }

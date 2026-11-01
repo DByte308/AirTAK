@@ -545,6 +545,10 @@
     <string name="settings_import_summary">Import summary</string>
     <string name="settings_moderation_votes">%1$d / %2$d votes · %3$d distinct voters</string>
     <string name="settings_adc_multiplier">Battery ADC multiplier</string>
+    <string name="settings_adc_required">Enter a number. Use 0 for the board default.</string>
+    <string name="settings_adc_invalid">Enter a decimal number with a dot or comma.</string>
+    <string name="settings_adc_range">Enter a value from %1$d to %2$d.</string>
+    <string name="settings_adc_hint">0 uses the board default. Changes are saved only when you tap Apply.</string>
     <string name="settings_factory_reset_note">Factory reset requires a HMAC confirm-token and ships in Phase 6.</string>
     <string name="preset_long_range">Long range / moderate speed</string>
     <string name="preset_short_fast">Short range / fast</string>

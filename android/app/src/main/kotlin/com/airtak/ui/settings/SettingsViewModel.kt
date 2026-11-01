@@ -10,8 +10,6 @@ package com.airtak.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.airtak.config.constants.ADC_MULTIPLIER_DEFAULT
-import com.airtak.config.constants.ADC_MULTIPLIER_MAX
-import com.airtak.config.constants.ADC_MULTIPLIER_MIN
 import com.airtak.config.constants.DEVICE_BROADCAST_INTERVAL_SECS
 import com.airtak.config.constants.DEVICE_MIN_TX_INTERVAL_SECS
 import com.airtak.config.constants.QR_SCHEME
@@ -121,6 +119,9 @@ class SettingsViewModel @Inject constructor(
     private val _channels = MutableStateFlow(EditableChannelsState()); val channels: StateFlow<EditableChannelsState> = _channels.asStateFlow()
     private val _position = MutableStateFlow(PositionState()); val position: StateFlow<PositionState> = _position.asStateFlow()
     private val _power    = MutableStateFlow(PowerState(adcMultiplier = prefs.adcMultiplier()));    val power:    StateFlow<PowerState>    = _power.asStateFlow()
+    private val _adcMultiplierInput = MutableStateFlow(AdcMultiplierInput.fromValue(_power.value.adcMultiplier))
+    val adcMultiplierInput = _adcMultiplierInput.asStateFlow()
+    private var adcMultiplierEdited = false
     private val _game     = MutableStateFlow(GameState());     val game:     StateFlow<GameState>     = _game.asStateFlow()
     private val _security = MutableStateFlow(SecurityState()); val security: StateFlow<SecurityState> = _security.asStateFlow()
 
@@ -162,10 +163,11 @@ class SettingsViewModel @Inject constructor(
                     if (ns != _position.value) _position.value = ns
                 }
                 map[ConfigGroup.POWER]?.let { b -> tryDecode { PowerConfig.parseFrom(b) } }?.let {
-                    // Issue #1: prefer the device's configured multiplier; when it reports
-                    // 0 (absent/unset) keep whatever we already show (prefs or board default).
-                    val multiplier = if (it.adcMultiplier > 0f) it.adcMultiplier else _power.value.adcMultiplier
-                    _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs, it.brightnessPct, multiplier)
+                    // Zero is a real selection: use the board default. Incoming config must not
+                    // replace a user's in-progress edit (including an empty field or trailing comma).
+                    val input = AdcMultiplierInput.fromValue(it.adcMultiplier)
+                    _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs, it.brightnessPct, input.value!!)
+                    if (!adcMultiplierEdited) _adcMultiplierInput.value = input
                 }
                 map[ConfigGroup.GAME]?.let { b -> tryDecode { GameConfig.parseFrom(b) } }?.let {
                     val ns = GameState(
@@ -242,16 +244,10 @@ class SettingsViewModel @Inject constructor(
     fun updatePosition(block: PositionState.() -> PositionState){_position.value = _position.value.block() }
     fun updatePower(block: PowerState.() -> PowerState)        { _power.value    = _power.value.block() }
 
-    /**
-     * Set and persist the per-device ADC battery-voltage multiplier (Issue #1).
-     * Clamped to [ADC_MULTIPLIER_MIN, ADC_MULTIPLIER_MAX] so an out-of-range value
-     * cannot be pushed to the device. The firmware only applies a value > 0, so the
-     * minimum is kept above 0.
-     */
-    fun setAdcMultiplier(value: Float) {
-        val clamped = value.coerceIn(ADC_MULTIPLIER_MIN, ADC_MULTIPLIER_MAX)
-        _power.value = _power.value.copy(adcMultiplier = clamped)
-        prefs.setAdcMultiplier(clamped)
+    /** Preserve raw text until Apply; never persist or send partial numbers while typing. */
+    fun setAdcMultiplierText(text: String) {
+        adcMultiplierEdited = true
+        _adcMultiplierInput.value = AdcMultiplierInput(text)
     }
     fun updateGame(block: GameState.() -> GameState) {
         val newState = _game.value.block()
@@ -267,7 +263,11 @@ class SettingsViewModel @Inject constructor(
     fun readLora()     = config.read(ConfigGroup.LORA)
     fun readChannels() = config.read(ConfigGroup.CHANNELS)
     fun readPosition() = config.read(ConfigGroup.POSITION)
-    fun readPower()    = config.read(ConfigGroup.POWER)
+    fun readPower() {
+        adcMultiplierEdited = false
+        _adcMultiplierInput.value = AdcMultiplierInput.fromValue(_power.value.adcMultiplier)
+        config.read(ConfigGroup.POWER)
+    }
     fun readGame()     = config.read(ConfigGroup.GAME)
     fun readSecurity() = config.read(ConfigGroup.SECURITY)
 
@@ -311,14 +311,19 @@ class SettingsViewModel @Inject constructor(
             .build()
         config.apply(ConfigGroup.POSITION, msg.toByteArray())
     }
-    fun applyPower() {
-        val s = _power.value
+    fun applyPower(): Boolean {
+        val multiplier = _adcMultiplierInput.value.value ?: return false
+        val s = _power.value.copy(adcMultiplier = multiplier)
+        _power.value = s
+        prefs.setAdcMultiplier(multiplier)
+        adcMultiplierEdited = false
         val msg = PowerConfig.newBuilder()
             .setGpsDutyCycle(s.gpsDutyCycle)
             .setDisplayOffSecs(s.displayOffSecs)
             .setBrightnessPct(s.brightnessPct)
             .setAdcMultiplier(s.adcMultiplier).build()
         config.apply(ConfigGroup.POWER, msg.toByteArray())
+        return true
     }
     fun applyGame() {
         val s = _game.value

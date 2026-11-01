@@ -525,6 +525,10 @@
     <string name="settings_import_summary">Überblick über den Import</string>
     <string name="settings_moderation_votes">%1$d / %2$d Stimmen · %3$d verschiedene Wähler</string>
     <string name="settings_adc_multiplier">Akku-ADC-Multiplikator</string>
+    <string name="settings_adc_required">Gib eine Zahl ein. 0 verwendet den Geräte-Standard.</string>
+    <string name="settings_adc_invalid">Gib eine Dezimalzahl mit Punkt oder Komma ein.</string>
+    <string name="settings_adc_range">Gib einen Wert zwischen %1$d und %2$d ein.</string>
+    <string name="settings_adc_hint">0 verwendet den Geräte-Standard. Erst Übernehmen speichert die Änderung.</string>
     <string name="settings_factory_reset_note">Der Werkseinstellung braucht ein HMAC-Bestätigungstoken und kommt in Phase 6.</string>
     <string name="preset_long_range">Weite Reichweite / mittlere Geschwindigkeit</string>
     <string name="preset_short_fast">Kurze Reichweite / schnell</string>
