@@ -1434,6 +1434,8 @@ private fun AppSection(vm: SettingsViewModel) {
     val tileUrl by vm.tileUrl.collectAsState()
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+        SectionLabel(stringResource(R.string.settings_exit_mode))
+        Spacer(Modifier.height(8.dp))
         Button(
             onClick = { context.findMainActivity()?.closeApp() },
             modifier = Modifier.fillMaxWidth(),
@@ -1445,8 +1447,7 @@ private fun AppSection(vm: SettingsViewModel) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(16.dp))
-        SectionLabel(stringResource(R.string.settings_exit_mode))
+        Spacer(Modifier.height(8.dp))
         com.airtak.data.prefs.ExitMode.entries.forEach { option ->
             val label = stringResource(
                 if (option == com.airtak.data.prefs.ExitMode.DoubleBack)
