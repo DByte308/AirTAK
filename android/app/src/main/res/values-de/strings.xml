@@ -3,9 +3,9 @@
     <string name="app_name">AirTAK</string>
     <string name="nav_map">Karte</string>
     <string name="nav_messages">Funk</string>
-    <string name="nav_players">Teamübersicht</string>
-    <string name="nav_game">Markierungen</string>
-    <string name="nav_settings">Einstellungen</string>
+    <string name="nav_players">Team</string>
+    <string name="nav_game">Marker</string>
+    <string name="nav_settings">Einst.</string>
     <string name="link_disconnected">Keine Verbindung</string>
     <string name="link_scanning">Suche läuft</string>
     <string name="link_pairing">Gerät koppeln</string>
