@@ -68,12 +68,25 @@ static void drawFooter() {
     uint8_t pct = (uint8_t)(Battery::level() * 100.0f);
     s_display.setTextColor(SSD1306_WHITE);
     char bat[10];
+#ifdef AIRTAK_BATTERY_DEBUG
+    // Diagnostic for the V3 0% reading: show the uncalibrated raw counts so they can
+    // be compared to a multimeter. millivolts already has the multiplier applied, so
+    // only the counts are usable for calibration. Enable via -DAIRTAK_BATTERY_DEBUG.
+    snprintf(bat, sizeof(bat), "%d%%", pct);
+    s_display.setCursor(2, DISP_FOOTER_Y + 2);
+    s_display.print(bat);
+    char dbg[18];
+    snprintf(dbg, sizeof(dbg), "%um/%uc",
+             (unsigned)Battery::voltageMillivolts(), (unsigned)Battery::rawCounts());
+    s_display.setCursor(DISP_WIDTH - 62, DISP_FOOTER_Y + 2);
+    s_display.print(dbg);
+#else
     snprintf(bat, sizeof(bat), "%d%%%s", pct, Battery::isCharging() ? "+" : "");
     s_display.setCursor(2, DISP_FOOTER_Y + 2);
     s_display.print(bat);
-
     s_display.setCursor(DISP_WIDTH - 22, DISP_FOOTER_Y + 2);
     s_display.print(ble::BLEServer::isConnected() ? "BLE" : "   ");
+#endif
 }
 
 // ── Screen renderers ─────────────────────────────────────────────────────────

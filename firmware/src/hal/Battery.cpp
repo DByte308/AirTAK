@@ -14,6 +14,7 @@ namespace airtak {
 static float    s_level        = 0.0f;
 static bool     s_is_charging  = false;
 static uint32_t s_voltage_mv   = 0;
+static uint32_t s_raw_counts   = 0;
 
 // Per-board calibration override (default 1.0 = no adjustment).
 // Some boards need a correction for trace resistance, diode/MOSFET drop,
@@ -88,6 +89,7 @@ void Battery::sample(EventGroupHandle_t system_event_group) {
     float adc_multiplier = config::ConfigManager::powerAdcMultiplier();
     if (adc_multiplier <= 0.0f) adc_multiplier = AIRTAK_ADC_MULTIPLIER;
 
+    s_raw_counts = raw_adc;
     s_voltage_mv = (uint32_t)(raw_adc * BATTERY_ADC_REFERENCE_MV * BATTERY_VOLTAGE_DIVIDER_RATIO * adc_multiplier
                  / BATTERY_ADC_MAX_COUNTS);
 
@@ -113,5 +115,6 @@ void Battery::sample(EventGroupHandle_t system_event_group) {
 float    Battery::level()             { return s_level;       }
 bool     Battery::isCharging()        { return s_is_charging; }
 uint32_t Battery::voltageMillivolts() { return s_voltage_mv;  }
+uint32_t Battery::rawCounts()         { return s_raw_counts;  }
 
 } // namespace airtak

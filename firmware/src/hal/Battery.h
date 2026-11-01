@@ -31,6 +31,12 @@ public:
 
     // Raw ADC voltage in millivolts (diagnostic use only).
     static uint32_t voltageMillivolts();
+
+    // Unprocessed oversampled ADC counts, before reference / divider / multiplier
+    // scaling. Only this can be calibrated against a multimeter: millivolts and
+    // level are both derived from the board's multiplier guess, so they cannot be
+    // used to check that guess. Diagnostic use only.
+    static uint32_t rawCounts();
 };
 
 } // namespace airtak
