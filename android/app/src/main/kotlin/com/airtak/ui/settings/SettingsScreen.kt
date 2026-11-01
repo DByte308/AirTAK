@@ -1429,34 +1429,18 @@ private fun ModerationSection(vm: SettingsViewModel) {
 private fun AppSection(vm: SettingsViewModel) {
     val mode by vm.themeMode.collectAsState()
     val exitMode by vm.exitMode.collectAsState()
-    val connectionPaused by vm.connectionPaused.collectAsState()
     val context = LocalContext.current
     val tileUrl by vm.tileUrl.collectAsState()
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-        SectionLabel(stringResource(R.string.settings_connection))
         Button(
-            onClick = {
-                if (!vm.toggleConnection(context)) {
-                    android.widget.Toast.makeText(
-                        context,
-                        context.getString(R.string.settings_connection_dfu_busy),
-                        android.widget.Toast.LENGTH_SHORT,
-                    ).show()
-                }
-            },
+            onClick = { (context as? com.airtak.ui.MainActivity)?.closeApp() },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(stringResource(
-                if (connectionPaused) R.string.settings_connection_resume
-                else R.string.settings_connection_pause,
-            ))
+            Text(stringResource(R.string.settings_close_app))
         }
         Text(
-            stringResource(
-                if (connectionPaused) R.string.settings_connection_paused_hint
-                else R.string.settings_connection_running_hint,
-            ),
+            stringResource(R.string.settings_close_app_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

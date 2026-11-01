@@ -47,6 +47,7 @@ class LinkService : Service() {
     @Inject lateinit var bleRepository: BleRepository
     @Inject lateinit var statusRepository: DeviceStatusRepository
     @Inject lateinit var prefs: AppPreferences
+    @Inject lateinit var phoneGps: com.airtak.data.gps.PhoneGpsProvider
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observerJob: Job? = null
@@ -63,11 +64,6 @@ class LinkService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (prefs.connectionPaused()) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return START_NOT_STICKY
-        }
         when (intent?.action) {
             ACTION_LINK_DISCONNECT -> {
                 bleRepository.disconnect()
@@ -88,7 +84,8 @@ class LinkService : Service() {
         // Do not kill the process: DFU has its own service, and Android can reclaim an idle
         // process once the link service is gone. Disconnect also disables BLE auto-reconnect.
         try {
-            bleRepository.disconnect()
+            phoneGps.stopTracking()
+            bleRepository.stopForAppExit()
         } finally {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -179,7 +176,6 @@ class LinkService : Service() {
 
     companion object {
         fun start(ctx: Context) {
-            if (AppPreferences(ctx.applicationContext).connectionPaused()) return
             val i = Intent(ctx, LinkService::class.java).setAction(ACTION_LINK_START)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i)
             else ctx.startService(i)

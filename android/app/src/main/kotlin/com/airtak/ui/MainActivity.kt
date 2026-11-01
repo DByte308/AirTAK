@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
         ensurePermissions()
         // Foreground service is started once the user has a bonded device. The
         // pairing screen invokes LinkService.start once pairing completes.
-        if (prefs.bondedAddress() != null && !prefs.connectionPaused()) LinkService.start(this)
+        if (prefs.bondedAddress() != null) LinkService.start(this)
 
         // Registered here, before setContent, so this is the oldest callback on the dispatcher.
         // OnBackPressedDispatcher invokes the newest enabled callback first, so the navigation
@@ -171,17 +171,16 @@ class MainActivity : ComponentActivity() {
      * notification go, the task leaves Recents, and nothing restarts it. LinkService returns
      * START_NOT_STICKY, so the system will not bring the service back after this.
      */
-    private fun closeApp() {
-        runCatching { bleRepository.disconnect() }
+    fun closeApp() {
+        if (bleRepository.firmwareUpdateInFlight) {
+            Toast.makeText(this, R.string.settings_close_app_dfu_busy, Toast.LENGTH_SHORT).show()
+            return
+        }
+        phoneGps.stopTracking()
+        runCatching { bleRepository.stopForAppExit() }
         LinkService.stop(this)
         finishAndRemoveTask()
 
-        if (bleRepository.firmwareUpdateInFlight) {
-            // A DFU transfer runs in its own foreground service. Cutting the process off here
-            // would abort it mid-write and leave the radio sitting in its bootloader, so the UI
-            // closes and the update is left alone.
-            return
-        }
         pendingHardExit?.let { exitHandler.removeCallbacks(it) }
         pendingHardExit = Runnable {
             pendingHardExit = null

@@ -416,7 +416,16 @@ class PhoneGpsProvider @Inject constructor(
         }
     }
 
+    private var trackingStopped = false
+
+    /** Explicit app exit must also release Android location subscriptions. */
+    fun stopTracking() {
+        trackingStopped = true
+        applyState(false, targetBle = false)
+    }
+
     private fun applyState(wantActive: Boolean, targetBle: Boolean) {
+        if (trackingStopped && wantActive) return
         sendToBle = targetBle
         val wasActive = registration.isActive
         val nowActive = registration.applyState(wantActive)
@@ -433,6 +442,10 @@ class PhoneGpsProvider @Inject constructor(
      * Cheap and idempotent: it does nothing when registration is already in place.
      */
     fun refresh() {
+        if (trackingStopped) {
+            trackingStopped = false
+            applyState(true, targetBle = false)
+        }
         registration.refresh()
         publishState()
     }

@@ -66,7 +66,6 @@ class SettingsViewModel @Inject constructor(
     private val prefs: AppPreferences,
     statusRepo: DeviceStatusRepository,
     val moderation: ModerationRepository,
-    private val ble: com.airtak.data.ble.BleRepository,
 ) : ViewModel() {
 
     val deviceStatus: StateFlow<DeviceStatus?> = statusRepo.status
@@ -501,16 +500,6 @@ class SettingsViewModel @Inject constructor(
     }
 
     
-
-    val connectionPaused = ble.connectionPaused
-
-    fun toggleConnection(context: android.content.Context): Boolean {
-        val paused = !connectionPaused.value
-        if (!ble.setConnectionPaused(paused)) return false
-        if (paused) com.airtak.data.ble.service.LinkService.stop(context)
-        else com.airtak.data.ble.service.LinkService.start(context)
-        return true
-    }
 
     private val _exitMode = MutableStateFlow(prefs.exitMode())
     val exitMode = _exitMode.asStateFlow()

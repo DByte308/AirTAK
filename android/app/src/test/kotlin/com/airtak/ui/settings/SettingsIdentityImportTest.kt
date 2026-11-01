@@ -79,9 +79,7 @@ class SettingsIdentityImportTest {
         every { prefs.language() } returns AppLanguage.System
         every { prefs.tileServerUrl() } returns null
 
-        val ble = mockk<com.airtak.data.ble.BleRepository>()
-        every { ble.connectionPaused } returns MutableStateFlow(false)
-        vm = SettingsViewModel(config, prefs, statusRepo, moderation, ble)
+        vm = SettingsViewModel(config, prefs, statusRepo, moderation)
         store.put("settings", vm)
     }
 

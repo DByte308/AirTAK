@@ -354,12 +354,9 @@
     <string name="settings_sec_unit_hierarchy">Einheitshierarchie (optional, selbst organisiert)</string>
     <string name="settings_profile_n">Profil %1$d</string>
     <string name="settings_brightness">Helligkeit: %1$d%%</string>
-    <string name="settings_connection">Geräteverbindung</string>
-    <string name="settings_connection_resume">Verbindung fortsetzen</string>
-    <string name="settings_connection_pause">Verbindung pausieren</string>
-    <string name="settings_connection_paused_hint">Pausiert. AirTAK verbindet sich erst wieder, wenn du die Verbindung fortsetzt, auch nach erneutem Öffnen der App.</string>
-    <string name="settings_connection_running_hint">Verbindung aktiviert. Pausieren trennt das Gerät und stoppt die automatische Wiederverbindung. Die Kopplung bleibt erhalten.</string>
-    <string name="settings_connection_dfu_busy">Warte, bis das Firmware-Update abgeschlossen ist, bevor du die Verbindung änderst.</string>
+    <string name="settings_close_app">AirTAK schließen</string>
+    <string name="settings_close_app_hint">Standortverfolgung auf dem Handy stoppen, Bluetooth-Verbindung trennen und die App schließen. Beim erneuten Öffnen verbindet sich AirTAK wie gewohnt.</string>
+    <string name="settings_close_app_dfu_busy">Warte, bis das Firmware-Update abgeschlossen ist, bevor du AirTAK schließt.</string>
     <string name="settings_exit_mode">AirTAK schließen</string>
     <string name="settings_exit_double_back">Zweimal Zurück drücken</string>
     <string name="settings_exit_recents">Aus letzten Apps entfernen</string>
