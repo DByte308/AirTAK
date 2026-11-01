@@ -354,12 +354,12 @@
     <string name="settings_sec_unit_hierarchy">Einheitshierarchie (optional, selbst organisiert)</string>
     <string name="settings_profile_n">Profil %1$d</string>
     <string name="settings_brightness">Helligkeit: %1$d%%</string>
-    <string name="settings_close_app">AirTAK schließen</string>
-    <string name="settings_close_app_hint">Standortverfolgung auf dem Handy stoppen, Bluetooth-Verbindung trennen und die App schließen. Beim erneuten Öffnen verbindet sich AirTAK wie gewohnt.</string>
     <string name="settings_close_app_dfu_busy">Warte, bis das Firmware-Update abgeschlossen ist, bevor du AirTAK schließt.</string>
     <string name="settings_exit_mode">AirTAK schließen</string>
     <string name="settings_exit_double_back">Zweimal Zurück drücken</string>
     <string name="settings_exit_recents">Aus letzten Apps entfernen</string>
+    <string name="settings_exit_button_only">Nur per Knopf</string>
+    <string name="settings_exit_button_only_hint">Zurück und das Entfernen aus den letzten Apps lassen die Verbindung bestehen. Der Schließen-Knopf stoppt Handy-Tracking und Bluetooth und beendet AirTAK. Beim erneuten Öffnen verbindet sich die App wie gewohnt.</string>
     <string name="settings_exit_double_back_hint">Auf dem Hauptbildschirm zweimal Zurück drücken, um die Verbindung zu trennen und die App zu schließen. Beim Entfernen aus den letzten Apps bleibt die Verbindung bestehen.</string>
     <string name="settings_exit_recents_hint">Zurück lässt die Verbindung bestehen. AirTAK in Androids letzten Apps wegwischen oder Alle schließen antippen, um die Verbindung zu trennen und die App zu schließen. Laufende Firmware-Updates werden nicht unterbrochen.</string>
     <string name="settings_theme_mode">Design: %1$s.</string>

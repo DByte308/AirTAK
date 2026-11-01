@@ -39,7 +39,6 @@ import com.airtak.data.ble.BleRepository
 import com.airtak.data.ble.service.LinkService
 import com.airtak.data.gps.PhoneGpsProvider
 import com.airtak.data.prefs.AppPreferences
-import com.airtak.data.prefs.ExitMode
 import com.airtak.ui.i18n.withAppLanguage
 import com.airtak.ui.theme.AirTakTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -144,7 +143,7 @@ class MainActivity : ComponentActivity() {
      */
     private val rootBackCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
-            if (prefs.exitMode() == ExitMode.Recents) {
+            if (!prefs.exitMode().closesOnBack) {
                 backToExit.reset()
                 // Keep the task in Recents so swiping it away remains an explicit exit action.
                 moveTaskToBack(true)

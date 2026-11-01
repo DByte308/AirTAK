@@ -41,6 +41,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Visibility
@@ -116,7 +117,7 @@ import com.airtak.ui.theme.AccentAmber
 import com.airtak.ui.theme.StatusActive
 import com.airtak.ui.theme.ThemeMode
 import com.airtak.ui.findMainActivity
-import androidx.compose.foundation.selection.selectable
+import com.airtak.data.prefs.ExitMode
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 
@@ -1432,43 +1433,58 @@ private fun AppSection(vm: SettingsViewModel) {
     val exitMode by vm.exitMode.collectAsState()
     val context = LocalContext.current
     val tileUrl by vm.tileUrl.collectAsState()
+    var exitMenuExpanded by remember { mutableStateOf(false) }
+    val exitLabels = mapOf(
+        ExitMode.DoubleBack to stringResource(R.string.settings_exit_double_back),
+        ExitMode.Recents to stringResource(R.string.settings_exit_recents),
+        ExitMode.ButtonOnly to stringResource(R.string.settings_exit_button_only),
+    )
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         SectionLabel(stringResource(R.string.settings_exit_mode))
         Spacer(Modifier.height(8.dp))
-        Button(
-            onClick = { context.findMainActivity()?.closeApp() },
-            modifier = Modifier.fillMaxWidth(),
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(stringResource(R.string.settings_close_app))
-        }
-        Text(
-            stringResource(R.string.settings_close_app_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(8.dp))
-        com.airtak.data.prefs.ExitMode.entries.forEach { option ->
-            val label = stringResource(
-                if (option == com.airtak.data.prefs.ExitMode.DoubleBack)
-                    R.string.settings_exit_double_back else R.string.settings_exit_recents,
-            )
-            Row(
-                Modifier.fillMaxWidth().selectable(
-                    selected = exitMode == option,
-                    role = androidx.compose.ui.semantics.Role.RadioButton,
-                    onClick = { vm.setExitMode(option) },
-                ).padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.material3.RadioButton(selected = exitMode == option, onClick = null)
-                Text(label, modifier = Modifier.padding(start = 8.dp))
+            Box(Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = { exitMenuExpanded = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(exitLabels.getValue(exitMode), modifier = Modifier.weight(1f))
+                    Icon(Icons.Outlined.ArrowDropDown, contentDescription = null)
+                }
+                DropdownMenu(
+                    expanded = exitMenuExpanded,
+                    onDismissRequest = { exitMenuExpanded = false },
+                ) {
+                    ExitMode.entries.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(exitLabels.getValue(option)) },
+                            onClick = {
+                                vm.setExitMode(option)
+                                exitMenuExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+            if (exitMode == ExitMode.ButtonOnly) {
+                Button(onClick = { context.findMainActivity()?.closeApp() }) {
+                    Text(stringResource(R.string.action_close))
+                }
             }
         }
+        Spacer(Modifier.height(8.dp))
         Text(
             stringResource(
-                if (exitMode == com.airtak.data.prefs.ExitMode.DoubleBack)
-                    R.string.settings_exit_double_back_hint else R.string.settings_exit_recents_hint,
+                when (exitMode) {
+                    ExitMode.DoubleBack -> R.string.settings_exit_double_back_hint
+                    ExitMode.Recents -> R.string.settings_exit_recents_hint
+                    ExitMode.ButtonOnly -> R.string.settings_exit_button_only_hint
+                },
             ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

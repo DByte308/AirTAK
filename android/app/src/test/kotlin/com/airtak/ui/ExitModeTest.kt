@@ -15,7 +15,7 @@ class ExitModeTest {
         assertEquals(ExitMode.DoubleBack, ExitMode.fromStored("unknown"))
     }
 
-    @Test fun bothModesRoundTrip() {
+    @Test fun allModesRoundTrip() {
         ExitMode.entries.forEach { assertEquals(it, ExitMode.fromStored(it.name)) }
     }
 
@@ -26,6 +26,21 @@ class ExitModeTest {
 
     @Test fun recentsModeClosesWhenTaskRemoved() {
         assertTrue(ExitMode.Recents.closesOnTaskRemoval(false))
+    }
+
+    @Test fun onlyDoubleBackModeClosesOnBack() {
+        assertTrue(ExitMode.DoubleBack.closesOnBack)
+        assertFalse(ExitMode.Recents.closesOnBack)
+        assertFalse(ExitMode.ButtonOnly.closesOnBack)
+    }
+
+    @Test fun buttonOnlyKeepsLinkWhenTaskRemoved() {
+        assertFalse(ExitMode.ButtonOnly.closesOnTaskRemoval(false))
+        assertFalse(ExitMode.ButtonOnly.closesOnTaskRemoval(true))
+    }
+
+    @Test fun buttonOnlyStoredValueIsRecognized() {
+        assertEquals(ExitMode.ButtonOnly, ExitMode.fromStored("ButtonOnly"))
     }
 
     @Test fun recentsModeProtectsFirmwareUpdate() {
