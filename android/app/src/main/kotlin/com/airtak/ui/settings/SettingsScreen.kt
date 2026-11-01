@@ -143,7 +143,7 @@ private enum class Section(
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
-    onFirmwareSelected: ((Uri) -> Unit)? = null,
+    onFirmwareUpdate: (() -> Unit)? = null,
 ) {
     var current by remember { mutableStateOf<Section?>(null) }
     // When non-null, the Channels editor scrolls / highlights the given slot
@@ -191,7 +191,7 @@ fun SettingsScreen(
                     Section.Share -> ShareSection(viewModel)
                     Section.Language -> LanguageSection(viewModel)
                     Section.Help -> HelpSection()
-                    Section.About -> AboutSection(viewModel, onFirmwareSelected)
+                    Section.About -> AboutSection(viewModel, onFirmwareUpdate)
                 }
             }
         }
@@ -1709,14 +1709,9 @@ private sealed class ImportState {
 // ── ABOUT ─────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun AboutSection(vm: SettingsViewModel, onFirmwareSelected: ((Uri) -> Unit)?) {
+private fun AboutSection(vm: SettingsViewModel, onFirmwareUpdate: (() -> Unit)?) {
     val status by vm.deviceStatus.collectAsState()
     val context = LocalContext.current
-    val filePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { onFirmwareSelected?.invoke(it) }
-    }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         HudCard(Modifier.fillMaxWidth()) {
             Column {
@@ -1745,7 +1740,8 @@ private fun AboutSection(vm: SettingsViewModel, onFirmwareSelected: ((Uri) -> Un
         ) { Text(stringResource(R.string.settings_reboot_device)) }
         Spacer(Modifier.height(8.dp))
         Button(
-                onClick = { filePicker.launch("*/*") },
+                onClick = { onFirmwareUpdate?.invoke() },
+                enabled = onFirmwareUpdate != null,
                 modifier = Modifier.fillMaxWidth(),
         ) { Text(stringResource(R.string.settings_update_firmware)) }
         Spacer(Modifier.height(8.dp))

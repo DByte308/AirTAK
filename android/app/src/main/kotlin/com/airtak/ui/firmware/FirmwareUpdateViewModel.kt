@@ -51,6 +51,7 @@ class FirmwareUpdateViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val ble: BleRepository,
     private val deviceStatusRepo: DeviceStatusRepository,
+    private val updateActivity: com.airtak.data.ota.FirmwareUpdateActivity,
 ) : ViewModel() {
 
     private val manager = FirmwareUpdateManager(appContext)
@@ -68,11 +69,16 @@ class FirmwareUpdateViewModel @Inject constructor(
         _debugLog.value = _debugLog.value + msg
     }
 
-    fun startUpdate(firmwareUri: Uri) {
+    private fun launchUpdate(block: suspend () -> Unit) {
         if (_state.value !is FwUpdateState.Idle) return
         _state.value = FwUpdateState.InProgress
-
         viewModelScope.launch {
+            updateActivity.duringUpdate { block() }
+        }
+    }
+
+    fun startUpdate(firmwareUri: Uri) {
+        launchUpdate {
             try {
                 val firmwareBytes = withContext(Dispatchers.IO) {
                     appContext.contentResolver.openInputStream(firmwareUri)?.use { it.readBytes() }
@@ -129,10 +135,7 @@ class FirmwareUpdateViewModel @Inject constructor(
      *  we don't use the BLE link at all (the engine takes the radio anyway).
      */
     fun startUpdateOverUsb(firmwareUri: Uri) {
-        if (_state.value !is FwUpdateState.Idle) return
-        _state.value = FwUpdateState.InProgress
-
-        viewModelScope.launch {
+        launchUpdate {
             try {
                 val firmwareBytes = withContext(Dispatchers.IO) {
                     appContext.contentResolver.openInputStream(firmwareUri)?.use { it.readBytes() }

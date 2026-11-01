@@ -8,7 +8,6 @@
 package com.airtak.ui
 
 import android.content.res.Configuration
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,8 +54,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.NavType
-import androidx.navigation.navArgument
 import androidx.compose.ui.res.stringResource
 import com.airtak.R
 import com.airtak.proto.DcLevel
@@ -84,6 +81,8 @@ enum class Destination(val route: String, val labelRes: Int, val icon: ImageVect
 @Composable
 fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
     val navController = rememberNavController()
+    val firmwareUpdateActive by viewModel.firmwareUpdateActive.collectAsState()
+    com.airtak.ui.components.KeepScreenAwake(firmwareUpdateActive)
     val link by viewModel.linkState.collectAsState()
     val status by viewModel.deviceStatus.collectAsState()
     val hudTitle by viewModel.hudTitle.collectAsState()
@@ -99,7 +98,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
 
     LaunchedEffect(Unit) {
         viewModel.usbFirmwareTrigger.collect {
-            navController.navigate("firmwareUpdate/")
+            navController.navigate("firmwareUpdate") { launchSingleTop = true }
         }
     }
 
@@ -438,19 +437,14 @@ private fun AppNavHost(
         composable(Destination.Game.route)     { com.airtak.ui.markers.MarkersScreen(onLocateMarker = onLocateMarker) }
         composable(Destination.Settings.route) {
             SettingsScreen(
-                onFirmwareSelected = { uri ->
-                    navController.navigate("firmwareUpdate/${Uri.encode(uri.toString())}")
+                onFirmwareUpdate = {
+                    navController.navigate("firmwareUpdate") { launchSingleTop = true }
                 },
             )
         }
         composable("pair")                     { PairingScreen(onDone = { navController.popBackStack() }) }
-        composable(
-            "firmwareUpdate/{uri}",
-            arguments = listOf(navArgument("uri") { type = NavType.StringType }),
-        ) { backStackEntry ->
-            val uri = backStackEntry.arguments?.getString("uri")
+        composable("firmwareUpdate") {
             FirmwareUpdateScreen(
-                firmwareUri = uri,
                 onDone = { navController.popBackStack() },
             )
         }

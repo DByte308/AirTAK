@@ -307,8 +307,8 @@ ROWS = [
     # ── Firmware update ──────────────────────────────────────────────────────
     ("fw_title", "Firmware Update", "Firmware-Aktualisierung", True),
     ("fw_subtitle",
-     "Select a firmware file (.bin or .zip) to flash onto your AirTAK device.",
-     "Wähle eine Firmware-Datei (.bin oder .zip) zum Aufspielen auf dein AirTAK-Gerät.", True),
+     "Choose USB or Bluetooth, then select the firmware file. USB does not need a Bluetooth connection. Bluetooth requires AirTAK firmware already running on the device.",
+     "Wähle USB oder Bluetooth und danach die Firmware-Datei. USB braucht keine Bluetooth-Verbindung. Für Bluetooth muss bereits AirTAK-Firmware auf dem Gerät laufen.", True),
     ("fw_via_ble", "Update via Bluetooth", "Update über Bluetooth", True),
     ("fw_via_usb", "Update via USB cable", "Update über USB-Kabel", True),
     ("fw_updated_title", "Firmware Updated", "Firmware aktualisiert", True),

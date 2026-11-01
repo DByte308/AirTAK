@@ -351,7 +351,7 @@
     <string name="percent_value_f" translatable="false">%1$.1f%%</string>
     <string name="metric_placeholder" translatable="false">—</string>
     <string name="fw_title">Firmware Update</string>
-    <string name="fw_subtitle">Select a firmware file (.bin or .zip) to flash onto your AirTAK device.</string>
+    <string name="fw_subtitle">Choose USB or Bluetooth, then select the firmware file. USB does not need a Bluetooth connection. Bluetooth requires AirTAK firmware already running on the device.</string>
     <string name="fw_via_ble">Update via Bluetooth</string>
     <string name="fw_via_usb">Update via USB cable</string>
     <string name="fw_updated_title">Firmware Updated</string>

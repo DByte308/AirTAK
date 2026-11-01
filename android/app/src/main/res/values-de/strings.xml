@@ -331,7 +331,7 @@
     <string name="percent_value_f" translatable="false">%1$.1f%%</string>
     <string name="metric_placeholder" translatable="false">—</string>
     <string name="fw_title">Firmware-Aktualisierung</string>
-    <string name="fw_subtitle">Wähle eine Firmware-Datei (.bin oder .zip) zum Aufspielen auf dein AirTAK-Gerät.</string>
+    <string name="fw_subtitle">Wähle USB oder Bluetooth und danach die Firmware-Datei. USB braucht keine Bluetooth-Verbindung. Für Bluetooth muss bereits AirTAK-Firmware auf dem Gerät laufen.</string>
     <string name="fw_via_ble">Update über Bluetooth</string>
     <string name="fw_via_usb">Update über USB-Kabel</string>
     <string name="fw_updated_title">Firmware aktualisiert</string>

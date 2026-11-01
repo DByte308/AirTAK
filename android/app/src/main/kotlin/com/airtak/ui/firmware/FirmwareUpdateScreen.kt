@@ -1,9 +1,8 @@
 // AirTAK Android — ui/firmware/FirmwareUpdateScreen.kt
 // Planning: §6.1, §8.2 | Roadmap: 6.1 (revised)
 //
-// Full-screen firmware update progress UI. Receives a firmware URI via
-// navigation argument, reads the file, and drives the update through
-// FirmwareUpdateViewModel. Displays the state machine from §8.2.
+// Firmware transport selection, file picker and update progress UI.
+// Opening the screen never starts an update or assumes a BLE connection.
 
 package com.airtak.ui.firmware
 
@@ -40,11 +39,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,30 +58,26 @@ import com.airtak.ui.theme.StatusHit
 
 @Composable
 fun FirmwareUpdateScreen(
-    firmwareUri: String?,
     onDone: () -> Unit,
     viewModel: FirmwareUpdateViewModel = hiltViewModel(),
 ) {
     val progress by viewModel.progress.collectAsState()
     val state by viewModel.state.collectAsState()
     val debugLog by viewModel.debugLog.collectAsState()
-    var selectedUri by remember { mutableStateOf<Uri?>(firmwareUri?.let { Uri.parse(it) }) }
-    // Track which transport the user chose for the currently picked file so
-    // the LaunchedEffect below dispatches to the right ViewModel entry point.
-    var transportMode by remember { mutableStateOf(TransportMode.Ble) }
+    // Survives activity recreation while the Android file picker is open.
+    var transportMode by rememberSaveable { mutableStateOf(FirmwareTransport.Usb) }
 
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        if (uri != null) {
-            selectedUri = uri
-        }
+        dispatchFirmwareFile(uri, transportMode, viewModel::startUpdateOverUsb, viewModel::startUpdate)
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -110,17 +104,17 @@ fun FirmwareUpdateScreen(
                     )
                     Spacer(Modifier.height(24.dp))
                     Button(onClick = {
-                        transportMode = TransportMode.Ble
-                        filePicker.launch("*/*")
-                    }) {
-                        Text(stringResource(R.string.fw_via_ble))
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(onClick = {
-                        transportMode = TransportMode.Usb
+                        transportMode = FirmwareTransport.Usb
                         filePicker.launch("*/*")
                     }) {
                         Text(stringResource(R.string.fw_via_usb))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = {
+                        transportMode = FirmwareTransport.Bluetooth
+                        filePicker.launch("*/*")
+                    }) {
+                        Text(stringResource(R.string.fw_via_ble))
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onDone) {
@@ -188,7 +182,6 @@ fun FirmwareUpdateScreen(
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = {
                         viewModel.reset()
-                        selectedUri = null
                     }) {
                         Text(stringResource(R.string.action_try_again))
                     }
@@ -204,17 +197,7 @@ fun FirmwareUpdateScreen(
         }
     }
 
-    LaunchedEffect(selectedUri) {
-        selectedUri?.let { uri ->
-            when (transportMode) {
-                TransportMode.Ble -> viewModel.startUpdate(uri)
-                TransportMode.Usb -> viewModel.startUpdateOverUsb(uri)
-            }
-        }
-    }
 }
-
-private enum class TransportMode { Ble, Usb }
 
 @Composable
 private fun FirmwareProgress(progress: UpdateProgress) {

@@ -48,6 +48,7 @@ class LinkService : Service() {
     @Inject lateinit var statusRepository: DeviceStatusRepository
     @Inject lateinit var prefs: AppPreferences
     @Inject lateinit var phoneGps: com.airtak.data.gps.PhoneGpsProvider
+    @Inject lateinit var firmwareUpdateActivity: com.airtak.data.ota.FirmwareUpdateActivity
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observerJob: Job? = null
@@ -80,7 +81,8 @@ class LinkService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        if (!prefs.exitMode().closesOnTaskRemoval(bleRepository.firmwareUpdateInFlight)) return
+        val updateInFlight = firmwareUpdateActivity.isActive.value || bleRepository.firmwareUpdateInFlight
+        if (!prefs.exitMode().closesOnTaskRemoval(updateInFlight)) return
         // Do not kill the process: DFU has its own service, and Android can reclaim an idle
         // process once the link service is gone. Disconnect also disables BLE auto-reconnect.
         try {

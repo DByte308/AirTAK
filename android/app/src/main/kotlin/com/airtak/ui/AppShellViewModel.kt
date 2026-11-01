@@ -25,7 +25,9 @@ class AppShellViewModel @Inject constructor(
     status: DeviceStatusRepository,
     phoneGps: PhoneGpsProvider,
     config: ConfigRepository,
+    firmwareUpdateActivity: com.airtak.data.ota.FirmwareUpdateActivity,
 ) : ViewModel() {
+    val firmwareUpdateActive = firmwareUpdateActivity.isActive
     val linkState = ble.linkState
     val deviceStatus = status.status
     val phoneGpsActive = phoneGps.isActive

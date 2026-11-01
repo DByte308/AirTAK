@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
 
     /** Injected so an explicit exit can drop the link instead of leaving the reconnect loop running. */
     @Inject lateinit var bleRepository: BleRepository
+    @Inject lateinit var firmwareUpdateActivity: com.airtak.data.ota.FirmwareUpdateActivity
 
     private val appShellViewModel: AppShellViewModel by viewModels()
 
@@ -171,7 +172,7 @@ class MainActivity : ComponentActivity() {
      * START_NOT_STICKY, so the system will not bring the service back after this.
      */
     fun closeApp() {
-        if (bleRepository.firmwareUpdateInFlight) {
+        if (firmwareUpdateActivity.isActive.value || bleRepository.firmwareUpdateInFlight) {
             Toast.makeText(this, R.string.settings_close_app_dfu_busy, Toast.LENGTH_SHORT).show()
             return
         }
