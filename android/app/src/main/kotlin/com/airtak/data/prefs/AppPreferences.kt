@@ -40,6 +40,16 @@ class AppPreferences @Inject constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences(APP_PREFS_FILE, Context.MODE_PRIVATE)
 
+    fun connectionPaused(): Boolean = prefs.getBoolean("connection_paused", false)
+
+    fun setConnectionPaused(paused: Boolean) {
+        prefs.edit().putBoolean("connection_paused", paused).apply()
+    }
+
+    fun exitMode(): ExitMode = ExitMode.fromStored(prefs.getString("exit_mode", null))
+
+    fun setExitMode(mode: ExitMode) { prefs.edit().putString("exit_mode", mode.name).apply() }
+
     fun themeMode(): ThemeMode = runCatching {
         ThemeMode.valueOf(prefs.getString(KEY_THEME, ThemeMode.System.name) ?: ThemeMode.System.name)
     }.getOrDefault(ThemeMode.System)

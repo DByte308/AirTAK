@@ -39,6 +39,7 @@ import com.airtak.data.ble.BleRepository
 import com.airtak.data.ble.service.LinkService
 import com.airtak.data.gps.PhoneGpsProvider
 import com.airtak.data.prefs.AppPreferences
+import com.airtak.data.prefs.ExitMode
 import com.airtak.ui.i18n.withAppLanguage
 import com.airtak.ui.theme.AirTakTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -94,7 +95,7 @@ class MainActivity : ComponentActivity() {
         ensurePermissions()
         // Foreground service is started once the user has a bonded device. The
         // pairing screen invokes LinkService.start once pairing completes.
-        if (prefs.bondedAddress() != null) LinkService.start(this)
+        if (prefs.bondedAddress() != null && !prefs.connectionPaused()) LinkService.start(this)
 
         // Registered here, before setContent, so this is the oldest callback on the dispatcher.
         // OnBackPressedDispatcher invokes the newest enabled callback first, so the navigation
@@ -143,6 +144,12 @@ class MainActivity : ComponentActivity() {
      */
     private val rootBackCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
+            if (prefs.exitMode() == ExitMode.Recents) {
+                backToExit.reset()
+                // Keep the task in Recents so swiping it away remains an explicit exit action.
+                moveTaskToBack(true)
+                return
+            }
             when (val decision = backToExit.onBackPressed()) {
                 is ExitDecision.Confirm -> Toast.makeText(
                     this@MainActivity,

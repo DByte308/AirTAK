@@ -374,6 +374,17 @@
     <string name="settings_sec_unit_hierarchy">Unit hierarchy (optional, self-organized)</string>
     <string name="settings_profile_n">Profile %1$d</string>
     <string name="settings_brightness">Brightness: %1$d%%</string>
+    <string name="settings_connection">Device connection</string>
+    <string name="settings_connection_resume">Resume connection</string>
+    <string name="settings_connection_pause">Pause connection</string>
+    <string name="settings_connection_paused_hint">Paused. AirTAK will not connect or reconnect until you resume, even after reopening the app.</string>
+    <string name="settings_connection_running_hint">Connection enabled. Pause disconnects the device and stops automatic reconnection without forgetting the bond.</string>
+    <string name="settings_connection_dfu_busy">Wait for the firmware update to finish before changing the connection.</string>
+    <string name="settings_exit_mode">Close AirTAK</string>
+    <string name="settings_exit_double_back">Press Back twice</string>
+    <string name="settings_exit_recents">Remove from recent apps</string>
+    <string name="settings_exit_double_back_hint">Press Back twice on the main screen to disconnect and close. Removing AirTAK from recent apps keeps the link running.</string>
+    <string name="settings_exit_recents_hint">Back keeps the link running. Swipe AirTAK away in Android’s recent apps or tap Close all to disconnect and close. Active firmware updates are not interrupted.</string>
     <string name="settings_theme_mode">Theme: %1$s.</string>
     <string name="settings_export_qr">Export config as QR code</string>
     <string name="settings_scan_prompt">Scan an AirTAK config QR code</string>

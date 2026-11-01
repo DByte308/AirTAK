@@ -25,6 +25,7 @@ import com.airtak.R
 import com.airtak.data.ble.BleRepository
 import com.airtak.data.ble.LinkState
 import com.airtak.data.status.DeviceStatusRepository
+import com.airtak.data.prefs.AppPreferences
 import com.airtak.ui.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +46,7 @@ class LinkService : Service() {
 
     @Inject lateinit var bleRepository: BleRepository
     @Inject lateinit var statusRepository: DeviceStatusRepository
+    @Inject lateinit var prefs: AppPreferences
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observerJob: Job? = null
@@ -61,6 +63,11 @@ class LinkService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (prefs.connectionPaused()) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_LINK_DISCONNECT -> {
                 bleRepository.disconnect()
@@ -73,6 +80,19 @@ class LinkService : Service() {
         // intent, so it could not even reconnect, and still held the process and showed
         // "AirTAK — Searching for device" on an app that was gone.
         return START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (!prefs.exitMode().closesOnTaskRemoval(bleRepository.firmwareUpdateInFlight)) return
+        // Do not kill the process: DFU has its own service, and Android can reclaim an idle
+        // process once the link service is gone. Disconnect also disables BLE auto-reconnect.
+        try {
+            bleRepository.disconnect()
+        } finally {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
@@ -159,6 +179,7 @@ class LinkService : Service() {
 
     companion object {
         fun start(ctx: Context) {
+            if (AppPreferences(ctx.applicationContext).connectionPaused()) return
             val i = Intent(ctx, LinkService::class.java).setAction(ACTION_LINK_START)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i)
             else ctx.startService(i)

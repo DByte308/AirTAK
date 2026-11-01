@@ -115,6 +115,7 @@ import com.airtak.ui.i18n.AppLanguage
 import com.airtak.ui.theme.AccentAmber
 import com.airtak.ui.theme.StatusActive
 import com.airtak.ui.theme.ThemeMode
+import androidx.compose.foundation.selection.selectable
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 
@@ -1427,9 +1428,66 @@ private fun ModerationSection(vm: SettingsViewModel) {
 @Composable
 private fun AppSection(vm: SettingsViewModel) {
     val mode by vm.themeMode.collectAsState()
+    val exitMode by vm.exitMode.collectAsState()
+    val connectionPaused by vm.connectionPaused.collectAsState()
+    val context = LocalContext.current
     val tileUrl by vm.tileUrl.collectAsState()
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+        SectionLabel(stringResource(R.string.settings_connection))
+        Button(
+            onClick = {
+                if (!vm.toggleConnection(context)) {
+                    android.widget.Toast.makeText(
+                        context,
+                        context.getString(R.string.settings_connection_dfu_busy),
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(
+                if (connectionPaused) R.string.settings_connection_resume
+                else R.string.settings_connection_pause,
+            ))
+        }
+        Text(
+            stringResource(
+                if (connectionPaused) R.string.settings_connection_paused_hint
+                else R.string.settings_connection_running_hint,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+        SectionLabel(stringResource(R.string.settings_exit_mode))
+        com.airtak.data.prefs.ExitMode.entries.forEach { option ->
+            val label = stringResource(
+                if (option == com.airtak.data.prefs.ExitMode.DoubleBack)
+                    R.string.settings_exit_double_back else R.string.settings_exit_recents,
+            )
+            Row(
+                Modifier.fillMaxWidth().selectable(
+                    selected = exitMode == option,
+                    role = androidx.compose.ui.semantics.Role.RadioButton,
+                    onClick = { vm.setExitMode(option) },
+                ).padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.RadioButton(selected = exitMode == option, onClick = null)
+                Text(label, modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+        Text(
+            stringResource(
+                if (exitMode == com.airtak.data.prefs.ExitMode.DoubleBack)
+                    R.string.settings_exit_double_back_hint else R.string.settings_exit_recents_hint,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
         SectionLabel(stringResource(R.string.settings_theme))
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

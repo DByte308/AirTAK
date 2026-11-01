@@ -143,6 +143,22 @@ class BleRepository @Inject constructor(
         var retriesLeft: Int = BLE_TX_RETRY_COUNT,
     )
 
+    private val _connectionPaused = MutableStateFlow(prefs.connectionPaused())
+    val connectionPaused: StateFlow<Boolean> = _connectionPaused.asStateFlow()
+
+    /** User pause is persistent and independent of the temporary DFU radio lock. */
+    @Synchronized
+    fun setConnectionPaused(paused: Boolean): Boolean {
+        if (firmwareUpdateInFlight) return false
+        prefs.setConnectionPaused(paused)
+        _connectionPaused.value = paused
+        if (paused) {
+            stopScan()
+            disconnect()
+        }
+        return true
+    }
+
     // ── Public API ────────────────────────────────────────────────────────────
 
     /** Whether the runtime BLE / location permissions required for connection are granted. */
@@ -165,7 +181,7 @@ class BleRepository @Inject constructor(
 
     /** Begin scanning for AirTAK advertisements (initial pair flow). */
     fun startScan() {
-        if (!hasRequiredPermissions() || adapter?.isEnabled != true) return
+        if (connectionPaused.value || !hasRequiredPermissions() || adapter?.isEnabled != true) return
         if (_linkState.value is LinkState.Scanning) return
         // Do not clobber an active connection — scanning while GATT is open can disrupt
         // the link on some chipsets, and the UI state machine would lose its Connected state.
@@ -195,6 +211,7 @@ class BleRepository @Inject constructor(
 
     /** Connect to a previously discovered or bonded device by MAC address. */
     fun connect(address: String, rememberAsBond: Boolean = true) {
+        if (connectionPaused.value || autoReconnectPaused) return
         stopScan()
         reconnectJob?.cancel()
         if (rememberAsBond) prefs.setBondedAddress(address)
@@ -303,7 +320,9 @@ class BleRepository @Inject constructor(
 
     // ── GATT callbacks ────────────────────────────────────────────────────────
 
+    @Synchronized
     private fun openGatt(device: BluetoothDevice, attempt: Int) {
+        if (connectionPaused.value || autoReconnectPaused) return
         _linkState.value = LinkState.Connecting(device.address)
         // autoConnect=false provides faster initial connect; reconnect uses our own backoff.
         gatt = device.connectGatt(appContext, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
@@ -313,6 +332,11 @@ class BleRepository @Inject constructor(
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
+                    if (connectionPaused.value) {
+                        g.disconnect()
+                        g.close()
+                        return
+                    }
                     // Android caches the remote GATT database per-bond. When the
                     // firmware adds new characteristics (e.g. OTA_COMMAND /
                     // OTA_DATA) the bonded phone keeps using the stale cache and
@@ -335,6 +359,7 @@ class BleRepository @Inject constructor(
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+            if (connectionPaused.value) return
             currentMtu = if (status == BluetoothGatt.GATT_SUCCESS) mtu else BLE_DEFAULT_MTU
             chunkPayloadSize = (currentMtu - BLE_FRAMING_HEADER_BYTES - BLE_FRAMING_ATT_OVERHEAD)
                 .coerceAtLeast(1)
@@ -342,6 +367,7 @@ class BleRepository @Inject constructor(
         }
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+            if (connectionPaused.value) return
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 _linkState.value = LinkState.Failed("Service discovery failed (status=$status)")
                 g.disconnect()
@@ -595,7 +621,7 @@ class BleRepository @Inject constructor(
     val firmwareUpdateInFlight: Boolean get() = autoReconnectPaused
 
     private fun onLinkLost(address: String, @Suppress("UNUSED_PARAMETER") status: Int) {
-        if (prefs.bondedAddress() != address || autoReconnectPaused) {
+        if (prefs.bondedAddress() != address || autoReconnectPaused || connectionPaused.value) {
             _linkState.value = LinkState.Disconnected
             return
         }
