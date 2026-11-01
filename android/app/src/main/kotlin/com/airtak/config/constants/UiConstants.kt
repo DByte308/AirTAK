@@ -116,3 +116,14 @@ const val UI_OVERLAY_HASH_BYTES = 8
 // ── HTTP cache ──────────────────────────────────────────
 /** HTTP max-age header value for tile caching (24 h in seconds). */
 const val UI_TILE_CACHE_MAX_AGE_SEC = 86400
+
+// ── Back-to-close (ui/BackToExit.kt) ────────────────────
+/** Back presses at the root of the app that close it, counted inside one window. */
+const val UI_BACK_TO_EXIT_PRESSES = 2
+/** How long the presses may be apart and still count as one exit sequence. */
+const val UI_BACK_TO_EXIT_WINDOW_MS = 2_000L
+/**
+ * Grace between "the user asked to close the app" and the hard process exit, long enough for
+ * finishAndRemoveTask() and the service stop to reach the system server.
+ */
+const val UI_EXIT_KILL_DELAY_MS = 600L

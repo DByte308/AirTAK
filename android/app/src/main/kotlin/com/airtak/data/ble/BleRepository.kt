@@ -576,6 +576,7 @@ class BleRepository @Inject constructor(
      *  flow finishes (success or failure). */
     fun pauseAutoReconnect(paused: Boolean) {
         autoReconnectPaused = paused
+        // The flag doubles as "a firmware update owns the radio". See [firmwareUpdateInFlight].
         if (paused) {
             reconnectJob?.cancel()
             reconnectJob = null
@@ -585,6 +586,13 @@ class BleRepository @Inject constructor(
             _linkState.value = LinkState.Disconnected
         }
     }
+
+    /**
+     * True while a firmware update owns the radio, which is exactly the window in which
+     * [pauseAutoReconnect] is set. Read this before tearing the link down for an app exit: cutting
+     * a process off mid-transfer leaves the device sitting in its DFU bootloader.
+     */
+    val firmwareUpdateInFlight: Boolean get() = autoReconnectPaused
 
     private fun onLinkLost(address: String, @Suppress("UNUSED_PARAMETER") status: Int) {
         if (prefs.bondedAddress() != address || autoReconnectPaused) {

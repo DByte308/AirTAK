@@ -68,11 +68,19 @@ class LinkService : Service() {
             }
             ACTION_LINK_START -> bleRepository.reconnectBonded()
         }
-        return START_STICKY
+        // START_NOT_STICKY, deliberately. This service exists to keep a link alive for a running
+        // app. Restarted by the system after the user closed AirTAK, it came back with a null
+        // intent, so it could not even reconnect, and still held the process and showed
+        // "AirTAK — Searching for device" on an app that was gone.
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
         observerJob?.cancel()
+        // stopService() removes the notification with the service, but the disconnect action and
+        // any stopSelf() path should leave nothing behind either.
+        (getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)
+            ?.cancel(LINK_NOTIFICATION_ID)
         super.onDestroy()
     }
 
@@ -154,6 +162,15 @@ class LinkService : Service() {
             val i = Intent(ctx, LinkService::class.java).setAction(ACTION_LINK_START)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i)
             else ctx.startService(i)
+        }
+
+        /**
+         * Stops the link service and takes the persistent notification with it. This is the piece
+         * that lets AirTAK actually close: while this service ran, the process was pinned as a
+         * foreground-service host no matter what happened to the activity.
+         */
+        fun stop(ctx: Context) {
+            ctx.stopService(Intent(ctx, LinkService::class.java))
         }
     }
 }

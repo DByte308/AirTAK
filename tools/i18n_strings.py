@@ -453,6 +453,14 @@ ROWS = [
      "Slot unbenutzt — es wird weder gesendet noch empfangen.", True),
     ("open_or_encrypted", "%1$s · %2$s", None, False),
     ("index_with_label", "%1$d: %2$s", None, False),
+
+    # ── Back-to-close hint (ui/BackToExit.kt) ────────────────────────────────
+    # The two-press exit shows the "again" form; the counted form exists so the hint stays honest
+    # if the press count is ever raised, and keeps the German short enough for a toast.
+    ("exit_back_again", "Press back again to close AirTAK",
+     "Nochmal Zurück drücken, um AirTAK zu schließen", True),
+    ("exit_back_more", "Press back %1$d more times to close AirTAK",
+     "Noch %1$d Mal Zurück drücken, um AirTAK zu schließen", True),
 ]
 
 

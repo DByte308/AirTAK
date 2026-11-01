@@ -417,5 +417,7 @@
     <string name="role_disabled_desc">Slot unused — no traffic sent or received.</string>
     <string name="open_or_encrypted" translatable="false">%1$s · %2$s</string>
     <string name="index_with_label" translatable="false">%1$d: %2$s</string>
+    <string name="exit_back_again">Press back again to close AirTAK</string>
+    <string name="exit_back_more">Press back %1$d more times to close AirTAK</string>
 <!-- i18n:end generated -->
 </resources>
