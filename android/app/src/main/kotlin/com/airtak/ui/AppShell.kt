@@ -69,6 +69,11 @@ import com.airtak.ui.pairing.PairingScreen
 import com.airtak.ui.players.PlayersScreen
 import com.airtak.ui.settings.SettingsScreen
 import com.airtak.ui.firmware.FirmwareUpdateScreen
+import com.airtak.ui.help.HelpDestination
+import com.airtak.ui.help.HelpDestinationScreen
+import com.airtak.ui.help.helpDestinationForTab
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 
 enum class Destination(val route: String, val labelRes: Int, val icon: ImageVector) {
     Map      ("map",      R.string.nav_map,      Icons.Outlined.Map),
@@ -148,6 +153,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
                 Box(Modifier.fillMaxSize()) {
                     AppNavHost(
                         navController = navController,
+                        firmwareUpdateActive = firmwareUpdateActive,
                         pendingDmNodeId = pendingDmNodeId,
                         onDmOpened = viewModel::clearDmTarget,
                         pendingLocateNodeId = pendingLocateNodeId,
@@ -202,6 +208,7 @@ fun AppShell(viewModel: AppShellViewModel = hiltViewModel()) {
             Box(Modifier.fillMaxSize().padding(padding)) {
                 AppNavHost(
                     navController = navController,
+                    firmwareUpdateActive = firmwareUpdateActive,
                     pendingDmNodeId = pendingDmNodeId,
                     onDmOpened = viewModel::clearDmTarget,
                     pendingLocateNodeId = pendingLocateNodeId,
@@ -408,6 +415,7 @@ private fun BottomNav(currentRoute: String?, onSelect: (Destination) -> Unit) {
 @Composable
 private fun AppNavHost(
     navController: androidx.navigation.NavHostController,
+    firmwareUpdateActive: Boolean,
     pendingDmNodeId: Long?,
     onDmOpened: () -> Unit,
     pendingLocateNodeId: Long?,
@@ -440,6 +448,9 @@ private fun AppNavHost(
                 onFirmwareUpdate = {
                     navController.navigate("firmwareUpdate") { launchSingleTop = true }
                 },
+                onHelpNavigate = { destination ->
+                    if (destination != HelpDestination.Help) navController.navigate(destination.route())
+                },
             )
         }
         composable("pair")                     { PairingScreen(onDone = { navController.popBackStack() }) }
@@ -448,10 +459,39 @@ private fun AppNavHost(
                 onDone = { navController.popBackStack() },
             )
         }
+        composable(
+            "help/{target}?nodeId={nodeId}&markerId={markerId}",
+            arguments = listOf(
+                navArgument("target") { type = NavType.StringType },
+                navArgument("nodeId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("markerId") { type = NavType.StringType; nullable = true; defaultValue = null },
+            ),
+        ) { entry ->
+            val destination = HelpDestination.entries.firstOrNull { it.name == entry.arguments?.getString("target") }
+                ?: HelpDestination.Help
+            HelpDestinationScreen(
+                destination = destination,
+                firmwareUpdateActive = firmwareUpdateActive,
+                nodeId = entry.arguments?.getString("nodeId")?.toLongOrNull(),
+                markerId = entry.arguments?.getString("markerId")?.toLongOrNull(),
+                onNavigate = { next, node, marker -> navController.navigate(next.route(node, marker)) },
+                onReturnToHelp = { navController.popBackStack(Destination.Settings.route, inclusive = false) },
+            )
+        }
     }
 }
 
 private fun androidx.navigation.NavHostController.navigateTopLevel(route: String) {
+    if (currentDestination?.route?.startsWith("help/") == true) {
+        helpDestinationForTab(route)?.let { destination ->
+            // All help targets share one NavHost pattern. SingleTop would reuse the current
+            // entry (and its local settings state) even when the requested target changes.
+            if (currentBackStackEntry?.arguments?.getString("target") != destination.name) {
+                navigate(destination.route())
+            }
+            return
+        }
+    }
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true

@@ -70,6 +70,7 @@
     <string name="map_tile_server_problem">Kartendienst läuft nicht. Kacheln werden möglicherweise nicht geladen.</string>
 <!-- i18n:begin generated (tools/i18n_strings.py) -->
 
+    <string name="help_back_to_guide">Zur Hilfe</string>
     <string name="link_failed">VERB.-FEHLER</string>
     <string name="markers_creator_you">Du</string>
     <string name="gps_permission_missing">Standortberechtigung fehlt — erlaube den Standortzugriff, um deine Position zu sehen</string>
@@ -181,8 +182,10 @@
     <string name="settings_channel_send">Auf diesem Kanal senden</string>
     <string name="settings_channel_receive">Auf diesem Kanal empfangen</string>
     <string name="settings_smart_beaconing">Intelligente Positionsmeldungen</string>
-    <string name="settings_phone_gps">Handy-GPS</string>
-    <string name="settings_device_gps">Geräte-GPS (L76K)</string>
+    <string name="settings_phone_gps">Smartphone-GPS</string>
+    <string name="settings_device_gps">GPS des Funkgeräts</string>
+    <string name="settings_gps_source_unknown">Unbekannte Quelle — bitte wählen</string>
+    <string name="settings_gps_source_hint">Wähle, woher deine Position kommt. Mit Übernehmen speicherst du die Auswahl am Funkgerät.</string>
     <string name="settings_position_channel_hint">Wähle den Kanal für deine GPS-Position. Verwende einen verschlüsselten Teamkanal — auf offenen Kanälen können Gegner deine Position mitlesen.</string>
     <string name="settings_gps_duty_cycle">GPS-Energiesparbetrieb (ab Phase 6)</string>
     <string name="settings_no_bans">Keine aktiven Sperren. Wenn drei verschiedene Spieler für einen Ausschluss stimmen, erscheint die Sperre hier.</string>

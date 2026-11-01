@@ -20,8 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.airtak.R
 
-data class HelpEntry(val label: String, val explanation: String)
-data class HelpTopic(val title: String, val intro: String, val entries: List<HelpEntry>)
+data class HelpEntry(val label: String, val explanation: String, val destination: HelpDestination)
+data class HelpTopic(val title: String, val intro: String, val entries: List<HelpEntry>, val destination: HelpDestination)
 
 /** Topic titles and intros, in on-screen order. */
 private val TOPICS: List<Pair<Int, Int>> = listOf(
@@ -123,6 +123,8 @@ private val ENTRIES: List<List<Pair<Int, Int>>> = listOf(
     ),
 )
 
+internal val helpEntryLabelResources: List<Int> get() = ENTRIES.flatten().map { it.first }
+
 /**
  * The guide in the active language.
  *
@@ -136,12 +138,14 @@ fun helpTopics(): List<HelpTopic> {
     require(TOPICS.size == ENTRIES.size) {
         "help guide: ${TOPICS.size} topics but ${ENTRIES.size} entry lists"
     }
-    return TOPICS.zip(ENTRIES) { (titleRes, introRes), pairs ->
+    require(TOPICS.size == helpTopicDestinations.size)
+    return TOPICS.zip(ENTRIES).mapIndexed { index, (topic, pairs) ->
         HelpTopic(
-            title = stringResource(titleRes),
-            intro = stringResource(introRes),
+            title = stringResource(topic.first),
+            intro = stringResource(topic.second),
+            destination = helpTopicDestinations[index],
             entries = pairs.map { (labelRes, bodyRes) ->
-                HelpEntry(stringResource(labelRes), stringResource(bodyRes))
+                HelpEntry(stringResource(labelRes), stringResource(bodyRes), helpEntryDestinations.getValue(labelRes))
             },
         )
     }

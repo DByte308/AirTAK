@@ -13,6 +13,7 @@ import pathlib
 import sys
 
 ROWS = [
+    ("help_back_to_guide", "Back to help", "Zur Hilfe", True),
     ("link_failed", "LINK FAIL", "VERB.-FEHLER", True),
     ("markers_creator_you", "You", "Du", True),
     ("gps_permission_missing", "Location permission not granted — allow location to see your position", "Standortberechtigung fehlt — erlaube den Standortzugriff, um deine Position zu sehen", True),
@@ -125,8 +126,10 @@ ROWS = [
     ("settings_channel_send", "Send on this channel", "Auf diesem Kanal senden", True),
     ("settings_channel_receive", "Receive on this channel", "Auf diesem Kanal empfangen", True),
     ("settings_smart_beaconing", "Smart beaconing", "Intelligente Positionsmeldungen", True),
-    ("settings_phone_gps", "Phone GPS", "Handy-GPS", True),
-    ("settings_device_gps", "Device GPS (L76K)", "Geräte-GPS (L76K)", True),
+    ("settings_phone_gps", "Smartphone GPS", "Smartphone-GPS", True),
+    ("settings_device_gps", "Radio GPS", "GPS des Funkgeräts", True),
+    ("settings_gps_source_unknown", "Unknown source — please choose", "Unbekannte Quelle — bitte wählen", True),
+    ("settings_gps_source_hint", "Choose where your position comes from. Tap Apply to save this choice to the radio.", "Wähle, woher deine Position kommt. Mit Übernehmen speicherst du die Auswahl am Funkgerät.", True),
     ("settings_position_channel_hint", "Select which channel carries your GPS position. Use an encrypted channel shared with your team — avoid unencrypted channels to prevent enemy tracking.", "Wähle den Kanal für deine GPS-Position. Verwende einen verschlüsselten Teamkanal — auf offenen Kanälen können Gegner deine Position mitlesen.", True),
     ("settings_gps_duty_cycle", "GPS duty cycle (Phase 6+)", "GPS-Energiesparbetrieb (ab Phase 6)", True),
     ("settings_no_bans", "No active bans. When 3 distinct players vote to kick someone, they appear here.", "Keine aktiven Sperren. Wenn drei verschiedene Spieler für einen Ausschluss stimmen, erscheint die Sperre hier.", True),

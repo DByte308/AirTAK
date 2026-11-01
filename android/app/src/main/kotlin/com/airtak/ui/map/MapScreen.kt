@@ -192,6 +192,7 @@ fun MapScreen(
     onFocusConsumed: () -> Unit = {},
     focusMarkerId: Long? = null,
     onMarkerFocusConsumed: () -> Unit = {},
+    initialHelpAction: com.airtak.ui.help.HelpMapAction? = null,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -212,7 +213,7 @@ fun MapScreen(
     var centeredOnce by remember { mutableStateOf(false) }
     var pendingWaypoint by remember { mutableStateOf<LatLng?>(null) }
     var waypointLabel by remember { mutableStateOf("") }
-    var tileSelectMode by remember { mutableStateOf(false) }
+    var tileSelectMode by remember { mutableStateOf(initialHelpAction == com.airtak.ui.help.HelpMapAction.Tiles) }
     var tileFirstCorner by remember { mutableStateOf<LatLng?>(null) }
     var selectedTileBounds by remember { mutableStateOf<TileBounds?>(null) }
     var zoomRange by remember { mutableStateOf(6f..19f) }
@@ -221,7 +222,7 @@ fun MapScreen(
     var missionOverlayEditMode by remember { mutableStateOf(false) }
     var selectedOverlayCorner by remember { mutableStateOf(MissionOverlayCornerId.TOP_LEFT) }
     var overlayCornerPoints by remember { mutableStateOf<Map<MissionOverlayCornerId, Offset>>(emptyMap()) }
-    var showSearch by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(initialHelpAction == com.airtak.ui.help.HelpMapAction.Search) }
     val markers by viewModel.markers.collectAsState()
     val drawing by viewModel.drawing.collectAsState()
     val gameActive by viewModel.gameActive.collectAsState()
@@ -233,15 +234,23 @@ fun MapScreen(
     var editingMarker by remember { mutableStateOf<MarkerVisual?>(null) }
     var showAlignmentPicker by remember { mutableStateOf(false) }
     var pendingAlignmentImport by remember { mutableStateOf<com.airtak.data.overlays.ReceivedAlignment?>(null) }
-    var showStatusPicker by remember { mutableStateOf(false) }
+    var showStatusPicker by remember { mutableStateOf(initialHelpAction == com.airtak.ui.help.HelpMapAction.Status) }
     val routeState by viewModel.routeState.collectAsState()
     val selectedProfileName by viewModel.selectedProfile.collectAsState()
-    var segmentSelectMode by remember { mutableStateOf(false) }
+    var segmentSelectMode by remember { mutableStateOf(initialHelpAction == com.airtak.ui.help.HelpMapAction.Segments) }
     var segmentFirstCorner by remember { mutableStateOf<LatLng?>(null) }
     var selectedSegmentBounds by remember { mutableStateOf<TileBounds?>(null) }
-    var routePlanMode by remember { mutableStateOf(false) }
+    var routePlanMode by remember { mutableStateOf(initialHelpAction == com.airtak.ui.help.HelpMapAction.Route) }
     var routePlanStart by remember { mutableStateOf<LatLng?>(null) }
     var routePlanEnd by remember { mutableStateOf<LatLng?>(null) }
+
+    LaunchedEffect(initialHelpAction) {
+        when (initialHelpAction) {
+            com.airtak.ui.help.HelpMapAction.DrawMarker -> viewModel.startDrawing(MarkerTool.POINT)
+            com.airtak.ui.help.HelpMapAction.Objective -> viewModel.startDrawing(MarkerTool.OBJECTIVE)
+            else -> Unit
+        }
+    }
 
     fun updateOwnLabelPoint() {
         val pos = ui.ownPosition
@@ -616,6 +625,7 @@ fun MapScreen(
                 routePlanStart = null
                 routePlanEnd = null
             },
+            initialProfileMenuExpanded = initialHelpAction == com.airtak.ui.help.HelpMapAction.Profile,
             selectedProfile = selectedProfileName,
             availableProfiles = viewModel.availableProfiles,
             onSelectProfile = { viewModel.setProfile(it) },
@@ -1244,6 +1254,7 @@ private fun MapToolbar(
     selectedProfile: String,
     availableProfiles: List<String>,
     onSelectProfile: (String) -> Unit,
+    initialProfileMenuExpanded: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -1356,7 +1367,7 @@ private fun MapToolbar(
                 Icon(Icons.AutoMirrored.Outlined.AltRoute, contentDescription = stringResource(R.string.map_cd_plan_route))
             }
             Box {
-                var profileExpanded by remember { mutableStateOf(false) }
+                var profileExpanded by remember { mutableStateOf(initialProfileMenuExpanded) }
                 Surface(
                     modifier = Modifier.clickable { profileExpanded = true },
                     shape = RoundedCornerShape(8.dp),

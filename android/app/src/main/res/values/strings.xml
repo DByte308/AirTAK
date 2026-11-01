@@ -90,6 +90,7 @@
     <string name="map_tile_server_problem">Map tile service is not running. Tiles may not load.</string>
 <!-- i18n:begin generated (tools/i18n_strings.py) -->
 
+    <string name="help_back_to_guide">Back to help</string>
     <string name="link_failed">LINK FAIL</string>
     <string name="markers_creator_you">You</string>
     <string name="gps_permission_missing">Location permission not granted — allow location to see your position</string>
@@ -201,8 +202,10 @@
     <string name="settings_channel_send">Send on this channel</string>
     <string name="settings_channel_receive">Receive on this channel</string>
     <string name="settings_smart_beaconing">Smart beaconing</string>
-    <string name="settings_phone_gps">Phone GPS</string>
-    <string name="settings_device_gps">Device GPS (L76K)</string>
+    <string name="settings_phone_gps">Smartphone GPS</string>
+    <string name="settings_device_gps">Radio GPS</string>
+    <string name="settings_gps_source_unknown">Unknown source — please choose</string>
+    <string name="settings_gps_source_hint">Choose where your position comes from. Tap Apply to save this choice to the radio.</string>
     <string name="settings_position_channel_hint">Select which channel carries your GPS position. Use an encrypted channel shared with your team — avoid unencrypted channels to prevent enemy tracking.</string>
     <string name="settings_gps_duty_cycle">GPS duty cycle (Phase 6+)</string>
     <string name="settings_no_bans">No active bans. When 3 distinct players vote to kick someone, they appear here.</string>

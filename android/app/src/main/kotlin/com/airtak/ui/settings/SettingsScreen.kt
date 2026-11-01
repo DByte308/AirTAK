@@ -38,6 +38,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.Role
+import com.airtak.ui.help.HelpDestination
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -104,7 +109,6 @@ import com.airtak.config.constants.UI_TX_POWER_MIN_DBM
 import com.airtak.config.constants.UI_TX_POWER_STEPS
 import com.airtak.proto.AdminCommand
 import com.airtak.proto.ChannelRole
-import com.airtak.proto.GpsSource
 import com.airtak.proto.LoraRegion
 import com.airtak.proto.PhyProfile
 import com.airtak.R
@@ -123,7 +127,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 
 // Titles and subtitles are string resources, not literals: hardcoding them here left
 // the settings_* keys in strings.xml dead and made the Config list untranslatable.
-private enum class Section(
+enum class Section(
     @StringRes val titleRes: Int,
     @StringRes val subtitleRes: Int,
 ) {
@@ -144,20 +148,28 @@ private enum class Section(
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
     onFirmwareUpdate: (() -> Unit)? = null,
+    initialSection: Section? = null,
+    onHelpNavigate: (HelpDestination) -> Unit = {},
+    onBackToHelp: (() -> Unit)? = null,
 ) {
-    var current by remember { mutableStateOf<Section?>(null) }
+    var current by rememberSaveable { mutableStateOf(initialSection) }
+    val helpScroll = rememberScrollState()
     // When non-null, the Channels editor scrolls / highlights the given slot
     // index on entry (used by the "Set up channel" flow from the Player section).
-    var focusChannelSlot by remember { mutableStateOf<Int?>(null) }
+    var focusChannelSlot by rememberSaveable { mutableStateOf<Int?>(null) }
+    val navigateBack: () -> Unit = {
+        if (onBackToHelp != null) onBackToHelp()
+        else {
+            current = null
+            focusChannelSlot = null
+        }
+    }
 
     // The Config sub-screens are local composable state, not NavHost entries, so the
     // system Back button is handled by the NavHost and pops the whole `settings` route --
     // dumping the user on the Map tab instead of the section list. Intercept Back while a
     // section is open and mirror the in-app TopRow "Back" button.
-    BackHandler(enabled = current != null) {
-        current = null
-        focusChannelSlot = null
-    }
+    BackHandler(enabled = current != null) { navigateBack() }
 
     when (val sec = current) {
         null -> SectionList(onPick = { current = it })
@@ -166,10 +178,7 @@ fun SettingsScreen(
             Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 TopRow(
                         title = title,
-                        onBack = {
-                            current = null
-                            focusChannelSlot = null
-                        }
+                        onBack = navigateBack
                 )
                 when (sec) {
                     Section.Player ->
@@ -190,7 +199,7 @@ fun SettingsScreen(
                     Section.App -> AppSection(viewModel)
                     Section.Share -> ShareSection(viewModel)
                     Section.Language -> LanguageSection(viewModel)
-                    Section.Help -> HelpSection()
+                    Section.Help -> HelpSection(helpScroll, onHelpNavigate)
                     Section.About -> AboutSection(viewModel, onFirmwareUpdate)
                 }
             }
@@ -292,10 +301,10 @@ private fun LanguageSection(vm: SettingsViewModel) {
 }
 
 @Composable
-private fun HelpSection() {
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+private fun HelpSection(scroll: ScrollState, onNavigate: (HelpDestination) -> Unit) {
+    Column(Modifier.verticalScroll(scroll).padding(vertical = 8.dp)) {
         helpTopics().forEach { topic ->
-            SectionLabel(topic.title)
+            SectionLabel(topic.title, Modifier.fillMaxWidth().clickable(role = Role.Button) { onNavigate(topic.destination) }.padding(vertical = 8.dp))
             if (topic.intro.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -307,12 +316,21 @@ private fun HelpSection() {
             Spacer(Modifier.height(10.dp))
             topic.entries.forEach { entry ->
                 Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                    Text(
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .clickable(role = Role.Button) { onNavigate(entry.destination) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
                             entry.label,
+                            modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                    )
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary)
+                    }
                     Spacer(Modifier.height(2.dp))
                     Text(
                             entry.explanation,
@@ -1186,22 +1204,16 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
         Spacer(Modifier.height(24.dp))
         SectionLabel(stringResource(R.string.settings_gps_source))
         Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                    if (position.gpsSource == GpsSource.PHONE_GPS) stringResource(R.string.settings_phone_gps) else stringResource(R.string.settings_device_gps),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onBackground
-            )
-            Switch(
-                    checked = position.gpsSource == GpsSource.PHONE_GPS,
-                    onCheckedChange = { checked ->
-                        vm.updatePosition {
-                            copy(gpsSource = if (checked) GpsSource.PHONE_GPS else GpsSource.DEVICE_GPS)
-                        }
-                    }
-            )
-        }
+        GpsSourceDropdown(
+            value = position.gpsSource,
+            onValue = { source -> vm.updatePosition { copy(gpsSource = source) } },
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.settings_gps_source_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(24.dp))
         SectionLabel(stringResource(R.string.settings_position_channel))
         Spacer(Modifier.height(8.dp))

@@ -79,14 +79,22 @@ fun MessagesScreen(
         dmViewModel: DirectMessagesViewModel = hiltViewModel(),
         pendingDmNodeId: Long? = null,
         onDmOpened: () -> Unit = {},
+        initialChannelSlot: Int? = null,
+        initialDirectMessages: Boolean = false,
 ) {
     val slots by viewModel.activeSlots.collectAsState()
     // DM tab is always the last tab, at index slots.size.
     val dmTabIndex = slots.size
 
     var tab by remember { mutableIntStateOf(0) }
-    // Clamp tab to valid range when slots list changes size.
-    LaunchedEffect(slots.size) { if (tab > dmTabIndex) tab = 0 }
+    var userSelectedTab by remember { mutableStateOf(false) }
+    // Help links select the requested channel after async slot loading, without overriding user input.
+    LaunchedEffect(slots.size) {
+        if (!userSelectedTab && initialDirectMessages) tab = dmTabIndex
+        else if (!userSelectedTab && initialChannelSlot != null && slots.isNotEmpty())
+            tab = slots.indexOfFirst { it.index == initialChannelSlot }.coerceAtLeast(0)
+        else if (tab > dmTabIndex) tab = 0
+    }
     LaunchedEffect(tab) { if (tab < dmTabIndex) viewModel.selectChannel(tab) }
     // Cross-screen DM deep-link: switch to DM tab and open conversation.
     LaunchedEffect(pendingDmNodeId) {
@@ -120,7 +128,7 @@ fun MessagesScreen(
             slots.forEachIndexed { i, slot ->
                 Tab(
                         selected = tab == i,
-                        onClick = { tab = i },
+                        onClick = { userSelectedTab = true; tab = i },
                         icon = { Icon(slotIcon(slot), contentDescription = null) },
                         text = {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -138,7 +146,7 @@ fun MessagesScreen(
             }
             Tab(
                     selected = tab == dmTabIndex,
-                    onClick = { tab = dmTabIndex },
+                    onClick = { userSelectedTab = true; tab = dmTabIndex },
                     icon = { Icon(Icons.Outlined.Person, contentDescription = null) },
                     text = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
