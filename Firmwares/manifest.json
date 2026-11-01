@@ -1,0 +1,105 @@
+{
+  "source_commit": "fdd89eeea1b52a719a724e7328fcc1d4703f698d",
+  "firmware_source_sha256": "dd7b5cf65be8f3b6b24d24cfd6a63c3ec1a3d3ba7dcaaec5c0d6b6bd93d4240a",
+  "build_tool": "PlatformIO Core, version 6.2.0",
+  "verification": "Local build and artifact checks only; not a seven-board hardware test",
+  "boards": {
+    "heltec_v3": {
+      "directory": "Heltec-V3",
+      "platform": "esp32",
+      "files": [
+        {
+          "path": "Heltec-V3/firmware.bin",
+          "bytes": 813712,
+          "sha256": "9e63e5386185dd63e51cd3ccc4bcb6b91ee109068f8ffeee9bae95f41db780d1"
+        },
+        {
+          "path": "Heltec-V3/firmware.factory.bin",
+          "bytes": 879248,
+          "sha256": "43a6bd3e319d585bb0095f02c625fd497f2481bd6583430ca9d9157f13fbf197"
+        }
+      ]
+    },
+    "heltec_v4": {
+      "directory": "Heltec-V4",
+      "platform": "esp32",
+      "files": [
+        {
+          "path": "Heltec-V4/firmware.bin",
+          "bytes": 813760,
+          "sha256": "ba9f20fa3821c5f0306dd02cf4a565316420b0f00e5ceab18b2202566c3f6678"
+        },
+        {
+          "path": "Heltec-V4/firmware.factory.bin",
+          "bytes": 879296,
+          "sha256": "f03e5f6d9c334690516e6d5f6ef7446762278c746215b2b5e766d0d3729e456a"
+        }
+      ]
+    },
+    "heltec_t114": {
+      "directory": "Heltec-T114",
+      "platform": "nrf52",
+      "files": [
+        {
+          "path": "Heltec-T114/firmware.zip",
+          "bytes": 181803,
+          "sha256": "0c2af8d2e98ab62d7c5dfecd5f262523f1e85f56089295a56e8c3daa97ca7034"
+        }
+      ]
+    },
+    "t3s3": {
+      "directory": "LilyGO-T3S3",
+      "platform": "esp32",
+      "files": [
+        {
+          "path": "LilyGO-T3S3/firmware.bin",
+          "bytes": 847696,
+          "sha256": "fd89d734d425f8ad12a49637867f827d0a679f96c882e0e2267ca3e53e1e4f88"
+        },
+        {
+          "path": "LilyGO-T3S3/firmware.factory.bin",
+          "bytes": 913232,
+          "sha256": "183eb90ee8535e067a4368acbad444692eca08416b7bbf900f2120860bbf6d4c"
+        }
+      ]
+    },
+    "t_deck": {
+      "directory": "LilyGO-T-Deck",
+      "platform": "esp32",
+      "files": [
+        {
+          "path": "LilyGO-T-Deck/firmware.bin",
+          "bytes": 874496,
+          "sha256": "45ef2d2b0f80cc3f615db14ecb56dc981bd7e9479f8d491b41a45a2ea11317b0"
+        },
+        {
+          "path": "LilyGO-T-Deck/firmware.factory.bin",
+          "bytes": 940032,
+          "sha256": "e5673f34cb183c48eef02b0aeeeaf09d8507ecc714c190b213c0f0806c9e2047"
+        }
+      ]
+    },
+    "t_echo": {
+      "directory": "LilyGO-T-Echo",
+      "platform": "nrf52",
+      "files": [
+        {
+          "path": "LilyGO-T-Echo/firmware.zip",
+          "bytes": 186311,
+          "sha256": "546189596f4515f8ca108d23e53ea8f5ab4eb830ec9040fc0a45e3a86ae77655"
+        }
+      ]
+    },
+    "t_echo_plus": {
+      "directory": "LilyGO-T-Echo-Plus",
+      "platform": "nrf52",
+      "files": [
+        {
+          "path": "LilyGO-T-Echo-Plus/firmware.zip",
+          "bytes": 186327,
+          "sha256": "04a9ecfaf96a5580ecbbec11b2c118b514658fca0dbf71062294a8aa6dd0a0a2"
+        }
+      ]
+    }
+  }
+}

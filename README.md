@@ -18,6 +18,12 @@ AirTAK is Meshtastic wire-format compatible on the shared channel and introduces
 - Interoperate with stock Meshtastic devices on the shared channel
 - PTT voice over LoRa via Codec2 (Phase 7)
 
+## Firmware downloads
+
+Ready-built LoRa-board images are in **[Firmwares/](Firmwares/README.md)**, with
+per-board downloads, USB/app-update instructions and SHA-256 checksums. These
+are locally built test images; see the hardware-verification limits there.
+
 ## Firmware quick start
 
 The firmware toolchain is pinned in git and installed into a local, ignored venv under `firmware/.venv`.
