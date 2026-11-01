@@ -115,6 +115,7 @@ import com.airtak.ui.i18n.AppLanguage
 import com.airtak.ui.theme.AccentAmber
 import com.airtak.ui.theme.StatusActive
 import com.airtak.ui.theme.ThemeMode
+import com.airtak.ui.findMainActivity
 import androidx.compose.foundation.selection.selectable
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -1434,7 +1435,7 @@ private fun AppSection(vm: SettingsViewModel) {
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         Button(
-            onClick = { (context as? com.airtak.ui.MainActivity)?.closeApp() },
+            onClick = { context.findMainActivity()?.closeApp() },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(stringResource(R.string.settings_close_app))
