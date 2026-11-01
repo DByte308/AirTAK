@@ -208,9 +208,15 @@ void Display::init() {
     digitalWrite(AIRTAK_PIN_POWER_EN, LOW);
     delay(PERIPH_POWER_SETTLE_MS); // allow OLED and LoRa boost to stabilise
 
-    // Enable battery ADC voltage divider (ADC_CTRL, active LOW).
+    // Enable battery ADC voltage divider. The Heltec V3 board config treats
+    // ADC_CTRL (GPIO 37) as active LOW, but board revisions differ here -- the
+    // V4 needs HIGH. Follow the flag so both polarities are flashable for issue #5.
     pinMode(AIRTAK_PIN_ADC_CTRL, OUTPUT);
+#ifdef AIRTAK_ADC_CTRL_ACTIVE_HIGH
+    digitalWrite(AIRTAK_PIN_ADC_CTRL, HIGH);
+#else
     digitalWrite(AIRTAK_PIN_ADC_CTRL, LOW);
+#endif
 
     Wire.begin(AIRTAK_PIN_OLED_SDA, AIRTAK_PIN_OLED_SCL);
 
