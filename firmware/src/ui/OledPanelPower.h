@@ -73,8 +73,10 @@ private:
     template <typename Send>
     void contrast(Send send) const {
         send(SetContrast);
-        const uint8_t percent = prompt_ ? 100 : brightness_;
-        send(static_cast<uint8_t>((static_cast<uint16_t>(percent) * 255 + 50) / 100));
+        const uint32_t percent = prompt_ ? 100 : brightness_;
+        // More adjustment room near minimum OLED current; 100% stays full contrast.
+        // Positive percentages may use contrast 0 (minimum current); only 0% powers off.
+        send(static_cast<uint8_t>((percent * percent * 255U + 5000U) / 10000U));
     }
 };
 

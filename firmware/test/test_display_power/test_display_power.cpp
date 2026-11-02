@@ -4,6 +4,7 @@
 #include <pb_encode.h>
 #include "ui/OledPanelPower.h"
 #include "ui/DisplayIdleTimer.h"
+#include "ui/DisplayWakeInputGate.h"
 #include "ui/PairingDisplayActivity.h"
 #include "config/PowerDisplayConfig.h"
 
@@ -25,7 +26,7 @@ static void test_percentage_maps_to_oled_contrast() {
     panel.begin(true); panel.setBrightness(50, send);
     TEST_ASSERT_EQUAL_UINT(3, commands.size());
     TEST_ASSERT_EQUAL_HEX8(0x81, commands[0]);
-    TEST_ASSERT_EQUAL_UINT8(128, commands[1]);
+    TEST_ASSERT_EQUAL_UINT8(64, commands[1]);
     TEST_ASSERT_EQUAL_HEX8(0xAF, commands[2]);
     TEST_ASSERT_TRUE(panel.canRender());
 }
@@ -48,13 +49,13 @@ static void test_brightness_changes_do_not_wake_sleeping_panel() {
     panel.begin(true); panel.sleep(send); commands.clear(); panel.setBrightness(25, send);
     TEST_ASSERT_EQUAL_UINT(2, commands.size());
     TEST_ASSERT_EQUAL_HEX8(0x81, commands[0]);
-    TEST_ASSERT_EQUAL_UINT8(64, commands[1]);
+    TEST_ASSERT_EQUAL_UINT8(16, commands[1]);
     TEST_ASSERT_FALSE(panel.canRender());
 }
 static void test_wake_restores_latest_brightness() {
     panel.begin(true); panel.sleep(send); panel.setBrightness(25, send); commands.clear(); panel.wake(send);
     TEST_ASSERT_EQUAL_UINT(3, commands.size());
-    TEST_ASSERT_EQUAL_UINT8(64, commands[1]);
+    TEST_ASSERT_EQUAL_UINT8(16, commands[1]);
     TEST_ASSERT_EQUAL_HEX8(0xAF, commands[2]);
     TEST_ASSERT_TRUE(panel.canRender());
 }
@@ -130,13 +131,13 @@ static void test_brightness_edit_during_prompt_is_restored_after_prompt() {
     panel.begin(true); panel.showPrompt(send); commands.clear(); panel.setBrightness(75, send);
     TEST_ASSERT_TRUE(commands.empty());
     panel.endPrompt(send);
-    TEST_ASSERT_EQUAL_UINT8(191, commands[1]);
+    TEST_ASSERT_EQUAL_UINT8(143, commands[1]);
     TEST_ASSERT_EQUAL_HEX8(0xAF, commands.back());
 }
 static void test_sleep_clears_prompt_override() {
     panel.begin(true); panel.setBrightness(50, send); panel.showPrompt(send); panel.sleep(send);
     commands.clear(); panel.wake(send);
-    TEST_ASSERT_EQUAL_UINT8(128, commands[1]);
+    TEST_ASSERT_EQUAL_UINT8(64, commands[1]);
 }
 static void test_prompt_does_not_touch_failed_panel() {
     panel.showPrompt(send); panel.endPrompt(send);
@@ -147,6 +148,85 @@ static void test_pairing_activity_requests_are_consumed_once() {
     airtak::ui::requestPairingDisplayActivity(); airtak::ui::requestPairingDisplayActivity();
     TEST_ASSERT_TRUE(airtak::ui::consumePairingDisplayActivity());
     TEST_ASSERT_FALSE(airtak::ui::consumePairingDisplayActivity());
+}
+static void test_awake_button_gestures_are_unchanged() {
+    airtak::ui::DisplayWakeInputGate gate;
+    TEST_ASSERT_TRUE(gate.update(false, true, false).dispatchButton);
+    TEST_ASSERT_TRUE(gate.update(false, true, true).dispatchButton);
+    TEST_ASSERT_TRUE(gate.update(false, false, true).dispatchButton);
+}
+static void test_wake_press_is_consumed_until_release() {
+    airtak::ui::DisplayWakeInputGate gate;
+    TEST_ASSERT_FALSE(gate.update(true, true, false).dispatchButton);
+    TEST_ASSERT_FALSE(gate.update(false, true, false).dispatchButton);
+    TEST_ASSERT_FALSE(gate.update(false, false, true).dispatchButton);
+    TEST_ASSERT_TRUE(gate.update(false, true, false).dispatchButton);
+    TEST_ASSERT_TRUE(gate.update(false, false, true).dispatchButton);
+}
+static void test_release_only_wake_event_is_consumed() {
+    airtak::ui::DisplayWakeInputGate gate;
+    TEST_ASSERT_FALSE(gate.update(true, false, true).dispatchButton);
+    TEST_ASSERT_TRUE(gate.update(false, false, true).dispatchButton);
+}
+static void test_long_wake_hold_does_not_become_hit_or_shutdown() {
+    airtak::ui::DisplayWakeInputGate gate;
+    TEST_ASSERT_FALSE(gate.update(true, true, false).dispatchButton);
+    for (int event = 0; event < 5; ++event)
+        TEST_ASSERT_FALSE(gate.update(false, true, true).dispatchButton);
+    TEST_ASSERT_FALSE(gate.update(false, false, true).dispatchButton);
+    TEST_ASSERT_TRUE(gate.update(false, true, true).dispatchButton);
+}
+static void test_release_without_gesture_does_not_latch_the_gate() {
+    airtak::ui::DisplayWakeInputGate gate;
+    gate.update(true, true, false);
+    TEST_ASSERT_FALSE(gate.update(false, false, false).dispatchButton);
+    TEST_ASSERT_TRUE(gate.update(false, false, true).dispatchButton);
+}
+static void test_wake_touch_does_not_navigate() {
+    airtak::ui::DisplayWakeInputGate gate;
+    TEST_ASSERT_FALSE(gate.update(true, false, false).dispatchTouch);
+    TEST_ASSERT_TRUE(gate.update(false, false, false).dispatchTouch);
+}
+static void test_idle_timer_and_gate_keep_page_until_second_press() {
+    DisplayIdleTimer timer(0, 1);
+    airtak::ui::DisplayWakeInputGate gate;
+    timer.update(1000, false, 1);
+    int page = 2;
+    const auto press = gate.update(timer.asleep(), true, false);
+    TEST_ASSERT_FALSE(press.dispatchButton);
+    TEST_ASSERT_TRUE(timer.update(1200, true, 1) == Action::Wake);
+    const auto release = gate.update(timer.asleep(), false, true);
+    if (release.dispatchButton) ++page;
+    TEST_ASSERT_EQUAL_INT(2, page);
+    gate.update(timer.asleep(), true, false);
+    const auto secondRelease = gate.update(timer.asleep(), false, true);
+    if (secondRelease.dispatchButton) ++page;
+    TEST_ASSERT_EQUAL_INT(3, page);
+}
+static void test_low_brightness_is_darker_without_changing_endpoints() {
+    panel.begin(true); panel.setBrightness(25, send);
+    TEST_ASSERT_EQUAL_UINT8(16, commands[1]);
+    commands.clear(); panel.setBrightness(100, send);
+    TEST_ASSERT_EQUAL_UINT8(255, commands[1]);
+    commands.clear(); panel.setBrightness(0, send);
+    TEST_ASSERT_EQUAL_UINT8(0, commands[1]);
+    TEST_ASSERT_EQUAL_HEX8(0xAE, commands.back());
+}
+static void test_positive_minimum_contrast_does_not_power_off() {
+    panel.begin(true); panel.setBrightness(1, send);
+    TEST_ASSERT_EQUAL_UINT8(0, commands[1]);
+    TEST_ASSERT_EQUAL_HEX8(0xAF, commands.back());
+    TEST_ASSERT_TRUE(panel.canRender());
+}
+static void test_contrast_curve_is_monotonic() {
+    panel.begin(true);
+    uint8_t previous = 0;
+    for (uint16_t percent = 0; percent <= 100; ++percent) {
+        commands.clear(); panel.setBrightness(static_cast<uint8_t>(percent), send);
+        TEST_ASSERT_GREATER_OR_EQUAL_UINT8(previous, commands[1]);
+        previous = commands[1];
+    }
+    TEST_ASSERT_EQUAL_UINT8(255, previous);
 }
 static uint8_t encoded[64];
 static size_t encodedSize;
@@ -204,6 +284,16 @@ int main(int, char**) {
     RUN_TEST(test_sleep_clears_prompt_override);
     RUN_TEST(test_prompt_does_not_touch_failed_panel);
     RUN_TEST(test_pairing_activity_requests_are_consumed_once);
+    RUN_TEST(test_awake_button_gestures_are_unchanged);
+    RUN_TEST(test_wake_press_is_consumed_until_release);
+    RUN_TEST(test_release_only_wake_event_is_consumed);
+    RUN_TEST(test_long_wake_hold_does_not_become_hit_or_shutdown);
+    RUN_TEST(test_release_without_gesture_does_not_latch_the_gate);
+    RUN_TEST(test_wake_touch_does_not_navigate);
+    RUN_TEST(test_idle_timer_and_gate_keep_page_until_second_press);
+    RUN_TEST(test_low_brightness_is_darker_without_changing_endpoints);
+    RUN_TEST(test_positive_minimum_contrast_does_not_power_off);
+    RUN_TEST(test_contrast_curve_is_monotonic);
     RUN_TEST(test_proto_omitted_zero_brightness_is_not_factory_100);
     RUN_TEST(test_proto_empty_power_snapshot_has_zero_brightness);
     RUN_TEST(test_proto_regular_brightness_is_used);

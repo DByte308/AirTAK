@@ -2,7 +2,7 @@
 
 | Issue | Ergebnis | Nächster nötiger Schritt |
 |---|---|---|
-| #31 OLED-Helligkeit/Timeout | Codefix und Test-Builds fertig, Hardwarebestätigung offen | V3-Testfirmware plus neue App prüfen: Helligkeit, Timeout, Aufwecken und Fortsetzung der Funkverbindung. |
+| #31 OLED-Helligkeit/Timeout | Grundfunktionen am V3 bestätigt; Aufweck-Follow-up zum Test bereit | Aufwecken muss die Seite behalten, erst der nächste Druck soll blättern; dunklere Kennlinie subjektiv am V3 prüfen. |
 | #30 Zahleneingaben | Behoben und auf S24 geprüft (`0f392a7`), geschlossen | Keine Gerätekonfiguration beim Test verändert. |
 | #29 Heltec-OLED | Im Code bestätigt, noch nicht behoben | GPS auf eigene Seite; Haupt-/Radioseite innerhalb 128×64 gestalten. Nachrichten/Spieler sind derzeit Platzhalter und brauchen echte Datenanbindung plus Auswahl der neuesten Einträge. |
 | #5 V3-Batterie | Offen, neue Messwerte vorhanden; Ursache nicht sicher geklärt | Vollständige, nicht abgeschnittene Rohwerte, tatsächlicher Messpunkt der 4,09 V, Vergleich mit GPIO1-Spannung und verifizierter Schaltlogik. |
@@ -37,10 +37,37 @@ wirklich gespeichert werden kann. Die physische OLED-Prüfung ist noch nicht erf
 - 28 neue native Controller-/Timeout-/Codec-Tests und fünf Android-Wire-Tests bestanden.
 
 Gebaut: `heltec_v3`, `heltec_v4`, `t3s3`, `runtime_s3_v4`, `heltec_v3_diag_high`, `t_echo`.
-BLE-Memory-Guard für alle fünf ESP32-Images bestanden. **Noch keine physische OLED-Prüfung
-oder Board-Programmierung im Rahmen dieses Fixes; #31 bleibt bis zur Rückmeldung offen.**
+BLE-Memory-Guard für alle fünf ESP32-Images bestanden. Bei der ersten Veröffentlichung
+war noch keine physische OLED-Prüfung erfolgt. Die Grundfunktionen sind inzwischen
+von HeroFruit bestätigt; das unten beschriebene Follow-up bleibt zu prüfen.
 Die HIGH-Diagnose behält die Schaltlogik aus #5; Akkuberechnung und Layoutprobleme aus #29
 werden durch diesen Display-Power-Fix nicht als behoben erklärt.
+
+## Rückmeldung zu #31 am 2. November (vor Follow-up-Korrektur)
+
+HeroFruit bestätigt Helligkeit nach Übernehmen, Abschaltung nach Timeout bei
+weiterlaufendem Gerät, Aufwecken per USER und dauerhaft an bei Timeout 0.
+Offen: Der Aufweckdruck blättert zusätzlich weiter; die kleine Helligkeit darf
+noch dunkler sein. Im Code weckt bereits das Halten der Taste, während die
+SHORT_PRESS-Geste erst beim Loslassen entsteht. Daher muss der ganze Druck bis
+zum Loslassen verbraucht werden, nicht nur die erste Poll-Runde. Die aktuelle
+Kontrastabbildung ist linear; eine quadratische Kennlinie soll unten feiner dimmen.
+Das Follow-up ist zu diesem Zeitpunkt noch nicht auf Hardware bestätigt.
+
+## Follow-up zu #31 implementiert
+
+Ein Input-Gate verbraucht den ganzen Aufweckdruck einschließlich Loslassen und
+langer Gesten. Der erste Druck verändert weder Seite noch HIT-/Shutdown-Zustand;
+der nächste Druck wird normal verarbeitet. Eine aufweckende Touchgeste navigiert
+ebenfalls nicht sofort. Die Inaktivitätszeit wird trotzdem durch den rohen Input zurückgesetzt.
+
+Eine quadratische Kontrastkennlinie gibt niedrigeren Prozentwerten niedrigere
+SSD1306-Kontrastwerte (25 %: 16 statt 64). 100 % bleibt maximal, 0 % schaltet aus;
+ein positiver Prozentwert mit Kontrast 0 bleibt dagegen auf der kleinsten Hardwarehelligkeit an.
+Zehn weitere native Regressionstests prüfen den Druck über mehrere Poll-Runden,
+Loslassen, nächsten Tastendruck, Touch, Seitenerhalt und die Kennliniengrenzen.
+Sechs Firmware-Builds und fünf ESP32-BLE-Guards bestanden. **Dieses Follow-up ist
+noch nicht am echten V3 bestätigt; #31 bleibt offen. Die Android-App ist unverändert.**
 
 ## Korrektur zu #5
 
@@ -75,7 +102,7 @@ mit einem eigenen Testencoder. Das ersetzt keinen Funk-Peer-Test.
 ## Geprüft und nicht geprüft
 
 - 392 Android-Tests, Discovery-Audit sauber; zwölf Python-Sprachtests.
-- 177 native Firmware-Tests, darunter Router- und Display-Power-Regressionsfälle.
+- 187 native Firmware-Tests, darunter Router-, Display-Power- und Aufweck-Regressionsfälle.
 - Die sechs oben genannten Firmware-Builds erfolgreich, BLE-Memory-Guard für die fünf ESP32-Images bestanden.
 - Zahleneingaben für #30 auf dem S24 einschließlich Löschen, führender Nullen,
   Überlauf, Hex-Eingabe, gesperrtem Übernehmen und Lesen-Rücksetzung geprüft.

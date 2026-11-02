@@ -28,6 +28,7 @@
 #include "hal/GPS.h"
 #include "hal/Display.h"
 #include "ui/DisplayIdleTimer.h"
+#include "ui/DisplayWakeInputGate.h"
 #include "ui/PairingDisplayActivity.h"
 #include "hal/Battery.h"
 #include "hal/Button.h"
@@ -392,6 +393,7 @@ void task_display_refresh(void* params) {
     airtak::Display::refresh(g_system_event_group);
     uint32_t last_refresh_check_ms = millis();
     airtak::ui::DisplayIdleTimer idle(millis(), airtak::config::ConfigManager::powerDisplayOffSecs());
+    airtak::ui::DisplayWakeInputGate wake_input;
     uint32_t last_player_tick_ms   = 0;
     bool     screen_changed        = false;
     bool     pairing_prompt_active = false;
@@ -419,14 +421,20 @@ void task_display_refresh(void* params) {
         }
 
         airtak::ButtonGesture gesture = airtak::Button::poll();
-        bool interaction = pairing_prompt_active || (gesture != airtak::ButtonGesture::NONE) || airtak::Button::heldMs() > 0;
+        const bool button_held = airtak::Button::heldMs() > 0;
+        bool interaction = pairing_prompt_active || (gesture != airtak::ButtonGesture::NONE) || button_held;
 
         airtak::TouchGesture touch = airtak::Touch::poll();
         if (touch != airtak::TouchGesture::NONE) interaction = true;
 
+        const auto dispatch = wake_input.update(idle.asleep(), button_held, gesture != airtak::ButtonGesture::NONE);
         const auto idle_action = idle.update(now, interaction, airtak::config::ConfigManager::powerDisplayOffSecs());
         if (idle_action == airtak::ui::DisplayIdleTimer::Action::Wake) airtak::Display::wake();
         else if (idle_action == airtak::ui::DisplayIdleTimer::Action::Sleep) airtak::Display::sleep();
+
+        // Raw input still resets the idle timer, but wake input is not a page/game action.
+        if (!dispatch.dispatchButton) gesture = airtak::ButtonGesture::NONE;
+        if (!dispatch.dispatchTouch) touch = airtak::TouchGesture::NONE;
 
         // Handle gestures
         if (gesture == airtak::ButtonGesture::LONG_LONG_PRESS) {
