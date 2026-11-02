@@ -3,6 +3,7 @@
 // Planning: §8.7, §8.9 | Roadmap: 2.5, 2.6, 2.9, 2.10, 2.11
 
 #include "mesh/Router.h"
+#include "proto/airtak/game.pb.h"
 #include "mesh/Crypto.h"
 #include "mesh/x25519.h"
 // NOTE: <Arduino.h> MUST be included before ChannelManager.h on ESP32.
@@ -399,14 +400,14 @@ static bool airtakPlayerIsStateTransition(const uint8_t* data_pb, uint16_t data_
     uint16_t inner_len = 0;
     if (!extractDataPayload(data_pb, data_len, inner, inner_len)) return true;
     uint32_t value = 0;
-    if (!readVarintField(inner, inner_len, 7, value)) return true;
+    if (!readVarintField(inner, inner_len, airtak_PlayerStatePacket_is_state_transition_tag, value)) return true;
     return value != 0;
 }
 
 // Same fail-safe for the raw PlayerStatePacket payload path (sendPacket).
 static bool playerPayloadIsStateTransition(const uint8_t* payload, uint16_t payload_len) {
     uint32_t value = 0;
-    if (!readVarintField(payload, payload_len, 7, value)) return true;
+    if (!readVarintField(payload, payload_len, airtak_PlayerStatePacket_is_state_transition_tag, value)) return true;
     return value != 0;
 }
 

@@ -17,6 +17,7 @@
 
 #include <unity.h>
 #include "mesh/Router.h"
+#include "proto/airtak/game.pb.h"
 #include "mesh/MeshNode.h"
 #include "mesh/Portnums.h"
 #include "config/Defaults.h"
@@ -117,8 +118,9 @@ static uint16_t build_position_request_payload(uint8_t* out, uint32_t target_nod
 }
 
 static uint16_t build_player_payload(uint8_t* out, bool is_state_transition) {
+    static_assert(airtak_PlayerStatePacket_is_state_transition_tag == 5, "check player wire schema");
     uint16_t pos = 0;
-    pos = append_tag(out, pos, 7, 0);
+    pos = append_tag(out, pos, 5, 0);
     pos = append_var_u32(out, pos, is_state_transition ? 1 : 0);
     return pos;
 }
@@ -771,6 +773,29 @@ void test_send_data_packet_heartbeat_strips_want_response() {
     TEST_ASSERT_EQUAL_UINT32(0, Router::testRetryEntryCount());
 }
 
+void test_squad_field_does_not_override_player_heartbeat_delivery() {
+    Router::init();
+    uint8_t payload[32];
+    uint16_t len = build_player_payload(payload, false);
+    const uint8_t squad[] = {'A', 'l', 'p', 'h', 'a'};
+    len = append_bytes(payload, len, airtak_PlayerStatePacket_squad_id_tag, squad, sizeof(squad));
+    uint8_t data[96];
+    const uint16_t data_len = build_data(data, Portnum::AIRTAK_PLAYER, payload, len, true);
+    TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
+    TEST_ASSERT_EQUAL_UINT32(0, Router::testRetryEntryCount());
+}
+
+void test_wrong_field_seven_cannot_disable_player_ack_safeguard() {
+    Router::init();
+    uint8_t payload[8];
+    uint16_t len = append_tag(payload, 0, 7, 0); // wrong old fixture, not a valid transition field
+    len = append_var_u32(payload, len, 0);
+    uint8_t data[96];
+    const uint16_t data_len = build_data(data, Portnum::AIRTAK_PLAYER, payload, len);
+    TEST_ASSERT_TRUE(Router::sendDataPacket(data, data_len, reinterpret_cast<QueueHandle_t>(0x1)));
+    TEST_ASSERT_EQUAL_UINT32(1, Router::testRetryEntryCount());
+}
+
 // B2 regression: defaultHopLimit(AIRTAK_ACK) must return a non-zero safety fallback
 // so that any inadvertent direct sendPacket call does not produce a dead packet.
 void test_default_hop_limit_airtak_ack_is_nonzero() {
@@ -912,6 +937,8 @@ int main(int argc, char** argv) {
     RUN_TEST(test_relay_queue_evicts_oldest_when_full);
     RUN_TEST(test_ack_generated_with_zero_hop_start_fallback);
     RUN_TEST(test_send_data_packet_heartbeat_strips_want_response);
+    RUN_TEST(test_squad_field_does_not_override_player_heartbeat_delivery);
+    RUN_TEST(test_wrong_field_seven_cannot_disable_player_ack_safeguard);
     RUN_TEST(test_default_hop_limit_airtak_ack_is_nonzero);
     RUN_TEST(test_implicit_ack_own_packet_cancels_retry);
     RUN_TEST(test_clear_pending_relays_deletes_all_entries);
