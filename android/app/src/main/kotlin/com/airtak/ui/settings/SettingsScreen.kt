@@ -392,6 +392,7 @@ private fun PlayerSection(
     val squadLabel = stringResource(R.string.scope_squad)
     val fireteamLabel = stringResource(R.string.scope_fireteam)
     val game by vm.game.collectAsState()
+    val numberInputs by vm.numberInputs.collectAsState()
     val channels by vm.channels.collectAsState()
     LaunchedEffect(Unit) { vm.readDevice() }
     LaunchedEffect(Unit) { vm.readGame() }
@@ -587,14 +588,10 @@ private fun PlayerSection(
         )
         Spacer(Modifier.height(16.dp))
         SectionLabel(stringResource(R.string.settings_sec_appearance))
-        OutlinedTextField(
-                value = game.playerColorRgb.toString(16).uppercase().padStart(6, '0'),
-                onValueChange = { hex ->
-                    hex.take(6).toIntOrNull(16)?.let { vm.updateGame { copy(playerColorRgb = it) } }
-                },
-                label = { Text(stringResource(R.string.settings_player_color_field)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
+        SettingsNumberField(
+            input = numberInputs.getValue(SettingsNumericField.PlayerColor),
+            label = stringResource(R.string.settings_player_color_field),
+            onText = { vm.setNumberText(SettingsNumericField.PlayerColor, it) },
         )
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -626,11 +623,10 @@ private fun PlayerSection(
             ) { Text(stringResource(R.string.settings_read)) }
             Button(
                     onClick = {
-                        vm.applyDevice()
-                        vm.applyGame()
+                        vm.applyPlayerAndDevice()
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = !busy
+                    enabled = !busy && vm.playerInputValid
             ) { Text(if (busy) stringResource(R.string.settings_applying) else stringResource(R.string.action_apply)) }
         }
     }
@@ -1158,36 +1154,23 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
     val position by vm.position.collectAsState()
     val power by vm.power.collectAsState()
     val adcInput by vm.adcMultiplierInput.collectAsState()
+    val numberInputs by vm.numberInputs.collectAsState()
     LaunchedEffect(Unit) { vm.readPosition() }
     LaunchedEffect(Unit) { vm.readPower() }
     LaunchedEffect(Unit) { vm.readChannels() }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         SectionLabel(stringResource(R.string.settings_position_broadcast))
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-                value = position.broadcastIntervalSecs.toString(),
-                onValueChange = { v ->
-                    v.toIntOrNull()?.let { vm.updatePosition { copy(broadcastIntervalSecs = it) } }
-                },
-                label = { Text(stringResource(R.string.settings_broadcast_interval)) },
-                keyboardOptions =
-                        androidx.compose.foundation.text.KeyboardOptions(
-                                keyboardType = KeyboardType.Number
-                        ),
-                modifier = Modifier.fillMaxWidth(),
+        SettingsNumberField(
+            input = numberInputs.getValue(SettingsNumericField.BroadcastInterval),
+            label = stringResource(R.string.settings_broadcast_interval),
+            onText = { vm.setNumberText(SettingsNumericField.BroadcastInterval, it) },
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-                value = position.minTxIntervalSecs.toString(),
-                onValueChange = { v ->
-                    v.toIntOrNull()?.let { vm.updatePosition { copy(minTxIntervalSecs = it) } }
-                },
-                label = { Text(stringResource(R.string.settings_min_tx_gap)) },
-                keyboardOptions =
-                        androidx.compose.foundation.text.KeyboardOptions(
-                                keyboardType = KeyboardType.Number
-                        ),
-                modifier = Modifier.fillMaxWidth(),
+        SettingsNumberField(
+            input = numberInputs.getValue(SettingsNumericField.MinimumTxInterval),
+            label = stringResource(R.string.settings_min_tx_gap),
+            onText = { vm.setNumberText(SettingsNumericField.MinimumTxInterval, it) },
         )
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1254,17 +1237,10 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-                value = power.displayOffSecs.toString(),
-                onValueChange = { v ->
-                    v.toIntOrNull()?.let { vm.updatePower { copy(displayOffSecs = it) } }
-                },
-                label = { Text(stringResource(R.string.settings_display_off_after)) },
-                keyboardOptions =
-                        androidx.compose.foundation.text.KeyboardOptions(
-                                keyboardType = KeyboardType.Number
-                        ),
-                modifier = Modifier.fillMaxWidth(),
+        SettingsNumberField(
+            input = numberInputs.getValue(SettingsNumericField.DisplayTimeout),
+            label = stringResource(R.string.settings_display_off_after),
+            onText = { vm.setNumberText(SettingsNumericField.DisplayTimeout, it) },
         )
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.settings_brightness, power.brightnessPct))
@@ -1316,10 +1292,10 @@ private fun PositionPowerSection(vm: SettingsViewModel) {
             ) { Text(stringResource(R.string.settings_read)) }
             Button(
                     onClick = {
-                        if (vm.applyPower()) vm.applyPosition()
+                        vm.applyPositionAndPower()
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = !busy && adcInput.isValid
+                    enabled = !busy && vm.positionPowerInputValid
             ) { Text(if (busy) stringResource(R.string.settings_applying) else stringResource(R.string.action_apply)) }
         }
     }

@@ -545,6 +545,10 @@
     <string name="settings_import_summary">Import summary</string>
     <string name="settings_moderation_votes">%1$d / %2$d votes · %3$d distinct voters</string>
     <string name="settings_adc_multiplier">Battery ADC multiplier</string>
+    <string name="settings_number_required">Fill in this field before applying.</string>
+    <string name="settings_number_whole">Enter a whole number, 0 or greater.</string>
+    <string name="settings_number_range">Enter a value from 0 to %1$d.</string>
+    <string name="settings_color_invalid">Enter six hex digits (RRGGBB), for example FF4D5E.</string>
     <string name="settings_adc_required">Enter a number. Use 0 for the board default.</string>
     <string name="settings_adc_invalid">Enter a decimal number with a dot or comma.</string>
     <string name="settings_adc_range">Enter a value from %1$d to %2$d.</string>

@@ -124,6 +124,14 @@ class SettingsViewModel @Inject constructor(
     private var adcMultiplierEdited = false
     private val _game     = MutableStateFlow(GameState());     val game:     StateFlow<GameState>     = _game.asStateFlow()
     private val _security = MutableStateFlow(SecurityState()); val security: StateFlow<SecurityState> = _security.asStateFlow()
+    private val editedNumbers = mutableSetOf<SettingsNumericField>()
+    private val _numberInputs = MutableStateFlow(mapOf(
+        SettingsNumericField.BroadcastInterval to SettingsNumericInput.fromValue(SettingsNumericField.BroadcastInterval, _position.value.broadcastIntervalSecs),
+        SettingsNumericField.MinimumTxInterval to SettingsNumericInput.fromValue(SettingsNumericField.MinimumTxInterval, _position.value.minTxIntervalSecs),
+        SettingsNumericField.DisplayTimeout to SettingsNumericInput.fromValue(SettingsNumericField.DisplayTimeout, _power.value.displayOffSecs),
+        SettingsNumericField.PlayerColor to SettingsNumericInput.fromValue(SettingsNumericField.PlayerColor, _game.value.playerColorRgb),
+    ))
+    val numberInputs = _numberInputs.asStateFlow()
 
     init {
         _game.value = _game.value.copy(
@@ -133,8 +141,6 @@ class SettingsViewModel @Inject constructor(
             companyChannelSlot = prefs.unitChannelSlot("company"),
         )
 
-        // Issue #1: when the device reports its board id, prefill the ADC multiplier
-        // with the device table value if the user has not yet set one (still at the
         // Historically the app auto-prefilled and auto-applied a value from the per-device table
         // (AdcMultiplierDefaults) whenever a DeviceStatus board id arrived. That was wrong: the
         // issue's table holds the TARGET TOTAL multiplier, while the firmware separates that into
@@ -161,6 +167,8 @@ class SettingsViewModel @Inject constructor(
                 map[ConfigGroup.POSITION]?.let { b -> tryDecode { PositionConfig.parseFrom(b) } }?.let {
                     val ns = PositionState(it.broadcastIntervalSecs, it.minTxIntervalSecs, it.smartBroadcast, it.gpsSource, it.positionChannelIndex)
                     if (ns != _position.value) _position.value = ns
+                    receiveNumber(SettingsNumericField.BroadcastInterval, it.broadcastIntervalSecs)
+                    receiveNumber(SettingsNumericField.MinimumTxInterval, it.minTxIntervalSecs)
                 }
                 map[ConfigGroup.POWER]?.let { b -> tryDecode { PowerConfig.parseFrom(b) } }?.let {
                     // Zero is a real selection: use the board default. Incoming config must not
@@ -168,6 +176,7 @@ class SettingsViewModel @Inject constructor(
                     val input = AdcMultiplierInput.fromValue(it.adcMultiplier)
                     _power.value = PowerState(it.gpsDutyCycle, it.displayOffSecs, it.brightnessPct, input.value!!)
                     if (!adcMultiplierEdited) _adcMultiplierInput.value = input
+                    receiveNumber(SettingsNumericField.DisplayTimeout, it.displayOffSecs)
                 }
                 map[ConfigGroup.GAME]?.let { b -> tryDecode { GameConfig.parseFrom(b) } }?.let {
                     val ns = GameState(
@@ -184,6 +193,7 @@ class SettingsViewModel @Inject constructor(
                         companyChannelSlot = prefs.unitChannelSlot("company"),
                     )
                     if (ns != _game.value) _game.value = ns
+                    receiveNumber(SettingsNumericField.PlayerColor, it.playerColorRgb)
                 }
                 map[ConfigGroup.SECURITY]?.let { b -> tryDecode { SecurityConfig.parseFrom(b) } }?.let {
                     _security.value = SecurityState(it.maxBondedDevices)
@@ -191,6 +201,28 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
+
+    fun setNumberText(field: SettingsNumericField, text: String) {
+        editedNumbers += field
+        _numberInputs.value = _numberInputs.value + (field to SettingsNumericInput(field, text))
+    }
+
+    private fun receiveNumber(field: SettingsNumericField, value: Int) {
+        if (field !in editedNumbers) {
+            _numberInputs.value = _numberInputs.value + (field to SettingsNumericInput.fromValue(field, value))
+        }
+    }
+
+    private fun resetNumber(field: SettingsNumericField, value: Int) {
+        editedNumbers -= field
+        receiveNumber(field, value)
+    }
+
+    val positionPowerInputValid: Boolean get() = _adcMultiplierInput.value.isValid && listOf(
+        SettingsNumericField.BroadcastInterval, SettingsNumericField.MinimumTxInterval, SettingsNumericField.DisplayTimeout,
+    ).all { _numberInputs.value.getValue(it).isValid }
+
+    val playerInputValid: Boolean get() = _numberInputs.value.getValue(SettingsNumericField.PlayerColor).isValid
 
     fun updateDevice(block: DeviceState.() -> DeviceState)     { _device.value   = _device.value.block() }
     fun updateLora(block: LoraState.() -> LoraState)           { _lora.value     = _lora.value.block() }
@@ -262,13 +294,21 @@ class SettingsViewModel @Inject constructor(
     fun readDevice()   = config.read(ConfigGroup.DEVICE)
     fun readLora()     = config.read(ConfigGroup.LORA)
     fun readChannels() = config.read(ConfigGroup.CHANNELS)
-    fun readPosition() = config.read(ConfigGroup.POSITION)
+    fun readPosition() {
+        resetNumber(SettingsNumericField.BroadcastInterval, _position.value.broadcastIntervalSecs)
+        resetNumber(SettingsNumericField.MinimumTxInterval, _position.value.minTxIntervalSecs)
+        config.read(ConfigGroup.POSITION)
+    }
     fun readPower() {
         adcMultiplierEdited = false
         _adcMultiplierInput.value = AdcMultiplierInput.fromValue(_power.value.adcMultiplier)
+        resetNumber(SettingsNumericField.DisplayTimeout, _power.value.displayOffSecs)
         config.read(ConfigGroup.POWER)
     }
-    fun readGame()     = config.read(ConfigGroup.GAME)
+    fun readGame() {
+        resetNumber(SettingsNumericField.PlayerColor, _game.value.playerColorRgb)
+        config.read(ConfigGroup.GAME)
+    }
     fun readSecurity() = config.read(ConfigGroup.SECURITY)
 
     fun applyDevice() {
@@ -300,8 +340,23 @@ class SettingsViewModel @Inject constructor(
         }).build()
         config.apply(ConfigGroup.CHANNELS, msg.toByteArray())
     }
-    fun applyPosition() {
-        val s = _position.value
+    fun applyPositionAndPower(): Boolean {
+        if (!positionPowerInputValid) return false
+        return applyPower() && applyPosition()
+    }
+
+    fun applyPlayerAndDevice(): Boolean {
+        if (!playerInputValid) return false
+        applyDevice()
+        return applyGame()
+    }
+
+    fun applyPosition(): Boolean {
+        val interval = _numberInputs.value.getValue(SettingsNumericField.BroadcastInterval).value ?: return false
+        val gap = _numberInputs.value.getValue(SettingsNumericField.MinimumTxInterval).value ?: return false
+        val s = _position.value.copy(broadcastIntervalSecs = interval, minTxIntervalSecs = gap)
+        _position.value = s
+        editedNumbers.removeAll(setOf(SettingsNumericField.BroadcastInterval, SettingsNumericField.MinimumTxInterval))
         val msg = PositionConfig.newBuilder()
             .setBroadcastIntervalSecs(s.broadcastIntervalSecs)
             .setMinTxIntervalSecs(s.minTxIntervalSecs)
@@ -310,10 +365,13 @@ class SettingsViewModel @Inject constructor(
             .setPositionChannelIndex(s.positionChannelIndex)
             .build()
         config.apply(ConfigGroup.POSITION, msg.toByteArray())
+        return true
     }
     fun applyPower(): Boolean {
         val multiplier = _adcMultiplierInput.value.value ?: return false
-        val s = _power.value.copy(adcMultiplier = multiplier)
+        val timeout = _numberInputs.value.getValue(SettingsNumericField.DisplayTimeout).value ?: return false
+        val s = _power.value.copy(adcMultiplier = multiplier, displayOffSecs = timeout)
+        editedNumbers -= SettingsNumericField.DisplayTimeout
         _power.value = s
         prefs.setAdcMultiplier(multiplier)
         adcMultiplierEdited = false
@@ -325,8 +383,11 @@ class SettingsViewModel @Inject constructor(
         config.apply(ConfigGroup.POWER, msg.toByteArray())
         return true
     }
-    fun applyGame() {
-        val s = _game.value
+    fun applyGame(): Boolean {
+        val color = _numberInputs.value.getValue(SettingsNumericField.PlayerColor).value ?: return false
+        val s = _game.value.copy(playerColorRgb = color)
+        _game.value = s
+        editedNumbers -= SettingsNumericField.PlayerColor
         val msg = GameConfig.newBuilder()
             .setCallsign(s.callsign)
             .setFireteamId(s.fireteamId)
@@ -337,6 +398,7 @@ class SettingsViewModel @Inject constructor(
             .setHitButtonEnabled(s.hitButtonEnabled)
             .build()
         config.apply(ConfigGroup.GAME, msg.toByteArray())
+        return true
     }
     fun applySecurity() {
         val s = _security.value

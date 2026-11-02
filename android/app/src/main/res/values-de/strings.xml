@@ -525,6 +525,10 @@
     <string name="settings_import_summary">Überblick über den Import</string>
     <string name="settings_moderation_votes">%1$d / %2$d Stimmen · %3$d verschiedene Wähler</string>
     <string name="settings_adc_multiplier">Akku-ADC-Multiplikator</string>
+    <string name="settings_number_required">Fülle dieses Feld vor dem Übernehmen aus.</string>
+    <string name="settings_number_whole">Gib eine ganze Zahl ab 0 ein.</string>
+    <string name="settings_number_range">Gib einen Wert zwischen 0 und %1$d ein.</string>
+    <string name="settings_color_invalid">Gib sechs Hex-Zeichen (RRGGBB) ein, zum Beispiel FF4D5E.</string>
     <string name="settings_adc_required">Gib eine Zahl ein. 0 verwendet den Geräte-Standard.</string>
     <string name="settings_adc_invalid">Gib eine Dezimalzahl mit Punkt oder Komma ein.</string>
     <string name="settings_adc_range">Gib einen Wert zwischen %1$d und %2$d ein.</string>
