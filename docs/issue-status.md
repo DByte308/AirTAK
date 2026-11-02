@@ -1,7 +1,8 @@
-# Offene Issues – Prüfung vom 1. November 2026
+# Offene Issues – Prüfung vom 2. November 2026
 
 | Issue | Ergebnis | Nächster nötiger Schritt |
 |---|---|---|
+| #31 OLED-Helligkeit/Timeout | Codefix und Test-Builds fertig, Hardwarebestätigung offen | V3-Testfirmware plus neue App prüfen: Helligkeit, Timeout, Aufwecken und Fortsetzung der Funkverbindung. |
 | #30 Zahleneingaben | Behoben und auf S24 geprüft (`0f392a7`), geschlossen | Keine Gerätekonfiguration beim Test verändert. |
 | #29 Heltec-OLED | Im Code bestätigt, noch nicht behoben | GPS auf eigene Seite; Haupt-/Radioseite innerhalb 128×64 gestalten. Nachrichten/Spieler sind derzeit Platzhalter und brauchen echte Datenanbindung plus Auswahl der neuesten Einträge. |
 | #5 V3-Batterie | Offen, neue Messwerte vorhanden; Ursache nicht sicher geklärt | Vollständige, nicht abgeschnittene Rohwerte, tatsächlicher Messpunkt der 4,09 V, Vergleich mit GPIO1-Spannung und verifizierter Schaltlogik. |
@@ -9,6 +10,37 @@
 | #4 nRF-OTG | Nicht auf nRF-Hardware verifiziert | Passendes nRF-Board/Bootloader per Android-OTG, Paket-/Protokollkompatibilität und vollständigen Flash-/Neustartablauf testen. |
 | #23 V4-Hardware | Offen | RX-LNA/FEM-Umschaltung, PSRAM-Allokation, Akkuvergleich mit Multimeter und Dauerbetrieb tatsächlich prüfen. |
 | #3 ROADMAP-Gates | Offen | Die einzelnen Exit-Gates abarbeiten, insbesondere mehrere Funkgeräte, Reichweite, Feldbetrieb und Interoperabilität. |
+
+## Befund zu #31 (2. November 2026, vor Implementierung)
+
+`Display::setBrightness`, `sleep` und `wake` sind bei Heltec V3, V4 und T3S3
+leere Methoden. Die Display-Task liest Helligkeit nur beim Start; live gespeicherte
+Änderungen erreichen den Treiber nicht. Der Timeout setzt zwar einen Softwarezustand,
+sendet aber kein OLED-Off-Kommando. Vorgesehen sind ein gemeinsam getesteter
+SSD1306-Powercontroller, Live-Übernahme und ein überlaufsicherer Idle-Timer.
+Zusätzlicher Transportfall: POWER mit ausschließlich Nullwerten wird von Proto3
+als leere Nutzlast kodiert; die Firmware versteht leer aber als Commit-Marker.
+Die App muss für diesen Fall einen expliziten Null-Skalar senden, damit 0 %
+wirklich gespeichert werden kann. Die physische OLED-Prüfung ist noch nicht erfolgt.
+
+## Softwarekorrektur zu #31
+
+- V3, V4/Runtime-OLED und T3S3 senden jetzt SSD1306-Kontrast- sowie Display-Off/On-Kommandos.
+- Geänderte Helligkeit wird ohne Neustart übernommen. 0 % schaltet das Panel aus.
+- Timeout 0 verhindert automatisches Abschalten und weckt ein zuvor idle-abgeschaltetes Panel.
+  Geänderte Timeouts starten die Wartezeit neu; große Sekundenwerte laufen nicht über.
+- Button/Touch wecken das Panel. Funk und Spieler-Timer laufen bei dunklem Display weiter.
+- Kopplungscode und Recovery-/Shutdown-Hinweise werden vorübergehend sichtbar, auch bei 0 %;
+  danach wird die konfigurierte Helligkeit wiederhergestellt.
+- Eine ganz leere POWER-Protobuf-Nutzlast wird in der App mit einem expliziten Nullfeld
+  gesendet, statt als reiner Commit-Marker verwechselt zu werden. Das gilt für Stage und Apply.
+- 28 neue native Controller-/Timeout-/Codec-Tests und fünf Android-Wire-Tests bestanden.
+
+Gebaut: `heltec_v3`, `heltec_v4`, `t3s3`, `runtime_s3_v4`, `heltec_v3_diag_high`, `t_echo`.
+BLE-Memory-Guard für alle fünf ESP32-Images bestanden. **Noch keine physische OLED-Prüfung
+oder Board-Programmierung im Rahmen dieses Fixes; #31 bleibt bis zur Rückmeldung offen.**
+Die HIGH-Diagnose behält die Schaltlogik aus #5; Akkuberechnung und Layoutprobleme aus #29
+werden durch diesen Display-Power-Fix nicht als behoben erklärt.
 
 ## Korrektur zu #5
 
@@ -42,9 +74,9 @@ mit einem eigenen Testencoder. Das ersetzt keinen Funk-Peer-Test.
 
 ## Geprüft und nicht geprüft
 
-- 387 Android-Tests, Discovery-Audit sauber; zwölf Python-Sprachtests.
-- 149 native Firmware-Tests, darunter Router-Regressionsfälle.
-- Firmware-Builds `heltec_v4` und `t_echo` erfolgreich; BLE-Memory-Guard für V4 bestanden.
+- 392 Android-Tests, Discovery-Audit sauber; zwölf Python-Sprachtests.
+- 177 native Firmware-Tests, darunter Router- und Display-Power-Regressionsfälle.
+- Die sechs oben genannten Firmware-Builds erfolgreich, BLE-Memory-Guard für die fünf ESP32-Images bestanden.
 - Zahleneingaben für #30 auf dem S24 einschließlich Löschen, führender Nullen,
   Überlauf, Hex-Eingabe, gesperrtem Übernehmen und Lesen-Rücksetzung geprüft.
 - **Keine Firmware bei dieser Prüfung auf ein Board geflasht.**

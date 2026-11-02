@@ -27,6 +27,8 @@
 #include "hal/Radio.h"
 #include "hal/GPS.h"
 #include "hal/Display.h"
+#include "ui/DisplayIdleTimer.h"
+#include "ui/PairingDisplayActivity.h"
 #include "hal/Battery.h"
 #include "hal/Button.h"
 #include "hal/Touch.h"
@@ -385,30 +387,46 @@ void task_config_apply(void* params) {
 
 void task_display_refresh(void* params) {
     airtak::Display::init();
-    airtak::Display::setBrightness(airtak::config::ConfigManager::powerBrightnessPct());
+    uint8_t applied_brightness = airtak::config::ConfigManager::powerBrightnessPct();
+    airtak::Display::setBrightness(applied_brightness);
     airtak::Display::refresh(g_system_event_group);
     uint32_t last_refresh_check_ms = millis();
-    uint32_t last_interaction_ms    = millis();
+    airtak::ui::DisplayIdleTimer idle(millis(), airtak::config::ConfigManager::powerDisplayOffSecs());
     uint32_t last_player_tick_ms   = 0;
     bool     screen_changed        = false;
-    bool     display_asleep        = false;
+    bool     pairing_prompt_active = false;
+    uint32_t pairing_prompt_ms     = 0;
     bool     shutdown_armed        = false;
     for (;;) {
         uint32_t now = millis();
 
+        const uint8_t brightness = airtak::config::ConfigManager::powerBrightnessPct();
+        if (brightness != applied_brightness) {
+            applied_brightness = brightness;
+            airtak::Display::setBrightness(brightness);
+            screen_changed = true;
+        }
+
+        // Give a passkey at least the normal refresh interval, even with a 1-second
+        // idle timeout. OLED drivers temporarily make critical prompts visible at 0%.
+        if (airtak::ui::consumePairingDisplayActivity()) {
+            pairing_prompt_active = true;
+            pairing_prompt_ms = now;
+            last_refresh_check_ms = now;
+        }
+        if (pairing_prompt_active && (now - pairing_prompt_ms) >= airtak::DISPLAY_REFRESH_CHECK_MS) {
+            pairing_prompt_active = false;
+        }
+
         airtak::ButtonGesture gesture = airtak::Button::poll();
-        bool interaction = (gesture != airtak::ButtonGesture::NONE);
+        bool interaction = pairing_prompt_active || (gesture != airtak::ButtonGesture::NONE) || airtak::Button::heldMs() > 0;
 
         airtak::TouchGesture touch = airtak::Touch::poll();
         if (touch != airtak::TouchGesture::NONE) interaction = true;
 
-        if (interaction) {
-            last_interaction_ms = now;
-            if (display_asleep) {
-                airtak::Display::wake();
-                display_asleep = false;
-            }
-        }
+        const auto idle_action = idle.update(now, interaction, airtak::config::ConfigManager::powerDisplayOffSecs());
+        if (idle_action == airtak::ui::DisplayIdleTimer::Action::Wake) airtak::Display::wake();
+        else if (idle_action == airtak::ui::DisplayIdleTimer::Action::Sleep) airtak::Display::sleep();
 
         // Handle gestures
         if (gesture == airtak::ButtonGesture::LONG_LONG_PRESS) {
@@ -447,20 +465,19 @@ void task_display_refresh(void* params) {
             screen_changed = true;
         }
 
-        // Display sleep timeout
-        uint32_t off_secs = airtak::config::ConfigManager::powerDisplayOffSecs();
-        if (!display_asleep && off_secs > 0 && (now - last_interaction_ms) >= off_secs * airtak::SECS_TO_MS) {
-            airtak::Display::sleep();
-            display_asleep = true;
-        }
-
         if (shutdown_armed) {
             airtak::Display::showShutdownWarning();
             vTaskDelay(pdMS_TO_TICKS(200));
             continue;
         }
 
-        if (display_asleep) {
+        // Sleeping the panel must not suspend the player's state/timer processing.
+        if ((now - last_player_tick_ms) >= airtak::PLAYER_TICK_INTERVAL_MS) {
+            airtak::PlayerState::tick(g_radio_tx_queue);
+            last_player_tick_ms = now;
+        }
+
+        if (idle.asleep()) {
             vTaskDelay(pdMS_TO_TICKS(airtak::DISPLAY_SLEEP_POLL_MS));
             continue;
         }
@@ -474,10 +491,6 @@ void task_display_refresh(void* params) {
             last_refresh_check_ms = now;
         }
 
-        if ((now - last_player_tick_ms) >= airtak::PLAYER_TICK_INTERVAL_MS) {
-            airtak::PlayerState::tick(g_radio_tx_queue);
-            last_player_tick_ms = now;
-        }
         vTaskDelay(pdMS_TO_TICKS(airtak::TASK_DISPLAY_LOOP_MS));
     }
 }

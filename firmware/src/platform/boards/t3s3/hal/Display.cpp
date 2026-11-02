@@ -10,6 +10,8 @@
 
 #include "hal/Display.h"
 #include "ui/Screens.h"
+#include "ui/OledPanelPower.h"
+#include "ui/PairingDisplayActivity.h"
 #include "hal/Battery.h"
 #include "hal/GPS.h"
 #include "hal/Radio.h"
@@ -32,6 +34,7 @@ using namespace ui;
 // ── OLED framebuffer ──────────────────────────────────────────────────────────
 static Adafruit_SSD1306 s_display(AIRTAK_OLED_WIDTH, AIRTAK_OLED_HEIGHT, &Wire, -1);
 
+static OledPanelPower s_panel_power;
 static ScreenId  s_current_screen  = ScreenId::MAIN;
 static uint16_t  s_dirty_mask      = DISPLAY_DIRTY_ALL;
 static uint32_t  s_last_refresh_ms = 0;
@@ -188,6 +191,7 @@ static void renderRadioScreen() {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 void Display::init() {
+    s_panel_power.begin(false);
     Wire.begin(AIRTAK_PIN_OLED_SDA, AIRTAK_PIN_OLED_SCL);
 
     if (!s_display.begin(SSD1306_SWITCHCAPVCC, AIRTAK_OLED_I2C_ADDRESS)) {
@@ -197,6 +201,7 @@ void Display::init() {
         return;
     }
 
+    s_panel_power.begin(true);
     s_display.clearDisplay();
     s_display.setTextWrap(false);
     s_display.cp437(true);
@@ -207,7 +212,8 @@ void Display::init() {
 
 void Display::refresh(EventGroupHandle_t system_event_group) {
     (void)system_event_group;
-    if (s_dirty_mask == 0) return;
+    s_panel_power.endPrompt([](uint8_t command) { s_display.ssd1306_command(command); });
+    if (!s_panel_power.canRender() || s_dirty_mask == 0) return;
 
     s_display.clearDisplay();
 
@@ -224,6 +230,9 @@ void Display::refresh(EventGroupHandle_t system_event_group) {
 }
 
 void Display::showPasscode(uint32_t passkey) {
+    if (!s_panel_power.ready()) return;
+    s_panel_power.showPrompt([](uint8_t command) { s_display.ssd1306_command(command); });
+    requestPairingDisplayActivity();
     s_display.clearDisplay();
 
     s_display.setTextSize(1);
@@ -247,6 +256,8 @@ void Display::showPasscode(uint32_t passkey) {
 }
 
 void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
+    if (!s_panel_power.ready()) return;
+    s_panel_power.showPrompt([](uint8_t command) { s_display.ssd1306_command(command); });
     s_display.clearDisplay();
 
     s_display.setTextSize(1);
@@ -269,6 +280,8 @@ void Display::showRecoveryMode(bool config_erased, bool bonds_cleared) {
 }
 
 void Display::showShutdownWarning() {
+    if (!s_panel_power.ready()) return;
+    s_panel_power.showPrompt([](uint8_t command) { s_display.ssd1306_command(command); });
     s_display.clearDisplay();
     s_display.setTextSize(1);
     s_display.setTextColor(SSD1306_WHITE);
@@ -299,8 +312,16 @@ ui::ScreenId Display::currentScreen()    { return s_current_screen; }
 void Display::markDirty(uint16_t mask)   { s_dirty_mask |= mask; }
 void Display::clearDirty()               { s_dirty_mask = 0; }
 void Display::forceRefresh()             { s_dirty_mask = DISPLAY_DIRTY_ALL; s_last_refresh_ms = 0; }
-void Display::setBrightness(uint8_t)      {}   // OLED: contrast fixed
-void Display::sleep()                     {}   // OLED: auto-off handled by task
-void Display::wake()                      {}
+void Display::setBrightness(uint8_t pct) {
+    s_panel_power.setBrightness(pct, [](uint8_t command) { s_display.ssd1306_command(command); });
+    markDirty(DISPLAY_DIRTY_ALL);
+}
+void Display::sleep() {
+    s_panel_power.sleep([](uint8_t command) { s_display.ssd1306_command(command); });
+}
+void Display::wake() {
+    s_panel_power.wake([](uint8_t command) { s_display.ssd1306_command(command); });
+    forceRefresh();
+}
 
 } // namespace airtak

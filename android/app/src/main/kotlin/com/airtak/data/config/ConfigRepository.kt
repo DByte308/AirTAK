@@ -104,7 +104,7 @@ class ConfigRepository internal constructor(
     fun stage(group: ConfigGroup, data: ByteArray) {
         send(ConfigPayload.newBuilder()
             .setGroup(group)
-            .setData(ByteString.copyFrom(identityConfigWireBytes(group, data)))
+            .setData(ByteString.copyFrom(powerConfigWireBytes(group, identityConfigWireBytes(group, data))))
             .setCommit(false)
             .build())
     }
@@ -112,7 +112,7 @@ class ConfigRepository internal constructor(
     fun apply(group: ConfigGroup, data: ByteArray) {
         send(ConfigPayload.newBuilder()
             .setGroup(group)
-            .setData(ByteString.copyFrom(identityConfigWireBytes(group, data)))
+            .setData(ByteString.copyFrom(powerConfigWireBytes(group, identityConfigWireBytes(group, data))))
             .setCommit(true)
             .build())
     }

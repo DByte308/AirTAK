@@ -3,6 +3,7 @@
 // Planning: §9.4, §9.4.2 | Roadmap: 2.8
 
 #include "config/ConfigManager.h"
+#include "config/PowerDisplayConfig.h"
 #include "config/FlashStore.h"
 #include "config/ConfigGroups.h"
 #include "config/Defaults.h"
@@ -504,25 +505,9 @@ uint32_t ConfigManager::powerDisplayOffSecs() {
 }
 
 uint8_t ConfigManager::powerBrightnessPct() {
-    uint8_t gidx = static_cast<uint8_t>(ConfigGroup::POWER);
-    const uint8_t* buf = s_buffers[gidx];
-    size_t n = s_sizes[gidx];
-    size_t pos = 0;
-    while (pos < n) {
-        uint32_t tag; if (!readProtoVarint(buf, n, pos, tag)) break;
-        uint8_t wire = tag & PROTO_WIRE_TYPE_MASK;
-        uint32_t field = tag >> PROTO_FIELD_NUM_SHIFT;
-        if (wire == PROTO_WIRE_VARINT) {
-            uint32_t v; if (!readProtoVarint(buf, n, pos, v)) break;
-            if (field == POWERCONFIG_FIELD_BRIGHTNESS) {  // brightness_pct = field 5
-                if (v > CONFIG_MAX_BRIGHTNESS_PCT) v = CONFIG_MAX_BRIGHTNESS_PCT;
-                return static_cast<uint8_t>(v);
-            }
-        } else {
-            if (!skipProtoField(buf, n, pos, wire)) break;
-        }
-    }
-    return static_cast<uint8_t>(defaults::POWER_BRIGHTNESS_PCT);
+    const uint8_t gidx = static_cast<uint8_t>(ConfigGroup::POWER);
+    return brightnessFromPowerConfig(s_buffers[gidx], s_sizes[gidx],
+        static_cast<uint8_t>(defaults::POWER_BRIGHTNESS_PCT));
 }
 
 float ConfigManager::powerAdcMultiplier() {
