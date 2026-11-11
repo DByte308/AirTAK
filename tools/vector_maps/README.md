@@ -25,7 +25,7 @@ localhost/airtak-tilemaker:3.2.0-c7d1dbf
 ```
 
 (image built from `tilemaker-src` at tag `c7d1dbf`, tilemaker v3.2.0; source checkout at
-`/home/d/output/airtak-render/tilemaker-src`).
+`~/output/airtak-render/tilemaker-src`).
 
 ### Verified podman run command
 
